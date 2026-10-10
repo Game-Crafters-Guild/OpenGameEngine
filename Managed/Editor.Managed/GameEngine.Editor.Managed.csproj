@@ -1,0 +1,19 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
+    <GenerateDocumentationFile>false</GenerateDocumentationFile>
+    <GenerateAssemblyInfo>true</GenerateAssemblyInfo>
+    <AppendTargetFrameworkToOutputPath>false</AppendTargetFrameworkToOutputPath>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\Editor.Scripting.ABI\GameEngine.Editor.Scripting.ABI.csproj" />
+    <ProjectReference Include="..\Scripting.Runtime\GameEngine.Scripting.Runtime.csproj" />
+    <ProjectReference Include="..\ECS.ABI\GameEngine.ECS.ABI.csproj" />
+  </ItemGroup>
+</Project>
+
+

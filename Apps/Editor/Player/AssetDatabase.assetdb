@@ -1,0 +1,10 @@
+# GameEngine AssetDatabase.assetdb (authoritative)
+# Format: JSON Lines (one JSON object per line). Lines starting with '#' are comments.
+# v2 (append-only journal + compaction): first non-comment line is a {format,version} record.
+# Asset upsert:    {"guid":"...","path":"...","type":"Texture","missing":false,"kv":{...}}
+# Asset delete:    {"guid":"...","deleted":true}
+# Redirect upsert: {"redirect_from":"...","redirect_to":"..."}
+# Redirect delete: {"redirect_from":"...","redirect_to":""}
+#
+{"format":"assetdb","version":2}
+{"guid":"85dc98d2-9d86-4a50-b183-109a0b59c2f8","path":"Scenes/ShadowStress.scene","type":"Scene"}

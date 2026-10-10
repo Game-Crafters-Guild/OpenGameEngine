@@ -1,0 +1,63 @@
+# GameEngine AssetDatabase.assetdb (authoritative)
+# Format: JSON Lines (one JSON object per line). Lines starting with '#' are comments.
+# v2 (append-only journal + compaction): first non-comment line is a {format,version} record.
+# Asset upsert:    {"guid":"...","path":"...","type":"Texture","missing":false,"kv":{...}}
+# Asset delete:    {"guid":"...","deleted":true}
+# Redirect upsert: {"redirect_from":"...","redirect_to":"..."}
+# Redirect delete: {"redirect_from":"...","redirect_to":""}
+#
+{"format":"assetdb","version":2}
+{"guid":"11c1a42e-e986-42e8-a5e3-4af217771ae7","path":"GameEngine.Scripts.csproj","type":"Unknown"}
+{"guid":"72814ae5-52b3-4fb5-90e1-f09386fcb9f0","path":"RenderPipelines/ForwardPlus.rendergraph","type":"RenderPipeline"}
+{"guid":"11c1a42e-e986-42e8-a5e3-4af217771ae7","path":"GameEngine.Scripts.csproj","type":"Unknown"}
+{"guid":"b44a5a01-5c02-4bef-a52b-4b680294ff49","path":"Scenes/Lanscape.scene","type":"Scene"}
+{"guid":"36521062-8eb1-4d23-9b16-26b1b96ec025","path":"Scripts/PlaneSpecs.cs","type":"Script"}
+{"guid":"7eac3dd6-2f14-44b2-9523-e0fffaf87a0b","path":"Scripts/PlaneFlightState.cs","type":"Script"}
+{"guid":"8fec54b5-f523-4dc9-b853-b0aaeaa68e54","path":"Models/Planes/AircoDH2/Materials/DefaultWhite.material","type":"Material"}
+{"guid":"11c1a42e-e986-42e8-a5e3-4af217771ae7","path":"GameEngine.Scripts.csproj","type":"Unknown"}
+{"guid":"147f9a76-cc55-4fc8-8a9a-b0216768de90","path":"Models/Planes/AircoDH2/Materials/DefaultWhite_interior.png.material","type":"Material"}
+{"guid":"c4fd0d7e-fb40-453f-a93c-5e2105a081bd","path":"Scripts/PlaneFlightControls.cs","type":"Script"}
+{"guid":"10365dab-1a68-4f9e-a5da-8d2f203cc13b","path":"Models/Planes/AircoDH2/Textures/scene_tex2.png","type":"Texture"}
+{"guid":"09075543-95c2-4193-88a9-9760191ef18d","path":"RenderPipelines/Default.rendergraph","type":"RenderPipeline"}
+{"guid":"d54675ae-f2fa-48a9-96ae-d16684750a98","path":"Models/Planes/AircoDH2/textures/DefaultWhite_panel.png_baseColor.png","type":"Texture"}
+{"guid":"72814ae5-52b3-4fb5-90e1-f09386fcb9f0","path":"RenderPipelines/ForwardPlus.rendergraph","type":"RenderPipeline"}
+{"guid":"4a2de65c-2aa1-4e1a-b1fa-f21fe3321db9","path":"Scripts/PlaneFlightSystem.cs","type":"Script"}
+{"guid":"5a91828d-2cf6-4431-b32d-ee0a4792243e","path":"RenderPipelines/Sample_PostStack.rendergraph","type":"RenderPipeline"}
+{"guid":"8723d08d-8357-4ef8-86bf-d6f519276a40","path":"Models/Planes/AircoDH2/textures/DefaultWhite_interior.png_baseColor.png","type":"Texture"}
+{"guid":"d23395c6-1afb-450e-9296-fcb98bd673b1","path":"Models/Planes/AircoDH2/Materials/DefaultWhite_texture.png.material","type":"Material"}
+{"guid":"61dace69-d7b2-4d5d-910a-b15f69136eae","path":"RenderPipelines/ForwardPlus_DebugOverlay.rendergraph","type":"RenderPipeline"}
+{"guid":"fd86a9e5-94f4-41f5-9c2f-cf6cb42f8a7a","path":"Models/Planes/AircoDH2/scene.gltf","type":"Model"}
+{"guid":"d7277706-27ad-406e-a944-8364e24c29e6","path":"Models/Planes/AircoDH2/textures/DefaultWhite_baseColor.png","type":"Texture"}
+{"guid":"b0b665b0-9fa6-4135-80ff-cff0a03037fb","path":"Models/Planes/AircoDH2/Textures/scene_tex3.png","type":"Texture"}
+{"guid":"14ff792b-1d3c-41c0-9756-6e5da7769e75","path":"Models/Planes/AircoDH2/Textures/scene_tex1.png","type":"Texture"}
+{"guid":"7d3d339f-64a4-44c4-922d-574b8a0d4b3a","path":"Models/Planes/AircoDH2/textures/DefaultWhite_texture.png_baseColor.png","type":"Texture"}
+{"guid":"147f5e43-6105-4715-8358-5a4bb614e313","path":"Models/Planes/AircoDH2/Materials/DefaultWhite_panel.png.material","type":"Material"}
+{"guid":"1f443f54-9264-45ac-91c0-24c49ec0709e","path":"Models/Planes/AircoDH2/scene.bin","type":"Unknown"}
+{"guid":"76411b26-3c56-46f9-8dac-8b2762c1255d","path":"Models/Planes/AircoDH2/license.txt","type":"Unknown"}
+{"guid":"ec535bdc-37e5-4042-bf30-0f6404c28070","path":"Models/Planes/AircoDH2/Textures/scene_tex0.png","type":"Texture"}
+{"guid":"2cff2a43-c83c-4558-8600-87b6e011022b","path":"models/planes/aircodh2/license.txt","type":"Unknown"}
+{"guid":"d99d96c0-3f0b-4431-a967-abf2a320414d","path":"models/planes/aircodh2/materials/defaultwhite_interior.png.material","type":"Material"}
+{"guid":"86e4741b-c25c-437e-9aec-096ff4858252","path":"renderpipelines/forwardplus.rendergraph","type":"RenderPipeline"}
+{"guid":"057079c1-11cd-476a-b872-0ede7e43c917","path":"models/planes/aircodh2/materials/defaultwhite.material","type":"Material"}
+{"guid":"726bac29-91bf-4c46-b62d-b4921a156f9f","path":"models/planes/aircodh2/materials/defaultwhite_texture.png.material","type":"Material"}
+{"guid":"09f3efec-f0cf-42fe-b5f5-6e780b2c2879","path":"models/planes/aircodh2/materials/defaultwhite_panel.png.material","type":"Material"}
+{"guid":"2ef37376-28d0-44df-b165-5b90351bd8a2","path":"models/planes/aircodh2/scene.bin","type":"Unknown"}
+{"guid":"95ed476c-44da-483b-b4f2-2c3612513b65","path":"scripts/planeflightstate.cs","type":"Script"}
+{"guid":"78fd7c8b-97d3-4f9e-9a7d-b76084b32c6f","path":"models/planes/aircodh2/scene.gltf","type":"Model"}
+{"guid":"48099a36-a143-4101-a9d8-2643429e6290","path":"models/planes/aircodh2/textures/defaultwhite_basecolor.png","type":"Texture"}
+{"guid":"90be0f24-e3a9-48ce-b59a-1e93e782f415","path":"scripts/planeflightcontrols.cs","type":"Script"}
+{"guid":"6cca2c7e-ae10-43e1-8f5f-0e758fdfcd39","path":"models/planes/aircodh2/textures/defaultwhite_interior.png_basecolor.png","type":"Texture"}
+{"guid":"cced8924-40c5-4c86-9b8f-474eed5ed358","path":"models/planes/aircodh2/textures/defaultwhite_panel.png_basecolor.png","type":"Texture"}
+{"guid":"4dcf8a42-7e4c-4405-aa34-d47e73d2c0a4","path":"models/planes/aircodh2/textures/defaultwhite_texture.png_basecolor.png","type":"Texture"}
+{"guid":"ef362bcb-2405-4ed6-b4cd-3612511ccbc1","path":"models/planes/aircodh2/textures/scene_tex0.png","type":"Texture"}
+{"guid":"7cc0f242-2aae-4fe5-8814-94b3c23c8173","path":"models/planes/aircodh2/textures/scene_tex1.png","type":"Texture"}
+{"guid":"35ca1758-466d-4fd2-b91d-a9e3a5ff5aeb","path":"models/planes/aircodh2/textures/scene_tex2.png","type":"Texture"}
+{"guid":"e22c81b7-5016-4f8a-866d-25452cf4fb72","path":"models/planes/aircodh2/textures/scene_tex3.png","type":"Texture"}
+{"guid":"424d9878-e74b-4796-b2e4-9fb1badef67c","path":"renderpipelines/default.rendergraph","type":"RenderPipeline"}
+{"guid":"06f572ae-da98-424a-9d63-3be7b21502e1","path":"renderpipelines/forwardplus_debugoverlay.rendergraph","type":"RenderPipeline"}
+{"guid":"ca71f4e7-1d11-47a3-ae50-3e95f599cb53","path":"renderpipelines/sample_poststack.rendergraph","type":"RenderPipeline"}
+{"guid":"926e3a7a-db3d-44bc-9e38-833cc86d8607","path":"scenes/lanscape.scene","type":"Scene"}
+{"guid":"115dc1e7-d84f-403a-ab52-247d7473c993","path":"scripts/planeflightsystem.cs","type":"Script"}
+{"guid":"d0dddf68-cce7-41f6-b294-9aa56a6d5ca6","path":"scripts/planespecs.cs","type":"Script"}
+{"guid":"78fd7c8b-97d3-4f9e-9a7d-b76084b32c6f","path":"models/planes/aircodh2/scene.gltf","type":"Model","kv":{"assets.fbx.mirrorAxes":"1,0,0","subassets.deriveKeys":"material/0\nmaterial/1\nmaterial/2\nmaterial/3"}}
+{"guid":"00146e68-fe92-4fa5-b966-afe45dfe5e2f","path":"scenes/lanscape materials.terrainmatlib","type":"TerrainMaterialLibrary"}

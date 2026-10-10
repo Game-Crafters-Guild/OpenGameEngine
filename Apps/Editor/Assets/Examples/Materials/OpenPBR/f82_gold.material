@@ -1,0 +1,15 @@
+{
+  "schemaVersion": 3,
+  "materialName": "OpenPBR - F82 Gold",
+  "lightingModel": "StandardPBR",
+  "alphaMode": "Opaque",
+  "doubleSided": false,
+  "surfaceShader": "Surfaces/standard_pbr.glsl",
+  "properties": {
+    "baseColor": [1.0, 0.766, 0.336, 1.0],
+    "metallic": 1.0,
+    "roughness": 0.22,
+    "specularColor": [1.0, 0.85, 0.6]
+  },
+  "textures": {}
+}

@@ -1,0 +1,17 @@
+<UIElement class="agent-row">
+  <UIElement class="agent-row-header-line">
+    <Label id="AgentRowHeader" class="agent-row-header" />
+    <Label id="AgentRowTime" class="agent-row-time" />
+    <Button id="AgentRowStop" class="small secondary agent-row-stop hidden" text="Stop" focusable="false" />
+  </UIElement>
+  <TextArea id="AgentRowText" class="script-editor-textarea agent-row-text" readonly="true" focusable="false" />
+  <UIElement id="AgentRowCalls" class="agent-row-calls hidden" />
+  <UIElement class="agent-row-footer">
+    <UIElement id="AgentRowStatus" class="agent-row-status" />
+    <UIElement id="AgentRowActions" class="agent-row-actions">
+      <Button id="AgentRowUndoTurn" class="small secondary hidden" text="Undo this turn" focusable="false" />
+      <Button id="AgentRowRetry" class="small secondary hidden" text="Retry" focusable="false" />
+      <Label id="AgentRowRetried" class="agent-row-retried hidden" text="Retried below" />
+    </UIElement>
+  </UIElement>
+</UIElement>

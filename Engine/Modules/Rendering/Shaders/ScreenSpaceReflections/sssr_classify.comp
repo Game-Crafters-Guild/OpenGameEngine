@@ -1,0 +1,129 @@
+#version 450
+
+#include "Includes/storage_access.glsl"
+
+layout(local_size_x = 8, local_size_y = 8, local_size_z = 1) in;
+
+layout(set = 0, binding = 0) uniform sampler2D uDepth;
+layout(set = 0, binding = 1) uniform sampler2D uNormalRoughness;
+layout(set = 0, binding = 2, rgba16f) uniform writeonly image2D uRadiance;
+layout(set = 0, binding = 3, rgba16f) uniform writeonly image2D uHitData;
+// The prefilter's output. This pass is the sole writer of its cleared value: the
+// prefilter is dispatched only over the tiles listed below, so every pixel it
+// never visits must already be defined here. Leaving them undefined would put
+// aliased transient memory (RGBA16F, so readily Inf/NaN) into the temporal
+// resolve's 5x5 neighbourhood statistics, which reflective pixels one and two
+// texels inside the boundary genuinely read.
+layout(set = 0, binding = 8, rgba16f) uniform writeonly image2D uPrefiltered;
+layout(std430, set = 0, binding = 5) GE_STORAGE_WRITEONLY buffer RayListBuffer { uint rays[]; } RayList;
+layout(std430, set = 0, binding = 4) GE_STORAGE_WRITEONLY buffer TileListBuffer { uint tiles[]; } TileList;
+
+layout(set = 0, binding = 9) uniform sampler2D uMotionVectors;
+layout(set = 0, binding = 10) uniform sampler2D uSurfaceHistory;
+layout(set = 0, binding = 11) uniform sampler2D uMoments;
+layout(set = 0, binding = 12) uniform sampler2D uSpecularWeight;
+
+#include "ScreenSpaceReflections/sssr_common.glsl"
+#include "ScreenSpaceReflections/sssr_reprojection.glsl"
+#include "ScreenSpaceReflections/sssr_history_policy.glsl"
+// This pass only APPENDS. The dispatch grids the two counters below drive are
+// bounded and spilled by sssr_prepare_args.comp, which runs before Intersect.
+#define GE_SSSR_ARGS_BINDING 6
+#include "ScreenSpaceReflections/sssr_dispatch.glsl"
+
+// Set when any pixel of this workgroup's tile is reflective. One append per tile
+// instead of per pixel, which is what keeps the tile list's atomic traffic ~1/64
+// of the ray list's.
+shared uint sTileHasReflectivePixel;
+
+void main()
+{
+    ivec2 size = imageSize(uRadiance);
+    ivec2 pixel = ivec2(gl_GlobalInvocationID.xy);
+    // Out-of-bounds threads must reach the barriers below with everyone else, so
+    // the bounds test gates work rather than returning early.
+    bool inBounds = all(lessThan(pixel, size));
+
+    if (gl_LocalInvocationIndex == 0u)
+        sTileHasReflectivePixel = 0u;
+    barrier();
+
+    float depth = 0.0;
+    float roughness = 1.0;
+    bool reflective = false;
+    if (inBounds)
+    {
+        imageStore(uRadiance, pixel, vec4(0.0));
+        imageStore(uHitData, pixel, vec4(0.0));
+        imageStore(uPrefiltered, pixel, vec4(0.0));
+        depth = texelFetch(uDepth, pixel, 0).r;
+        roughness = GE_Roughness(texelFetch(uNormalRoughness, pixel, 0));
+        reflective = GE_SssrIsReflective(depth, roughness) &&
+                     any(greaterThan(texelFetch(uSpecularWeight, pixel, 0).rgb, vec3(1e-5)));
+        if (reflective)
+            atomicOr(sTileHasReflectivePixel, 1u);
+    }
+    barrier();
+
+    // The prefilter's tile list. A tile is listed when it holds at least one
+    // reflective pixel — NOT when it holds a traced one: the rate control below
+    // traces a fraction of them per frame, and reconstructing the untraced
+    // remainder is exactly what the prefilter is for.
+    if (gl_LocalInvocationIndex == 0u && sTileHasReflectivePixel != 0u)
+    {
+        uint slot = atomicAdd(Args.tileCount, 1u);
+        TileList.tiles[slot] = gl_WorkGroupID.x | (gl_WorkGroupID.y << 16u);
+    }
+
+    if (!reflective)
+        return;
+
+    // Mirror-like surfaces get one ray per pixel. Rougher lobes are sampled
+    // sparsely (1/rate^2 of pixels per frame) and reconstructed by the edge-aware
+    // prefilter/temporal passes. The active sub-position must scan ALL rate^2
+    // cells over rate^2 frames so every pixel is traced (and accumulates its own
+    // temporal history) — decomposing the frame index low/high bits covers the
+    // rate x rate block; (frame, frame*3) does NOT (3*f == f mod 2 collapses
+    // rate-2 to a diagonal, leaving half the pixels never traced).
+    // Roughness->rate table scaled by the user's SampleQuality: Low quarters
+    // the rough lobes, High traces near-full-rate. rate must stay a power of
+    // two (the phase decomposition masks with rate-1).
+    uint rate;
+    if (sssr.sampleQuality <= 0)      // Low
+        rate = roughness < 0.35 ? 1u : (roughness < 0.72 ? 4u : 4u);
+    else if (sssr.sampleQuality == 1) // Medium
+        rate = roughness < 0.35 ? 1u : (roughness < 0.72 ? 2u : 4u);
+    else                              // High
+        rate = roughness < 0.35 ? 1u : (roughness < 0.72 ? 1u : 2u);
+    vec2 uv = (vec2(pixel) + 0.5) / vec2(size);
+    vec2 previousUv;
+    float previousDepth;
+    bool moved;
+    bool validHistory = sssr.historyValid != 0u &&
+        GE_SssrReprojectSurface(uMotionVectors, uv, GE_ViewPosition(uv, depth),
+            previousUv, previousDepth, moved);
+    vec4 moments = vec4(0.0);
+    if (validHistory)
+    {
+        ivec2 q = ivec2(previousUv * vec2(size));
+        vec4 surface = texelFetch(uSurfaceHistory, q, 0);
+        vec3 normalWS = normalize(mat3(ge_invView) *
+            GE_DecodeNormalVS(texelFetch(uNormalRoughness, pixel, 0)));
+        moments = texelFetch(uMoments, q, 0);
+        validHistory = moments.a > 0.0 &&
+            GE_SssrDepthHistoryValid(GE_SssrDecodeHistoryDepth(surface.a), GE_LinearZ(previousDepth)) &&
+            dot(normalWS, GE_OctDecode(surface.rg)) > 0.9 && abs(roughness - surface.b) < 0.1 &&
+            GE_SssrIsFinite(moments);
+    }
+    float relativeVariance = max(moments.g - moments.r * moments.r, 0.0) /
+                             max(moments.r * moments.r, 1e-4);
+    rate = GE_SssrAdaptiveRate(rate, roughness, validHistory, relativeVariance, moments.a);
+    uint shift = uint(findMSB(rate)); // log2(rate); 0 for rate 1
+    uvec2 phase =
+        uvec2(sssr.frameIndex & (rate - 1u), (sssr.frameIndex >> shift) & (rate - 1u));
+    if (any(notEqual(uvec2(pixel) & (rate - 1u), phase)))
+        return;
+
+    uint index = atomicAdd(Args.rayCount, 1u);
+    RayList.rays[index] = uint(pixel.x) | (uint(pixel.y) << 16u);
+}

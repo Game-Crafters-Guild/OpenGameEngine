@@ -1,0 +1,192 @@
+#version 450
+
+// SMAA pass 2 of 3: blend-weight calculation. For each pixel owning an edge,
+// walk both ways along the contour to its ends, read the crossing edges
+// there, and integrate the revectorized contour line over this pixel to get
+// coverage areas (Jimenez 2012, computed analytically instead of the area
+// LUT; no diagonal patterns).
+//
+// Output convention (this implementation's own, consumed by smaa_blend.comp):
+//   R = fraction of the TOP neighbor this pixel takes in
+//   G = fraction of THIS pixel the TOP neighbor takes in
+//   B = fraction of the LEFT neighbor this pixel takes in
+//   A = fraction of THIS pixel the LEFT neighbor takes in
+
+layout(local_size_x = 8, local_size_y = 8) in;
+
+layout(set = 0, binding = 0, rgba8) uniform writeonly image2D uWeights;
+layout(set = 0, binding = 1) uniform sampler2D uEdges;
+
+const int kMaxSearchSteps = 16;
+
+vec2 EdgesAt(ivec2 p, ivec2 size)
+{
+    if (p.x < 0 || p.y < 0 || p.x >= size.x || p.y >= size.y)
+        return vec2(0.0);
+    return texelFetch(uEdges, p, 0).rg;
+}
+
+// End offset for one end of the contour: +0.5 = the surface bulges toward the
+// positive cross axis, -0.5 = toward the negative, 0 = flat (none, or a T
+// junction where both crossing edges meet).
+float EndOffset(bool crossPos, bool crossNeg)
+{
+    if (crossPos == crossNeg)
+        return 0.0;
+    return crossPos ? 0.5 : -0.5;
+}
+
+// Signed area of the revectorized line over this pixel's [x0, x0+1] slice of
+// the span. The line runs (0, hL) -> (D, hR) for L/Z patterns; U patterns
+// (both ends offset the same way) fold at the span midpoint through 0.
+// Positive area accumulates into outPos, negative into outNeg.
+void IntegrateSpan(float x0, float D, float hL, float hR, out float outPos, out float outNeg)
+{
+    outPos = 0.0;
+    outNeg = 0.0;
+    const float x1 = x0 + 1.0;
+
+    // Piecewise segments: U folds at D/2, everything else is one segment.
+    const bool uShape = (hL != 0.0) && (hL == hR);
+    for (int seg = 0; seg < 2; ++seg)
+    {
+        float sx0, sx1, sh0, sh1;
+        if (uShape)
+        {
+            if (seg == 0) { sx0 = 0.0;     sx1 = 0.5 * D; sh0 = hL;  sh1 = 0.0; }
+            else          { sx0 = 0.5 * D; sx1 = D;       sh0 = 0.0; sh1 = hR;  }
+        }
+        else
+        {
+            if (seg == 1)
+                break;
+            sx0 = 0.0; sx1 = D; sh0 = hL; sh1 = hR;
+        }
+
+        const float a = max(x0, sx0);
+        const float b = min(x1, sx1);
+        if (b <= a)
+            continue;
+        const float invLen = 1.0 / max(sx1 - sx0, 1e-6);
+        const float ha = mix(sh0, sh1, (a - sx0) * invLen);
+        const float hb = mix(sh0, sh1, (b - sx0) * invLen);
+
+        if (ha >= 0.0 && hb >= 0.0)
+            outPos += 0.5 * (ha + hb) * (b - a);
+        else if (ha <= 0.0 && hb <= 0.0)
+            outNeg += 0.5 * (-ha - hb) * (b - a);
+        else
+        {
+            // The line crosses zero inside [a, b]: split at the root.
+            const float t = ha / (ha - hb);
+            const float xz = a + t * (b - a);
+            if (ha > 0.0) { outPos += 0.5 * ha * (xz - a); outNeg += 0.5 * (-hb) * (b - xz); }
+            else          { outNeg += 0.5 * (-ha) * (xz - a); outPos += 0.5 * hb * (b - xz); }
+        }
+    }
+}
+
+void main()
+{
+    const ivec2 size = imageSize(uWeights);
+    const ivec2 p = ivec2(gl_GlobalInvocationID.xy);
+    if (p.x >= size.x || p.y >= size.y)
+        return;
+
+    const vec2 e = EdgesAt(p, size);
+    vec4 weights = vec4(0.0);
+
+    // ── Horizontal contour: this pixel's TOP edge ──────────────────────────
+    if (e.g > 0.5)
+    {
+        // Walk left/right while the top edge continues and no crossing edge
+        // interrupts the span.
+        int d1 = 0;
+        for (; d1 < kMaxSearchSteps; ++d1)
+        {
+            const ivec2 q = p + ivec2(-(d1 + 1), 0);
+            if (EdgesAt(q, size).g < 0.5)
+                break;
+            if (EdgesAt(q + ivec2(1, 0), size).r > 0.5 ||
+                EdgesAt(q + ivec2(1, -1), size).r > 0.5)
+                break;
+        }
+        int d2 = 0;
+        for (; d2 < kMaxSearchSteps; ++d2)
+        {
+            const ivec2 q = p + ivec2(d2 + 1, 0);
+            if (EdgesAt(q, size).g < 0.5)
+                break;
+            if (EdgesAt(q, size).r > 0.5 || EdgesAt(q + ivec2(0, -1), size).r > 0.5)
+                break;
+        }
+
+        // Crossing edges at the span ends. Left end pixel is p.x - d1; its
+        // crossing verticals are the r-edges of that column on this row
+        // (below the contour) and the row above (above the contour).
+        const ivec2 endL = ivec2(p.x - d1, p.y);
+        const ivec2 endR = ivec2(p.x + d2 + 1, p.y);
+        const bool lTop = EdgesAt(endL + ivec2(0, -1), size).r > 0.5;
+        const bool lBot = EdgesAt(endL, size).r > 0.5;
+        const bool rTop = EdgesAt(endR + ivec2(0, -1), size).r > 0.5;
+        const bool rBot = EdgesAt(endR, size).r > 0.5;
+
+        // Toward the top neighbor is NEGATIVE y, mapped to +h.
+        const float hL = EndOffset(lTop, lBot);
+        const float hR = EndOffset(rTop, rBot);
+        if (hL != 0.0 || hR != 0.0)
+        {
+            float areaTop, areaBot;
+            IntegrateSpan(float(d1), float(d1 + d2 + 1), hL, hR, areaTop, areaBot);
+            // The contour bulging toward the top (+) means the TOP NEIGHBOR
+            // shows this pixel's surface; bulging down means this pixel shows
+            // the top neighbor's.
+            weights.g = clamp(areaTop, 0.0, 1.0);
+            weights.r = clamp(areaBot, 0.0, 1.0);
+        }
+    }
+
+    // ── Vertical contour: this pixel's LEFT edge ───────────────────────────
+    if (e.r > 0.5)
+    {
+        int d1 = 0;
+        for (; d1 < kMaxSearchSteps; ++d1)
+        {
+            const ivec2 q = p + ivec2(0, -(d1 + 1));
+            if (EdgesAt(q, size).r < 0.5)
+                break;
+            if (EdgesAt(q + ivec2(0, 1), size).g > 0.5 ||
+                EdgesAt(q + ivec2(-1, 1), size).g > 0.5)
+                break;
+        }
+        int d2 = 0;
+        for (; d2 < kMaxSearchSteps; ++d2)
+        {
+            const ivec2 q = p + ivec2(0, d2 + 1);
+            if (EdgesAt(q, size).r < 0.5)
+                break;
+            if (EdgesAt(q, size).g > 0.5 || EdgesAt(q + ivec2(-1, 0), size).g > 0.5)
+                break;
+        }
+
+        const ivec2 endT = ivec2(p.x, p.y - d1);
+        const ivec2 endB = ivec2(p.x, p.y + d2 + 1);
+        const bool tLeft = EdgesAt(endT + ivec2(-1, 0), size).g > 0.5;
+        const bool tRight = EdgesAt(endT, size).g > 0.5;
+        const bool bLeft = EdgesAt(endB + ivec2(-1, 0), size).g > 0.5;
+        const bool bRight = EdgesAt(endB, size).g > 0.5;
+
+        // Toward the left neighbor is NEGATIVE x, mapped to +h.
+        const float hT = EndOffset(tLeft, tRight);
+        const float hB = EndOffset(bLeft, bRight);
+        if (hT != 0.0 || hB != 0.0)
+        {
+            float areaLeft, areaRight;
+            IntegrateSpan(float(d1), float(d1 + d2 + 1), hT, hB, areaLeft, areaRight);
+            weights.a = clamp(areaLeft, 0.0, 1.0);
+            weights.b = clamp(areaRight, 0.0, 1.0);
+        }
+    }
+
+    imageStore(uWeights, p, weights);
+}

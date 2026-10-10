@@ -1,0 +1,21 @@
+{
+  "schemaVersion": 3,
+  "materialName": "EmissiveBands",
+  "lightingModel": "StandardPBR",
+  "alphaMode": "Opaque",
+  "doubleSided": true,
+  "surfaceShader": "Surfaces/standard_pbr.glsl",
+  "properties": {
+    "baseColor": [0.0, 0.0, 0.0, 1.0],
+    "metallic": 0.0,
+    "roughness": 1.0,
+    "emissive": [1.0, 1.0, 1.0],
+    "emissionLuminance": 400.0
+  },
+  "textures": {
+    "emissiveMap": {
+      "guid": "200dfad0-7a51-4875-ac4b-2dcefcff9df3",
+      "path": "Textures/EmissiveBands.png"
+    }
+  }
+}

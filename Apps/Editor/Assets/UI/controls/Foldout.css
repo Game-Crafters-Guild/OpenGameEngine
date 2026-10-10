@@ -1,0 +1,90 @@
+/* Foldout Control Styles (Editor app asset)
+ *
+ * NOTE:
+ * - Avoid % widths (not supported reliably).
+ * - Avoid clip-path / transition (not supported by our CSS parser).
+ */
+
+.foldout {
+	display: flex;
+	flex-direction: column;
+	align-self: stretch;
+	min-width: 0;
+}
+
+.foldout-header {
+	display: flex;
+	flex-direction: row;
+	align-items: center;
+	gap: 8px;
+	padding: 6px 10px;
+	border-radius: 6px;
+	cursor: pointer;
+	background-color: rgba(255, 255, 255, 0.15);
+}
+
+.foldout-header:hover {
+	background-color: rgba(255, 255, 255, 0.192);
+}
+
+.foldout-header.pressed {
+	background-color: rgba(255, 255, 255, 0.31);
+}
+
+.foldout-chevron {
+	width: 12px;
+	height: 12px;
+	min-width: 12px;
+	min-height: 12px;
+	background-size: 12px 12px;
+	background-repeat: no-repeat;
+	background-position: center;
+	opacity: 0.65;
+	background-image: url("editor:Icons/arrow-right.png");
+	background-image-tint: rgba(200, 200, 200, 1.0);
+}
+
+.foldout-chevron.expanded {
+	background-image: url("editor:Icons/arrow-down.png");
+	opacity: 0.85;
+}
+
+.foldout-chevron.collapsed {
+	background-image: url("editor:Icons/arrow-right.png");
+}
+
+/* A header icon set by SetIconClass: the class supplies the image, the slot its box. */
+.foldout-icon {
+	width: 16px;
+	height: 16px;
+	min-width: 16px;
+	min-height: 16px;
+	flex-shrink: 0;
+	background-size: contain;
+	background-repeat: no-repeat;
+	background-position: center;
+}
+
+.foldout-icon.hidden {
+	display: none;
+}
+
+.foldout-title {
+	flex: 1;
+	min-width: 0;
+	font-size: 13px;
+	color: rgba(255, 255, 255, 0.96);
+}
+
+.foldout-content {
+	display: flex;
+	flex-direction: column;
+	align-self: stretch;
+	min-width: 0;
+	padding: 6px 8px 6px 22px;
+	gap: 6px;
+}
+
+.foldout-content.hidden {
+	display: none;
+}

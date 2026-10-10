@@ -1,0 +1,152 @@
+/* ==============================================
+   Smart Folders Component Styles
+   ==============================================
+   Styles for Smart Folder feature including:
+   - Tree view items (section header, folder items)
+   - Inspector panel (filter rows, buttons, dropdowns)
+   ============================================== */
+
+/* ----------------------
+   Tree View Styles
+   ---------------------- */
+
+/* Smart Folders section header */
+.tree .tree-item.smart-folders-section .tree-title {
+	font-weight: 500;
+}
+
+/* Smart Folder items - blue icon tint on the dedicated icon element (overridden by --ui_smartfolder_icon_tint when set) */
+.tree .tree-item.smart-folder .tree-folder-icon {
+	background-image: url("editor:Icons/Folder@64px.png");
+	background-image-tint: rgba(107, 164, 248, 1.0);
+	background-image-tint: var(--ui_smartfolder_icon_tint, rgba(107, 164, 248, 1.0));
+}
+
+/* Smart Folders section header: also use the blue-tinted folder icon */
+.tree .tree-item.smart-folders-section .tree-folder-icon {
+	background-image: url("editor:Icons/Folder@64px.png");
+	background-image-tint: rgba(107, 164, 248, 1.0);
+	background-image-tint: var(--ui_smartfolder_icon_tint, rgba(107, 164, 248, 1.0));
+}
+
+.tree .tree-item.smart-folders-section.selected .tree-folder-icon {
+	background-image-tint: rgba(157, 196, 255, 1.0);
+}
+
+.tree .tree-item.smart-folders-section:hover .tree-folder-icon {
+	background-image-tint: rgba(157, 196, 255, 1.0);
+}
+
+.tree .tree-item.smart-folder.selected .tree-folder-icon {
+	background-image-tint: rgba(157, 196, 255, 1.0);
+}
+
+.tree .tree-item.smart-folder:hover .tree-folder-icon {
+	background-image-tint: rgba(157, 196, 255, 1.0);
+}
+
+/* ----------------------
+   Inspector Styles
+   ---------------------- */
+
+/* Add Filter button */
+.inspector-button.add-filter-button {
+	height: 32px;
+	min-height: 32px;
+	background-color: #191919;
+	border-color: #191919;
+	background-image: url("editor:Icons/plus.png");
+	background-size: 16px 16px;
+	background-repeat: no-repeat;
+	background-position: 12px 7px;
+	background-image-tint: rgba(255, 255, 255, 0.7);
+	padding-left: 32px;
+	align-items: center;
+	margin-bottom: 16px;
+	margin-right: 6px;
+}
+
+.inspector-button.add-filter-button:hover {
+	background-color: #222222;
+	border-color: #222222;
+	background-image-tint: rgba(255, 255, 255, 0.87);
+}
+
+/* Filter row layout */
+.smart-folder-filter-row {
+	display: flex;
+	flex-direction: row;
+	align-items: center;
+	gap: 4px;
+	padding: 2px 0;
+	margin-bottom: 2px;
+}
+
+.smart-folder-filter-row .xclose-icon {
+	width: 24px;
+	min-width: 24px;
+}
+
+/* Filter dropdowns */
+.filter-type-dropdown {
+	width: 50%;
+	min-width: 80px;
+}
+
+.filter-value-dropdown,
+.filter-value-field {
+	width: 50%;
+	min-width: 80px;
+}
+
+/* Smart folder inspector rows */
+.smart-folder-name-row {
+	margin-top: 16px;
+}
+
+.smart-folder-row {
+	margin-top: 6px;
+}
+
+.smart-folder-row .inspector-field,
+.smart-folder-row .inspector-dropdown,
+.smart-folder-name-row .inspector-field {
+	width: 70%;
+	margin-right: 6px;
+}
+
+.smart-folder-row .inspector-dropdown,
+.smart-folder-row .inspector-dropdown .dropdown-header {
+	height: 28px;
+	min-height: 28px;
+}
+
+.smart-folder-name-row .inspector-field,
+.smart-folder-name-row .inspector-field TextInput {
+	height: 28px;
+	min-height: 28px;
+}
+
+/* Delete Smart Folder button: same look as Add Filter normally, red only on hover */
+.button.inspector-button.danger {
+	height: 32px;
+	min-height: 32px;
+	background-color: #191919;
+	border-color: #191919;
+	color: var(--ui_color_text);
+	margin-top: 16px;
+	background-image: url("editor:Icons/trash.png");
+	background-size: 20px 20px;
+	background-repeat: no-repeat;
+	background-position: 12px 5px;
+	background-image-tint: rgba(255, 255, 255, 0.7);
+	padding-left: 36px;
+	align-items: center;
+	margin-right: 6px;
+}
+
+.button.inspector-button.danger:hover {
+	background-color: #DC3545;
+	border-color: #DC3545;
+	background-image-tint: rgba(255, 255, 255, 0.95);
+}

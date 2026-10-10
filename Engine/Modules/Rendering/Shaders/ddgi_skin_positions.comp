@@ -1,0 +1,145 @@
+#version 450
+
+// DDGI skinned-geometry bake: apply one instance's bone palette to its mesh's
+// bind-pose positions, writing an OBJECT-space posed position stream for the
+// instance's BLAS build. Object space on purpose: the vertex path skins in
+// local space and lets the instance transform carry it to world
+// (Adapters/adapter_vertex.glsl), and the TLAS instance row does exactly the
+// same for the BLAS — so the two agree by construction.
+//
+// One thread per vertex. Matches ge_ApplyBonePalette's linear-blend math via
+// the shared bone_palette.glsl helpers — the same palette atlas the vertex
+// shader reads, so the traced surface is the surface being drawn. 4-influence
+// always; the second influence pair (SKINNED_8-class meshes) is summed in when
+// uParams.w says the streams are real (absent streams alias the primary
+// bindings and the flag keeps them unread).
+//
+// Joints stream is R16G16B16A16_UINT (VertexLayoutBuilder's contract): two
+// packed uints per vertex, unpacked 16 bits at a time. Weights are vec4.
+// Positions are read out of the interleaved core vertex by float index —
+// position always leads the core vertex, so the offset is 0 and the stride
+// arrives in floats.
+
+layout(local_size_x = 64, local_size_y = 1, local_size_z = 1) in;
+
+layout(std140, set = 0, binding = 0) uniform DDGISkinParams
+{
+    uvec4 uParams;   // x=vertexCount, y=coreStrideFloats, z=paletteOffset (bone slots), w=hasSecondInfluence
+    uvec4 uParams2;  // x=uv0OffsetFloats within the core vertex (0xFFFFFFFF = mesh has no UV0),
+                     // y=vertexOffset — the mesh's first vertex in its POOLED streams
+                     // (all streams sit at the same vertex offset, the allocator's
+                     // lockstep guarantee); reads add it, the dense output does not.
+                     // z=normalOffsetFloats within the core vertex (0xFFFFFFFF = none)
+} SkinParams;
+
+layout(std430, set = 0, binding = 1) readonly buffer CoreVertices
+{
+    float ge_coreVerts[];
+};
+
+layout(std430, set = 0, binding = 2) readonly buffer JointsStream
+{
+    uint ge_joints[];  // 2 uints per vertex: 4 x u16
+};
+
+layout(std430, set = 0, binding = 3) readonly buffer WeightsStream
+{
+    vec4 ge_weights[];
+};
+
+layout(std430, set = 0, binding = 4) readonly buffer Joints1Stream
+{
+    uint ge_joints1[];
+};
+
+layout(std430, set = 0, binding = 5) readonly buffer Weights1Stream
+{
+    vec4 ge_weights1[];
+};
+
+layout(std430, set = 0, binding = 6) readonly buffer BonePaletteAtlasSSBO
+{
+    vec4 rows[];
+} BonePaletteAtlas;
+
+#define GE_BONE_PALETTE_READABLE
+#include "Includes/bone_palette.glsl"
+
+// 32 B record: [pos.xyz | normal.xyz | uv.xy] — the SAME 8-float layout as
+// SceneBvh::ThreadedBvh::VertexData, so the software lane's refit kernel can
+// copy posed records verbatim into a BVH range. Position leads (the BLAS
+// build-input contract); the hardware geometry row publishes UV0 at byte 24.
+// WGSL storage buffers have no write-only access mode (naga rejects it); the buffer is still
+// only written. GE_WRITEONLY drops the qualifier on the compat cook and keeps it on native.
+#if defined(GE_COMPAT_PROFILE)
+#define GE_WRITEONLY
+#else
+#define GE_WRITEONLY writeonly
+#endif
+layout(std430, set = 0, binding = 7) GE_WRITEONLY buffer SkinnedPositions
+{
+    float ge_skinnedVerts[];
+};
+
+uvec4 GE_UnpackJoints(uint packedLo, uint packedHi)
+{
+    return uvec4(packedLo & 0xFFFFu, packedLo >> 16, packedHi & 0xFFFFu, packedHi >> 16);
+}
+
+void main()
+{
+    uint v = gl_GlobalInvocationID.x;
+    if (v >= SkinParams.uParams.x)
+        return;
+
+    uint strideFloats = SkinParams.uParams.y;
+    uint paletteOffset = SkinParams.uParams.z;
+    uint poolV = SkinParams.uParams2.y + v;
+    vec3 bindPos = vec3(ge_coreVerts[poolV * strideFloats + 0u],
+                        ge_coreVerts[poolV * strideFloats + 1u],
+                        ge_coreVerts[poolV * strideFloats + 2u]);
+
+    uvec4 joints = GE_UnpackJoints(ge_joints[poolV * 2u + 0u], ge_joints[poolV * 2u + 1u]);
+    vec4 weights = ge_weights[poolV];
+
+    vec4 r0, r1, r2;
+    ge_BlendBonePaletteRows(paletteOffset, joints, weights, r0, r1, r2);
+    if (SkinParams.uParams.w != 0u)
+    {
+        uvec4 joints1 = GE_UnpackJoints(ge_joints1[poolV * 2u + 0u], ge_joints1[poolV * 2u + 1u]);
+        vec4 r0b, r1b, r2b;
+        ge_BlendBonePaletteRows(paletteOffset, joints1, ge_weights1[poolV], r0b, r1b, r2b);
+        r0 += r0b;
+        r1 += r1b;
+        r2 += r2b;
+    }
+
+    // Core layout law: position leads; a normal, when present, follows it
+    // (SceneAS's CoreVertexUV0Offset encodes the same rule). uParams2.z is the
+    // normal's float offset (0xFFFFFFFF = none — posed normal falls back to
+    // +Y rather than garbage).
+    uint normalOffsetFloats = SkinParams.uParams2.z;
+    vec3 bindNormal = vec3(0.0, 1.0, 0.0);
+    if (normalOffsetFloats != 0xFFFFFFFFu)
+        bindNormal = vec3(ge_coreVerts[poolV * strideFloats + normalOffsetFloats + 0u],
+                          ge_coreVerts[poolV * strideFloats + normalOffsetFloats + 1u],
+                          ge_coreVerts[poolV * strideFloats + normalOffsetFloats + 2u]);
+    vec3 posedNormal = normalize(vec3(dot(r0.xyz, bindNormal), dot(r1.xyz, bindNormal),
+                                      dot(r2.xyz, bindNormal)));
+
+    vec4 ph = vec4(bindPos, 1.0);
+    uint outBase = v * 8u;
+    ge_skinnedVerts[outBase + 0u] = dot(r0, ph);
+    ge_skinnedVerts[outBase + 1u] = dot(r1, ph);
+    ge_skinnedVerts[outBase + 2u] = dot(r2, ph);
+    ge_skinnedVerts[outBase + 3u] = posedNormal.x;
+    ge_skinnedVerts[outBase + 4u] = posedNormal.y;
+    ge_skinnedVerts[outBase + 5u] = posedNormal.z;
+    uint uvOffsetFloats = SkinParams.uParams2.x;
+    vec2 uv = vec2(0.0);
+    if (uvOffsetFloats != 0xFFFFFFFFu)
+        uv = vec2(ge_coreVerts[poolV * strideFloats + uvOffsetFloats + 0u],
+                  ge_coreVerts[poolV * strideFloats + uvOffsetFloats + 1u]);
+    ge_skinnedVerts[outBase + 6u] = uv.x;
+    ge_skinnedVerts[outBase + 7u] = uv.y;
+}

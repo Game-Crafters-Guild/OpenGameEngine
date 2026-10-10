@@ -1,0 +1,25 @@
+{
+  "name": "eztree",
+  "version": "1.1.0",
+  "displayName": "Tree Generator",
+  "assets": "Assets/",
+  "runtimeAssets": {
+    "EZTree": ["Textures/EZTree/"]
+  },
+  "modules": [
+    {
+      "name": "eztree-runtime",
+      "kind": "Runtime",
+      "lang": "Cpp",
+      "root": "Native/",
+      "prebuilt": "Binaries/Runtime/"
+    },
+    {
+      "name": "eztree-editor",
+      "kind": "Editor",
+      "lang": "Cpp",
+      "root": "Editor/",
+      "prebuilt": "Binaries/Editor/"
+    }
+  ]
+}

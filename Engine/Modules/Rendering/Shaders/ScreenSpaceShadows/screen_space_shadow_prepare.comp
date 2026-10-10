@@ -1,0 +1,17 @@
+#version 460
+#extension GL_GOOGLE_include_directive : require
+#include "Includes/storage_access.glsl"
+
+// Initialize every visibility value, including the light-center singularity
+// omitted by the radial trace. Dimensions come from the resolved depth input.
+layout(local_size_x = 8, local_size_y = 8, local_size_z = 1) in;
+layout(set = 0, binding = 0) uniform sampler2D uDepth;
+layout(set = 0, binding = 1, std430) GE_STORAGE_WRITEONLY buffer Visibility { uint visibility[]; };
+void main()
+{
+    ivec2 pixel = ivec2(gl_GlobalInvocationID.xy);
+    ivec2 size = textureSize(uDepth, 0);
+    if (any(greaterThanEqual(pixel, size)))
+        return;
+    visibility[pixel.y * size.x + pixel.x] = 255u;
+}

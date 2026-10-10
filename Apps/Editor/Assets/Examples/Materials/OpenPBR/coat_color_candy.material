@@ -1,0 +1,18 @@
+{
+  "schemaVersion": 3,
+  "materialName": "OpenPBR - Candy Coat (coat_color)",
+  "lightingModel": "StandardPBR",
+  "alphaMode": "Opaque",
+  "doubleSided": false,
+  "surfaceShader": "Surfaces/standard_pbr.glsl",
+  "properties": {
+    "baseColor": [0.8, 0.8, 0.8, 1.0],
+    "metallic": 0.0,
+    "roughness": 0.45,
+    "enableClearCoat": true,
+    "clearCoat": 1.0,
+    "clearCoatRoughness": 0.03,
+    "coatColor": [0.85, 0.08, 0.08]
+  },
+  "textures": {}
+}

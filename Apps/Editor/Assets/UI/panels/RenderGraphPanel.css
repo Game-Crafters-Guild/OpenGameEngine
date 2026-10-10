@@ -1,0 +1,485 @@
+/* Render Graph panel — scrollable pass list + per-pass detail view. */
+
+.render-graph-panel {
+    display: flex;
+    flex-direction: column;
+    width: 100%;
+    height: 100%;
+    background-color: var(--ui_color_bg_panel);
+    padding: 6px;
+    gap: 6px;
+}
+
+.render-graph-toolbar {
+    display: flex;
+    flex-direction: row;
+    align-items: center;
+    flex-wrap: wrap;
+    column-gap: 6px;
+    row-gap: 8px;
+    padding: 0 10px;
+    flex: 0 0 auto;
+}
+
+.render-graph-toolbar Button {
+    flex: 0 0 auto;
+    white-space: nowrap;
+}
+
+.render-graph-btn-profile {
+    width: 110px;
+}
+
+.render-graph-btn-capture {
+    width: 160px;
+}
+
+.render-graph-btn-export {
+    width: 100px;
+}
+
+.render-graph-btn-sort {
+    width: 130px;
+}
+
+.render-graph-overview-row {
+    display: flex;
+    flex-direction: row;
+    justify-content: flex-start;
+    align-items: baseline;
+    flex-wrap: wrap;
+    column-gap: 5px;
+    row-gap: 2px;
+    flex: 0 0 auto;
+    padding: 0 10px;
+}
+
+.render-graph-overview-num {
+    flex: 0 0 auto;
+    font-size: 15px;
+    color: #ffffff;
+}
+
+.render-graph-overview-word {
+    flex: 0 0 auto;
+    font-size: 15px;
+    color: #B8D8FF;
+}
+
+.render-graph-search {
+    width: 220px;
+    flex: 0 0 auto;
+    font-size: 14px;
+}
+
+/* Small muted hints: profiling state next to Profile, the written .rdc filename
+   next to Capture, and the stats row's main-window-only scope note. */
+.render-graph-profile-hint,
+.render-graph-capture-hint,
+.render-graph-window-hint {
+    flex: 0 0 auto;
+    font-size: 12px;
+    color: #808890;
+    white-space: nowrap;
+}
+
+/* Sits inline with the stats numbers rather than in a toolbar. */
+.render-graph-window-hint {
+    padding: 0;
+}
+
+/* ---- Validation section (S2.3 blueprint diagnostics) ---- */
+
+.render-graph-validation {
+    display: flex;
+    flex-direction: column;
+    flex: 0 0 auto;
+    row-gap: 4px;
+    padding: 2px 10px 4px 10px;
+}
+
+.render-graph-validation-banner {
+    display: flex;
+    flex-direction: row;
+    align-items: center;
+    flex: 0 0 auto;
+    padding: 6px 10px;
+    border-radius: 4px;
+    border-left-width: 3px;
+    border-left-color: transparent;
+    background-color: #3A1E20;
+}
+
+.render-graph-validation-banner-label {
+    flex: 1 1 auto;
+    min-width: 0;
+    font-size: 14px;
+    color: #F0A0A2;
+}
+
+.render-graph-validation-list {
+    display: flex;
+    flex-direction: column;
+    flex: 0 0 auto;
+    row-gap: 2px;
+}
+
+.render-graph-validation-warntoggle {
+    align-self: flex-start;
+    flex: 0 0 auto;
+    white-space: nowrap;
+}
+
+.render-graph-validation-row {
+    display: flex;
+    flex-direction: row;
+    align-items: baseline;
+    flex: 0 0 auto;
+    column-gap: 6px;
+    padding: 1px 4px;
+    border-radius: 3px;
+}
+
+.render-graph-validation-row:hover {
+    background-color: var(--ui_color_bg_hover);
+}
+
+.render-graph-validation-pill {
+    flex: 0 0 auto;
+    font-size: 11px;
+    padding: 0 6px;
+    border-radius: 8px;
+}
+
+.render-graph-validation-row.error .render-graph-validation-pill {
+    color: #FFD7D8;
+    background-color: #7A2528;
+}
+
+.render-graph-validation-row.warn .render-graph-validation-pill {
+    color: #2A2200;
+    background-color: #D9A039;
+}
+
+.render-graph-validation-row.info .render-graph-validation-pill {
+    color: #D0E4FF;
+    background-color: #2A4360;
+}
+
+.render-graph-validation-node {
+    flex: 0 0 auto;
+    font-size: 13px;
+    color: #B8D8FF;
+    white-space: nowrap;
+}
+
+.render-graph-validation-msg {
+    flex: 1 1 auto;
+    min-width: 0;
+    font-size: 13px;
+    color: #cfcfcf;
+}
+
+.render-graph-toolbar-spacer {
+    flex: 1 1 0;
+    min-width: 0;
+}
+
+.render-graph-hardware {
+    flex: 0 0 auto;
+    padding: 0;
+    font-size: 14px;
+    color: #bfbfbf;
+    white-space: nowrap;
+}
+
+.render-graph-pass-row.hidden {
+    display: none;
+}
+
+.render-graph-body {
+    display: flex;
+    flex-direction: row;
+    flex: 1 1 auto;
+    gap: 0;
+    min-height: 0;
+}
+
+.render-graph-splitter {
+    flex: 0 0 6px;
+    width: 6px;
+    background-color: transparent;
+    cursor: col-resize;
+}
+
+.render-graph-splitter:hover {
+    background-color: var(--ui_color_accent_blue);
+}
+
+/* ---- Panes ---- */
+
+.render-graph-pane {
+    display: flex;
+    flex-direction: column;
+    flex-basis: 0;
+    flex-shrink: 1;
+    min-width: 0;
+    min-height: 0;
+}
+
+/* ---- Left: pass list ---- */
+
+.render-graph-passes-list {
+    flex: 1 1 auto;
+    min-width: 0;
+    min-height: 0;
+    background-color: var(--ui_color_bg_grid);
+    border-radius: 4px;
+    overflow-x: hidden;
+    overflow-y: auto;
+}
+
+.render-graph-passes-list .scroll-content {
+    display: flex;
+    flex-direction: column;
+    padding: 4px;
+    gap: 1px;
+    min-width: 0;
+}
+
+.render-graph-pass-row {
+    display: flex;
+    flex-direction: column;
+    padding: 2px 10px;
+    border-radius: 3px;
+    flex: 0 0 auto;
+    border-left-width: 3px;
+    border-left-color: transparent;
+}
+
+.render-graph-pass-row:hover {
+    background-color: var(--ui_color_bg_hover);
+}
+
+.render-graph-pass-row.selected,
+.render-graph-pass-row.selected:hover {
+    background-color: #2A3340;
+}
+
+.render-graph-pass-row.selected .render-graph-pass-name {
+    color: #ffffff;
+}
+
+.render-graph-pass-row.selected .render-graph-pass-meta-word {
+    color: #B8D8FF;
+}
+
+.render-graph-pass-row.selected .render-graph-pass-meta-num {
+    color: #ffffff;
+}
+
+.render-graph-pass-row.disabled {
+    opacity: 0.5;
+}
+
+.render-graph-pass-name {
+    font-size: 14px;
+    color: #bfbfbf;
+    padding: 0;
+}
+
+.render-graph-pass-meta-row {
+    display: flex;
+    flex-direction: row;
+    align-items: baseline;
+    flex-wrap: wrap;
+    column-gap: 5px;
+    row-gap: 0px;
+    padding: 0;
+}
+
+.render-graph-pass-meta-group {
+    display: flex;
+    flex-direction: row;
+    align-items: baseline;
+    column-gap: 5px;
+}
+
+.render-graph-pass-meta-group.hidden {
+    display: none;
+}
+
+.render-graph-pass-meta-spacer {
+    flex: 1 1 0;
+    min-width: 0;
+}
+
+.render-graph-pass-meta-group.cpu {
+    flex: 0 0 auto;
+    min-width: 78px;
+}
+
+.render-graph-pass-meta-group.gpu {
+    flex: 0 0 auto;
+    min-width: 78px;
+    margin-left: 18px;
+}
+
+.render-graph-pass-meta-group.cpu .render-graph-pass-meta-word {
+    color: #FFC080;
+}
+
+.render-graph-pass-meta-group.gpu .render-graph-pass-meta-word {
+    color: #80D0FF;
+}
+
+.render-graph-pass-row.selected .render-graph-pass-meta-group.cpu .render-graph-pass-meta-word {
+    color: #FFC080;
+}
+
+.render-graph-pass-row.selected .render-graph-pass-meta-group.gpu .render-graph-pass-meta-word {
+    color: #80D0FF;
+}
+
+.render-graph-pass-meta-group .render-graph-pass-meta-word.unit,
+.render-graph-pass-row.selected .render-graph-pass-meta-group .render-graph-pass-meta-word.unit {
+    color: #808080;
+}
+
+.render-graph-pass-meta-group .render-graph-pass-meta-word.label {
+    margin-right: 6px;
+}
+
+.render-graph-pass-meta-word {
+    font-size: 14px;
+    color: #B8D8FF;
+    padding: 0;
+}
+
+.render-graph-pass-meta-num {
+    font-size: 17px;
+    color: #ffffff;
+    padding: 0;
+}
+
+/* ---- Right: detail ---- */
+
+.render-graph-detail {
+    flex: 1 1 auto;
+    min-width: 0;
+    min-height: 0;
+    background-color: var(--ui_color_bg_grid);
+    border-radius: 4px;
+    overflow-x: hidden;
+    overflow-y: auto;
+}
+
+.render-graph-detail .scroll-content {
+    display: flex;
+    flex-direction: column;
+    padding: 6px 10px;
+    gap: 0px;
+    min-width: 0;
+}
+
+.render-graph-detail-empty {
+    font-size: 15px;
+    color: var(--ui_color_text_secondary);
+    padding: 4px 0;
+}
+
+.render-graph-detail-header {
+    font-size: 18px;
+    color: #bfbfbf;
+    padding: 0;
+}
+
+.render-graph-detail-subheader {
+    font-size: 15px;
+    color: #B8D8FF;
+    padding: 0 0 2px 0;
+}
+
+.render-graph-detail-section {
+    font-size: 15px;
+    color: #bfbfbf;
+    padding: 6px 0 2px 0;
+}
+
+.render-graph-access-row {
+    display: flex;
+    flex-direction: row;
+    align-items: center;
+    gap: 6px;
+    height: 18px;
+    flex: 0 0 auto;
+    padding: 0 0 0 6px;
+    border-radius: 2px;
+}
+
+.render-graph-access-row:hover {
+    background-color: var(--ui_color_bg_hover);
+}
+
+.render-graph-access-tag {
+    width: 18px;
+    font-size: 14px;
+    color: var(--ui_color_text_secondary);
+}
+
+.render-graph-access-row.write .render-graph-access-tag {
+    color: #f08040;
+}
+
+.render-graph-access-row.read .render-graph-access-tag {
+    color: #60a0ff;
+}
+
+.render-graph-access-name {
+    flex: 1 1 auto;
+    min-width: 0;
+    font-size: 15px;
+    color: #bfbfbf;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.render-graph-access-state {
+    flex: 0 0 auto;
+    font-size: 14px;
+    color: #B8D8FF;
+    white-space: nowrap;
+}
+
+.render-graph-barrier-row {
+    display: flex;
+    flex-direction: row;
+    align-items: center;
+    gap: 6px;
+    height: 18px;
+    flex: 0 0 auto;
+    padding: 0 0 0 6px;
+    border-radius: 2px;
+}
+
+.render-graph-barrier-row:hover {
+    background-color: var(--ui_color_bg_hover);
+}
+
+.render-graph-barrier-name {
+    flex: 1 1 auto;
+    min-width: 0;
+    font-size: 15px;
+    color: #bfbfbf;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.render-graph-barrier-transition {
+    flex: 0 0 auto;
+    font-size: 14px;
+    color: #B8D8FF;
+    white-space: nowrap;
+}

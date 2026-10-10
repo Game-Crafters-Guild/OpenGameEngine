@@ -1,0 +1,324 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Game builds and Steam publishing</title>
+<style>
+  :root{
+    --bg:#0e1116; --panel:#161b22; --panel-light:#1c232c; --border:#2a323d;
+    --text:#d7dde5; --muted:#8b97a6; --accent:#5db0ff;
+    --danger:#ff6b6b; --bad:#ff6b6b; --ok:#5ad19b; --good:#5ad19b; --warn:#e8c468;
+    --mono:"SF Mono",ui-monospace,Menlo,Consolas,monospace;
+  }
+  *{box-sizing:border-box}
+  body{background:var(--bg);color:var(--text);font:15px/1.6 -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif;
+       margin:0;padding:0 0 80px}
+  .wrap{max-width:980px;margin:0 auto;padding:32px 24px}
+  h1{font-size:30px;margin:0 0 4px;letter-spacing:-.4px}
+  h2{font-size:22px;margin:42px 0 14px;padding-top:22px;border-top:1px solid var(--border)}
+  h3{font-size:17px;margin:26px 0 8px;color:#e9eef4}
+  p,li{color:var(--text)}
+  .lede{color:var(--muted);font-size:13px;text-transform:uppercase;letter-spacing:.12em;margin:0 0 26px}
+  a{color:var(--accent);text-decoration:none}
+  code{font-family:var(--mono);font-size:.88em;background:#11161d;border:1px solid var(--border);
+       border-radius:4px;padding:1px 5px}
+  pre{font-family:var(--mono);font-size:12.5px;line-height:1.5;background:#0b0f14;border:1px solid var(--border);
+      border-radius:8px;padding:14px 16px;overflow:auto}
+  pre code{background:none;border:none;padding:0}
+  .panel{border:1px solid var(--border);border-left-width:4px;border-radius:8px;background:var(--panel);
+         padding:14px 18px;margin:16px 0}
+  .panel.danger{border-left-color:var(--danger)} .panel.ok{border-left-color:var(--ok)}
+  .panel.warn{border-left-color:var(--warn)}
+  .panel h4{margin:0 0 6px;font-size:14px;text-transform:uppercase;letter-spacing:.06em}
+  .panel.danger h4{color:var(--danger)} .panel.ok h4{color:var(--ok)} .panel.warn h4{color:var(--warn)}
+  table{border-collapse:collapse;width:100%;margin:16px 0;font-size:13.5px}
+  th,td{border:1px solid var(--border);padding:8px 11px;text-align:left;vertical-align:top}
+  th{background:var(--panel-light);color:#e9eef4}
+  tr:hover td{background:#12171e}
+  .muted{color:var(--muted)}
+  ul{padding-left:22px} li{margin:4px 0}
+  .step{border:1px solid var(--border);border-radius:8px;background:var(--panel);padding:12px 16px;margin:10px 0}
+  .step b{color:var(--accent)}
+  footer{max-width:980px;margin:40px auto 0;padding:18px 24px 0;border-top:1px solid var(--border);color:var(--muted);font-size:12.5px}
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <h1>Game builds and Steam publishing</h1>
+  <p class="lede">Usage guide · build panel / publish_game.py / Steam Deck</p>
+
+  <p>The same Python commands prepare, verify, preview and upload game releases on Windows,
+  macOS and Linux. Each project owns a <code>publishing.json</code>; Steam IDs are
+  configuration, never engine constants. No Steam account is needed to prepare a release or to
+  deploy it to a Steam Deck over SSH.</p>
+
+  <h2>Build host and target</h2>
+
+  <table>
+    <tr><th>Operation</th><th>macOS host</th><th>Windows host</th><th>Linux host</th></tr>
+    <tr><td>Build a macOS game</td><td>macOS editor</td><td>Use a Mac</td><td>Use a Mac</td></tr>
+    <tr><td>Build a Windows game</td><td>Use a Windows machine</td><td>Windows editor</td><td>Use a Windows machine</td></tr>
+    <tr><td>Build a Linux game, including gameplay code</td><td>Use a Linux machine</td>
+        <td>Linux machine, or the Linux editor under WSL2</td><td>Linux editor</td></tr>
+    <tr><td>Build the Steam Deck x64 runtime</td><td>Docker, <code>linux/amd64</code> (emulated on Apple Silicon)</td>
+        <td>WSL2 with Docker integration</td><td>Docker</td></tr>
+    <tr><td>Prepare, verify, SteamPipe upload</td><td>Yes</td><td>Yes</td><td>Yes</td></tr>
+    <tr><td>Deploy, roll back, startup smoke test on a Deck</td><td>OpenSSH</td><td>Windows OpenSSH</td><td>OpenSSH</td></tr>
+  </table>
+
+  <p>The editor refuses a target its host cannot build and says how to build it instead. The
+  Windows editor, for example, refuses a Linux or Steam Deck build and names the Linux x64
+  editor and <code>build_deck.py</code> (in the engine checkout's <code>Tools/Scripts</code>); it does not write a Windows game into a
+  folder named for the other target.</p>
+
+  <p>A runtime template is the engine executable and its libraries. A game containing C#,
+  custom C++ or native package modules needs a machine that builds for the target, with the
+  target's SDK. The editor refuses to leave that code out of a template export. Template exports
+  and native builds stage assets, GUID manifests, packages and game configuration the same way.</p>
+
+  <p>The editor stores the Steam Deck platform under the name <code>Steam</code>. In publishing
+  configuration, <code>platform</code> is the binary's operating system, <code>deviceProfile</code>
+  is an optional device preference, and <code>depotId</code> selects the Steam depot. One Linux
+  depot can serve both Linux desktops and the Steam Deck; it does not need a separate Deck depot.</p>
+
+  <h2>First project setup</h2>
+
+  <p>Install Python 3.10 or newer. Run these commands from the game project, replacing
+  <code>/path/to/GameEngine</code> with your engine checkout (on Windows, use its Windows path).
+  The scripts need only Python's standard library.</p>
+
+<pre><code>python /path/to/GameEngine/Tools/Scripts/publish_game.py init</code></pre>
+
+  <p>Edit the generated <code>publishing.json</code>:</p>
+  <ul>
+    <li>Keep the targets you ship and set their output folders, executable paths and
+    <code>game.config</code> paths. Relative <code>source</code> paths resolve against the
+    configuration file, not the shell's working directory. Executable and content paths use
+    <code>/</code> on every host. Set the actual Mac <code>.app</code> name and architecture. A
+    Mac export keeps code in <code>Contents/MacOS</code> and <code>Contents/Frameworks</code> (the
+    engine, your native C++ scripts and each package's native module) and everything else in
+    <code>Contents/Resources</code>, so its executable is
+    <code>My Game.app/Contents/MacOS/Player</code> and its <code>game.config</code> is
+    <code>My Game.app/Contents/Resources/game.config</code>.</li>
+    <li>Add your own <code>steam.appId</code> and each target's <code>depotId</code> before a Steam
+    action. Null IDs are allowed for local release preparation and Deck deployment.</li>
+    <li>Use <code>requiredFiles</code> for project-specific gameplay libraries or content whose
+    absence must block publishing, including precompiled gameplay shipped without source.</li>
+    <li>Keep <code>editorPlatform</code> to build with the open editor, or supply
+    <code>buildCommands</code> for a build machine. Commands are arrays of arguments, grouped by
+    host (<code>windows</code>, <code>macos</code>, <code>linux</code>); they must wait for the
+    completed game export and return nonzero on failure. A configured host recipe takes
+    precedence over the editor build.</li>
+  </ul>
+
+  <p>For a Steam Deck export from the macOS editor, a target can use
+  <code>platform: "linux"</code>, <code>architecture: "x64"</code>,
+  <code>deviceProfile: "steamdeck"</code>, <code>editorPlatform: "Steam"</code>,
+  <code>source: "Build/Steam/steamdeck-player"</code>, <code>executable: "Player"</code> and
+  <code>gameConfig: "game.config"</code>. Match <code>source</code> to your editor's actual
+  output setting.</p>
+
+  <h2 id="what-ships">What a build ships</h2>
+
+  <p>A build ships the scenes in its scene list and the assets they reference, followed through
+  materials, models and every other reference, whether the asset belongs to the project or to a
+  package. Each enabled package also ships:</p>
+  <ul>
+    <li>its <code>Shaders/</code> folder, because a material names its shaders by path;</li>
+    <li>its code modules;</li>
+    <li>the files its <code>package.json</code> lists under <code>runtimeAssets</code> for each
+    component a shipped scene uses.</li>
+  </ul>
+  <p>Nothing else from a package ships. A package that ships nothing is left out of the game, so
+  editor-only packages such as the version control integrations add nothing to it. Only shipped
+  textures are baked.</p>
+
+  <p>A script cannot be scanned for the assets it loads. If a script loads an asset by GUID or by
+  path and nothing in a shipped scene references that asset, the asset is not in the build. When
+  the game asks for it, the log shows <code>asset &lt;id&gt; is not in this build</code>, and the
+  load returns nothing. To ship such an asset, reference it from a scene or a material in the
+  build. A package author instead lists the files the package's code loads by path under
+  <code>runtimeAssets</code>, keyed by the component that loads them; see
+  <a href="Packages/package-data-model.html#runtime-assets">the package data model</a>.</p>
+
+  <h2>Build, prepare, verify</h2>
+
+  <p>Open the project and the Build panel (the <b>Build</b> button in the editor's top toolbar),
+  and leave the panel open: <code>build</code> stops with an error while the panel is closed.
+  <a href="first-project.html#export">Your first project</a> covers creating a project and a plain
+  export from the panel. The build command checks the connected project's
+  identity, starts the chosen target, waits for that exact build's completion receipt, and
+  validates its output. A different editor project, a failed script compile, a cancellation, a
+  newer build or a mismatched output folder stops the command.</p>
+
+<pre><code>python /path/to/GameEngine/Tools/Scripts/publish_game.py build --target windows
+python /path/to/GameEngine/Tools/Scripts/publish_game.py check --target windows
+python /path/to/GameEngine/Tools/Scripts/publish_game.py prepare --target windows --release 1.0.0-beta.1
+python /path/to/GameEngine/Tools/Scripts/publish_game.py verify Releases/1.0.0-beta.1</code></pre>
+
+  <p>Use <code>--editor-port</code> to select a particular editor. Editor builds also need Node.js
+  and the engine's command-line tool dependencies; custom build recipes do not. Select the
+  native target on each machine. Copy completed outputs from other machines into the configured
+  source folders, preserving <code>.app</code> symlinks and Unix permissions, then prepare
+  several depots together by repeating <code>--target</code>. Omitting <code>--target</code>
+  selects every configured target. <code>prepare</code> also works after an ordinary Build button
+  export; it does not need the editor to stay open.</p>
+
+  <div class="panel warn">
+    <h4>How a build replaces its output folder</h4>
+    <p>A build writes into a staging folder next to the output folder and replaces the output
+    only once everything has succeeded. If another program holds a file in the new build open,
+    the build copies the files into place instead of moving the folder. The build keeps no copy
+    of the previous output; to go back to an earlier version, use a prepared release (see
+    <code>publish_game.py</code> below).</p>
+    <p>If the previous game is running, the build stops without changing anything: close the
+    game, then build again. A <code>&lt;output&gt;.discard</code> folder holds files of a
+    replaced game that were still in use; the next build deletes it.</p>
+    <p><code>&lt;output&gt;.previous</code> exists only while a build replaces the output. If one
+    is left behind, a build stopped at that step: the output folder may be incomplete and
+    <code>&lt;output&gt;.previous</code> holds the game it was replacing. Move it back or delete
+    it, then build again.</p>
+  </div>
+
+  <p>Preparation copies the game into a new release directory and validates the startup scene
+  and render pipeline, compiled shaders, asset identities, gameplay assembly paths, package
+  mounts and native module targets. It rejects external symlinks, paths that differ only by case
+  and development <code>steam_appid.txt</code> overrides. Loose PDB and <code>.debug</code> files
+  move to <code>symbols/</code>, outside the depot content; source outputs stay intact. Mac app
+  bundles are copied without editing their signed contents. Configure any production signing
+  and notarization in the Mac build recipe before preparation.</p>
+
+  <p>Every release has a checksum manifest. Reusing a release name is refused, and Steam and
+  deploy actions recheck that the content has not changed; use a new release name for changes.
+  Carry native build outputs between machines in an archive that preserves symlinks and modes;
+  Windows may need Developer Mode to extract Mac bundle symlinks. Test installed executable
+  permissions in SteamPipe Preview when uploading Unix depots from Windows.</p>
+
+  <p>A Player whose <code>game.config</code> turns <code>window.vsync</code> off runs uncapped; to
+  cap it, set the environment variable <code>GE_FRAME_CAP</code> to a frame rate before it starts
+  (for example <code>GE_FRAME_CAP=60</code>).</p>
+
+  <h2>SteamPipe</h2>
+
+  <p>Install the Steamworks SDK's SteamCMD/ContentBuilder for your platform. Log in interactively
+  once with your build account and complete Steam Guard. Pass the executable or the
+  <code>steamcmd.sh</code> wrapper with <code>--steamcmd</code>, or set <code>STEAMCMD</code>.
+  Pass <code>--username</code>, or set <code>STEAM_BUILD_USER</code>. Passwords and tokens do not
+  belong in the project configuration; SteamCMD owns the authenticated session.</p>
+
+<pre><code>python /path/to/GameEngine/Tools/Scripts/publish_game.py preview Releases/1.0.0-beta.1 --steamcmd /path/to/steamcmd --username YOUR_BUILD_ACCOUNT
+python /path/to/GameEngine/Tools/Scripts/publish_game.py upload Releases/1.0.0-beta.1 --steamcmd /path/to/steamcmd --username YOUR_BUILD_ACCOUNT --branch YOUR_BETA_BRANCH</code></pre>
+
+  <p>Preview generates file mappings and lets SteamCMD check them without uploading. Without
+  <code>--steamcmd</code>, <code>preview</code> only writes reviewable VDF files. Upload is a
+  separate command; omit <code>--branch</code> to upload without setting the build live. The
+  public/default branch is promoted in Steamworks, never by this tool. Scripts are regenerated
+  against the current release location, so moving a release between machines does not leave
+  stale absolute paths. SteamPipe's chunk cache lives beside the releases and is reused across
+  versions.</p>
+
+  <p>Configure depot OS filters, launch options and the Linux runtime in Steamworks; depot
+  uploads do not carry those app settings. Set the Linux launch option to <code>launch.sh</code>
+  when shipping the Deck launcher, Windows to <code>Player.exe</code>, and Mac to the exported
+  <code>.app</code>. See Valve's
+  <a href="https://partner.steamgames.com/doc/sdk/uploading">uploading documentation</a>.</p>
+
+  <h2 id="steam-deck">Steam Deck iteration</h2>
+
+  <p>Build the Deck runtime with the same entry point on every host:</p>
+
+<pre><code>python /path/to/GameEngine/Tools/Scripts/build_deck.py --project . --output Build/DeckRuntime --check
+python /path/to/GameEngine/Tools/Scripts/build_deck.py --project . --output Build/DeckRuntime</code></pre>
+
+  <p>On Windows, install WSL2 and enable Docker Desktop integration for its default Linux
+  distribution. The script converts paths and runs the Linux build inside WSL; Git Bash is not
+  needed. On macOS and Linux it runs Docker directly. The runtime build keeps its dependency and
+  compiler caches, lets only one build use the shared build tree at a time, and replaces the old
+  output only with a completed build. <code>--check</code> never deletes the old game.</p>
+
+  <p>The container is <code>linux/amd64</code> on every host, emulated on Apple Silicon, and uses
+  the pinned Steam Runtime 4 SDK for compilers, headers and libraries; the .NET 10 SDK is staged
+  separately. Select Steam Linux Runtime 4.0 in Steamworks for these releases, and qualify the
+  exported game on that runtime and on the device before shipping. Valve recommends Steam Linux
+  Runtime 4.0 for new native Linux games:
+  <a href="https://github.com/ValveSoftware/steam-runtime">Steam Runtime documentation</a>.</p>
+
+  <h3>Steam Deck export from the macOS editor</h3>
+
+  <p>The macOS editor packages a Steam Deck game into a cached Deck runtime. It uses the export
+  tools staged with the editor, so no engine checkout is needed when a matching runtime is
+  cached; Python 3 must be installed. A runtime matches when it was built from the same engine
+  sources as the editor. After you rebuild the editor from changed engine sources, the next Deck
+  export rebuilds the runtime in Docker, which needs the engine checkout. Runtimes without an
+  identity, and runtimes whose binaries changed after they were built, are rebuilt the same
+  way.</p>
+
+  <h3>Deploy to a Deck</h3>
+
+  <p>Deploy a prepared Linux release. The Deck needs SSH key authentication and Python 3.12 or
+  newer; Windows does not need rsync.</p>
+
+<pre><code>python /path/to/GameEngine/Tools/Scripts/publish_game.py deploy Releases/1.0.0-beta.1 --target linux --host deck@steamdeck.local --remote-dir devkit-game/MyGame
+python /path/to/GameEngine/Tools/Scripts/publish_game.py smoke --host deck@steamdeck.local --remote-dir devkit-game/MyGame
+python /path/to/GameEngine/Tools/Scripts/publish_game.py rollback --host deck@steamdeck.local --remote-dir devkit-game/MyGame</code></pre>
+
+  <p>The remote directory is relative to the SSH user's home. Each deployment unpacks into a new
+  release, verifies the transferred checksums, then switches <code>current</code> to it. The old
+  release remains as <code>previous</code>; rollback switches back without copying. Point the
+  Steam development shortcut at <code>/home/deck/devkit-game/MyGame/current/launch.sh</code>
+  once. A plain Linux export without the launcher can use <code>--launcher Player</code> for smoke
+  testing if the desktop session environment is already configured. Add <code>--key</code> for a
+  non-default SSH key.</p>
+
+  <p>The smoke command checks shared-library resolution, launches its own Player for up to 30
+  seconds, requires the initialization and startup-scene log markers, and stops only that
+  process group. Logs remain under <code>~/.local/state/GameEngine/publishing</code> on the Deck.
+  It is a startup check, not Deck Verified status or a performance benchmark. Before promoting a
+  release, test controller-only navigation, keyboard entry, suspend and resume, offline startup,
+  1280×800 text readability and sustained frame pacing on the device. The shared launcher keeps
+  the descriptor-buffer and WSI fallbacks; set <code>GE_VK_USE_DESCRIPTOR_BUFFER=1</code> or
+  <code>GE_DECK_WSI_BYPASS=0</code> when comparing driver behavior during qualification.</p>
+
+  <h2>Validation</h2>
+
+  <p>From a build directory configured with tests enabled:</p>
+
+<pre><code>ctest -R "GamePublishingTests|BuildOutputPromotionTests" --output-on-failure</code></pre>
+
+  <p>or run the Python contracts directly with <code>python Tests/GamePublishingTests.py</code>.
+  <code>GamePublishingTests</code> is registered only when CMake finds Python 3.10 or newer.</p>
+
+  <div class="panel warn">
+    <h4>Some contracts run only on Linux or macOS</h4>
+    <p>The Steam Deck build preflight and the Deck receiver's install and rollback run only on
+    Linux or macOS, and the symlink rejection needs symlink support (Developer Mode on Windows).
+    On Windows those tests report as skipped.</p>
+  </div>
+
+  <h2>Changelog</h2>
+  <ul>
+    <li><b>2026-10-06</b> — A Mac export ships the native modules of the packages it uses in
+    <code>Contents/Frameworks</code>.</li>
+    <li><b>2026-10-06</b> — What a build ships: the assets its scenes reference, each package's
+    <code>Shaders/</code> folder and code modules, and the package's <code>runtimeAssets</code>
+    for the components the scenes use. A package no longer ships whole.</li>
+    <li><b>2026-10-04</b> — <code>build</code> needs the Build panel open; link to the
+    first-project guide.</li>
+    <li><b>2026-10-02</b> — A Mac export's <code>game.config</code> and content are in the
+    bundle's <code>Contents/Resources</code>; <code>init</code> writes that path.</li>
+    <li><b>2026-10-02</b> — A Player with VSync off runs uncapped; <code>GE_FRAME_CAP</code> caps it.</li>
+    <li><b>2026-09-23</b> — Output replacement: no copy of the previous output is kept, a
+    running game stops the build, what a <code>.discard</code> and a leftover
+    <code>.previous</code> folder mean.</li>
+    <li><b>2026-09-23</b> — Converted from Markdown. Corrected the host table: the Deck runtime
+    builds in a <code>linux/amd64</code> container on every host. Added the per-host target
+    refusal, how a build replaces its output folder, the macOS Deck export's staged tools and
+    runtime matching, and the ctest selection for validation.</li>
+  </ul>
+
+</div>
+<footer>Game builds and Steam publishing · v1 · 2026-09-23</footer>
+</body>
+</html>

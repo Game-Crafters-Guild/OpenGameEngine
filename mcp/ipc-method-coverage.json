@@ -1,0 +1,60 @@
+{
+  "$comment": [
+    "Debug-server methods that deliberately have no typed tool in mcp/src/tools/.",
+    "Every one is still callable: `node mcp/ge.mjs raw <method> '{...}'`.",
+    "Tests/Mcp/ipc-method-drift.mjs fails if a handler is neither covered by a tool",
+    "nor listed here, so adding a RegisterHandler forces a tool-or-raw-only choice.",
+    "Promoting one to a tool means adding it under mcp/src/tools/ and deleting its",
+    "entry here — the check fails on a redundant entry, so this list cannot rot."
+  ],
+  "rawOnly": {
+    "debug_crash": "Deliberate crash injection for testing the crash handler; must stay awkward to reach.",
+    "assistant_bind": "The AI Assistant's MCP server binding its connection to a conversation; the server sends it itself on every connection.",
+    "assistant_authorize": "The AI Assistant's MCP server asking the editor before a tool that writes files or starts processes; the server sends it itself.",
+
+    "respond_modal": "Modal-dialog plumbing for scripted scene flows; driven over raw by the integration harness.",
+    "open_context_menu": "Context-menu capture; the raw JSON round-trip is what the UI test flows already drive.",
+    "get_context_menu": "Reads back the last open_context_menu capture — meaningless without that raw call before it.",
+    "invoke_menu_item": "Third step of the context-menu sequence; promote the trio together, not one at a time.",
+    "set_text_field": "Direct field write that skips per-keystroke callbacks; input_text is the usual path.",
+    "send_text": "Lower-level text injection; no typed tool yet.",
+    "get_sky_settings": "Diagnostic readback of the sky's per-frame SkySettings for comparing two runs or builds input by input; raw-only until a sky tool group exists.",
+    "show_universal_search": "Opens the universal search overlay; no typed tool yet.",
+    "simulate_mouse_drag": "Press-move-release drag for UI flows; no typed tool yet. Its dragDropSession field says whether the gesture started a drag-and-drop session; perform_drop makes a drop without one.",
+    "simulate_double_click_drag": "Double-click-then-drag variant; no typed tool yet.",
+    "set_scroll": "Sets a ScrollView offset; no typed tool yet.",
+    "undock_panel": "Floats a docked panel; no typed tool yet.",
+
+    "open_scene": "Scene loading with dirty-prompt and crash-recovery policy; the parameter contract deserves a schema before promotion.",
+    "spawn_model": "Spawns a model asset; spawn_skinned_model covers the skinned case that had a workflow behind it.",
+    "export_model_materials": "One-off model material export; no typed tool yet.",
+    "enumerate_provenance": "Asset provenance dump; no typed tool yet.",
+    "set_entity_enabled": "Toggles entity enablement; set_component reaches the same state today.",
+    "select_smart_folder": "Assets-panel smart folder selection; no typed tool yet.",
+    "get_asset_sources": "Lists mounted asset roots; get_build_settings answers the usual mount question.",
+    "get_asset_list": "Registered-asset listing; no typed tool yet.",
+    "import_proflares": "One-off ProFlares importer; no typed tool yet.",
+
+    "set_scene_view_mode": "Scene-view display mode; no typed tool yet.",
+    "set_scene_tool": "Sets the active gizmo tool; no typed tool yet.",
+    "get_scene_tool": "Reads the active gizmo tool; no typed tool yet.",
+
+    "capture_shadow_diagnostics": "Deferred shadow/draw-stream stability hashes; no typed tool yet.",
+    "get_mesh_registry": "MeshGPURegistry dump; no typed tool yet.",
+    "get_ui_clip_stats": "UI clip-rect statistics; no typed tool yet.",
+    "movie_record": "Movie recording start/stop; the editor's own recorder UI owns this workflow.",
+    "spawn_bench_scene": "Benchmark scene spawner used by perf runs, which drive it over raw.",
+
+    "physics_raycast": "Single-shot physics raycast; no typed tool yet.",
+    "get_terrain_debug": "Per-entity terrain dump: component, splat/heightfield stats, authored grass parameters, and the per-view grassPlacement rows — placed-blade counts, each row's liveness (isCurrent/framesSinceDeclared: a view that stops being declared keeps serving its last count, so read those first), and the always-on grass dropout tallies (zeroGrassFrames/staleArgFrames/lastDropoutFrameIndex, dated against the top-level grassFrameIndex). Raw-only because it is a diagnostic wall of numbers rather than a question. NOT covered by get_terrain_stats, which answers CBT tessellation health and carries no grass data at all.",
+    "cbt_force_vertex_eval": "Forces a CBT vertex evaluation pass; a terrain-debugging primitive, not a workflow.",
+    "get_cbt_tree_audit": "CBT watertightness audit of the live tree (a ~160 MiB one-shot readback: CPU edge multiset over the decoded HeapIDs plus link, occupancy, corner-cache and draw-stream checks); a terrain-debugging primitive, not a workflow.",
+    "terrain_sculpt_dab": "Applies one terrain sculpt dab; no typed tool yet.",
+    "set_terrain_brush": "Configures the terrain sculpt brush; pairs with terrain_sculpt_dab, promote together.",
+
+    "graph_set_viewport": "B1 spike zoom-ladder harness: SetPanZoom on the live GraphCanvas. Measurement-only, not a user workflow.",
+    "graph_spike_dummy_nodes": "B1 spike: spawn pooled dummy GraphPortedNode slots. Measurement-only, not a user workflow.",
+    "graph_get_nodes": "Scripting/verification helper: lists the active graph's node ids/types/positions; too niche for a typed tool.",
+    "graph_delete_node": "Scripting/verification helper: deletes one node by id through the canvas's undo-scoped delete path; too niche for a typed tool."
+  }
+}

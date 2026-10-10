@@ -1,0 +1,13 @@
+<!-- InspectorNotice (Apps/Editor/Include/UI/Controls/InspectorNotice.h): the plate, its heading (a
+     glyph and a title, hidden until the notice is given a title), its text and its action. The
+     classes are the contract with InspectorNotice.cpp. No ids: focus is tracked by id, and every
+     notice's action has to stay a focus target of its own. The action stays hidden until the notice
+     is given one. -->
+<UIElement class="inspector-notice-plate">
+  <UIElement class="inspector-notice-heading hidden">
+    <UIElement class="inspector-notice-glyph" />
+    <Label class="inspector-notice-title" />
+  </UIElement>
+  <Label class="inspector-notice-text" />
+  <Button class="inspector-notice-action small hidden" />
+</UIElement>

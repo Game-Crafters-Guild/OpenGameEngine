@@ -1,0 +1,422 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>AI Assistant — providers</title>
+<style>
+  :root{
+    --bg:#0e1116; --panel:#161b22; --panel-light:#1c232c; --border:#2a323d;
+    --text:#d7dde5; --muted:#8b97a6; --accent:#5db0ff;
+    --danger:#ff6b6b; --bad:#ff6b6b; --ok:#5ad19b; --good:#5ad19b; --warn:#e8c468;
+    --mono:"SF Mono",ui-monospace,Menlo,Consolas,monospace;
+  }
+  *{box-sizing:border-box}
+  body{background:var(--bg);color:var(--text);font:15px/1.6 -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif;
+       margin:0;padding:0 0 80px}
+  .wrap{max-width:980px;margin:0 auto;padding:32px 24px}
+  h1{font-size:30px;margin:0 0 4px;letter-spacing:-.4px}
+  h2{font-size:22px;margin:42px 0 14px;padding-top:22px;border-top:1px solid var(--border)}
+  h3{font-size:17px;margin:26px 0 8px;color:#e9eef4}
+  p,li{color:var(--text)}
+  .lede{color:var(--muted);font-size:13px;text-transform:uppercase;letter-spacing:.12em;margin:0 0 26px}
+  a{color:var(--accent);text-decoration:none}
+  code{font-family:var(--mono);font-size:.88em;background:#11161d;border:1px solid var(--border);
+       border-radius:4px;padding:1px 5px}
+  .panel{border:1px solid var(--border);border-left-width:4px;border-radius:8px;background:var(--panel);
+         padding:14px 18px;margin:16px 0}
+  .panel.ok{border-left-color:var(--ok)} .panel.warn{border-left-color:var(--warn)}
+  .panel h4{margin:0 0 6px;font-size:14px;text-transform:uppercase;letter-spacing:.06em}
+  .panel.ok h4{color:var(--ok)} .panel.warn h4{color:var(--warn)}
+  .grid-2{display:grid;grid-template-columns:1fr 1fr;gap:16px}
+  @media(max-width:760px){.grid-2{grid-template-columns:1fr}}
+  table{border-collapse:collapse;width:100%;margin:16px 0;font-size:13.5px}
+  th,td{border:1px solid var(--border);padding:8px 11px;text-align:left;vertical-align:top}
+  th{background:var(--panel-light);color:#e9eef4}
+  tr:hover td{background:#12171e}
+  .muted{color:var(--muted)}
+  ul{padding-left:22px} li{margin:4px 0}
+  .step{border:1px solid var(--border);border-radius:8px;background:var(--panel);padding:12px 16px;margin:10px 0}
+  .step b{color:var(--accent)}
+  footer{max-width:980px;margin:40px auto 0;padding:18px 24px 0;border-top:1px solid var(--border);color:var(--muted);font-size:12.5px}
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <h1>AI Assistant</h1>
+  <p class="lede">Feature guide · editor / providers</p>
+
+  <p>The <b>AI Assistant</b> panel sends what you type to a language model and shows its reply.
+  The panel is the editor's own; the model behind it is a <b>provider</b> you choose in the
+  dropdown beside the send button or on the settings page, <b>Settings &gt; AI Assistant</b>
+  (under User Settings). The two always show the same choice.</p>
+
+  <h2>Providers</h2>
+  <table>
+    <tr><th>Provider</th><th>What it needs</th><th>Where it sends your prompt</th></tr>
+    <tr><td><b>Claude (local session)</b> (the default)</td>
+        <td>Claude Code installed on this machine and logged in (<code>claude auth login</code>).</td>
+        <td>Your own <code>claude</code> program, which talks to the service it is logged in to.</td></tr>
+    <tr><td><b>Codex (local session)</b></td>
+        <td>Codex installed on this machine and logged in (<code>codex login</code>), and its full path in the settings.</td>
+        <td>Your own <code>codex</code> program, which talks to the service it is logged in to.</td></tr>
+    <tr><td><b>Claude (API)</b></td>
+        <td>A Claude API key in the <code>ANTHROPIC_API_KEY</code> environment variable.</td>
+        <td><code>https://api.anthropic.com/v1/messages</code>, always.</td></tr>
+  </table>
+
+  <h2>The conversation</h2>
+  <p>Each message is a row: your prompt under <b>You</b>, and the reply under the provider and
+  model that wrote it, with the time. A Claude (local session) reply names the exact model that
+  answered (<b>Opus 5.5</b> when you chose Opus) and the effort it asked for. The reply streams into its row as the provider writes
+  it; the line under it says where it stands and, once it ends, any note and the provider's own
+  cost estimate and token counts (shown, never added up).</p>
+  <table>
+    <tr><th>You do</th><th>What happens</th></tr>
+    <tr><td>Enter (or the send button)</td><td>Sends the prompt. Shift+Enter starts a new line; Up and
+        Down recall earlier prompts.</td></tr>
+    <tr><td>Send while a reply is being written</td><td>The prompt waits in its row as
+        <b>Queued</b> and is sent when the replies before it end. Prompts are answered one at a
+        time, in order.</td></tr>
+    <tr><td>Stop on the reply's row, or Esc in the prompt field</td><td>Ends the reply being
+        written (it keeps the text so far, ends it with an ellipsis and reads <b>Stopped by you</b>)
+        and cancels every queued prompt (its reply reads <b>Cancelled before it started</b>).</td></tr>
+    <tr><td>Copy on a finished or stopped reply</td><td>Copies the reply's text (without the
+        ellipsis); the status line reads <b>Reply copied</b>.</td></tr>
+    <tr><td>Retry on a failed reply</td><td>Sends the same prompt again, to the same provider and
+        model, as a new message at the end of the conversation (queued like any prompt if a reply is
+        being written). The failed reply stays where it was and reads <b>Retried below</b> in place
+        of the button; it is never sent to the provider as part of the conversation. If the retry
+        fails too, its own row offers Retry.</td></tr>
+    <tr><td>Choose another provider</td><td>Starts a new conversation: the rows and the queue are
+        cleared. A local session keeps its own conversation, so choosing it again continues it.</td></tr>
+    <tr><td>The model button beside the provider</td><td>Opens a small panel with the
+        <b>Model</b> and, for Claude (local session), an <b>Effort</b> slider. The button reads your
+        choice: <b>Opus (latest) · High</b> until a reply names the version, then <b>Opus 5.5 · High</b>. In a narrow panel the button drops "(latest)", then the effort, before it cuts its text, and its tooltip
+        holds the whole choice. A change is kept at once and applies from the next
+        prompt you send, in the same conversation; prompts already queued keep what they were sent
+        with. Click outside the panel or press Esc to close it.</td></tr>
+  </table>
+  <h3>Model and effort</h3>
+  <table>
+    <tr><th>Provider</th><th>Models</th><th>Effort</th></tr>
+    <tr><td>Claude (local session)</td><td><b>Opus</b> (the first choice), <b>Fable</b>, <b>Sonnet</b>,
+        <b>Haiku</b>: each the latest model of its family, so a new release needs no editor update.
+        Once a reply has named the version, the button and the list show it.</td>
+        <td><b>Low</b>, <b>Medium</b>, <b>High</b> (the first choice), <b>Extra high</b>, <b>Max</b>:
+        how much the model reasons before it answers. Higher levels answer more carefully, take
+        longer and cost more.</td></tr>
+    <tr><td>Claude (API)</td><td>Opus 5.5, Sonnet 5.5, Haiku 4.5.</td><td>None.</td></tr>
+    <tr><td>Codex (local session)</td><td>The button is hidden: Codex names its own models, so the
+        <b>Codex model</b> setting takes the name as Codex spells it.</td><td>None.</td></tr>
+  </table>
+  <p>The choice is yours, not the project's: it is kept in your editor settings and applies to
+  every project you open. A model your account cannot use fails the prompt with Claude Code's
+  own message ("There's an issue with the selected model …"); choose another and send again.</p>
+  <p>A message holds at most 64 KB of text. A prompt longer than that is not sent: the status
+  line gives its size, and the prompt stays in the field for you to shorten. A reply longer than
+  that keeps its first 64 KB: its text ends with an ellipsis, the line under it reads <b>Reply
+  truncated at 64 KB</b>, Copy copies those 64 KB and says so, and later prompts to Claude (API)
+  carry those 64 KB as the reply.</p>
+  <p>A reply runs on a thread of the panel's own, so a reply that takes minutes never holds up
+  the editor's other work; closing the panel stops it.</p>
+
+  <h2>Local sessions: Claude Code and Codex</h2>
+  <p>A local session runs the command-line program you already use, under your own login, on
+  this machine. For each prompt the editor starts the program in the project's folder, hands it
+  the prompt and shows the reply as the program reports it. The editor never stores, copies or
+  sends your login anywhere. The program runs with its own tools turned off (Claude Code) or in
+  its read-only sandbox (Codex), so it cannot change your files itself; what it may do in the
+  editor is the editor's decision, set by the mode control (see
+  <a href="#acting">Acting in the editor</a>).</p>
+
+  <div class="grid-2">
+    <div class="step"><b>Claude (local session)</b>
+      <ul>
+        <li>Runs <code>claude</code>, found on <code>PATH</code>, unless you set a full path in
+        <b>Claude executable</b>. Use the native program (<code>claude.exe</code> on Windows): the
+        <code>claude.cmd</code> script that npm installs is refused, because Windows passes a
+        script's arguments through <code>cmd.exe</code>.</li>
+        <li>Needs Claude Code 2.1.259 or later; an older one is refused with "run
+        <code>claude update</code>".</li>
+        <li>Not logged in: run <code>claude auth login</code> in a terminal, then send the prompt again.</li>
+        <li>The model and the effort come from the model button (or <b>Claude session model</b> and
+        <b>Claude session effort</b> in the settings), and every prompt names both: Opus at High
+        until you choose. Your own Claude Code model and effort settings do not apply to the panel.</li>
+      </ul></div>
+    <div class="step"><b>Codex (local session)</b>
+      <ul>
+        <li>Codex is usually not on <code>PATH</code> (an editor extension installs it in its own
+        folder), so <b>Codex executable</b> starts empty: set it to the full path of
+        <code>codex.exe</code>. Until you do, a prompt fails with "No Codex executable: set its path
+        in Settings &gt; AI Assistant."</li>
+        <li>Not logged in: run <code>codex login</code> in a terminal, then send the prompt again.</li>
+        <li>The model comes from <b>Codex model</b>, a name as Codex spells it; empty uses
+        Codex's own default.</li>
+        <li>Codex has no option to add the panel's instructions to its own, so a Codex session
+        answers without them.</li>
+      </ul></div>
+  </div>
+
+  <h3>Your login, not a key</h3>
+  <p>Both programs prefer a key in the environment over your login. So that a session always
+  runs on your login, the editor removes <code>ANTHROPIC_API_KEY</code>,
+  <code>ANTHROPIC_AUTH_TOKEN</code>, <code>CODEX_API_KEY</code> and <code>OPENAI_API_KEY</code>
+  from the environment of every program it starts, the login check included. Everything else
+  in the environment is passed on unchanged.</p>
+  <p>Other ways of signing Claude Code in are your own configuration and are left alone: an
+  <code>apiKeyHelper</code> in your Claude Code settings, <code>CLAUDE_CODE_OAUTH_TOKEN</code>,
+  or a cloud-provider switch such as <code>CLAUDE_CODE_USE_BEDROCK</code> or
+  <code>CLAUDE_CODE_USE_VERTEX</code>. The <b>Login status</b> row tells you which one Claude
+  Code is using; the session's turns are billed through it.</p>
+
+  <h3>Login status</h3>
+  <p>The <b>Check</b> button on the <b>Login status</b> row asks the chosen local session's
+  program whether it is logged in (it takes a few seconds) and shows the answer in the row. It
+  shows the login method only, never the account's email address, organization or a key:</p>
+  <table>
+    <tr><th>The row shows</th><th>Meaning</th></tr>
+    <tr><td>Logged in (claude.ai)</td><td>Claude Code runs on your Claude login.</td></tr>
+    <tr><td>Logged in (<i>method</i>): turns are billed through that credential</td>
+        <td>Claude Code runs on another credential, for example <code>api_key_helper</code>.</td></tr>
+    <tr><td>Logged in using ChatGPT</td><td>Codex's own status line, cut before any key it would show.</td></tr>
+    <tr><td>Not logged in: run <code>claude auth login</code>. / run <code>codex login</code>.</td>
+        <td>Log in from a terminal, then check again.</td></tr>
+    <tr><td>Could not start ... set its path in Settings &gt; AI Assistant.</td>
+        <td>The program was not found: set its executable row.</td></tr>
+    <tr><td>... did not answer ... within 20 s: check its executable in Settings &gt; AI Assistant.</td>
+        <td>The program did not exit in time; the row's executable is probably not the
+        right program.</td></tr>
+  </table>
+  <p>With Claude (API) chosen, the row explains that the API has no login: it reads its key when
+  a prompt is sent.</p>
+  <p>Before the first prompt of each session the editor runs the same checks itself (for Claude
+  Code also its version), so a session that cannot answer is refused with the fix instead of
+  failing halfway.</p>
+
+  <h3>Conversations</h3>
+  <p>A local session keeps its own transcript: each prompt continues the conversation, and the
+  program remembers the earlier turns. The editor keeps each session for as long as it runs, so
+  closing the panel and opening it again continues the same conversation, although the panel no
+  longer lists the earlier turns. The trash button (behind the gear button) clears the panel and
+  starts a new conversation on the next prompt. Changing a session's executable or opening
+  another project also starts a new one, as does restarting the editor, until you pick a session
+  with the <b>Session…</b> button.</p>
+
+  <h3>Picking a session</h3>
+  <p>With a local session chosen, the <b>Session…</b> button beside the provider dropdown opens a
+  list you can search (its tooltip names the session you are in). The list is read from the program's own session files for this project,
+  newest first; each row shows the session's first prompt (its first line), when the session
+  was last used and how many turns it holds. Type to keep the sessions whose first prompt
+  contains what you typed.</p>
+  <table>
+    <tr><th>Row</th><th>What happens</th></tr>
+    <tr><td>New session</td><td>Clears the panel; the next prompt starts a new session.</td></tr>
+    <tr><td>Resume last</td><td>Continues the session this provider used last in this project,
+        also after the editor was restarted; the session's first prompt is shown under it. Shown
+        once a session has run here.</td></tr>
+    <tr><td>A session</td><td>Continues that session.</td></tr>
+  </table>
+  <p>A continued conversation starts with one row, for example <b>Continued session from
+  2026-10-07 14:05 · 3 earlier turns not shown</b>: the program remembers those turns, but the
+  panel does not show them. Your next prompt continues the session.</p>
+  <p>Where the files are: Claude Code keeps one file per session under
+  <code>%USERPROFILE%\.claude\projects\</code> (or <code>CLAUDE_CONFIG_DIR</code>), in a folder
+  named after the project's path; Codex keeps its sessions under
+  <code>%USERPROFILE%\.codex\sessions\</code> (or <code>CODEX_HOME</code>), and the list shows
+  those started in the project's folder. The editor only reads these files, and only when you
+  open the list. A file it cannot read is left out, and the status line says how many were.</p>
+  <p>If the program no longer has the session (its file was deleted), the first prompt fails with
+  the program's message and the status line reads <b>Reply failed: the session could not be
+  continued, so Retry starts a new session</b>. The editor forgets that session; Retry sends the
+  prompt again in a new session. Any other failure (not logged in, the program not found)
+  keeps the session: fix the cause and send the prompt again to continue it.</p>
+  <p>A reply the program stops before finishing (it exits early, for example) fails with the
+  program's exit code and its last error line; the text that arrived stays in the panel.</p>
+
+  <h2 id="acting">Acting in the editor</h2>
+  <p>A Claude (local session) conversation can read and change the editor through the editor's own
+  tools: the program is started with the editor's tool server attached and calls it while it
+  answers. The <b>mode control</b> beside <b>Session…</b> decides, per conversation, what those
+  calls may do: a call runs, waits on its row for your answer, or is refused.</p>
+  <table>
+    <tr><th>Mode</th><th>What runs</th><th>What asks you first</th></tr>
+    <tr><td><b>Read only</b></td>
+        <td>Reads: the editor state, the hierarchy, components, the log, screenshots of the editor's
+        rendered frame, render-graph resources, profilers.</td>
+        <td>Nothing: everything that changes something, the view included, is refused.</td></tr>
+    <tr><td><b>Auto</b> (the default)</td>
+        <td>Reads; view changes (camera, selection, mark-up visibility); scene edits you can undo
+        (create, change or delete entities, mark-ups and their comments); injected keyboard, pointer
+        and drop input.</td>
+        <td>Actions that cannot be undone as one step: saving the scene, writing project files (C#
+        components and systems, game graphs, thumbnails), play mode, commands, render settings that
+        are saved into the project, game builds, GPU captures.</td></tr>
+    <tr><td><b>Ask before every edit</b></td>
+        <td>Reads and view changes.</td>
+        <td>Every scene edit, injected input and action that cannot be undone.</td></tr>
+    <tr><td><b>Edit freely</b></td>
+        <td>Everything the assistant is allowed, without asking.</td>
+        <td>Nothing. Only what is never allowed (below) is refused.</td></tr>
+  </table>
+  <p><b>Never allowed</b>, in any mode: building the engine, running tests, starting, waiting for or
+  stopping editors; moving windows or taking the operating system's focus; <b>undo</b> and
+  <b>redo</b> (the assistant cannot see what is on top of the undo history, so correcting a change
+  is a new edit and undoing is yours); screenshots that capture the desktop
+  (<code>allowWindowCapture</code>): only the editor's own rendered frame is sent. A refused call
+  tells the assistant why and which mode would run it, so it can tell you.</p>
+  <p>The tools that write files (C# components and systems, game graphs and their generated C++)
+  work inside the open project only: a relative path is relative to the project's folder, and a
+  path outside it is refused in every mode. Generated C++ that exists already is replaced only
+  when the call asks for it explicitly.</p>
+  <ul>
+    <li>A new conversation starts in the mode you chose last (Auto until you first choose); a
+    session you resume keeps the mode it last ran in. <b>Mode for new conversations</b> in the
+    settings shows and sets the remembered mode.</li>
+    <li>A change applies from the assistant's next call, also while a reply runs.</li>
+    <li>Screenshots and render-graph captures the assistant reads are sent to the provider, in every
+    mode.</li>
+    <li>Each scene edit the assistant makes is one undo step named for it, for example
+    <b>Assistant: Set DirectionalLight (12)</b> in the Edit menu and in Undo History; an entity is
+    named by its id, as the call gave it. Injected input lands as the editor's own steps.</li>
+    <li>A scene edit, or an action that cannot be undone, that arrives while you drag or scrub a
+    value waits until you let go, and then runs as its own step after yours.</li>
+  </ul>
+  <h3>The calls under a reply</h3>
+  <p>Each call the assistant made is a row under its reply: a mark (a check for a call that changed
+  something, a ring for a read or a view change, a cross for a call that did not run, a question
+  mark for one that waits), the action, what it acted on, and at the end what it left in the undo
+  history: the step's name, "not an undo step" or "nothing changed". Consecutive calls of one tool
+  with the same arguments share a row ("Lantern_02, Lantern_03 (2 calls)"). <b>Details</b> shows the
+  call as the assistant sent it and the editor's answer. The reply's footer counts its undo steps
+  and the calls that did not run, by the word their rows use, for example "5 undo steps · 1
+  refused · 1 failed".</p>
+  <h3>Images and assets in the conversation</h3>
+  <p>A screenshot the assistant takes, or a render-graph texture it captures, shows under its call's
+  row as the picture itself, as wide as the row at most and no taller than a fixed height. Click it
+  (or press Enter on it) to open it in the Asset View panel, fitted to the panel. The conversation
+  keeps only the image's file path and size: the file is the PNG the editor wrote into its capture
+  folder, and the row shows a smaller copy of it. Only a screenshot or a capture the editor wrote
+  shows as a picture. Its tooltip shows the file's path, and a right-click offers the Assets
+  panel's menu for a file: <b>Open</b> (in the system's image viewer), <b>Show in Explorer</b>
+  (Finder on macOS) and <b>Copy Full Path</b>. An asset tile has the same menu.</p>
+  <p>A model, material or texture the assistant names, by its path or its GUID, in what it sent
+  or what the editor answered, shows under the row as a tile: the asset's thumbnail, its file name,
+  its type and <b>Open</b>, which opens it as a double-click in the Assets panel does. A path to an
+  asset that is not in the project when the call runs shows its file name and "not found". A tile
+  shows a timer while its thumbnail is still being drawn.</p>
+  <p>What leaves your computer: each screenshot and captured texture the assistant reads is sent to
+  the provider as an image, in every mode, Read only included, together with the rest of the
+  tool's answer. Only the editor's own rendered frame is ever captured, never other windows. The
+  asset tiles are drawn by the editor and are not sent anywhere.</p>
+  <p><b>Undo this turn</b>, beside Copy on a finished reply that changed the scene, takes back that
+  reply's edits, newest first. It works only while they are the newest steps in the undo history:
+  when anything came after them (your own edit, or a later reply's), the button is disabled and its
+  tooltip names the step on top; undo that first, or use Undo History. Afterwards the rows read
+  "undone" and Redo (Ctrl+Y) brings the edits back one by one. A reply whose first edit has dropped
+  off the end of the undo history is too old to undo as a turn. Each call is also one line in the
+  editor log: the tool, what it acted on, what happened and its undo step.</p>
+  <p>A call that asks waits on its row with <b>Allow</b>, <b>Allow for this turn</b> and <b>Deny</b>;
+  the status line reads <b>Waiting for your answer</b>, and the assistant's later calls wait
+  behind it, in order. From the prompt field, <b>Ctrl+Enter</b> takes the keyboard to the waiting
+  call's Allow; Tab moves to Allow for this turn and Deny, and Enter answers.</p>
+  <ul>
+    <li><b>Allow</b> runs the call; <b>Allow for this turn</b> also runs, without asking, every later
+    call of the same tool in that reply (allowing one save does not allow a build). The next reply
+    asks again.</li>
+    <li><b>Deny</b> runs nothing; the assistant is told "The user declined" with the action.</li>
+    <li>Stop, or the assistant's program ending, cancels a waiting call: its row reads
+    "Cancelled: the session ended".</li>
+    <li>A call nobody answers is refused after 10 minutes.</li>
+    <li>A call that did not run says why on its row: "(refused)" and the reason when the mode or
+    the tool's class does not allow it, "(failed)" and the error when the editor could not do it
+    (for example "(failed) Invalid entity"), "you declined" after Deny. A call the program refused
+    itself, before it reached the editor, reads "(failed)".</li>
+  </ul>
+  <h3>What acting needs</h3>
+  <ul>
+    <li>Node.js 20 or later: <code>node</code> on <code>PATH</code>, or its full path in <b>Node
+    executable</b>. Without it a reply runs without the editor's tools and says why.</li>
+    <li>The tool server staged beside the editor: build the <code>McpServer</code> target. Without
+    it the mode control reads <b>Conversation only</b> and its tooltip says what to build.</li>
+    <li>The editor's debug server running (it starts with the editor; <code>--debug-port</code>
+    picks its port).</li>
+  </ul>
+  <div class="panel warn"><h4>Codex: conversation only</h4>
+  <p>Codex keeps a shell in its read-only sandbox. Before Codex could act, the editor checks whether a
+  command in that sandbox can open the editor's debug port; if it can, the command could reach the
+  editor around the mode's checks, so Codex stays a conversation and its mode control reads
+  <b>Conversation only</b> with that reason; use Claude (local session) for the editor's tools. On Windows with Codex 0.162 the check connects, so Codex
+  answers without the editor's tools.</p></div>
+  <p>The editor's debug port is reachable by any program on this machine, as before; the modes limit
+  what the panel's assistant does, they do not make the port private.</p>
+
+  <h2>Settings &gt; AI Assistant</h2>
+  <table>
+    <tr><th>Row</th><th>What it sets</th></tr>
+    <tr><td>Provider</td><td>The connection the panel talks to (the same choice as the panel's dropdown).</td></tr>
+    <tr><td>Claude session model</td><td>The model of a Claude (local session) turn (the same choice as the panel's model button).</td></tr>
+    <tr><td>Claude session effort</td><td>The effort of a Claude (local session) turn (the same choice as the panel's effort slider).</td></tr>
+    <tr><td>Claude API model</td><td>The model of a Claude (API) turn (the same choice as the panel's model button).</td></tr>
+    <tr><td>Codex model</td><td>The model of a Codex (local session) turn; empty for Codex's default.</td></tr>
+    <tr><td>Mode for new conversations</td><td>The mode a new conversation starts in; the panel's mode control changes it.</td></tr>
+    <tr><td>Claude executable</td><td><code>claude</code> on <code>PATH</code> by default, or a full path to <code>claude.exe</code>.</td></tr>
+    <tr><td>Codex executable</td><td>The full path to <code>codex.exe</code>.</td></tr>
+    <tr><td>Node executable</td><td><code>node</code> on <code>PATH</code> by default, or a full path to <code>node.exe</code> (Node 20 or later), which runs the editor's tools for the assistant.</td></tr>
+    <tr><td>Login status</td><td>The Check button described above.</td></tr>
+  </table>
+  <p>There is no key row: the editor never asks for, shows or stores a key.</p>
+
+  <h3>Claude (API): supplying the key</h3>
+  <p>The editor reads the key from the <code>ANTHROPIC_API_KEY</code> environment variable each
+  time you send a prompt, and from nowhere else. There is no key field in the panel or in the
+  settings, and the editor never writes the key to a file. Set the variable before you start
+  the editor, for example in PowerShell:</p>
+  <div class="step"><code>$env:ANTHROPIC_API_KEY = "sk-ant-..."</code>, then start the editor from the same window.</div>
+  <p>Without the variable, a prompt fails with "No Claude API key: set ANTHROPIC_API_KEY in the
+  environment before starting the editor." A key the API rejects fails with the API's message,
+  HTTP 401 and a reminder to check the variable. The <b>Claude API model</b> row defaults to
+  <code>claude-opus-5-5</code>; a reply is capped at 16,384 tokens. Each prompt is sent with the
+  conversation's earlier prompts and their finished replies; a reply that failed or was stopped
+  is left out, together with its prompt.</p>
+
+  <div class="panel warn"><h4>Long replies</h4>
+  <p>A reply may take a while to start. The panel waits as long as the server keeps sending
+  and gives up after ten minutes of silence. A reply that reaches the 16,384-token limit, or
+  that the model declines, ends with a note saying so. A reply stream larger than 8 MiB, more
+  than a 16,384-token reply needs, is cut off with a message saying so; the text received
+  until then stays in the panel.</p></div>
+
+  <h2>Changelog</h2>
+  <ul><li>2026-10-07: first version: the Claude (API) provider and how its key is supplied.</li>
+      <li>2026-10-07: the Claude Code and Codex local sessions, the Settings &gt; AI Assistant page,
+      Login status, and how sessions continue; the model moved from the panel to the settings page.</li>
+      <li>2026-10-08: the conversation: streamed replies, one row per message, queued prompts, Stop
+      and Esc, Copy, a provider change starts a new conversation, and Claude (API) prompts carry the
+      conversation's earlier turns. Run again and the per-entry remove button are gone.</li>
+      <li>2026-10-08: Retry on a failed reply; a message holds at most 64 KB (a longer prompt is
+      refused, a longer reply is truncated and marked); Copy reports in the status line.</li>
+      <li>2026-10-08: the Session… button: New session, Resume last and a searchable list of the
+      project's local sessions; a session that can no longer be continued is forgotten.</li>
+      <li>2026-10-09: acting in the editor: the mode control (Read only, Auto, Edit freely), what
+      each mode runs and refuses, what is never allowed, the remembered mode, the Node executable
+      and Mode for new conversations rows, and why Codex stays a conversation; the tools that write
+      files stay inside the open project.</li>
+      <li>2026-10-09: asking: the Ask before every edit mode, Auto asks before actions that cannot be
+      undone, Allow, Allow for this turn and Deny; one row per call under the reply with Details and
+      the footer counts; each scene edit is one undo step named for it; edits wait for your drag to
+      end.</li>
+      <li>2026-10-09: Undo this turn; the rows read "undone" after it; one editor log line per call.</li>
+      <li>2026-10-09: screenshots and captured textures show inline under their call, open
+      in Asset View; models, materials and textures the assistant names show as tiles with Open, and
+      a missing one as "not found"; what is sent to the provider.</li>
+      <li>2026-10-10: the model button: the model and, for Claude (local session), the effort, chosen
+      in the panel and applied from the next prompt; a reply names the model that answered and the
+      effort it asked for; the choices are model families and effort levels, Opus at High to start, and
+      the button names the version once a reply has; Haiku and the Claude session effort setting.</li></ul>
+
+</div>
+<footer>AI Assistant guide · 2026-10-10</footer>
+</body>
+</html>

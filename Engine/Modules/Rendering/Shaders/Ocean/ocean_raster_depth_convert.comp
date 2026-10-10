@@ -1,0 +1,33 @@
+#version 450
+
+// Converts a hidden top-down orthographic reverse-Z depth capture into water
+// depth in meters below the calm sea level. The capture camera sits above the
+// sea and uses zNear = top padding, so the near plane coincides with sea level.
+
+layout(local_size_x = 8, local_size_y = 8, local_size_z = 1) in;
+
+layout(set = 0, binding = 0) uniform sampler2D uDepth;
+layout(set = 0, binding = 1, r32f) uniform writeonly image2D uWaterDepthOut;
+
+layout(std140, set = 0, binding = 2) uniform OceanRasterDepthParams
+{
+    vec4 uNearFarDeepResolution; // x = near/top padding, y = far, z = deep, w = resolution
+};
+
+void main()
+{
+    ivec2 id = ivec2(gl_GlobalInvocationID.xy);
+    int resolution = int(uNearFarDeepResolution.w + 0.5);
+    if (id.x >= resolution || id.y >= resolution)
+        return;
+
+    float rawDepth = texelFetch(uDepth, id, 0).r;
+    float zNear = max(uNearFarDeepResolution.x, 1.0e-3);
+    float zFar = max(uNearFarDeepResolution.y, zNear + 1.0e-3);
+    float deep = max(uNearFarDeepResolution.z, 1.0e-3);
+
+    // Reverse-Z orthographic: raw 1 = near sea plane, raw 0 = far/deep.
+    float viewZ = zFar - rawDepth * (zFar - zNear);
+    float waterDepth = clamp(viewZ - zNear, 0.0, deep);
+    imageStore(uWaterDepthOut, id, vec4(waterDepth, 0.0, 0.0, 0.0));
+}

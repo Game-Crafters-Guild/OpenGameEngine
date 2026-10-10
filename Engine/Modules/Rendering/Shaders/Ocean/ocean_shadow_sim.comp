@@ -1,0 +1,92 @@
+#version 450
+// World-space temporal shadow fields. Engine CSM uses reverse Z.
+layout(local_size_x = 8, local_size_y = 8, local_size_z = 1) in;
+struct ShadowInput
+{
+    vec4 rect;
+    vec4 values;
+};
+layout(std140, set = 0, binding = 0) uniform Params
+{
+    vec4 current[7];
+    uvec4 currentMeta;
+    vec4 previous[7];
+    uvec4 previousMeta;
+    vec4 simulation;
+    vec4 frame;
+    ShadowInput inputs[64];
+};
+layout(set = 0, binding = 1) uniform sampler2DArray historyTexture;
+layout(rg16f, set = 0, binding = 2) uniform writeonly image2DArray resultTexture;
+// Prefix of the engine ShadowDataGPU. The complete buffer is bound unchanged.
+layout(std140, set = 0, binding = 8) uniform ShadowData
+{
+    mat4 shadowVP[4];
+    vec4 shadowSplits;
+    vec4 shadowParams;
+};
+layout(set = 0, binding = 9) uniform sampler2DArrayShadow shadowMap;
+#include "Ocean/ocean_sun_shadow.glsl"
+float hash(vec2 p)
+{
+    return fract(sin(dot(p, vec2(12.9898, 78.233))) * 43758.5453);
+}
+vec2 disk(vec2 p)
+{
+    float angle = 6.2831853 * hash(p + frame.yy);
+    return vec2(cos(angle), sin(angle)) * sqrt(hash(p.yx + frame.yy * 0.61)) * 0.5;
+}
+float visibility(vec2 xz)
+{
+    return OceanSunVisibility(vec3(xz.x, simulation.x + max(shadowParams.y, 0.0), xz.y));
+}
+float blendShadow(float value, float inputValue, float weight, int mode)
+{
+    float combined = inputValue;
+    if (mode == 1)
+        combined = value + inputValue;
+    else if (mode == 2)
+        combined = value * inputValue;
+    else if (mode == 3)
+        combined = min(value, inputValue);
+    else if (mode == 4)
+        combined = max(value, inputValue);
+    return clamp(mix(value, combined, weight), 0, 1);
+}
+void main()
+{
+    ivec3 id = ivec3(gl_GlobalInvocationID);
+#if defined(GE_COMPAT_PROFILE)
+    // naga 29.0.4's SPIR-V front end types imageSize() of an arrayed storage image as a
+    // 2-vector, dropping the layer count. The field holds one layer per LOD of its layout
+    // (OceanCascadeArray), so the layout's LOD count is the same bound.
+    ivec3 size = ivec3(imageSize(resultTexture).xy, int(currentMeta.x));
+#else
+    ivec3 size = imageSize(resultTexture);
+#endif
+    if (any(greaterThanEqual(id, size)))
+        return;
+    vec4 tile = current[id.z];
+    vec2 xz = tile.xy + (vec2(id.xy) + 0.5) * tile.z;
+    vec2 jitter = disk(xz);
+    vec2 lit = vec2(visibility(xz + jitter * simulation.w), visibility(xz + jitter * simulation.z));
+    for (int i = 0; i < min(int(frame.z), 64); ++i)
+    {
+        ShadowInput s = inputs[i];
+        vec2 edge = s.rect.zw - abs(xz - s.rect.xy);
+        if (any(lessThan(edge, vec2(0))))
+            continue;
+        float weight = s.values.z > 0 ? smoothstep(0, s.values.z, min(edge.x, edge.y)) : 1;
+        lit = 1 - vec2(blendShadow(1 - lit.x, s.values.x, weight, int(s.values.w)),
+                       blendShadow(1 - lit.y, s.values.y, weight, int(s.values.w)));
+    }
+    if (frame.x > 0.5 && uint(id.z) < previousMeta.x)
+    {
+        vec4 old = previous[id.z];
+        vec2 uv = (xz - old.xy) / (old.z * float(size.x));
+        vec2 inset = vec2(0.5) / vec2(textureSize(historyTexture, 0).xy);
+        if (all(greaterThanEqual(uv, inset)) && all(lessThanEqual(uv, 1 - inset)))
+            lit = mix(lit, textureLod(historyTexture, vec3(uv, id.z), 0).rg, simulation.y);
+    }
+    imageStore(resultTexture, id, vec4(lit, 0, 0));
+}

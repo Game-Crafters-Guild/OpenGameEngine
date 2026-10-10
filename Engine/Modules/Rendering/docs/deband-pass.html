@@ -1,0 +1,116 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Gradient-Aware Deband — Terminal Encode</title>
+<style>
+:root {
+  --bg: #0f1115; --panel: #171a21; --panel-light: #1e232c; --border: #2a3040;
+  --text: #d7dce5; --muted: #8b93a3; --accent: #5aa0f2; --danger: #e06c75;
+  --bad: #e06c75; --ok: #7ec87e; --good: #7ec87e; --warn: #e0b060;
+}
+body { background: var(--bg); color: var(--text); font: 15px/1.55 "Segoe UI", system-ui, sans-serif; margin: 0; padding: 2rem; }
+.wrap { max-width: 980px; margin: 0 auto; }
+h1 { font-size: 1.7rem; margin: 0 0 .2rem; }
+h2 { font-size: 1.25rem; margin-top: 2.2rem; border-top: 1px solid var(--border); padding-top: 1.2rem; }
+.lede { color: var(--muted); margin: 0 0 1.6rem; }
+code, pre { font-family: "Cascadia Code", Consolas, monospace; background: var(--panel-light); border-radius: 4px; }
+code { padding: .08rem .35rem; font-size: .88em; }
+pre { padding: .8rem 1rem; overflow-x: auto; border: 1px solid var(--border); }
+.panel { background: var(--panel); border: 1px solid var(--border); border-left: 4px solid var(--accent); border-radius: 6px; padding: .9rem 1.1rem; margin: 1rem 0; }
+.panel.danger { border-left-color: var(--danger); }
+.panel.ok { border-left-color: var(--ok); }
+.panel.warn { border-left-color: var(--warn); }
+table { border-collapse: collapse; width: 100%; margin: 1rem 0; }
+th, td { border: 1px solid var(--border); padding: .45rem .7rem; text-align: left; }
+th { background: var(--panel-light); }
+tr:hover td { background: rgba(90,160,242,.06); }
+.muted { color: var(--muted); }
+footer { color: var(--muted); margin-top: 3rem; border-top: 1px solid var(--border); padding-top: 1rem; font-size: .85rem; }
+</style>
+</head>
+<body><div class="wrap">
+
+<h1>Gradient-Aware Deband</h1>
+<p class="lede">GUIDE · rendering · output encode</p>
+
+<p>Content authored as an 8-bit gradient can reach the screen as a visible staircase once lighting
+and exposure gain magnify each authored step into several output code values. The dither cannot
+break a step several times its own amplitude, so the engine carries a gradient-aware deband filter
+in the terminal encode. It is <b>off unless a volume turns it on</b>.</p>
+
+<h2>Turning it on</h2>
+<p>Attach a <code>DebandEffect</code> component to the same entity as a <code>PostProcessVolume</code>.
+A world with no volume, and a volume with no <code>DebandEffect</code>, run with the filter off;
+attaching the component is the explicit enable, and <code>Enabled = false</code> is an explicit
+pin-off. <code>ThresholdLsb</code> lerps across volume blends like any other volume property.</p>
+
+<table>
+<tr><th>Control</th><th>Default</th><th>Meaning</th></tr>
+<tr><td><code>DebandEffect.Enabled</code></td><td>true (component absent = filter off)</td><td>Whether this volume engages the filter.</td></tr>
+<tr><td><code>DebandEffect.ThresholdLsb</code></td><td>6</td><td>The gate, in output code values of the target's own bit depth. A tap average is adopted only while <em>every</em> channel stays within this distance of the original pixel, so a real edge vetoes the blend. Clamped 0–16; 0 is off. Larger gates start eating texture detail.</td></tr>
+<tr><td><code>GE_DEBAND</code></td><td>on</td><td>Debug instrument: <code>0</code> kills the filter process-wide and beats any volume. Also the A/B and capture-parity gate.</td></tr>
+<tr><td><code>GE_DEBAND_THRESHOLD</code></td><td>unset</td><td>Debug override for the gate; beats any volume value (clamped 0–16, 0 disables).</td></tr>
+<tr><td><code>GE_DEBAND_RADIUS</code></td><td>8.0</td><td>Debug override for the first-iteration tap radius in pixels (clamped 1–64, ×i per iteration). Process-wide, not a volume knob.</td></tr>
+</table>
+<p class="muted">Precedence is resolved in one place, <code>Passes::ResolveOutputDebandThresholdLsb()</code>:
+environment kill → environment threshold override → the volume value. The environment is read once per
+process; the volume value flows per frame from <code>PostProcessSettings::DebandThresholdLsb</code> to
+every terminal-encode call site, movie encodes included. Radii and iteration count are compile-time.</p>
+
+<h2>Where it runs</h2>
+<p>Inside the terminal encode (<code>encode_srgb.frag</code> / <code>AddSRGBEncodePassRG</code>),
+between the output transfer curve and the TPDF dither:</p>
+<pre>FinalLinear (FP16) ─→ EncodeForOutput (sRGB / PQ / HLG) ─→ <b>DebandEncoded</b> ─→ TPDF dither ─→ quantizing target</pre>
+<p>The bands are output-referred — they are born from albedo × lighting × exposure and are measured in
+output code values — so the filter belongs after the transfer curve, where one threshold means the same
+thing whatever the exposure is. It is one pass with no new render-graph resources, and it costs nothing
+when off: <code>debandThreshold ≤ 0</code> is a dynamically uniform branch, so the taps never issue.
+scRGB and hardware-sRGB passthrough carry no quantizer in this pass and get neither dither nor deband.</p>
+
+<h2>What it does to a pixel</h2>
+<p>Three iterations; each takes a 4-tap cross at a per-pixel random rotation and distance, with the
+radius growing per iteration (8/16/24&nbsp;px reach by default) so it covers plateaus of the widths a
+camera actually produces. Each tap samples the source and applies the active transfer curve, and the
+four-tap average is compared against the <em>original</em> encoded centre — never the evolving result,
+which is what bounds total displacement to one threshold. The average is adopted only when every
+channel passes the gate, which keeps hue stable and lets one high-contrast channel veto the blend.
+The dither then breaks the residual sub-code-value structure; its amplitude is unchanged.</p>
+<p>The threshold is always scaled by the destination's own quantizer step
+(<code>EncodeDitherLsbForFormat</code>: 1/255 for 8-bit, 1/1023 for RGB10A2, nothing for a float
+target), the same sizing rule the dither amplitude uses. Neither filter can be sized for a depth the
+target does not have.</p>
+
+<h2>Editor views and editor chrome</h2>
+<p>Editor chrome is never debanded, and this is structural rather than a list of rectangles to avoid.
+Each editor world view finalizes at its own resolve — <code>Engine::Renderer::DeclareViewFinalize</code>
+applies the transfer curve, this deband and the dither to that view's image alone — and the interface
+composites onto the finished result. The window's terminal encode then names
+<code>FinalizeQuantizer::None</code> and filters nothing: it rounds the composite onto the backbuffer's
+step and adds neither filter. Editor viewport pixels therefore run exactly the filter the player runs,
+so the volume lever previews truthfully.</p>
+<p>Views finalize only while <code>Engine::Renderer::ViewFinalizeEligible</code> holds, which means no
+active HDR output mode. Under HDR the views decline, the terminal encode owns the transfer curve and
+its quantizer full-frame, and the chrome exclusion does not apply — the 10-bit step puts that grain at
+about 0.1%.</p>
+
+<h2>Limits</h2>
+<ul>
+<li>Anything composed into a view's image <em>before</em> its finalize is filtered with the world:
+scene-pane overlay and gizmo passes write into the pipeline output the finalize consumes, so
+in-viewport overlays are debanded too — bounded to under one threshold and mostly vetoed by contrast.
+The game view's HUD composites onto the finished view and is never filtered.</li>
+<li>World-content previews that do not finalize (asset previews, camera-bookmark previews, thumbnails,
+the video player) are not debanded at all.</li>
+<li>A profiled strip laid across a diagonal high-contrast edge manufactures a synthetic staircase and
+looks exactly like banding in the numbers. The filter correctly refuses to smooth those. Check a strip
+is edge-free before reading its steps as banding.</li>
+</ul>
+
+<h2>Checking it is alive</h2>
+<p>The backbuffer state log line carries <code>debandThreshold</code> and <code>debandRadius</code>, and
+<code>get_render_stats</code> reports the effective gate as <code>debandThresholdLsb</code> in its
+<code>output</code> block — so a filter that is off reads as off rather than having to be seen.</p>
+
+</div></body>
+</html>

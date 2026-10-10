@@ -1,0 +1,687 @@
+<meta charset="utf-8">
+<title>JobSystem Usage Guide</title>
+<style>
+  :root {
+    --bg: #0f1115; --panel: #171a21; --panel-light: #1e2230; --border: #2a2f3d;
+    --text: #d7dae2; --muted: #8b91a3; --accent: #5cc8ff;
+    --danger: #ff6b6b; --bad: #ff6b6b; --ok: #57d99a; --good: #57d99a; --warn: #ffc857;
+  }
+  body { background: var(--bg); color: var(--text); font: 15px/1.6 "Segoe UI", system-ui, sans-serif; margin: 0; padding: 2rem clamp(1rem, 6vw, 5rem); }
+  h1 { font-size: 1.9rem; margin: 0 0 0.2rem; }
+  h2 { font-size: 1.35rem; margin-top: 3rem; border-top: 1px solid var(--border); padding-top: 1.6rem; color: var(--accent); }
+  h3 { font-size: 1.05rem; margin-top: 1.6rem; }
+  .lede { color: var(--muted); margin: 0 0 2rem; letter-spacing: 0.04em; }
+  code { background: var(--panel-light); border-radius: 4px; padding: 0.1em 0.4em; font-size: 0.9em; }
+  pre { background: var(--panel-light); border: 1px solid var(--border); border-radius: 8px; padding: 0.9rem 1.1rem; overflow-x: auto; font-size: 0.85rem; line-height: 1.5; }
+  pre code { background: none; padding: 0; }
+  table { border-collapse: collapse; width: 100%; margin: 1rem 0; font-size: 0.92rem; }
+  th { text-align: left; background: var(--panel-light); padding: 0.5rem 0.7rem; border-bottom: 2px solid var(--border); }
+  td { padding: 0.5rem 0.7rem; border-bottom: 1px solid var(--border); vertical-align: top; }
+  tr:hover td { background: rgba(92, 200, 255, 0.04); }
+  .panel { background: var(--panel); border: 1px solid var(--border); border-left: 4px solid var(--accent); border-radius: 8px; padding: 1rem 1.3rem; margin: 1.2rem 0; }
+  .panel.ok { border-left-color: var(--ok); }
+  .panel.warn { border-left-color: var(--warn); }
+  .panel.danger { border-left-color: var(--danger); }
+  .pill { display: inline-block; border-radius: 999px; padding: 0.05em 0.7em; font-size: 0.78rem; font-weight: 600; }
+  .pill.new { background: #14532d; color: #86efac; }
+  .pill.del { background: #58151c; color: #fda4af; }
+  .pill.mod { background: #1e3a5f; color: #93c5fd; }
+  .pill.keep { background: #3f3520; color: #fde68a; }
+  .two-col { display: grid; grid-template-columns: 1fr 1fr; gap: 1rem; }
+  @media (max-width: 900px) { .two-col { grid-template-columns: 1fr; } }
+  footer { margin-top: 4rem; padding-top: 1rem; border-top: 1px solid var(--border); color: var(--muted); font-size: 0.85rem; }
+  ul li { margin-bottom: 0.35rem; }
+  .muted { color: var(--muted); }
+  .mermaid { background: var(--panel); border: 1px solid var(--border); border-radius: 8px; padding: 1rem; margin: 1.2rem 0; }
+</style>
+
+<h1>JobSystem Usage Guide</h1>
+<p class="lede">GUIDE · 2026-07-10 · Engine/Modules/JobSystem</p>
+
+<div class="panel">
+<strong>Who this is for:</strong> engine developers (and AI sessions) putting work on the pool. The JobSystem was overhauled in 2026-07 (7 slices, all merged); this guide covers the API that shipped and how to pick between its three submission paths. It is a <em>how-to</em> — the design/audit record with the full race analyses is the jobsystem-overhaul record in the workbench. Every signature here is verbatim from the headers in <code>Engine/Modules/JobSystem/Include/JobSystem/</code>.
+</div>
+
+<div class="panel ok">
+<strong>Getting the pool:</strong> there is one engine-wide pool, created at engine init and destroyed last at teardown.
+<pre><code>auto&amp; pool = GameEngine::EngineCore::GetInstance().GetJobSystem();
+// -&gt; JobSystem::WorkStealingThreadPool&amp;</code></pre>
+Tests and tools construct their own: <code>JobSystem::WorkStealingThreadPool pool(4);</code>
+</div>
+
+<h2>1 · Which path? (decision table + flowchart)</h2>
+
+<table>
+<tr><th>You have</th><th>Use</th><th>Per-task cost</th><th>You get back</th></tr>
+<tr>
+  <td>Fire-and-forget work; the caller owns all synchronization</td>
+  <td><code>EnqueueWork(fn)</code></td>
+  <td>0 allocs steady-state (pooled 128-byte slab), one queue push, one bounded wake · 3.5M tasks/s floor</td>
+  <td>Nothing — but the task is <strong>never dropped</strong>, even racing Shutdown</td>
+</tr>
+<tr>
+  <td>&ge; ~8 <em>homogeneous</em> fire-and-forget closures ready at once</td>
+  <td><code>EnqueueWorkBatch(funcs, count)</code></td>
+  <td>Bulk queue op + one bounded batch wake (&le; 4 caller notifies) · 11.9µs for a 200-task burst</td>
+  <td>Same as EnqueueWork; elements are moved-from</td>
+</tr>
+<tr>
+  <td>A cohort you must join ("all N finished"), possibly <strong>from a worker thread</strong></td>
+  <td><code>Run(fn, counter)</code> + <code>Wait(counter)</code></td>
+  <td>One slab envelope + one stub per task; no TaskHandle, no TaskData · fork+join 7.8µs warm</td>
+  <td>Happens-before on all task writes at Wait-return; worker-legal join; sticky <code>HasAnyFailed()</code></td>
+</tr>
+<tr>
+  <td>An index range or container to iterate</td>
+  <td><code>ParallelFor</code> / <code>ParallelForEach</code> / <code>ParallelSort</code></td>
+  <td>One batch publish + JobCounter barrier, chunking done for you</td>
+  <td>Blocks until done; sequential fallback below threshold / no pool / shutdown. <strong>Join from a non-worker thread only</strong></td>
+</tr>
+<tr>
+  <td>Per-task result, status, cancellation, or completion callbacks</td>
+  <td><code>Submit(lambda)</code> → <code>TaskHandle</code></td>
+  <td>466ns Release / 1200ns DebugFast, exactly 1 heap alloc</td>
+  <td><code>TryGetResult&lt;T&gt;</code>, <code>Wait</code>, <code>Cancel</code>, <code>OnComplete</code>/<code>OnFailure</code>, dependency-graph attachable</td>
+</tr>
+<tr>
+  <td>Work whose thread waits on another process, the OS or a driver for most of its run (a compiler, cmake, a compile server)</td>
+  <td><code>JobChannel::Submit(fn)</code>, or <code>JobChannel::Enqueue(fn)</code> for work that must never be dropped, on the owning service's channel (§12)</td>
+  <td>Runs on a blocking thread, never a compute worker; at most the channel's cap run at once, the rest wait in its FIFO and hold no thread</td>
+  <td>A <code>TaskHandle</code>, as <code>Submit(lambda)</code>: cancellable while queued, a <code>Submit(fn, deps)</code> dependency</td>
+</tr>
+<tr>
+  <td>Execution ordering between tasks (B runs after A)</td>
+  <td><code>Submit(fn, deps)</code> — lambda + a span of dependency handles. <code>Task</code> subclass + <code>AddDependency</code> for stateful task types</td>
+  <td>Graph node + TaskData; node erased eagerly at terminal</td>
+  <td>Dependents run only after every dependency is terminal; failure cascades to parked dependents; cancel cascades too</td>
+</tr>
+</table>
+
+<pre class="mermaid">
+flowchart TD
+    A["I have work for the pool"] --> B{"Does anyone need to know<br/>when it finishes?"}
+    B -->|"No — fire and forget"| C{"&ge; 8 homogeneous<br/>closures at once?"}
+    C -->|Yes| D["EnqueueWorkBatch(funcs, count)"]
+    C -->|No| E["EnqueueWork(fn)"]
+    B -->|Yes| F{"What do you need back?"}
+    F -->|"Just a join:<br/>'these N are all done'"| G{"Iterating an index range<br/>or a container?"}
+    G -->|Yes| H["ParallelFor / ParallelForEach<br/>(join from non-worker thread)"]
+    G -->|No| I["Run(fn, counter) + pool.Wait(counter)<br/>worker-legal join"]
+    F -->|"Per-task result / cancel /<br/>callbacks / wait on ONE task"| J["Submit(lambda) &rarr; TaskHandle"]
+    F -->|"Ordering between tasks<br/>(B after A)"| K["Submit(fn, deps)<br/>(or Task subclass + AddDependency)"]
+    style D fill:#14532d,color:#86efac
+    style E fill:#14532d,color:#86efac
+    style H fill:#1e3a5f,color:#93c5fd
+    style I fill:#1e3a5f,color:#93c5fd
+    style J fill:#3f3520,color:#fde68a
+    style K fill:#3f3520,color:#fde68a
+</pre>
+
+<p class="muted">Rule of thumb: start at the cheapest path that gives you the completion observation you actually need. Paying for a TaskHandle on work nobody waits on, or hand-rolling a barrier where a JobCounter fits, are both censused past mistakes the overhaul deleted.</p>
+
+<h2>2 · Path 1 — fire-and-forget: EnqueueWork / EnqueueWorkBatch</h2>
+
+<pre><code>// WorkStealingThreadPool.h
+template &lt;typename F, typename = std::enable_if_t&lt;std::is_invocable_v&lt;F&amp;&gt;&gt;&gt;
+void EnqueueWork(F&amp;&amp; func, JobPriority priority = JobPriority::Normal);
+
+template &lt;typename F, typename = std::enable_if_t&lt;std::is_invocable_v&lt;F&amp;&gt;&gt;&gt;
+void EnqueueWorkBatch(F* funcs, size_t count,
+                      JobPriority priority = JobPriority::Normal);   // elements are MOVED FROM
+
+template &lt;typename F, typename = std::enable_if_t&lt;std::is_invocable_v&lt;F&amp;&gt;&gt;&gt;
+void EnqueueWorkBatch(std::span&lt;F&gt; funcs,
+                      JobPriority priority = JobPriority::Normal);   // span convenience</code></pre>
+
+<pre><code>#include "JobSystem/WorkStealingThreadPool.h"
+
+auto&amp; pool = GameEngine::EngineCore::GetInstance().GetJobSystem();
+
+// One-off. No handle, no TaskData, zero allocations in steady state
+// (pooled slab). YOU own all synchronization — nothing tells you when,
+// or on which thread, it ran.
+pool.EnqueueWork([pixels = std::move(pixels)] { UploadToStaging(pixels); });
+
+// Homogeneous batch: one closure TYPE, one bulk queue op, one bounded wake.
+struct MipTask
+{
+    Texture* Tex = nullptr;
+    uint32_t Mip = 0;
+    void operator()() const { GenerateMip(*Tex, Mip); }
+};
+
+MipTask tasks[16];
+// ... fill tasks ...
+pool.EnqueueWorkBatch(tasks, 16);   // tasks[0..15] are moved-from after this</code></pre>
+
+<ul>
+<li><strong>Batch threshold:</strong> batches below <code>kBulkPublishThreshold</code> (= 8) internally route down the per-task publish loop — per-task visibility overlaps publication with execution, which measured 2× faster for small warm forks. So don't contort call sites to batch fewer than ~8 tasks; at and above 8, the bulk path wins. One <code>EnqueueWorkBatch</code> call handles up to any count (staged through 64-entry stack runs, <code>kStackBatch</code>).</li>
+<li><strong>Nothrow-move closures:</strong> the bulk slab path <code>static_assert</code>s <code>std::is_nothrow_move_constructible_v&lt;F&gt;</code>. Plain member-wise structs (the intended shape) satisfy this automatically.</li>
+<li><strong>Closure size:</strong> closures that fit a 128-byte slab (i.e. ~104 bytes of captures) are allocation-free after warmup; oversized closures fall back to a plain heap allocation, chosen at compile time. Keep captures small on hot paths.</li>
+<li><strong>Exceptions:</strong> a throwing bare task is caught and logged by the worker; it cannot take the pool down, but nobody else observes the failure. If you need failure observation, you wanted a JobCounter or a TaskHandle.</li>
+<li><strong>Never dropped (F13c):</strong> an EnqueueWork racing or following <code>Shutdown()</code> still executes — see §7.</li>
+</ul>
+
+<h2>3 · Path 2 — fork-join: Run(fn, counter) + Wait(counter)</h2>
+
+<pre><code>// WorkStealingThreadPool.h
+template &lt;typename F, typename = std::enable_if_t&lt;std::is_invocable_v&lt;F&amp;&gt;&gt;&gt;
+void Run(F&amp;&amp; fn, JobCounter&amp; counter);
+
+void Wait(JobCounter&amp; counter);
+
+// JobCounter.h
+class JobCounter
+{
+  public:
+    JobCounter() = default;                  // non-copyable; dtor asserts count == 0
+    void Add(uint32 n = 1);                  // F16: at submit, BEFORE publish
+    void Decrement();                        // once per counted unit, on any thread, after its Add
+    bool IsZero() const;                     // lock-free probe — NOT a join, see below
+    bool HasAnyFailed() const;               // F19 sticky: some counted task threw
+    void Reset();                            // re-arm for the next wave; quiescent only
+};</code></pre>
+
+<pre><code>#include "JobSystem/JobCounter.h"
+#include "JobSystem/WorkStealingThreadPool.h"
+
+JobSystem::JobCounter counter;               // stack-owned is the normal case
+for (Tile&amp; tile : dirtyTiles)
+{
+    pool.Run([&amp;tile] { RebuildTile(tile); }, counter);
+}
+pool.Wait(counter);                          // legal on a worker thread too (see below)
+
+if (counter.HasAnyFailed())                  // sticky flag; no per-task attribution
+{
+    Logger::Log::Warning("tile rebuild wave had failures");
+}
+// From here the counter may be destroyed, or reused for the next wave.</code></pre>
+
+<p>This is the primitive that replaced the six hand-rolled remaining/mutex/condvar barrier copies. <strong>Do not hand-roll new barriers.</strong></p>
+
+<h3>3.1 · The participating-Wait rule (F17) — why waiting inside Wait is legal</h3>
+<div class="panel ok">
+<code>pool.Wait(counter)</code> participates on two kinds of thread: <strong>a worker of this pool</strong> and <strong>a thread that cannot block</strong> (the browser main thread). Such a waiter does not park while there is findable work: it executes tasks, but <strong>only tasks tagged to that same counter</strong> (they live in the counter's own queue, never drained from the pool's general queues). When no same-counter task is findable (the remainder is in flight on other threads, or the counter is a bare-chunk barrier with no tagged queue), it parks on the counter's condvar and wakes on the last decrement. <strong>Every other thread parks</strong> on the counter's condvar until the last decrement while the workers run the tasks: the native main thread, another pool's worker, a thread of your own. This filtered consumption is what makes fork-join from inside a job deadlock-free on a bounded pool, guarantees that waiting on counter A never picks up an unrelated 5ms task, and lets the browser main thread, which must not sleep, drain its own join.
+</div>
+
+<p><strong>Scope:</strong> participation covers only tasks submitted via <code>Run(fn, counter)</code>. A counter used purely as a barrier for externally-published work (bare <code>EnqueueWork</code> chunks with manual <code>Add</code>/<code>Decrement</code> — the ParallelFor shape, §3.3) <strong>must be joined from a non-worker thread</strong>: the waiter has nothing tagged to execute and a worker parked on it would deadlock a bounded pool. Also: all tasks counted into one counter must target the <strong>same pool</strong>.</p>
+
+<h3>3.2 · Lifetime and the destruction license</h3>
+<ul>
+<li><strong>Caller-owned:</strong> the counter is yours — stack, member, wherever. The pool never owns it. It must reach zero before destruction (Debug assert) — i.e. <code>Wait()</code> must complete first.</li>
+<li><strong>Wait-return = destruction license for exactly ONE thread.</strong> Only one thread may treat its Wait's return as permission to destroy the counter. A second concurrent waiter can still be inside the condvar's wait internals when the first destroys it — UB. Every in-tree counter has a single joining thread; keep it that way, or give the counter external lifetime that outlives all waiters.</li>
+<li><strong>Never destroy off a bare <code>IsZero()</code>:</strong> observing zero via the lock-free probe does not order a concurrent decrementer's critical section before you — the decrementer can still be inside the counter's mutex. <code>pool.Wait(counter)</code> performs the required synchronizing lock; use it as the join point.</li>
+<li><strong>Reuse:</strong> after Wait returns, the same counter can carry the next wave (Add/Run/Wait again). <code>HasAnyFailed()</code> is sticky <em>across waves</em> unless you re-arm: read it, then call <code>Reset()</code> between waves to clear it. Reset is legal <strong>only at quiescence</strong> — count == 0, no parked waiters (both Debug-asserted); calling it while tasks or waiters are live races the flag writes it clears.</li>
+<li><strong>Exceptions always decrement:</strong> the envelope's scope guard decrements on every exit path, so a throwing task can never hang the join. The throw is logged and flips <code>HasAnyFailed()</code>; there is no per-task failure observation on this path (F19).</li>
+</ul>
+
+<h3>3.3 · The bare-barrier shape (Add/Decrement by hand)</h3>
+<p>A JobCounter can also gate work that was <em>not</em> submitted via <code>Run</code> — you count it in manually and decrement from the task body. In-tree example: <code>MaterialSystem</code>'s shader-prewarm drain (<code>Engine/Source/Engine/Rendering/MaterialSystem.cpp</code>):</p>
+
+<pre><code>// Count BEFORE publish (F16) — a Wait issued after the submits on the same
+// thread can then never miss a task.
+m_PrewarmCounter.Add(1);
+pool.EnqueueWork([this]
+{
+    struct DecrementGuard                    // decrements on EVERY exit path
+    {
+        JobSystem::JobCounter* Counter;
+        ~DecrementGuard() { Counter-&gt;Decrement(); }
+    } guard{&amp;m_PrewarmCounter};
+    CompileVariant();                        // may throw — guard still fires
+});
+
+// ... later, from the MAIN thread (bare barriers don't participate — §3.1):
+pool.Wait(m_PrewarmCounter);</code></pre>
+
+<div class="panel warn">
+<strong>F16 ordering is binding:</strong> <code>Add()</code> on the submitting thread <em>before</em> the task is published; exactly one <code>Decrement()</code> per counted unit, after its <code>Add()</code>, on any thread: the task's completion path, or a driver's completion thread for work the pool does not run (use a scope guard so exceptions decrement). Decrement-then-publish or publish-then-Add both create windows where Wait can return early or hang.
+</div>
+
+<h3>3.4 · Don't hand-roll ranges: ParallelFor / ParallelForEach / ParallelSort / DispatchAndWait</h3>
+<p>The range primitives in <code>JobSystem/ParallelAlgorithms.h</code> are built on a JobCounter barrier and handle chunk math, batch publication, and fallbacks for you:</p>
+
+<pre><code>// ParallelAlgorithms.h — all take the pool by POINTER (null = sequential)
+template &lt;typename Func&gt;
+void ParallelFor(WorkStealingThreadPool* pool, size_t begin, size_t end,
+                 Func&amp;&amp; func, size_t minBatchSize = 1024);   // func(chunkBegin, chunkEnd)
+
+template &lt;typename Iter, typename Func&gt;
+void ParallelForEach(WorkStealingThreadPool* pool, Iter begin, Iter end,
+                     Func&amp;&amp; func, size_t minBatchSize = 1024); // func(element)
+
+template &lt;typename Iter, typename Compare, ...&gt;
+void ParallelSort(WorkStealingThreadPool* pool, Iter begin, Iter end,
+                  Compare comp, size_t threshold = 5000);      // + std::less overload
+
+void DispatchAndWait(WorkStealingThreadPool* pool,
+                     std::function&lt;void()&gt;* tasks, uint32_t count);</code></pre>
+
+<pre><code>#include "JobSystem/ParallelAlgorithms.h"
+
+JobSystem::ParallelFor(&amp;pool, 0, particles.size(),
+    [&amp;](size_t begin, size_t end)
+    {
+        for (size_t i = begin; i &lt; end; ++i)
+            Integrate(particles[i], dt);
+    },
+    /*minBatchSize=*/1024);   // at or below this, the whole range runs on the caller</code></pre>
+
+<p>They block until done, run one chunk on the calling thread (a free extra lane), fall back to sequential execution when the pool is null / shutting down / the range is small — and <strong>must be called from a non-worker thread</strong> (their barrier is the bare shape of §3.3; Debug-asserted). Exceptions in chunks are logged and swallowed so the barrier always releases.</p>
+
+<h2>4 · Path 3 — future-style: Submit(lambda) → TaskHandle</h2>
+
+<pre><code>// WorkStealingThreadPool.h
+template &lt;typename F, typename = std::enable_if_t&lt;std::is_invocable_v&lt;F&amp;&gt;&gt;&gt;
+TaskHandle Submit(F&amp;&amp; task,
+                  JobPriority priority = JobPriority::Normal);  // non-void return stored as the result
+
+template &lt;typename T&gt;
+TaskHandle CreateCompletedHandle(T result);  // born-terminal handle carrying its payload
+
+// TaskHandle.h (the useful surface — there are NO public state mutators)
+bool IsValid() const;   bool IsDone() const;   bool IsCompleted() const;
+bool IsRunning() const; bool HasFailed() const;
+String GetErrorMessage() const;
+template &lt;typename T&gt; bool TryGetResult(T&amp; result) const;   // non-blocking
+void Wait();                                 // blocks calling thread until terminal
+void OnComplete(Function&lt;void()&gt; callback);
+void OnComplete(Function&lt;void(const TaskHandle&amp;)&gt; callback);
+void OnFailure(Function&lt;void(const String&amp;)&gt; callback);
+bool Cancel();                               // F12 single-fire arbitration, §5</code></pre>
+
+<pre><code>JobSystem::TaskHandle handle = pool.Submit([path]() -&gt; MeshData
+{
+    return LoadMeshFromDisk(path);           // return value stored on the handle
+});
+
+// Non-blocking poll (typical per-frame check):
+MeshData mesh;
+if (handle.TryGetResult(mesh)) { Use(std::move(mesh)); }
+
+// Or callbacks — they run inline on the COMPLETING thread; keep them tiny
+// and never block on other handles inside them:
+handle.OnFailure([](const JobSystem::String&amp; err)
+{
+    Logger::Log::Error("mesh load failed: {}", err);
+});
+
+// Or block, off the pool. TaskHandle::Wait does NOT participate; on a
+// worker of the handle's pool it is a Debug assert (§8).
+handle.Wait();</code></pre>
+
+<ul>
+<li><strong>Cost:</strong> 466ns Release / 1200ns DebugFast, exactly one heap allocation, one registry mutex hit (slice 6). Cheap enough for asset-grade work; still ~30× an EnqueueWork — don't pay it for work nobody observes.</li>
+<li><strong>Handles are values:</strong> copy freely; all copies share the task's state. Canceling/waiting through any copy works.</li>
+<li><strong>Result typing:</strong> the result rides in a <code>std::any</code>; <code>TryGetResult&lt;T&gt;</code> returns false both when the task isn't <code>Completed</code> yet <em>and</em> on a type mismatch. Debug builds now <strong>assert on the mismatch</strong> (task completed, a result exists, T doesn't match) — pre-polish that bug silently polled false forever and read as "never completes". Release stays silent-false.</li>
+<li><strong>No public mutators:</strong> <code>SetResult</code>/<code>SetException</code>/<code>Mark*</code> are private — force-completing a handle from outside the pool races the worker's F12 arbitration CAS. A <em>running</em> <code>Task</code> subclass publishes its own payload via the protected <code>Task::PublishResult(value)</code> / <code>PublishException(ptr)</code> (safe: the executing task already won the arbitration).</li>
+<li><strong>Already-available results:</strong> if the value already exists (asset already loaded), do <em>not</em> submit a dummy task and force-complete it — that races the worker's status arbitration and is a contract violation. Use <code>CreateCompletedHandle(payload)</code>: born terminal with the payload bound at creation, waiters never block, <code>TryGetResult&lt;T&gt;</code> yields it immediately (T = the decayed argument type — match it to the polling side).</li>
+<li><strong>Failure:</strong> a throwing body flips the handle to <code>Failed</code> with the exception message in <code>GetErrorMessage()</code>; <code>OnFailure</code> callbacks fire. <code>HasFailed()</code> is true for both <code>Failed</code> and <code>Cancelled</code>.</li>
+</ul>
+
+<h2>5 · Cancellation (F12: single-fire CAS arbitration)</h2>
+
+<div class="panel">
+<strong>The semantics in one line:</strong> <code>Cancel()</code> wins only against tasks that have not started. It performs <code>CAS(Pending → Cancelled)</code> while the dequeuing worker performs <code>CAS(Pending → Running)</code> — <strong>exactly one side wins, exactly once</strong>.
+</div>
+
+<ul>
+<li><strong>Canceller wins → returns <code>true</code>:</strong> the body <em>never</em> executes. Canceled callbacks (the <code>OnFailure</code> set) and waiter wakeups fire exactly once, inline on the canceling thread. The handle reads <code>IsDone() == true</code>, <code>HasFailed() == true</code>, <code>IsCompleted() == false</code>. For dependency-managed tasks, parked payloads are retired and pending dependents cascade to <code>Cancelled</code>.</li>
+<li><strong>Worker wins → returns <code>false</code>:</strong> the task is Running or already terminal. A running task <strong>completes normally</strong> and its callbacks fire with its actual outcome — never the cancellation path. Canceled callbacks and the body are mutually exclusive by construction.</li>
+<li><strong>Every handle path is cancellable</strong>, including plain <code>Submit(lambda)</code> (this was bug B1 — pre-overhaul, Cancel on lambda tasks was a silent no-op).</li>
+<li><strong>Destruction latency (F14):</strong> a won Cancel does not free the queued envelope; it is destroyed when a worker dequeues it and loses the arbitration. Captured resources in a canceled closure live until then — don't capture things whose destruction is time-critical.</li>
+<li><strong>Fire-and-forget and JobCounter tasks are not cancellable</strong> — no handle, no status to arbitrate. If you need cancel, you need <code>Submit</code>.</li>
+</ul>
+
+<h3>5.1 · The cancel-on-supersede pattern (hot reload / streaming)</h3>
+<p>The typical customer: a newer request makes the in-flight one worthless (<code>TileStreamingManager</code> is the in-tree example, pinned by <code>Tests/Jobs/CancellationAndShutdownTests.cpp</code>).</p>
+
+<pre><code>void RequestTile(TileKey key)
+{
+    if (m_InFlight.IsValid())
+    {
+        m_InFlight.Cancel();
+        // true  -&gt; old body never runs; nothing to clean up.
+        // false -&gt; old job is running or already done; it will complete
+        //          normally. The generation check below defuses its result.
+    }
+
+    const uint64_t gen = ++m_Generation;
+    m_InFlight = pool.Submit([this, gen, key]
+    {
+        TileData data = LoadTile(key);
+        ApplyTileIfCurrent(gen, std::move(data));   // zombie-completion guard
+    });
+}</code></pre>
+
+<div class="panel warn">
+Because a running task always completes, <strong>Cancel alone is an optimization, not a correctness mechanism</strong>. Pair it with an application-side supersede guard (generation counter, key compare) so a completion that lost the race can't overwrite newer state.
+</div>
+
+<h2>6 · Dependencies (the graph path)</h2>
+
+<p>Execution ordering between tasks: the lambda overload <code>Submit(fn, deps)</code> covers the common case; the dependency-aware <code>Task</code> base remains for stateful task types (cancellation flags, member results, multi-stage pipelines). Both ride the <em>same</em> graph machinery — registration, F8, failure cascade, cancel cascade, shutdown coverage.</p>
+
+<pre><code>// WorkStealingThreadPool.h
+template &lt;typename F, typename = std::enable_if_t&lt;std::is_invocable_v&lt;F&amp;&gt;&gt;&gt;
+TaskHandle Submit(F&amp;&amp; task, std::span&lt;const TaskHandle&gt; dependencies);
+
+TaskHandle Submit(UniquePtr&lt;Task&gt; task);     // registers declared deps in the graph
+
+// Task.h — the Task base class; declare during creation, BEFORE Submit:
+void AddDependency(TaskId dependencyId);
+void AddDependency(const TaskHandle&amp; dependency);
+void AddDependency(const Vector&lt;TaskId&gt;&amp; dependencies);
+void AddDependency(const Vector&lt;TaskHandle&gt;&amp; dependencies);</code></pre>
+
+<pre><code>// Lambda form — dependencies are a span of handles from ANY submission
+// path of the same pool, plain Submit(lambda) handles included:
+auto decode = pool.Submit([=] { return DecodeTexture(path); });      // deps FIRST
+auto compress = pool.Submit(
+    [=] { return CompressDecoded(); },
+    std::span&lt;const JobSystem::TaskHandle&gt;(&amp;decode, 1));             // runs after decode
+
+// Fan-in: N handles in a contiguous container -&gt; one span.
+std::vector&lt;JobSystem::TaskHandle&gt; deps = ...;
+auto join = pool.Submit([=] { Merge(); },
+                        std::span&lt;const JobSystem::TaskHandle&gt;(deps.data(), deps.size()));</code></pre>
+
+<pre><code>// Subclass form — for stateful task types:
+class CompressTask : public JobSystem::Task
+{
+  public:
+    CompressTask(JobSystem::WorkStealingThreadPool* pool,
+                 const JobSystem::TaskHandle&amp; decode)
+        : Task(pool)
+    {
+        AddDependency(decode);               // creation-time, before Submit
+    }
+
+    void Execute() override
+    {
+        // Runs only after decode is terminal. Its handle is guaranteed
+        // observable-terminal here — read the outcome through the handle.
+        // Publish a payload with PublishResult(value) (protected on Task).
+    }
+};
+
+auto decode = pool.Submit([=] { return DecodeTexture(path); });  // deps FIRST
+auto compress = pool.Submit(std::make_unique&lt;CompressTask&gt;(&amp;pool, decode));</code></pre>
+
+<div class="panel ok">
+<strong>Lambda handles are real dependencies now.</strong> Plain <code>Submit(lambda)</code> tasks don't register in the graph (that keeps them at 1 alloc / 1 mutex), so pre-polish their ids were silently dependency-<em>exempt</em>. <code>Submit(fn, deps)</code> bridges them: a live lambda dependency gets a payload-less graph node whose completion/failure/cancellation is driven off the task's own terminal flip — ordering, failure cascade, and cancel cascade all behave exactly as for subclass dependencies. The plain-Submit fast path is unchanged (one flag check at completion; the alloc/lock pins still hold). Passing a lambda handle to <code>Task::AddDependency</code> directly is <em>still</em> exempt — route lambda dependencies through <code>Submit(fn, deps)</code>.
+</div>
+
+<ul>
+<li><strong>Submit order matters:</strong> submit dependencies before dependents. Ids are pool-generated; a dependent naming a never-submitted id would silently run early (see the tombstone diagnostic below).</li>
+<li><strong>Absent dependency = terminal (F8):</strong> the graph erases terminal nodes eagerly, so a dependency that already completed/failed/canceled is simply absent at registration — the dependent <strong>runs</strong>, and observes the dependency's actual outcome through its <code>TaskHandle</code>. This is the designed behavior for "dependency finished before I registered", not an error.</li>
+<li><strong>Failure propagation:</strong> a failing dependency cascades <code>Failed</code> to its <em>parked</em> dependents (and on down the chain). A dependent submitted <em>after</em> the dependency already failed runs independently (F8 again) — check the dependency handle in the body if its outcome matters.</li>
+<li><strong>Callbacks are safe:</strong> completion callbacks fire outside the graph lock; submitting new tasks from inside a callback does not deadlock (F10, test-pinned). They also run outside the handle's own callback lock, so a callback may register another callback on the same handle; one for the outcome that fired runs at once, on that thread (test-pinned).</li>
+<li><strong>Tombstone diagnostic (Debug, F7):</strong> registering a dependency id that is neither live nor <em>recently</em> terminal prints a loud stderr warning — usually a submit-order violation, or a plain <code>Submit(lambda)</code> id passed to <code>AddDependency</code> directly (plain lambda submits never graph-register; route lambda dependencies through <code>Submit(fn, deps)</code>, which bridges them). Set <code>GE_JOB_TOMBSTONE_STRICT=1</code> to turn the warning into an abort during bring-up. It can false-positive on handles legitimately held long past terminal (the tombstone ring is bounded), which is why it is non-fatal by default.</li>
+</ul>
+
+<h2>7 · Shutdown contract (F13)</h2>
+
+<p><code>Shutdown()</code> is idempotent, runs in the pool destructor, and follows a binding order: <strong>gate → join compute workers → drain → retire graph payloads → registry sweep → join blocking threads → the same release again</strong>.</p>
+
+<ol>
+<li><strong>Gate:</strong> all submit paths are gated the moment shutdown is requested, <code>JobChannel::Submit</code> and <code>JobChannel::Enqueue</code> included; blocking threads take no further work.</li>
+<li><strong>Join compute workers:</strong> workers stop taking new work and are joined; <em>in-flight tasks complete normally</em> (shutdown never interrupts a running body).</li>
+<li><strong>Drain (two-phase, on the shutting-down thread):</strong> one pass over the pool queues, every channel's FIFO and the blocking threads' FIFO: queued <strong>handle/graph tasks are canceled first</strong>, then queued <strong>bare tasks are executed</strong>. Cancel-first matters: a bare task may Wait() on a handle task queued behind it — canceling first makes that Wait return. Bare tasks are executed rather than dropped because they release caller-side barriers (ParallelFor chunks reference the blocked caller's stack; dropping one is a hang, B7).</li>
+<li><strong>Graph-parked payloads</strong> are retired with cancellation events.</li>
+<li><strong>Registry sweep:</strong> every non-terminal TaskData is marked <code>Cancelled</code> and its waiters notified. Combined with the submitter-side re-checks below: <strong>no <code>TaskHandle::Wait()</code> can outlive the pool</strong>.</li>
+<li><strong>Join blocking threads, then release again:</strong> a channel job may be waiting on a compute handle or on another channel's handle, which only the steps above can make terminal, so the blocking threads are joined after them. Each finishes the job it holds; whatever that job published or released is drained by a second pass of steps 3 to 5.</li>
+</ol>
+
+<h3>7.1 · What each path does around Shutdown</h3>
+<table>
+<tr><th>Path</th><th>Racing <code>Shutdown()</code></th><th>After <code>Shutdown()</code> returned</th></tr>
+<tr>
+  <td><code>Submit</code> (lambda or Task)</td>
+  <td>F13a gate: returns an <strong>invalid handle</strong>, callable never runs. If the submit passed the gate concurrently, it re-checks after publish (F13e) and cancels its own task — the handle is valid but terminal (<code>Cancelled</code>); <code>Wait()</code> always returns.</td>
+  <td>Invalid handle; callable never runs. Check <code>IsValid()</code> if you submit near teardown.</td>
+</tr>
+<tr>
+  <td><code>EnqueueWork</code> / <code>EnqueueWorkBatch</code></td>
+  <td>F13c: <strong>never drops work.</strong> If shutdown is detected after the publish, the caller self-drains the queues (bare tasks execute inline, handle/graph tasks are canceled).</td>
+  <td>Runs <strong>synchronously on the calling thread</strong>. Every callable runs exactly once — on a worker, in the drain, or on the caller.</td>
+</tr>
+<tr>
+  <td><code>JobChannel::Submit</code> / <code>JobChannel::Enqueue</code></td>
+  <td><code>Submit</code>: gated like <code>Submit</code>; a channel submit that passed the gate concurrently returns a handle that reads <code>Cancelled</code>. <code>Enqueue</code>: never dropped; handed back to the caller and run there.</td>
+  <td><code>Submit</code>: invalid handle, the job never runs. <code>Enqueue</code>: runs synchronously on the calling thread.</td>
+</tr>
+<tr>
+  <td><code>Run(fn, counter)</code></td>
+  <td>Inherits F13c via its stub: never dropped, the counter always drains, <code>Wait(counter)</code> always returns.</td>
+  <td><code>fn</code> runs synchronously on the calling thread; counter drains.</td>
+</tr>
+<tr>
+  <td><code>ParallelFor</code> / <code>ForEach</code> / <code>Sort</code> / <code>DispatchAndWait</code></td>
+  <td>F13b: a shutting-down pool is treated as no pool — <strong>sequential fallback on the caller</strong>. A shutdown landing mid-flight is covered by F13c (chunks always execute, the barrier always releases).</td>
+  <td>Sequential fallback on the caller.</td>
+</tr>
+</table>
+
+<div class="panel ok">
+Practical upshot: teardown-adjacent code does not need its own "is the pool alive" ceremony. Fire-and-forget and fork-join degrade to synchronous execution; handle-based code must tolerate <code>Cancelled</code> outcomes and invalid handles.
+</div>
+
+<h2>8 · Anti-patterns</h2>
+
+<div class="panel danger">
+<strong>Blocking I/O in jobs.</strong> A job doing blocking file/network I/O parks a worker for the full I/O latency — a handful of these starve the entire pool (the editor default is one pool for everything). Asset loading has dedicated I/O threads (<code>AssetStreamingManager</code>); route disk/network work there and use the pool for CPU work. Work that waits on another process (a build, a compile, a tool) goes on a <code>JobChannel</code> (§12). The same applies to <code>std::this_thread::sleep_for</code> and long lock waits inside job bodies.
+</div>
+
+<div class="panel danger">
+<strong>Waiting from a worker on work that isn't tagged to that counter.</strong> <code>pool.Wait(counter)</code> from a worker is legal <em>only because</em> it participates in that counter's own tasks (§3.1). Everything else that blocks a worker is a deadlock class on a bounded pool:
+<ul>
+<li><code>ParallelFor</code>/<code>ParallelForEach</code>/<code>ParallelSort</code>/<code>DispatchAndWait</code> from a worker — their barrier chunks are bare pool tasks, not counter-tagged; the join parks without participating. Debug-asserted (<code>Detail::AssertNotOnWorkerThread</code>). Fork-join that must run on a worker goes through <code>Run(fn, counter)</code> + <code>Wait(counter)</code>.</li>
+<li><code>TaskHandle::Wait()</code> from a worker — parks the worker until some <em>other</em> thread completes the task. Works until the day every worker is doing it. Debug builds assert on it when the worker belongs to the handle's pool, whether or not the task has finished, so the check never depends on timing. Register <code>OnComplete</code> or submit the continuation with <code>Submit(fn, deps)</code>.</li>
+<li>Waiting on a bare-barrier counter (§3.3) from a worker — nothing tagged to execute, pure park.</li>
+</ul>
+</div>
+
+<div class="panel danger">
+<strong>Holding a lock across Run/Submit/Wait that the job body also takes.</strong> Job bodies can execute <em>inline on your own thread</em>: a participating Wait runs same-counter bodies on the waiting thread; Run's OOM fallback executes inline; post-shutdown EnqueueWork/Run execute synchronously on the caller. With a non-recursive mutex held, a body that takes the same mutex is a same-thread deadlock:
+<pre><code>std::lock_guard lock(m_Mutex);                       // held...
+pool.Run([this] { std::lock_guard g(m_Mutex); ... }, counter);
+pool.Wait(counter);   // participating waiter may run the body RIGHT HERE — deadlock</code></pre>
+Publish and join outside the lock, or make the body lock-free with respect to the caller's mutex.
+</div>
+
+<div class="panel danger">
+<strong>Assuming execution order.</strong> No submission path orders task execution — not submission order, not batch index order, not "same thread submitted both". Workers, spinners, participating waiters and the steal ring all consume concurrently. If B must run after A: dependency graph (§6), or fork A's wave, <code>Wait</code>, then fork B's.
+</div>
+
+<div class="panel danger">
+<strong>JobCounter lifetime abuse.</strong> Destroying a counter off a bare <code>IsZero()</code> read; two threads both treating their Wait-return as destruction license (§3.2); <code>Add()</code> after publish instead of before (F16); more than one <code>Decrement()</code> per counted unit, or a <code>Decrement()</code> before its <code>Add()</code>. Each of these is a use-after-free or a hung join under contention, even if it passes locally.
+</div>
+
+<h2>9 · Performance reference</h2>
+
+<p class="muted">Measured 2026-07-10, quiet 32-core box; Release unless noted. Full methodology and the topology census live in the overhaul spec §8. Reproduce via <code>Tests/Jobs</code> bench filters (<code>JobSystemBench.*</code>, <code>TopologyBench.*</code>).</p>
+
+<table>
+<tr><th>Operation</th><th>Measured</th><th>Pre-overhaul</th><th>Notes</th></tr>
+<tr><td>Warm-storm fork+join (8 tasks)</td><td><strong>7.8µs</strong> median</td><td>100–235µs</td><td>the UI-cascade unlock</td></tr>
+<tr><td>True-cold fork (idle workers)</td><td><strong>236µs</strong> p99.9, zero &gt;900µs</td><td>~15.6ms worst (timer-period trap)</td><td>cold wakeup tail</td></tr>
+<tr><td>200-task publication burst (<code>EnqueueWorkBatch</code>)</td><td><strong>11.9µs</strong> caller-side</td><td>300–600µs</td><td>bulk push + bounded wake</td></tr>
+<tr><td><code>Submit(lambda)</code></td><td><strong>466ns</strong> Release / 1200ns DebugFast</td><td>~2.9µs, 4 allocs, ~5 locks</td><td>1 heap alloc, 1 registry mutex hit</td></tr>
+<tr><td><code>EnqueueWork</code> steady-state</td><td><strong>0 allocs at 3.5M tasks/s</strong> (3.82M/s post slice 7)</td><td>1 alloc/task</td><td>slab-pooled envelopes</td></tr>
+<tr><td>Idle pool CPU</td><td><strong>&lt;0.03%</strong> delta</td><td>~32k timed wakeups/s at idle</td><td>no wakeup churn</td></tr>
+</table>
+
+<p>Backpressure signals, if you need them: <code>GetApproximateQueueSize()</code> (tasks sitting in queues) and <code>GetPendingTasksApprox()</code> (queued + currently executing) — both <strong>Normal-only</strong>, see §11.3. <code>GetWorkerCount()</code> for fan-out sizing; <code>GetCurrentWorkerId()</code> returns <code>SIZE_MAX</code> off-pool — the "am I on a worker?" probe. For what the pool is doing (per-lane and per-channel backlogs, what each thread runs, cumulative traffic) read <code>GetStatistics()</code>, §13.</p>
+
+<h2>10 · Environment variables</h2>
+
+<table>
+<tr><th>Variable</th><th>Default</th><th>Read</th><th>Effect</th></tr>
+<tr>
+  <td><code>GE_JOB_THREADS</code></td>
+  <td><code>hardware_concurrency</code> (non-editor runs clamp to &le; 8)</td>
+  <td>once at engine init (<code>Engine.cpp</code>)</td>
+  <td>Worker count of the engine pool — the single sizing knob (D3).</td>
+</tr>
+<tr>
+  <td><code>GE_JOB_SPIN_US</code></td>
+  <td><code>100</code></td>
+  <td>once at pool construction</td>
+  <td>Per-worker adaptive spin window (µs) before sleeping — the warm-fork latency win. <code>0</code> disables spinning entirely (reproduces pre-overhaul wake behavior; the A/B knob).</td>
+</tr>
+<tr>
+  <td><code>GE_JOB_MAX_SPINNERS</code></td>
+  <td><code>2</code></td>
+  <td>once at pool construction</td>
+  <td>Max simultaneously armed spinner tokens. More spinners trade idle CPU for marginal latency; 2 covered every censused workload.</td>
+</tr>
+<tr>
+  <td><code>GE_JOB_TOMBSTONE_STRICT</code></td>
+  <td>unset</td>
+  <td>Debug builds, first graph violation</td>
+  <td><code>=1</code> escalates the "dependency not recently terminal" stderr diagnostic (§6) to an abort. For dependency-order bring-up; leave unset day-to-day (bounded tombstone ring can false-positive on long-held handles).</td>
+</tr>
+</table>
+
+<p class="muted">Tests must not mutate process env — use <code>SetSpinConfigForTest(spinWindowUs, maxSpinners)</code> and <code>SetSleepBackstopForTest(backstopUs)</code> on the pool instance instead.</p>
+
+<h2>11 · Priorities: JobPriority::Background</h2>
+
+<p>Two classes only — <code>Normal</code> (the default and the hot path) and <code>Background</code>. Background rides a dedicated global lane that <strong>every consumer polls LAST</strong> (worker lap, spin poll, retiring spinner's recheck), gated by an occupancy counter so an empty lane costs one relaxed load per scan. Background never enters worker-local queues or the steal ring. Design record: the jobsystem-priorities-design record in the workbench.</p>
+
+<pre><code>pool.Submit(fn, JobSystem::JobPriority::Background);        // handle semantics identical to Normal
+pool.EnqueueWork(fn, JobSystem::JobPriority::Background);
+pool.EnqueueWorkBatch(funcs, count, JobSystem::JobPriority::Background);
+// Run(fn, counter) has NO priority parameter — fork-join is latency work,
+// its stubs are always Normal. Graph tasks (Submit with deps / UniquePtr&lt;Task&gt;)
+// are always Normal too.</code></pre>
+
+<h3>11.1 · When Background is right</h3>
+<ul>
+<li><strong>Deferrable, abandonable work</strong> that should run on idle capacity: streaming decode, batch precompute, speculative bakes, cache warming. The test: if it silently ran <em>minutes</em> late — or was canceled at shutdown — would anything break?</li>
+<li><strong>Starvation is one-directional by contract:</strong> a saturating Normal flood postpones Background <em>indefinitely</em> (no aging, by design). Background can delay Normal only by the remainder of an already-claimed body.</li>
+</ul>
+
+<h3>11.2 · The shutdown asymmetry</h3>
+<p>Priority changes scheduling, <strong>never lifetime</strong> — but the two Background shapes end differently, and picking the wrong one matters:</p>
+<table>
+<tr><th>Shape</th><th>At shutdown</th><th>Use for</th></tr>
+<tr>
+  <td><code>Submit(fn, Background)</code> (handle task)</td>
+  <td><strong>Canceled</strong>, like every handle task — the body never runs.</td>
+  <td>Heavy abandonable work that should die at shutdown.</td>
+</tr>
+<tr>
+  <td><code>EnqueueWork(fn, Background)</code> (bare task)</td>
+  <td><strong>Executes</strong> in the post-join drain, exactly like bare Normal (F13c is priority-blind: a dropped bare task can be a caller-barrier release — B7). After <code>Shutdown()</code> returns it runs synchronously on the caller.</td>
+  <td>Cheap fire-and-forget whose execution at teardown is harmless.</td>
+</tr>
+</table>
+
+<h3>11.3 · Backpressure and flood behavior</h3>
+<ul>
+<li><strong>Backpressure getters are Normal-only (audit A7):</strong> <code>GetApproximateQueueSize()</code> and <code>GetPendingTasksApprox()</code> EXCLUDE the queued Background backlog — the lane is polled last, so a backlog there never delays a Normal submission, and a streaming flood keeps 10k+ background tasks queued as its steady state. Coarsening ECS batches against that would surrender parallelism for zero contention relief. In-flight background <em>bodies</em> still count in <code>GetPendingTasksApprox</code> (bounded by worker count; they genuinely occupy workers).</li>
+<li><strong>Floods keep workers spun up:</strong> under a sustained Background flood the workers never park, so warm Normal forks actually get FASTER (no wakeup latency), pinned by the flood-regime tripwire test. A background backlog is not a latency smell for Normal work.</li>
+</ul>
+
+<div class="panel danger">
+<strong>Anti-pattern: frame-critical work on Background.</strong> There is no aging — under Normal saturation a Background task waits unboundedly. Anything a frame, an interaction, or a join waits on belongs on Normal (the default). If you find yourself wanting "Background but it must land this frame", you wanted Normal with a smaller body.
+</div>
+
+<h2>12 · Blocking channels: JobChannel</h2>
+
+<p>A <code>JobChannel</code> (<code>JobSystem/JobChannel.h</code>) is a FIFO of <em>blocking</em> jobs owned by the module that owns the work, with a cap on how many of them run at once. A blocking job is one whose thread is off the CPU for most of its run: it waits on another process (a compiler, cmake, the compile server), on the OS or on a driver, and finishes in bounded time. On a compute worker such a job holds the worker for its whole run while the frame's work queues behind it; on a channel it runs on one of the pool's <strong>blocking threads</strong> instead.</p>
+
+<pre><code>// One channel per service, constructed after the pool and destroyed before it.
+JobSystem::JobChannel m_Builds{pool, {.Name = "Native module builds", .MaxRunning = 1}};
+
+JobSystem::TaskHandle build = m_Builds.Submit([this] { RunCMake(); });
+build.OnComplete([] { /* registered before the build ends: runs on its blocking thread */ });
+pool.Submit([] { /* runs after the build */ }, std::span&lt;const JobSystem::TaskHandle&gt;(&amp;build, 1));
+
+// Fire-and-forget, never dropped: a removal the user asked for runs even if the
+// channel is destroyed or the pool shuts down while it is queued.
+m_Removals.Enqueue([root] { std::filesystem::remove_all(root); });</code></pre>
+
+<ul>
+<li><strong>Threads.</strong> Blocking threads are created on a channel's first dispatch, up to the sum of the registered channels' caps and never above the budget the pool was constructed with (the engine passes <code>Platform::BlockingThreadBudget()</code>: 64 on desktop, 1 on the threaded web build), and are never retired. They run channel jobs only, never compute work, and never touch the compute workers' wake protocol. They are named <code>Job Blocking #k</code> in a debugger or a profiler.</li>
+<li><strong>The cap.</strong> At most <code>MaxRunning</code> jobs of the channel run at once; the rest wait in the channel's FIFO and hold no thread. A queued job starts when a running job of the same channel ends, in submission order.</li>
+<li><strong>Two ways in, one FIFO.</strong> <code>Submit</code> is for jobs a quit may abandon: it returns a handle, and a queued <code>Submit</code> job is cancelled when its channel is destroyed or the pool shuts down. <code>Enqueue</code> is fire-and-forget and <strong>never dropped</strong> (the <code>EnqueueWork</code> contract): use it for work that must happen once it was asked for, and for jobs whose scope guards release a counter someone waits on. A throw in an <code>Enqueue</code> job is logged and swallowed, as for <code>EnqueueWork</code>. Both share the channel's cap and FIFO order.</li>
+<li><strong>The handle.</strong> <code>Submit</code> returns a <code>TaskHandle</code> with the same semantics as <code>pool.Submit(lambda)</code>: <code>Cancel()</code> wins while the job is queued (the job never runs and its slot is never taken), a throw fails the handle with the exception's message, a non-void job's value is read with <code>TryGetResult&lt;T&gt;</code>, and the handle is a dependency of <code>Submit(fn, deps)</code>. A callback registered before the job ends runs on the blocking thread that ran it; one registered after runs at once on the registering thread.</li>
+<li><strong>Waits.</strong> A channel job may wait on a compute handle; <code>TaskHandle::Wait()</code> is not asserted on a blocking thread. It must <strong>never wait on a job of its own channel</strong>: with a cap of 1 that wait never returns. A wait on <strong>another channel's job</strong> needs a free blocking thread for that job, which holds only while the pool's budget covers the sum of the registered channels' caps; below that, the waiter can hold the last blocking thread and the job it waits on never starts. On the threaded web build the budget is 1, so there <strong>no channel job may wait on another channel's job</strong>.</li>
+<li><strong>The cap is not a lock.</strong> It bounds concurrency until the pool's shutdown gate. Do not use a cap of 1 as mutual exclusion over shared state; guard shared state with its own mutex.</li>
+<li><strong>Destroying a channel</strong> cancels its queued <code>Submit</code> jobs and hands its queued <code>Enqueue</code> jobs, in order, to the blocking threads, where they run with no cap on the threads that already exist; its running jobs finish and keep the channel's internal state alive until they do. Destroy it before the pool: the pool's destructor asserts that no channel is still registered.</li>
+<li><strong>Shutdown.</strong> After <code>Shutdown()</code> has started, <code>Submit</code> returns an invalid handle and the job never runs, and <code>Enqueue</code> runs the job on the calling thread; a <code>Submit</code> that passed the gate concurrently returns a handle that reads <code>Cancelled</code>, an <code>Enqueue</code> that did runs on its caller. The drain (§7) cancels every queued <code>Submit</code> job, across every channel, before it runs any queued <code>Enqueue</code> job on the thread that called <code>Shutdown()</code>. A job that finishes after the gate starts nothing more from its channel's FIFO.</li>
+<li><strong>Inline pools</strong> (0 workers, the single-threaded web build) run a channel job on the submitting thread inside <code>Submit</code> or <code>Enqueue</code>.</li>
+</ul>
+
+<p>The engine's channels:</p>
+<table>
+<tr><th>Channel</th><th>Owner</th><th>Cap</th><th>Jobs</th></tr>
+<tr><td><code>Script compiles</code></td><td><code>ScriptManager</code></td><td>1</td><td>Every C# compile in the process: the hot-reload pipeline's compile, the deferred initial build, the package-module retry, the synchronous reload, and the game export's csproj refresh and Debug build (<code>ScriptManager::RunCompile</code>, which <code>Shutdown</code> waits for and refuses once it has started). The compile server serves one connection per workspace at a time, so a second compile waits in this FIFO rather than at the server's pipe. The export's NativeAOT publish reads nothing a live compile writes and runs on the export's own job.</td></tr>
+<tr><td><code>Native module builds</code></td><td><code>NativeScriptManager</code></td><td>1</td><td>The cmake configure and build of the stale native modules, one job per batch.</td></tr>
+<tr><td><code>MSVC detection</code></td><td><code>MsvcToolchain</code></td><td>1</td><td>The one-time fast-build toolchain detection (vswhere, vcvars; a PATH scan for Ninja off Windows).</td></tr>
+<tr><td><code>Engine startup</code></td><td><code>EngineCore</code> (<code>GetStartupChannel()</code>)</td><td>2</td><td>One-time startup loads that wait on the disk or a device: the audio device open (where the joining thread may block; on the browser main thread it runs inline on first use) and the editor's shader package preload.</td></tr>
+<tr><td><code>Terrain bake store</code></td><td><code>TerrainService</code> (one per process)</td><td>1</td><td>A save's terrain bake-cache copy, writes and prune. The cap of 1 schedules one store at a time across every world; it is not a lock, so a caller that needs mutual exclusion takes its own.</td></tr>
+<tr><td><code>Tree removals</code></td><td><code>FileSystem::TreeRemoval</code></td><td>1</td><td><code>Enqueue</code>: the removal of a directory tree the user deleted (the project picker's project removal); never dropped.</td></tr>
+<tr><td><code>Polyhaven</code></td><td>the editor's <code>PolyhavenDownloadManager</code></td><td>4</td><td>Every Polyhaven network transfer in the editor: the placeholder downloads and the Assets browser's listing, category, thumbnail and download fetches, reached through the editor context. Queued transfers are cancelled at quit.</td></tr>
+<tr><td><code>Project acquisition</code></td><td>the editor's <code>ProjectAcquisition</code></td><td>1</td><td>A new project's template copy, git clone or archive download.</td></tr>
+<tr><td><code>Project catalog</code></td><td>the editor's <code>ProjectCatalogService</code></td><td>1</td><td>The community catalog fetch; the service's destructor waits for a fetch in flight, which writes into it.</td></tr>
+<tr><td><code>Game export</code></td><td>the editor's <code>BuildPanel</code></td><td>1</td><td>A game export, minutes long. It forks its cook work onto the compute workers (texture bands at Background, as before) and waits on the <code>Script compiles</code> channel for its script step.</td></tr>
+</table>
+
+<h2>13 · Statistics and occupancy</h2>
+
+<p>The pool reports what it is doing through two reads, for two kinds of reader.</p>
+
+<pre><code>#include "JobSystem/JobSystemStatistics.h"
+
+// Diagnostics, tools, tests: everything at once. Allocates, and takes each
+// channel's mutex in turn.
+JobSystem::JobSystemStatistics stats = pool.GetStatistics();
+stats.Normal.Queued;        // jobs waiting in the Normal lane
+stats.Background.Running;   // compute workers running a Background job
+stats.Channels[0].QueueWaitNs;
+stats.TasksExecuted;        // compute-lane dequeues + channel jobs run
+
+// A reader that must never block on the pool (a watchdog): lock-free,
+// allocation-free, into the caller's own array.
+std::array&lt;JobSystem::JobSystemStatistics::Occupancy, 128&gt; threads;
+size_t count = pool.SnapshotOccupancy(threads);   // workers first, then blocking threads</code></pre>
+
+<table>
+<tr><th>Field</th><th>What it is</th></tr>
+<tr><td><code>ComputeWorkers</code>, <code>BlockingThreads</code></td><td>Thread counts. Blocking threads are created on a channel's first dispatch (§12) and never retired.</td></tr>
+<tr><td><code>Normal</code>, <code>Background</code></td><td>Per lane: <code>Queued</code> (jobs waiting) and <code>Running</code> (compute workers running a job of that class).</td></tr>
+<tr><td><code>Channels</code></td><td>One row per registered <code>JobChannel</code>, in registration order: <code>Name</code>, <code>Queued</code> (past the cap), <code>Running</code> (holding a slot), <code>Cap</code>, <code>Jobs</code> (cumulative jobs that took a slot), <code>QueueWaitNs</code> (cumulative time jobs waited in the channel for a slot).</td></tr>
+<tr><td><code>Threads</code></td><td>The occupancy snapshot: one <code>Occupancy</code> per compute worker, then per blocking thread created so far. <code>Running</code> is <code>"Normal"</code> or <code>"Background"</code> on a worker, the channel's name on a blocking thread, null when idle. <code>SinceNs</code> (steady_clock nanoseconds) is set for Background and channel jobs only: the pool reads the clock for the kinds that run long, never for a 1&nbsp;&micro;s Normal job.</td></tr>
+<tr><td><code>TasksExecuted</code></td><td>Dequeues from the compute lanes (the census pops below) plus the channel jobs the blocking threads ran. It counts dequeues, so a handle job the shutdown drain cancelled and a fork stub whose job a participating <code>Wait</code> already ran are in it. Derived, so the per-task path pays nothing extra for it.</td></tr>
+<tr><td>Census</td><td><code>GlobalPushes</code>, <code>LocalPushes</code>, <code>BackgroundPushes</code>, <code>GlobalPops</code>, <code>LocalPops</code>, <code>StealPops</code>, <code>BackgroundPops</code>, <code>StealMisses</code>, <code>EmptyLoopsWithBacklog</code>, <code>BackstopTimeouts</code>: cumulative queue traffic. Pushes equal pops per queue once the pool is idle (steals count against the local queues). Tests assert on these, never on a sampled gauge.</td></tr>
+</table>
+
+<ul>
+<li><strong>Gauges are relaxed reads of a running pool.</strong> Two fields can describe slightly different moments, and a job starting or ending during a snapshot can pair one job's name with another's start time. A job that runs long, the case worth reporting, reads consistently. The cumulative counters only grow: read twice and subtract for a rate.</li>
+<li><strong>A job body, not its callbacks.</strong> A thread reads as running from the moment a job's body starts to the moment it returns; completion callbacks (<code>OnComplete</code>) and the dependency release after a body run with the thread already reading idle, wherever the completion happened.</li>
+<li><strong>The class a body runs as comes from where it was dequeued:</strong> the Normal lane (global queue, local queues, steal ring) or the Background lane on a worker, its channel on a blocking thread, the class given at publish on an inline pool, the lane or channel it was queued in when the shutdown drain runs it. A participating <code>Wait</code> runs a tagged job as the waiter's own class.</li>
+<li><strong>Inline pools</strong> (0 workers) have no threads, so they report no occupancy and zero traffic.</li>
+</ul>
+
+<p>Two consumers ship with it. The editor's <code>get_job_system</code> debug method (MCP tool and <code>node mcp/ge.mjs get_job_system</code>) returns the statistics as JSON, the instrument for any live check of the pool: which thread holds a long job, which lane or channel is backed up, how many blocking threads exist. The editor's main-thread hang watchdog adds every pool thread's occupancy to each stall report beside the main thread's stack, for example <code>Job Worker #3: Background for 2.4s</code> or <code>Job Blocking #0: Script compiles for 12.0s</code>; teardown reports leave it out, because teardown destroys the pool.</p>
+
+<h2>Changelog</h2>
+<ul>
+<li><strong>v1.7 · 2026-10-10:</strong> §13 Statistics and occupancy: <code>GetStatistics()</code> (lanes, channels, threads, the derived <code>TasksExecuted</code> and the census, which replaces <code>GetTopologyCensusForTests()</code>), <code>SnapshotOccupancy()</code>, the class a body runs as, the <code>get_job_system</code> debug method and the hang watchdog's occupancy lines. §9 points at §13.</li>
+<li><strong>v1.6 · 2026-10-10:</strong> §12: <code>JobChannel::Enqueue</code> (fire-and-forget, never dropped; a destroyed channel hands its queued <code>Enqueue</code> jobs on, in order) and the editor's blocking channels (<code>Engine startup</code>, <code>Terrain bake store</code>, <code>Tree removals</code>, <code>Polyhaven</code>, <code>Project acquisition</code>, <code>Project catalog</code>, <code>Game export</code>); <code>Script compiles</code> also runs the game export's script step. §1 and §7: <code>Enqueue</code> beside <code>Submit</code>.</li>
+<li><strong>v1.5 · 2026-10-10:</strong> §12 Blocking channels: <code>JobChannel</code> with <code>Submit</code>, the pool's blocking threads and their budget (the constructor's second parameter, <code>Platform::BlockingThreadBudget()</code> in the engine), and the engine's three channels. §1 gains the blocking-work row. §7: the blocking threads are joined after the drain, the graph retire and the registry sweep, and the release runs again after them. §8 points process waits at §12.</li>
+<li><strong>v1.4 · 2026-10-09:</strong> §6: the <code>Task</code> base class is declared in <code>JobSystem/Task.h</code> (<code>WorkStealingThreadPool.h</code> still includes it); the subclass example submits with <code>Submit(std::make_unique&lt;CompressTask&gt;(&amp;pool, decode))</code>, the <code>Submit&lt;TaskType&gt;(args...)</code> overload no longer exists.</li>
+<li><strong>v1.3 · 2026-10-09:</strong> §6: callbacks run outside the handle's callback lock; a callback may register another callback on the same handle.</li>
+<li><strong>v1.2 · 2026-10-08:</strong> §3.1 states which waiters participate (this pool's workers and the browser main thread; every other thread parks). <code>TaskHandle::HasResult</code> removed (it duplicated <code>IsCompleted</code>). <code>TaskHandle::Wait</code> on a worker of the handle's pool is a Debug assert (§4, §8). <code>JobCounter::Decrement</code> may be called on any thread, once per counted unit after its <code>Add</code> (§3.2, §8).</li>
+<li><strong>v1.1 · 2026-07-10:</strong> priorities and the API-polish batch.</li>
+</ul>
+
+<footer>v1.7 · 2026-10-10 · sources: JobSystemStatistics.h / WorkStealingThreadPool.h @ feat/jobsystem-s5-statistics (the JobSystem design's slice S5), Tests/Jobs/JobSystemStatisticsTests, Apps/Editor DebugServer/JobSystemDebugHandlers and Diagnostics/MainThreadHangWatchdog; JobChannel.h @ feat/jobsystem-s7-editor-channels (the JobSystem design's slice S7), Tests/Jobs/JobChannelTests; JobChannel.h / WorkStealingThreadPool.h / Capabilities.h @ feat/jobsystem-s6-blocking-channels (the JobSystem design's slice S6), Tests/Jobs/JobChannelTests; Task.h / WorkStealingThreadPool.h @ refactor/jobsystem-s3-header-split (the JobSystem design's slice S3); TaskHandle.h / TaskHandle.cpp @ refactor/jobsystem-s2-callbacks-unlocked (the JobSystem design's slice S2); WorkStealingThreadPool.h / JobCounter.h / ParallelAlgorithms.h / TaskHandle.h @ refactor/jobsystem-s1-hygiene (the JobSystem design's slice S1, on top of v1.1's sources @ feat/jobsystem-api-polish: priorities #327 + API-polish batch: Submit(fn, deps), JobCounter::Reset, TaskHandle hardening, CreateCompletedHandle(payload), TryGetResult Debug diagnosability), the jobsystem-overhaul and jobsystem-priorities design records, Tests/Jobs (JobCounterTests, SubmitWithDependencyTests, CancellationAndShutdownTests, TaskDependencyGraphTests, JobPriorityTests)</footer>
+
+<script src="https://cdn.jsdelivr.net/npm/mermaid@10/dist/mermaid.min.js"></script>
+<script>mermaid.initialize({ startOnLoad: true, theme: 'dark', themeVariables: { darkMode: true, background: '#0f1115' } });</script>

@@ -1,0 +1,128 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Exposure</title>
+<style>
+  :root {
+    --bg: #0f1115; --panel: #171a21; --panel-light: #1f232c; --border: #2a2f3a;
+    --text: #d7dae0; --muted: #8b93a3; --accent: #6aa9ff; --danger: #ff6b6b; --bad: #ff6b6b;
+    --ok: #5fd38d; --good: #5fd38d; --warn: #ffc857;
+  }
+  body { margin: 0; background: var(--bg); color: var(--text); font: 15px/1.55 -apple-system, Segoe UI, Roboto, sans-serif; }
+  .wrap { max-width: 1040px; margin: 0 auto; padding: 40px 28px 64px; }
+  h1 { font-size: 30px; margin: 0 0 4px; }
+  h2 { font-size: 21px; margin: 40px 0 14px; padding: 8px 0; border-bottom: 2px solid var(--border); }
+  h3 { font-size: 16px; margin: 22px 0 8px; color: var(--accent); }
+  .lede { color: var(--muted); margin: 0 0 24px; letter-spacing: .04em; text-transform: uppercase; font-size: 12px; }
+  code, pre { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 13px; }
+  code { background: var(--panel-light); padding: 1px 5px; border-radius: 4px; }
+  pre { background: var(--panel); border: 1px solid var(--border); border-radius: 8px; padding: 14px 16px; overflow-x: auto; }
+  pre code { background: none; padding: 0; }
+  table { width: 100%; border-collapse: collapse; margin: 12px 0 18px; background: var(--panel); border: 1px solid var(--border); border-radius: 8px; overflow: hidden; }
+  th { text-align: left; background: var(--panel-light); color: var(--muted); font-weight: 600; font-size: 12px; text-transform: uppercase; letter-spacing: .04em; }
+  th, td { padding: 8px 12px; border-bottom: 1px solid var(--border); }
+  tr:last-child td { border-bottom: none; }
+  tr:hover td { background: rgba(255,255,255,.02); }
+  td.num, th.num { text-align: right; font-variant-numeric: tabular-nums; }
+  .panel { background: var(--panel); border: 1px solid var(--border); border-left: 4px solid var(--accent); border-radius: 8px; padding: 12px 16px; margin: 14px 0; }
+  .panel.warn { border-left-color: var(--warn); }
+  .panel.ok { border-left-color: var(--ok); }
+  .panel.danger { border-left-color: var(--danger); }
+  .muted { color: var(--muted); }
+  hr { border: 0; border-top: 1px solid var(--border); margin: 36px 0; }
+  .footer { color: var(--muted); font-size: 13px; margin-top: 48px; padding-top: 16px; border-top: 1px solid var(--border); }
+</style>
+</head>
+<body>
+<div class="wrap">
+
+<h1>Exposure</h1>
+<p class="lede">Guide · rendering · cameras · living document</p>
+
+<p>Lights in this engine use physical units: the sun is about 100,000 lux, a lamp a few hundred lumens.
+Exposure turns those values into a picture, the way a camera's aperture, shutter and sensitivity do.
+Exposure belongs to the <b>Camera</b> component; a Post Process Volume can only offset it (the
+<b>Exposure Adjustment</b> effect, in stops). Views without a camera, such as the editor's Scene View,
+use the camera defaults.</p>
+
+<h2>Exposure modes</h2>
+<table>
+  <thead><tr><th>Mode</th><th>What sets the exposure</th><th>Use it for</th></tr></thead>
+  <tbody>
+    <tr><td><b>Auto</b> (default)</td><td>The camera meters the scene every frame and adapts over time, like an eye.</td><td>Games where the player moves between bright and dark places.</td></tr>
+    <tr><td><b>Manual</b></td><td><b>Manual EV</b>, an absolute EV100: 15 is bright sun, 12 overcast, 7 to 9 an interior, 2 to 5 night.</td><td>Shots that must not change with what is on screen.</td></tr>
+    <tr><td><b>Physical</b></td><td>Aperture, shutter time and ISO, as on a real camera (f/16, 1/100 s, ISO 100 is about EV 14.6).</td><td>Matching photographic reference.</td></tr>
+    <tr><td><b>Fixed</b></td><td>A plain linear multiplier.</td><td>Non-physical content.</td></tr>
+  </tbody>
+</table>
+<p><b>Exposure Compensation</b> applies in every mode, in stops: +1 doubles the brightness, -1 halves it.</p>
+
+<h2>How Auto metering works</h2>
+<p>Auto exposure looks at the pixels of the frame before bloom and tone mapping and sets the exposure so
+their average lands at 18 % grey, the middle grey of a photograph. Two rules keep it from being fooled:</p>
+<ul>
+  <li><b>The darkest and brightest tenth are ignored.</b> Deep shadows and specular highlights do not
+    move the meter.</li>
+  <li><b>The sky is not part of the average.</b> The meter reads what the camera sees of the world: the
+    ground, buildings and characters. Pixels where nothing was drawn (the sky, the sun, clouds) are
+    counted apart. The sea is part of the world: an ocean surface is metered like the ground, so a coast, a ship or a
+    flight over water is exposed for the water and what stands on it. A character standing against a bright sky is exposed for the character, not for the
+    sky behind it.</li>
+</ul>
+<p>The sky still has a say when it fills a large part of the frame. If its average would sit more than
+<b>two stops</b> over middle grey, it holds the exposure back so it does not burn to white. How much it
+holds back follows its share of the frame:</p>
+<table>
+  <thead><tr><th>Sky in view</th><th>Effect on exposure</th><th>Example</th></tr></thead>
+  <tbody>
+    <tr><td>Under 10 %</td><td>None: the scene is metered on its own and the sky may blow out into bloom.</td><td>A dark room with a daylight window; turning toward the window brightens the meter through adaptation.</td></tr>
+    <tr><td>10 % to 30 %</td><td>Grows with the share.</td><td>A street with a strip of sky.</td></tr>
+    <tr><td>Over 30 %</td><td>Full: the sky's average sits at most two stops over middle grey.</td><td>A landscape at dusk; a model on a floor under the open sky.</td></tr>
+    <tr><td>95 % to 100 %</td><td>The meter blends from the scene toward the sky as the scene shrinks below 5 % of the frame, and meters only the sky when nothing else is in view.</td><td>Looking up into open sky from a cockpit.</td></tr>
+  </tbody>
+</table>
+<div class="panel">What lands at middle grey is the average of the world in view (the middle 80 % of its
+brightness), not any one object. An 18 % grey card reads middle grey when the scene around it averages
+18 % and the sky is not holding the exposure back. Two things move it away:
+<ul>
+  <li><b>A bright sky over 30 % of the frame</b> (dawn, dusk, a model under the open sky): the sky's limit
+    holds the exposure back, and the ground sits about half a stop under middle grey.</li>
+  <li><b>A floor or ground lighter than 18 %</b> (snow, sand, pale stone, a white studio floor): when the floor
+    fills most of the view, the meter keys it to middle grey, so what stands on it reads darker by up to
+    <code>log2(albedo / 0.18)</code> stops: typically up to about 1.7 for a floor of albedo 0.6 and 2.5 for a
+    white (1.0) floor such as the Default Material. The less of the view the floor fills, the smaller the
+    offset (a model on a white floor under the open sky measured 0.7 to 1 stop). Raise
+    <b>Exposure Compensation</b> by the offset you see to put an 18 % subject back at middle grey.</li>
+</ul>
+<b>Exposure Compensation</b> is the only control that moves the target.</div>
+
+<h2>Auto settings on the Camera</h2>
+<table>
+  <thead><tr><th>Setting</th><th>Default</th><th>Meaning</th></tr></thead>
+  <tbody>
+    <tr><td><b>Auto Min EV</b></td><td class="num">4</td><td>The darkest scene the meter fully brightens. Lower it to let night scenes brighten more.</td></tr>
+    <tr><td><b>Auto Max EV</b></td><td class="num">18</td><td>The brightest scene the meter fully darkens.</td></tr>
+    <tr><td><b>Auto Speed Up</b></td><td class="num">1</td><td>How fast the picture brightens when the scene gets darker (stops per second, roughly).</td></tr>
+    <tr><td><b>Auto Speed Down</b></td><td class="num">3</td><td>How fast the picture darkens when the scene gets brighter.</td></tr>
+  </tbody>
+</table>
+
+<h2>Troubleshooting</h2>
+<table>
+  <thead><tr><th>Symptom</th><th>Cause</th><th>Fix</th></tr></thead>
+  <tbody>
+    <tr><td>Everything reads dark in bright sun, and the ground is very light</td><td>The meter keys the average to middle grey; light materials (snow, sand, pale grass) average brighter than 18 %.</td><td>Check material base colors against real albedos (grass 0.1 to 0.25); or add positive Exposure Compensation.</td></tr>
+    <tr><td>Loading a scene reports a skipped <code>Camera.autoExposureKey</code></td><td>The property no longer exists; the target is fixed at 18 % grey.</td><td>Delete the line; use <code>Camera.exposureCompensation</code> (stops) instead.</td></tr>
+  </tbody>
+</table>
+
+<h2>Changelog</h2>
+<ul>
+  <li>2026-10-10: first version: exposure modes; Auto metering excludes the sky and uses it as a ceiling; the Auto key setting was removed; what lands at middle grey, and the compensation a light floor needs.</li>
+</ul>
+
+<div class="footer">Exposure guide · 2026-10-10</div>
+</div>
+</body>
+</html>

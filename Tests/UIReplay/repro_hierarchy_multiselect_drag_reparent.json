@@ -1,0 +1,102 @@
+{
+  "name": "repro_hierarchy_multiselect_drag_reparent",
+  "windowIndex": 0,
+  "minFrames": 180,
+  "probe": {
+    "treeViewUnderId": "mount:Hierarchy",
+    "elementId": "mount:Hierarchy",
+    "visualPatchElementIds": { "enabled": true, "max": 12 },
+    "dragDrop": { "enabled": true }
+  },
+  "asserts": [
+    {
+      "kind": "selectedCount",
+      "subtreeId": "mount:Hierarchy",
+      "requiredClass": "tree-item",
+      "frameStart": 35,
+      "frameEnd": 90,
+      "atLeast": 2
+    },
+    {
+      "kind": "treeBoundRowsContain",
+      "treeViewUnderId": "mount:Hierarchy",
+      "frameStart": 60,
+      "frameEnd": 95,
+      "minFrames": 2,
+      "rows": [
+        { "label": "Sphere", "depth": 0 },
+        { "label": "Cube", "depth": 1 },
+        { "label": "Capsule", "depth": 1 }
+      ]
+    },
+    {
+      "kind": "treeBoundRowsContain",
+      "treeViewUnderId": "mount:Hierarchy",
+      "frameStart": 95,
+      "frameEnd": 125,
+      "minFrames": 2,
+      "rows": [
+        { "label": "Cube", "depth": 0 },
+        { "label": "Capsule", "depth": 0 },
+        { "label": "Sphere", "depth": 0 },
+        { "label": "Plane", "depth": 0 }
+      ]
+    },
+    {
+      "kind": "treeBoundRowsContain",
+      "treeViewUnderId": "mount:Hierarchy",
+      "frameStart": 125,
+      "frameEnd": 165,
+      "minFrames": 2,
+      "rows": [
+        { "label": "Plane", "depth": 0 },
+        { "label": "Cube", "depth": 1 },
+        { "label": "Capsule", "depth": 1 }
+      ]
+    }
+  ],
+  "events": [
+    { "frame": 2, "type": "mouseMove", "target": { "kind": "elementId", "id": "tab:Hierarchy", "relX": 0.5, "relY": 0.5 } },
+    { "frame": 3, "type": "mouseDown", "button": 0 },
+    { "frame": 4, "type": "mouseUp", "button": 0 },
+
+    { "frame": 10, "type": "invokeCommand", "commandId": 16656 },
+    { "frame": 12, "type": "invokeCommand", "commandId": 16658 },
+    { "frame": 14, "type": "invokeCommand", "commandId": 16657 },
+    { "frame": 16, "type": "invokeCommand", "commandId": 16659 },
+
+    { "frame": 18, "type": "waitTextContains", "subtreeId": "mount:Hierarchy", "requiredClass": "tree-title", "needle": "Cube", "atLeast": 1, "timeoutFrames": 180 },
+    { "frame": 18, "type": "waitTextContains", "subtreeId": "mount:Hierarchy", "requiredClass": "tree-title", "needle": "Capsule", "atLeast": 1, "timeoutFrames": 180 },
+    { "frame": 18, "type": "waitTextContains", "subtreeId": "mount:Hierarchy", "requiredClass": "tree-title", "needle": "Sphere", "atLeast": 1, "timeoutFrames": 180 },
+    { "frame": 18, "type": "waitTextContains", "subtreeId": "mount:Hierarchy", "requiredClass": "tree-title", "needle": "Plane", "atLeast": 1, "timeoutFrames": 180 },
+
+    { "frame": 24, "type": "mouseMove", "target": { "kind": "labelTextUnderId", "underId": "mount:Hierarchy", "requiredClass": "tree-title", "needle": "Cube", "relX": 0.5, "relY": 0.5 } },
+    { "frame": 25, "type": "mouseDown", "button": 0 },
+    { "frame": 26, "type": "mouseUp", "button": 0 },
+
+    { "frame": 30, "type": "keyDown", "key": 341, "mods": 2 },
+    { "frame": 31, "type": "mouseMove", "target": { "kind": "labelTextUnderId", "underId": "mount:Hierarchy", "requiredClass": "tree-title", "needle": "Capsule", "relX": 0.5, "relY": 0.5 } },
+    { "frame": 32, "type": "mouseDown", "button": 0 },
+    { "frame": 33, "type": "mouseUp", "button": 0 },
+    { "frame": 34, "type": "keyUp", "key": 341, "mods": 0 },
+
+    { "frame": 45, "type": "mouseMove", "target": { "kind": "labelTextUnderId", "underId": "mount:Hierarchy", "requiredClass": "tree-title", "needle": "Cube", "relX": 0.5, "relY": 0.5 } },
+    { "frame": 46, "type": "mouseDown", "button": 0 },
+    { "frame": 47, "type": "mouseMove", "dx": 0.0, "dy": 14.0 },
+    { "frame": 48, "type": "mouseMove", "target": { "kind": "ancestorOfLabelTextUnderId", "underId": "mount:Hierarchy", "ancestorClass": "tree-item", "requiredClass": "tree-title", "needle": "Sphere", "relX": 0.5, "relY": 0.4 } },
+    { "frame": 49, "type": "mouseUp", "button": 0 },
+
+    { "frame": 80, "type": "mouseMove", "target": { "kind": "labelTextUnderId", "underId": "mount:Hierarchy", "requiredClass": "tree-title", "needle": "Cube", "relX": 0.5, "relY": 0.5 } },
+    { "frame": 81, "type": "mouseDown", "button": 0 },
+    { "frame": 82, "type": "mouseMove", "dx": 0.0, "dy": 14.0 },
+    { "frame": 83, "type": "mouseMove", "target": { "kind": "elementId", "id": "mount:Hierarchy", "relX": 0.75, "relY": 0.95 } },
+    { "frame": 84, "type": "mouseUp", "button": 0 },
+
+    { "frame": 110, "type": "mouseMove", "target": { "kind": "labelTextUnderId", "underId": "mount:Hierarchy", "requiredClass": "tree-title", "needle": "Cube", "relX": 0.5, "relY": 0.5 } },
+    { "frame": 111, "type": "mouseDown", "button": 0 },
+    { "frame": 112, "type": "mouseMove", "dx": 0.0, "dy": 14.0 },
+    { "frame": 113, "type": "mouseMove", "target": { "kind": "ancestorOfLabelTextUnderId", "underId": "mount:Hierarchy", "ancestorClass": "tree-item", "requiredClass": "tree-title", "needle": "Plane", "relX": 0.5, "relY": 0.4 } },
+    { "frame": 114, "type": "mouseUp", "button": 0 }
+  ]
+}
+

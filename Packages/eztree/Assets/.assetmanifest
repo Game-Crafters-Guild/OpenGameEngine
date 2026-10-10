@@ -1,0 +1,50 @@
+# GameEngine AssetDatabase.assetdb (authoritative)
+# Format: JSON Lines (one JSON object per line). Lines starting with '#' are comments.
+# v2 (append-only journal + compaction): first non-comment line is a {format,version} record.
+# Asset upsert:    {"guid":"...","path":"...","type":"Texture","missing":false,"kv":{...}}
+# Asset delete:    {"guid":"...","deleted":true}
+# Redirect upsert: {"redirect_from":"...","redirect_to":"..."}
+# Redirect delete: {"redirect_from":"...","redirect_to":""}
+#
+{"format":"assetdb","version":2}
+{"guid":"02ef7af6-d66b-4c02-9ccc-147177d76129","path":"textures/eztree/leaves/oak_color.png","type":"Texture","kv":{"assets.texture.usage":"color"}}
+{"guid":"0481cc3a-3da5-4099-8bcf-1a54366bc797","path":"editor/ui/eztreeeditorchrome.css","type":"UIStyle"}
+{"guid":"04ad1aaa-9d88-4a91-b961-5c02e866569a","path":"textures/eztree/leaves/aspen_normal.jpg","type":"Texture","kv":{"assets.texture.colorSpace":"linear","assets.texture.usage":"normal"}}
+{"guid":"0a934af9-c7a1-42aa-af14-9d8277937a42","path":"textures/eztree/leaves/ash_roughness.jpg","type":"Texture","kv":{"assets.texture.colorSpace":"linear","assets.texture.usage":"packed"}}
+{"guid":"112f13af-f651-4047-bac0-f8e8c590c888","path":"textures/eztree/bark/willow_ao_1k.jpg","type":"Texture","kv":{"assets.texture.colorSpace":"linear","assets.texture.usage":"mask"}}
+{"guid":"131f4780-8ce2-45b5-901d-71c2ca6e6812","path":"shaders/vertexmodifiers/ez_tree_wind.glsl","type":"Shader"}
+{"guid":"1437a97a-0c3d-461e-864c-58327131efe9","path":"materials/eztree/eztree_leaves.material","type":"Material"}
+{"guid":"146d5e07-369f-4bf1-82a7-83bc9798f9f2","path":"textures/eztree/bark/birch_normal_1k.jpg","type":"Texture","kv":{"assets.texture.colorSpace":"linear","assets.texture.usage":"normal"}}
+{"guid":"1570b154-420f-4258-a623-a852e0bcfad7","path":"textures/eztree/leaves/aspen_roughness.jpg","type":"Texture","kv":{"assets.texture.colorSpace":"linear","assets.texture.usage":"packed"}}
+{"guid":"19971285-b350-42e1-b097-8e49e12844a4","path":"textures/eztree/bark/birch_roughness_1k.jpg","type":"Texture","kv":{"assets.texture.colorSpace":"linear","assets.texture.usage":"packed"}}
+{"guid":"1c23e993-4bad-4a8c-8f79-e61b0779b699","path":"textures/eztree/notice.md","type":"Unknown"}
+{"guid":"1f09ce19-9190-4fdb-ab96-49e4116a9164","path":"textures/eztree/bark/oak_normal_1k.jpg","type":"Texture","kv":{"assets.texture.colorSpace":"linear","assets.texture.usage":"normal"}}
+{"guid":"276c2685-97ae-4c7a-af08-aa4526f7dd25","path":"textures/eztree/leaves/oak_roughness.jpg","type":"Texture","kv":{"assets.texture.colorSpace":"linear","assets.texture.usage":"packed"}}
+{"guid":"2f35090d-4f14-4119-a679-0a637a3dac29","path":"editor/ui/panels/eztreestatspanel.uxml","type":"UILayout"}
+{"guid":"43481466-7666-421d-8935-286286ce7099","path":"shaders/surfaces/ez_tree_leaves.glsl","type":"Shader"}
+{"guid":"4388a169-6c14-48f6-b556-4c566289af2d","path":"textures/eztree/bark/oak_color_1k.jpg","type":"Texture","kv":{"assets.texture.usage":"color"}}
+{"guid":"4d4f216f-6bb7-4140-89f5-b5a6ea590393","path":"textures/eztree/bark/willow_roughness_1k.jpg","type":"Texture","kv":{"assets.texture.colorSpace":"linear","assets.texture.usage":"packed"}}
+{"guid":"4ed5d46e-bee5-4588-b0fa-328f7c68c338","path":"editor/ui/panels/eztreestatspanel.css","type":"UIStyle"}
+{"guid":"500c15b7-99f5-4bde-b814-aaa928fbee54","path":"textures/eztree/leaves/aspen_color.png","type":"Texture","kv":{"assets.texture.usage":"color"}}
+{"guid":"5517d4cb-739f-4822-bfe9-8b21372833f1","path":"textures/eztree/bark/pine_ao_1k.jpg","type":"Texture","kv":{"assets.texture.colorSpace":"linear","assets.texture.usage":"mask"}}
+{"guid":"6650df9f-d156-487f-8625-6e5cc63ea674","path":"textures/eztree/leaves/oak_normal.jpg","type":"Texture","kv":{"assets.texture.colorSpace":"linear","assets.texture.usage":"normal"}}
+{"guid":"6e56091e-d7be-4732-96ca-f5bcb5f50a23","path":"textures/eztree/leaves/ash_ao.jpg","type":"Texture","kv":{"assets.texture.colorSpace":"linear","assets.texture.usage":"mask"}}
+{"guid":"7db09b2c-808a-4008-aa78-f5a77a1d5eaa","path":"textures/eztree/leaves/oak_ao.jpg","type":"Texture","kv":{"assets.texture.colorSpace":"linear","assets.texture.usage":"mask"}}
+{"guid":"7df2cc72-0ef9-4bc0-afc6-968262a035bc","path":"materials/eztree/eztree_trellis.material","type":"Material"}
+{"guid":"82be5be5-7276-4ed9-9250-123884fa6f29","path":"textures/eztree/bark/pine_color_1k.jpg","type":"Texture","kv":{"assets.texture.usage":"color"}}
+{"guid":"9574bd10-2228-4178-8b11-6ebab1cf1577","path":"textures/eztree/bark/birch_ao_1k.jpg","type":"Texture","kv":{"assets.texture.colorSpace":"linear","assets.texture.usage":"mask"}}
+{"guid":"9c820823-8c54-4479-9fb9-b7cd62b76b30","path":"textures/eztree/bark/oak_roughness_1k.jpg","type":"Texture","kv":{"assets.texture.colorSpace":"linear","assets.texture.usage":"packed"}}
+{"guid":"b5ca74ac-5592-4f75-a7ee-dd209e90df42","path":"textures/eztree/leaves/ash_normal.jpg","type":"Texture","kv":{"assets.texture.colorSpace":"linear","assets.texture.usage":"normal"}}
+{"guid":"b7c90a05-8339-4e4d-aed0-9c92a7c4f683","path":"textures/eztree/leaves/pine_normal.jpg","type":"Texture","kv":{"assets.texture.colorSpace":"linear","assets.texture.usage":"normal"}}
+{"guid":"c29d1920-621b-4a13-8790-a0dfdc7fed72","path":"textures/eztree/bark/birch_color_1k.jpg","type":"Texture","kv":{"assets.texture.usage":"color"}}
+{"guid":"c3280555-d6c3-44a1-b3b5-0733006f810f","path":"textures/eztree/leaves/aspen_ao.jpg","type":"Texture","kv":{"assets.texture.colorSpace":"linear","assets.texture.usage":"mask"}}
+{"guid":"c477085d-a5de-4b66-82fe-9d6a170da07b","path":"textures/eztree/leaves/pine_roughness.jpg","type":"Texture","kv":{"assets.texture.colorSpace":"linear","assets.texture.usage":"packed"}}
+{"guid":"c6e36937-9c72-4b1c-b50a-60527b52dcf3","path":"textures/eztree/bark/oak_ao_1k.jpg","type":"Texture","kv":{"assets.texture.colorSpace":"linear","assets.texture.usage":"mask"}}
+{"guid":"d273c55b-47ea-41bc-a22d-eb2d952f381d","path":"materials/eztree/eztree_bark.material","type":"Material"}
+{"guid":"d4e0544a-4f50-41aa-b0d2-3c76b2fda95b","path":"textures/eztree/bark/pine_normal_1k.jpg","type":"Texture","kv":{"assets.texture.colorSpace":"linear","assets.texture.usage":"normal"}}
+{"guid":"d963d4a5-02cd-41c9-a27c-6da00654489e","path":"textures/eztree/bark/pine_roughness_1k.jpg","type":"Texture","kv":{"assets.texture.colorSpace":"linear","assets.texture.usage":"packed"}}
+{"guid":"e11a2b9a-25f0-4ee5-bf0a-83206ac41a8d","path":"textures/eztree/leaves/pine_color.png","type":"Texture","kv":{"assets.texture.usage":"color"}}
+{"guid":"e85f917a-191d-4a15-a8af-fd255ad9268b","path":"textures/eztree/leaves/pine_ao.jpg","type":"Texture","kv":{"assets.texture.colorSpace":"linear","assets.texture.usage":"mask"}}
+{"guid":"ef8cc38b-2140-44dc-a922-5a881ca44277","path":"textures/eztree/leaves/ash_color.png","type":"Texture","kv":{"assets.texture.usage":"color"}}
+{"guid":"f6ec2746-2efd-49e6-bcff-6f6f6d1ef0c5","path":"textures/eztree/bark/willow_color_1k.jpg","type":"Texture","kv":{"assets.texture.usage":"color"}}
+{"guid":"f852a302-3ded-429b-90e2-0a6159518850","path":"textures/eztree/bark/willow_normal_1k.jpg","type":"Texture","kv":{"assets.texture.colorSpace":"linear","assets.texture.usage":"normal"}}

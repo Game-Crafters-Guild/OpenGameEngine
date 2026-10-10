@@ -1,0 +1,24 @@
+/* Accordion Control Styles (Editor app asset) */
+
+.accordion {
+	display: flex;
+	flex-direction: column;
+	align-self: stretch;
+	min-width: 0;
+	gap: 4px;
+}
+
+/* AccordionItem is a declarative wrapper and is hidden once internal foldouts are built */
+.accordion-item.hidden {
+	display: none;
+}
+
+/* Foldouts within accordion get slightly different styling */
+.accordion > .foldout {
+	margin: 0;
+}
+
+.accordion[mode="exclusive"] > .foldout.expanded .foldout-header {
+	background-color: rgba(100, 150, 255, 0.12);
+}
+

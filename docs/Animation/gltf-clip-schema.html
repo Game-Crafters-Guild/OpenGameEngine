@@ -1,0 +1,201 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>glTF clip schema</title>
+<style>
+  :root {
+    --bg: #0f1115; --panel: #171a21; --panel-light: #1f232c; --border: #2a2f3a;
+    --text: #d7dae0; --muted: #8b919c; --accent: #6ea8fe; --danger: #ff6b6b;
+    --bad: #ff6b6b; --ok: #4cd18a; --good: #4cd18a; --warn: #f2c94c;
+  }
+  body { margin: 0; padding: 2rem 3rem; background: var(--bg); color: var(--text);
+         font: 15px/1.55 system-ui, -apple-system, "Segoe UI", sans-serif; max-width: 1100px; }
+  h1 { margin: 0 0 .25rem; font-size: 1.9rem; }
+  h2 { margin-top: 2.2rem; padding: .35rem .6rem; border: 1px solid var(--border);
+       border-left: 4px solid var(--accent); background: var(--panel); font-size: 1.25rem; }
+  h3 { margin: 1.4rem 0 .4rem; color: var(--accent); font-size: 1.05rem; }
+  .lede { color: var(--muted); margin: 0 0 1.5rem; letter-spacing: .04em; text-transform: uppercase; font-size: .8rem; }
+  hr { border: 0; border-top: 1px solid var(--border); margin: 2rem 0; }
+  code, pre { font: 13px/1.5 ui-monospace, "Cascadia Mono", Consolas, monospace;
+              background: var(--panel-light); border-radius: 4px; }
+  code { padding: .05rem .35rem; }
+  pre { padding: .8rem 1rem; overflow-x: auto; border: 1px solid var(--border); }
+  .panel { border: 1px solid var(--border); background: var(--panel); border-radius: 6px; padding: .9rem 1.1rem; margin: 1rem 0; }
+  .panel.ok { border-left: 4px solid var(--ok); }
+  .panel.warn { border-left: 4px solid var(--warn); }
+  table { border-collapse: collapse; width: 100%; margin: 1rem 0; }
+  th, td { border: 1px solid var(--border); padding: .45rem .7rem; text-align: left; vertical-align: top; }
+  th { background: var(--panel-light); color: var(--muted); font-weight: 600; font-size: .85rem; }
+  tr:hover td { background: var(--panel); }
+  footer { margin-top: 3rem; color: var(--muted); font-size: .85rem; }
+</style>
+</head>
+<body>
+
+<h1>glTF clip schema</h1>
+<p class="lede">GUIDE · animation / assets · declaring a clip's settings and events in a glTF animation</p>
+<p>
+  A <code>.gltf</code> or <code>.glb</code> file can declare how each of its animations plays, in a block the
+  engine reads at import: the <code>clip</code> key of the animation's <code>extras</code>. The block sets the
+  clip's loop and speed, its root motion bone, how its translation keys apply, and its events. It is the one key
+  of an animation's extras the engine reads itself; every other key is the game's
+  (see <a href="../Assets/model-extras.html">Model extras</a>). The block applies to clips embedded in a model and
+  to clip files alike.
+</p>
+
+<pre>"animations": [{
+  "name": "attack_sword",
+  "channels": [ ... ], "samplers": [ ... ],
+  "extras": {
+    "clip": {
+      "schemaVersion": 1,
+      "loop": false,
+      "speed": 1.15,
+      "rootMotion": { "bone": "root", "translation": true, "rotation": true },
+      "translations": "absolute",
+      "events": [ { "frame": 19, "name": "hit" }, { "frame": 31, "name": "recover" } ]
+    }
+  }
+}]</pre>
+
+<h2>Fields</h2>
+<p>Every field but <code>schemaVersion</code> is optional; a field the block leaves out keeps the default. A
+  whole number may be written with or without a decimal point (<code>19</code> or <code>19.0</code>); a name is a
+  non-empty string with no control characters (no byte below U+0020, and not U+007F).</p>
+<table>
+  <tr><th>Field</th><th>Value</th><th>Default</th><th>What the engine does with it</th></tr>
+  <tr><td><code>schemaVersion</code></td><td>The whole number <code>1</code></td><td>Required</td>
+      <td>Names the version of this schema the block is written in. A block of any other version is refused.</td></tr>
+  <tr><td><code>loop</code></td><td><code>true</code> or <code>false</code></td><td>Not declared</td>
+      <td>The clip's own loop setting, at the lowest precedence: see <a href="#precedence">Loop and speed</a>.</td></tr>
+  <tr><td><code>speed</code></td><td>A number greater than 0 that a 32-bit float holds: at most about
+      3.4 × 10<sup>38</sup>, and not so small that it rounds to 0 as a float (<code>1e-50</code> is refused)</td><td>Not declared</td>
+      <td>The clip's own playback rate, at the lowest precedence: see <a href="#precedence">Loop and speed</a>.</td></tr>
+  <tr><td><code>rootMotion</code></td><td>An object: <code>bone</code>, the name of the bone whose motion moves the
+      entity (required, a name); <code>translation</code> and <code>rotation</code>, <code>true</code> or <code>false</code>,
+      which parts of that motion it hands on</td><td>No root motion declared; inside the object,
+      <code>translation</code> and <code>rotation</code> default to <code>true</code></td>
+      <td>Kept with the clip. Playback does not read it: root motion comes from the Animator's
+      <em>Apply Root Motion</em> setting, on the animation graph path only.</td></tr>
+  <tr><td><code>translations</code></td><td><code>"absolute"</code>: a key is the bone's local translation;
+      <code>"restRelative"</code>: a key moves the bone from the playing skeleton's rest by its offset from the
+      clip's rest</td><td><code>"absolute"</code></td>
+      <td>Kept with the clip. Playback samples every clip as <code>"absolute"</code>.</td></tr>
+  <tr><td><code>events</code></td><td>An array of objects, each with <code>frame</code>, a whole number of 0 or
+      more, and <code>name</code>, a name; no other fields</td><td>No events</td>
+      <td>Fill the clip's event track, sorted by time (events at one time keep their order in the file). Playback
+      fires them as it reaches them (<a href="animation-events.html">Animation events</a>).</td></tr>
+</table>
+
+<h3>Frames</h3>
+<p>
+  An event's <code>frame</code> counts from the clip's start, frame 0, at the rate the clip is sampled: the key
+  count of the clip's channel with the most keys (the first such channel on a tie), less one, over that channel's
+  time span. A clip exported with a key on every frame at 30 frames per second is sampled at 30, so frame 19 is at
+  19 / 30 = 0.633 seconds. Events need that rate: a clip whose channel with the most keys has no two keys apart in
+  time cannot carry events.
+</p>
+<p>
+  The clip ends at frame <em>length × rate</em>, which need not be a whole number: a clip keyed at 10 frames per
+  second that lasts 1.06 seconds ends at frame 10.6. An event at the end frame or before it is read; an event after
+  it could never fire, so it refuses the block (frame 11 in that clip, even though it is less than one frame past
+  the end). An exporter that counts frames from 1 shows up here.
+</p>
+<p>
+  Key times are 32-bit floats, so a clip keyed on every frame computes its end a rounding error away from its last
+  frame, and the error grows with the clip's length. An event counts as on the end frame when it lies within four
+  float epsilons of it (about 5 × 10<sup>-7</sup> of the end frame: 0.012 frames at frame 25 600, 1 024 seconds at
+  25 frames per second), and never more than half a frame past it (the limit from about a million frames on). So an
+  event on the frame after the end is refused up to about sixteen million frames (155 hours at 30 frames per second),
+  and an event on the last frame of a clip keyed on every frame is read up to about four million frames (39 hours
+  at 30 frames per second); past those lengths, 32-bit key times cannot place a frame to within half a frame, so
+  neither the last frame nor the one after it is certain.
+</p>
+
+<h2 id="precedence">Loop and speed</h2>
+<p>
+  The clip's <code>loop</code> and <code>speed</code> have the lowest precedence of every loop and speed setting
+  in the engine. Each way of playing a clip carries its own, and that one is what playback uses:
+</p>
+<table>
+  <tr><th>Played by</th><th>Its setting, which overrides the clip's</th></tr>
+  <tr><td>An Animator</td><td><em>Loop</em> and <em>Speed Scale</em></td></tr>
+  <tr><td>An animation library entry</td><td>The entry's <code>loop</code></td></tr>
+  <tr><td>A controller state's motion</td><td>The motion's <code>speed</code> and <code>loop</code></td></tr>
+  <tr><td>An animation graph's clip player node</td><td>The node's <code>speed</code> and <code>loop</code></td></tr>
+  <tr><td>A montage</td><td>Its <code>playRate</code>; a montage plays its clip once</td></tr>
+</table>
+<div class="panel warn">
+  Every one of these settings always holds a value (loop on and speed 1 unless changed), so a clip's
+  <code>loop</code> and <code>speed</code> do not change playback today. Set the loop and speed you want on the
+  Animator, the library entry, the controller motion or the graph node that plays the clip.
+</div>
+
+<h2>Refusals and bounds</h2>
+<p>
+  A block the engine cannot read whole is refused whole: the clip imports with its keys and without any of the
+  block's settings or events, and the import logs one warning that names the file, the animation and the field
+  at fault. A block is refused when:
+</p>
+<ul>
+  <li>its <code>schemaVersion</code> is missing or is not <code>1</code>;</li>
+  <li>a field has a value of the wrong kind (a <code>loop</code> that is not <code>true</code> or <code>false</code>,
+      a <code>speed</code> of 0, a frame of 2.5, an event with no <code>name</code>, a name holding a control
+      character), or the block, <code>rootMotion</code> or an event has a field this schema does not define: a
+      misspelled field is refused rather than ignored. The fields read before the one at fault are discarded with
+      the rest;</li>
+  <li>an event lies after the clip's end, or the clip has events and no sampling rate;</li>
+  <li>the animation's extras hold more than 262 144 bytes (256 KiB), nest objects and arrays more than 16 levels
+      deep, or give one object the same key twice (JSON leaves which value wins to the reader, so this reader
+      refuses it). These rules apply to the whole of the animation's extras, the <code>clip</code> key and any
+      other key beside it: a model file can come from anywhere.</li>
+</ul>
+<p>
+  The import checks these rules in one pass over the extras and then parses them in a second, and both take time
+  in proportion to the size of the text, so a block at the 256 KiB bound reads as quickly as its size allows
+  whatever it holds.
+</p>
+<p>
+  A warning quotes at most 64 bytes of any text from the file (a field name, an event name), followed by that
+  text's length in bytes when it is longer.
+</p>
+<pre>AnimationClip 'knight': the clip schema of animation 'attack_sword' is refused: clip.schemaVersion 2 is not a version this engine reads; it reads schemaVersion 1. The clip loads without it.
+AnimationClip 'knight': the clip schema of animation 'attack_sword' is refused: clip.events[1] has no name. The clip loads without it.
+AnimationClip 'knight': the clip schema of animation 'idle' is refused: the animation's extras hold 300000 bytes, and a schema is read only from extras of at most 262144 bytes (256 KiB). The clip loads without it.</pre>
+<p>
+  An animation with no <code>clip</code> key, or whose extras are not a JSON object, imports with no settings and
+  no warning.
+</p>
+
+<h2>Editable copies</h2>
+<p>
+  The settings and events belong to the clip read from the glTF file. An editable copy of that clip, the
+  <code>.anim</code> file the Animation window saves when you edit an imported clip, holds its keys only: the
+  <code>.anim</code> format has no place for the clip schema, so the copy has no settings and no events, and undo in
+  the Animation window leaves none behind. Keep the settings and events in the glTF file.
+</p>
+
+<hr>
+<h2>Changelog</h2>
+<ul>
+  <li>2026-09-30: playback fires a clip's events; <a href="animation-events.html">Animation events</a> says when and
+      how a game reads them.</li>
+  <li>2026-09-30: the tolerance on the end frame is at most half a frame, so the next frame is refused at every
+      length a 32-bit key time can resolve (about sixteen million frames); a warning prints the file's frame as
+      the shortest number that reads back as it.</li>
+  <li>2026-09-30: an event on the end frame is read within four float epsilons of it, at any clip length; a
+      warning prints frames as plain numbers; the extras are read in time proportional to their size.</li>
+  <li>2026-09-30: whole numbers may be written with a decimal point; a speed that rounds to 0 as a float, a key
+      given twice in one object and a name holding a control character are refused; the clip's end is its length
+      times its rate, not rounded; the rate comes from the channel with the most keys; warnings quote at most 64
+      bytes of file text; editable copies hold no settings or events.</li>
+  <li>2026-09-30: first version. <code>schemaVersion</code> 1: <code>loop</code>, <code>speed</code>,
+      <code>rootMotion</code>, <code>translations</code> and <code>events</code> read at import from glTF and GLB
+      animations; the loop and speed precedence; refusals and bounds.</li>
+</ul>
+
+<footer>glTF clip schema · version 5 · 2026-09-30</footer>
+
+</body>
+</html>

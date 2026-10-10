@@ -1,0 +1,200 @@
+#version 450
+
+// Spatial denoise for the RT directional shadow mask (rt_shadow_mask.comp).
+//
+// The mask traces ONE cone-jittered ray per pixel, so a single frame's mask is a
+// binary stipple whose LOCAL DENSITY is the true fractional occlusion. In a
+// temporal view TAA integrates that stipple over frames into a smooth penumbra,
+// but a view without TAA history advances no jitter phase (uTemporal.x = 0):
+// the stipple is frozen and never resolves. This pass converts the stipple into
+// the fractional value spatially — a compact plane-aware (joint-bilateral) blur
+// that averages the mask ONLY across pixels on the same receiver surface.
+//
+// It removes stochastic noise WITHIN the penumbra; it does not create or widen a
+// penumbra. The plane-distance weight keeps the blur from crossing occluder/
+// receiver depth discontinuities (no light leak at contact, no smear over
+// silhouettes), and the kernel footprint is bounded to the penumbra scale by the
+// caller (uParams.x, derived from the sun's angular diameter) so a narrow
+// small-sun penumbra is not fattened into a wide one. At angular diameter 0 the
+// caller declares NO denoise pass, so a hard shadow stays byte-exact hard.
+//
+// Cost structure: an 8x8 workgroup stages its (8 + 2 * kMaxRadius)^2 footprint
+// — mask value and reconstructed view-space position — into shared memory once
+// (4 fetches per thread), then every tap is a shared-memory read. A tile whose
+// staged mask is uniform (all lit or all shadowed — most of the screen) writes
+// the mask through and skips the kernel entirely; only penumbra tiles pay it.
+//
+// Depth reconstruction mirrors rt_shadow_mask.comp exactly (the SAME single-
+// sample depth the mask was traced from): reverse-Z raw depth unprojected through
+// uInvProj with the engine's negative-viewport convention (ndc.y = 1 - 2*uv.y),
+// left-handed view space (+Z forward, z grows with distance). The receiver normal
+// is reconstructed from best-of-neighbour depth differences (no normal G-buffer
+// in the depth-only Forward+ pipeline), used only to define the tangent plane the
+// bilateral weight measures against.
+
+layout(local_size_x = 8, local_size_y = 8, local_size_z = 1) in;
+
+layout(set = 0, binding = 0) uniform sampler2D uMaskIn;  // raw RT mask (R8, 1 = lit)
+layout(set = 0, binding = 1) uniform sampler2D uDepth;   // single-sample reverse-Z depth
+layout(set = 0, binding = 2, r8) uniform writeonly image2D uMaskOut;
+
+layout(set = 0, binding = 3, std140) uniform RTShadowDenoiseParams
+{
+    mat4 uInvProj;   // clip -> view (reverse-Z, LH), same matrix the mask pass used
+    vec4 uParams;    // x = kernel radius (texels, <= kMaxRadius), y = plane tolerance
+                     // (multiple of the kernel's view-space footprint), z = spatial
+                     // sigma (texels), w reserved
+};
+
+// Largest kernel radius the tile border covers; RTShadowMaskService clamps the
+// uploaded radius to the same value (kDenoiseMaxRadius).
+const int kMaxRadius = 4;
+const int kGroupSize = 8;
+const int kTileSize  = kGroupSize + 2 * kMaxRadius;   // 16
+const int kTileCount = kTileSize * kTileSize;         // 256 = 4 per thread
+// Sky / cleared depth (reverse-Z far) has no receiver; flagged in the tile with a
+// non-positive view z (a visible surface always has z > 0).
+const float kSkyTap = -1.0;
+
+shared vec3  s_TilePos[kTileCount];    // view-space position, z <= 0 = sky
+shared float s_TileMask[kTileCount];
+shared uint  s_TileHasLit;
+shared uint  s_TileHasShadow;
+
+// View-space position from a raw reverse-Z depth at uv (rt_shadow_mask.comp /
+// gtao.comp convention).
+vec3 ViewPosFromRaw(vec2 uv, float raw)
+{
+    vec2 ndc = vec2(uv.x * 2.0 - 1.0, 1.0 - 2.0 * uv.y);
+    vec4 vp  = uInvProj * vec4(ndc, raw, 1.0);
+    return vp.xyz / vp.w;
+}
+
+int TileIndex(ivec2 t)
+{
+    return t.y * kTileSize + t.x;
+}
+
+void main()
+{
+    ivec2 size   = imageSize(uMaskOut);
+    ivec2 pix    = ivec2(gl_GlobalInvocationID.xy);
+    ivec2 local  = ivec2(gl_LocalInvocationID.xy);
+    ivec2 origin = ivec2(gl_WorkGroupID.xy) * kGroupSize - kMaxRadius;   // tile (0,0) in pixels
+    vec2  texel  = 1.0 / vec2(size);
+
+    if (gl_LocalInvocationIndex == 0u)
+    {
+        s_TileHasLit    = 0u;
+        s_TileHasShadow = 0u;
+    }
+    barrier();
+
+    // Stage the footprint: 4 entries per thread. Out-of-image taps clamp to the
+    // edge (the same result PointClamp sampling gave).
+    bool sawLit    = false;
+    bool sawShadow = false;
+    for (int i = 0; i < kTileCount / (kGroupSize * kGroupSize); ++i)
+    {
+        int   idx = int(gl_LocalInvocationIndex) + i * (kGroupSize * kGroupSize);
+        ivec2 t   = ivec2(idx % kTileSize, idx / kTileSize);
+        ivec2 p   = clamp(origin + t, ivec2(0), size - 1);
+        vec2  uv  = (vec2(p) + 0.5) * texel;
+        float raw = texelFetch(uDepth, p, 0).r;
+        float m   = texelFetch(uMaskIn, p, 0).r;
+        s_TilePos[idx]  = (raw <= 0.0) ? vec3(0.0, 0.0, kSkyTap) : ViewPosFromRaw(uv, raw);
+        s_TileMask[idx] = m;
+        sawLit    = sawLit || (m > 0.5);
+        sawShadow = sawShadow || (m <= 0.5);
+    }
+    if (sawLit)
+        atomicOr(s_TileHasLit, 1u);
+    if (sawShadow)
+        atomicOr(s_TileHasShadow, 1u);
+    barrier();
+
+    if (pix.x >= size.x || pix.y >= size.y)
+        return;
+
+    ivec2 tc      = local + kMaxRadius;   // this pixel's tile coordinate
+    float centerM = s_TileMask[TileIndex(tc)];
+    vec3  centerVP = s_TilePos[TileIndex(tc)];
+
+    // Uniform tile (no penumbra anywhere in the footprint): pass through. The
+    // condition is workgroup-uniform, so no thread diverges here.
+    if (s_TileHasLit == 0u || s_TileHasShadow == 0u || centerVP.z <= 0.0)
+    {
+        imageStore(uMaskOut, pix, vec4(centerM));
+        return;
+    }
+
+    // Best-of-neighbour receiver normal (rt_shadow_mask.comp): pick the least
+    // depth-discontinuous side pair so a silhouette does not tilt the plane. Only
+    // its orientation matters to the plane-distance weight, so no camera-facing
+    // flip is needed.
+    vec3 Pr = s_TilePos[TileIndex(tc + ivec2(1, 0))];
+    vec3 Pl = s_TilePos[TileIndex(tc - ivec2(1, 0))];
+    vec3 Pd = s_TilePos[TileIndex(tc + ivec2(0, 1))];
+    vec3 Pu = s_TilePos[TileIndex(tc - ivec2(0, 1))];
+    vec3 dPdx = (abs(Pr.z - centerVP.z) < abs(centerVP.z - Pl.z)) ? (Pr - centerVP) : (centerVP - Pl);
+    vec3 dPdy = (abs(Pd.z - centerVP.z) < abs(centerVP.z - Pu.z)) ? (Pd - centerVP) : (centerVP - Pu);
+    vec3 nVS  = cross(dPdx, dPdy);
+    float nLen = length(nVS);
+    bool haveNormal = nLen > 1e-8;
+    nVS = haveNormal ? nVS / nLen : vec3(0.0);
+
+    const int radius = min(int(uParams.x), kMaxRadius);
+    // Plane tolerance scales with the kernel's view-space footprint: one texel's
+    // lateral extent at the receiver's depth (same raw depth, one texel over, so
+    // it is projection-agnostic) times the kernel radius. A receiver curving away
+    // over the kernel deviates by a fraction of a texel and passes; a step or an
+    // occluder of a few footprints falls off the plane and is rejected — at any
+    // distance, because the footprint shrinks with the texel.
+    vec2  uv       = (vec2(pix) + 0.5) * texel;
+    float rawC     = texelFetch(uDepth, pix, 0).r;
+    float texelVS  = length(ViewPosFromRaw(uv + vec2(texel.x, 0.0), rawC) - centerVP);
+    float planeTol = max(uParams.y, 1e-3) * float(radius) * max(texelVS, 1e-6);
+    float spatialS = max(uParams.z, 1e-3);
+    float invPlane2 = 1.0 / (2.0 * planeTol * planeTol);
+    float invSpat2  = 1.0 / (2.0 * spatialS * spatialS);
+    // Depth-relative fallback tightness for the degenerate-normal case (grazing
+    // depth cliff): a plain reverse-Z edge stop so those rare pixels still reject
+    // across a discontinuity instead of leaking.
+    const float kDepthSigma = 64.0;
+
+    float sum  = 0.0;
+    float wsum = 0.0;
+    for (int y = -radius; y <= radius; ++y)
+    for (int x = -radius; x <= radius; ++x)
+    {
+        int  idx   = TileIndex(tc + ivec2(x, y));
+        vec3 tapVP = s_TilePos[idx];
+        if (tapVP.z <= 0.0)
+            continue;  // sky tap: never average "lit sky" into a receiver edge
+
+        float wSpatial = exp(-float(x * x + y * y) * invSpat2);
+        float wEdge;
+        if (haveNormal)
+        {
+            // Off-tangent-plane distance: taps on the same receiver plane weigh
+            // ~1 (even a grazing floor, whose absolute depth runs away); an
+            // occluder or a step in front falls off the plane and is rejected.
+            float planeDist = dot(tapVP - centerVP, nVS);
+            wEdge = exp(-planeDist * planeDist * invPlane2);
+        }
+        else
+        {
+            float dz = abs(tapVP.z - centerVP.z) / max(centerVP.z, 1e-4);
+            wEdge = exp(-dz * dz * kDepthSigma);
+        }
+
+        float w = wSpatial * wEdge;
+        sum  += s_TileMask[idx] * w;
+        wsum += w;
+    }
+
+    // wsum >= the center tap's weight (>0), so this is always the plane-weighted
+    // mean of same-surface neighbours; the result stays in [0,1].
+    float result = wsum > 0.0 ? sum / wsum : centerM;
+    imageStore(uMaskOut, pix, vec4(result));
+}

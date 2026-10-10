@@ -1,0 +1,455 @@
+#version 450
+
+#include "Includes/storage_access.glsl"
+
+// GPU compute skinning. One workgroup per animation instance, 64 threads per
+// workgroup. The skeleton's bones are its joint closure (every skin joint and
+// every ancestor up to its root), level-sorted by GPUAnimationDataStore so a
+// parent precedes its children. Phase 1 samples each bone's clip channels into
+// its local matrix, phase 2 turns local matrices into world matrices level by
+// level in place, phase 3 writes the skin palette to the atlas.
+
+layout(local_size_x = 64, local_size_y = 1, local_size_z = 1) in;
+
+// GPUAnimationDataStore::kMaxBones and kMaxHierarchyLevels: the host routes a
+// skeleton over either to the CPU sample path, so every profile runs this
+// kernel with the same two numbers.
+const uint kMaxBones = 256u;
+const uint kMaxHierarchyLevels = 64u;
+
+// ---------------------------------------------------------------------------
+// Bindings
+// ---------------------------------------------------------------------------
+
+struct SkeletonHeader {
+    uint boneCount;          // joint closure bones
+    uint skinJointCount;
+    uint levelCount;
+    uint parentsOffset;      // uint per bone: its parent bone, 0xFFFFFFFF for a root
+    uint restTRSOffset;      // 10 floats per bone: t3, r4 (xyzw), s3
+    uint restLocalMatOffset; // 16 floats per bone, column-major
+    uint inverseBindOffset;  // 16 floats per joint, column-major
+    uint jointBonesOffset;   // uint per joint: its bone, 0xFFFFFFFF when it has none
+    uint levelOffsetsOffset; // levelCount + 1 prefix offsets into the bones
+    uint boneNodesOffset;    // uint per bone: its skeleton node, the clip's channel index
+    uint _pad0[2];
+    mat4 meshRootInverse;
+    uint _pad1[4];
+};
+
+struct ClipHeader {
+    float duration;
+    uint channelCount;
+    uint channelDescOffset;
+    uint keyframeDataOffset;
+    uint boneChannelStartOffset;
+    uint boneChannelCountOffset;
+    uint boneCount;
+    uint _pad[9];
+};
+
+struct AnimInstance {
+    uint skeletonGPUIndex;
+    uint clipGPUIndex;
+    float time;
+    uint atlasOutputOffset;
+    uint runtimeId; // index into RuntimeVisible[] for the visibility gate
+    uint _pad[3];
+};
+
+layout(set = 0, binding = 0, std430) restrict readonly buffer SkeletonHeaders {
+    SkeletonHeader headers[];
+} skelHeaders;
+
+layout(set = 0, binding = 1, std430) restrict readonly buffer SkeletonData {
+    uint data[];
+} skelData;
+
+layout(set = 0, binding = 2, std430) restrict readonly buffer ClipHeaders {
+    ClipHeader headers[];
+} clipHeaders;
+
+layout(set = 0, binding = 3, std430) restrict readonly buffer ClipData {
+    uint data[];
+} clipData;
+
+layout(set = 0, binding = 4, std430) restrict readonly buffer AnimInstances {
+    AnimInstance instances[];
+} animInstances;
+
+layout(set = 0, binding = 5, std430) restrict GE_STORAGE_WRITEONLY buffer BonePaletteAtlasSSBO {
+    vec4 rows[];
+} BonePaletteAtlas;
+
+// Phase 6-iii: per-runtime visibility flags written by runtime_visibility_aggregate.comp.
+// Non-zero iff any GPUInstance with this runtimeId was visible to any view this frame.
+// When pc.gateEnabled != 0 the skinning compute early-outs for runtimes whose entities
+// are all off-screen, recovering animation/skinning GPU time on crowd scenes.
+layout(set = 0, binding = 6, std430) restrict readonly buffer RuntimeVisibleSSBO {
+    uint runtimeVisible[];
+} RuntimeVisible;
+
+#define GE_BONE_PALETTE_WRITABLE
+#include "Includes/bone_palette.glsl"
+
+layout(push_constant) uniform PushConstants {
+    uint instanceCount;
+    uint gateEnabled;        // Phase 6-iii: 1 to enable visibility-gated early-out, 0 to disable
+    uint runtimeVisibleCap;  // Phase 6-iii: capacity of RuntimeVisible[] in element units (bounds-check)
+};
+
+// ---------------------------------------------------------------------------
+// Shared memory
+// ---------------------------------------------------------------------------
+
+// One affine 3x4 matrix per bone as three vec4 rows, the top three rows of a
+// column-major mat4 (the bone palette's own form, bone_palette.glsl):
+// 3 rows x 256 bones x 16 B = 12 288 B on every compiler, 4 096 B under the
+// 16 384 B that Vulkan guarantees for maxComputeSharedMemorySize and that
+// WebGPU grants by default for maxComputeWorkgroupStorageSize. A mat4x3[256]
+// strides its columns at 16 B and would take all 16 384 B. Phase 1 stores
+// local matrices; phase 2 rewrites them into world matrices.
+shared vec4 s_world[3u * kMaxBones];
+
+// ---------------------------------------------------------------------------
+// Helpers
+// ---------------------------------------------------------------------------
+
+float readFloat(uint bufferOffset) {
+    return uintBitsToFloat(skelData.data[bufferOffset]);
+}
+
+float readClipFloat(uint bufferOffset) {
+    return uintBitsToFloat(clipData.data[bufferOffset]);
+}
+
+mat4 readMat4(uint baseOffset) {
+    return mat4(
+        readFloat(baseOffset +  0), readFloat(baseOffset +  1), readFloat(baseOffset +  2), readFloat(baseOffset +  3),
+        readFloat(baseOffset +  4), readFloat(baseOffset +  5), readFloat(baseOffset +  6), readFloat(baseOffset +  7),
+        readFloat(baseOffset +  8), readFloat(baseOffset +  9), readFloat(baseOffset + 10), readFloat(baseOffset + 11),
+        readFloat(baseOffset + 12), readFloat(baseOffset + 13), readFloat(baseOffset + 14), readFloat(baseOffset + 15)
+    );
+}
+
+void storeBoneRows(uint bone, mat4 m) {
+    uint base = 3u * bone;
+    s_world[base + 0u] = vec4(m[0][0], m[1][0], m[2][0], m[3][0]);
+    s_world[base + 1u] = vec4(m[0][1], m[1][1], m[2][1], m[3][1]);
+    s_world[base + 2u] = vec4(m[0][2], m[1][2], m[2][2], m[3][2]);
+}
+
+mat4 loadBoneMatrix(uint bone) {
+    uint base = 3u * bone;
+    vec4 row0 = s_world[base + 0u];
+    vec4 row1 = s_world[base + 1u];
+    vec4 row2 = s_world[base + 2u];
+    return mat4(row0.x, row1.x, row2.x, 0.0,
+                row0.y, row1.y, row2.y, 0.0,
+                row0.z, row1.z, row2.z, 0.0,
+                row0.w, row1.w, row2.w, 1.0);
+}
+
+// Quaternion to rotation matrix. Input: (x,y,z,w).
+mat3 quatToMat3(vec4 q) {
+    float w = q.w, x = q.x, y = q.y, z = q.z;
+    float x2 = x + x, y2 = y + y, z2 = z + z;
+    float xx = x * x2, xy = x * y2, xz = x * z2;
+    float yy = y * y2, yz = y * z2, zz = z * z2;
+    float wx = w * x2, wy = w * y2, wz = w * z2;
+    return mat3(
+        1.0 - (yy + zz), xy + wz,         xz - wy,
+        xy - wz,          1.0 - (xx + zz), yz + wx,
+        xz + wy,          yz - wx,          1.0 - (xx + yy)
+    );
+}
+
+// Build T * R * S local matrix from TRS components.
+mat4 buildLocalTRS(vec3 t, vec4 r_xyzw, vec3 s) {
+    mat3 R = quatToMat3(r_xyzw);
+    // T * R * S: scale columns of R, then set translation.
+    mat4 m;
+    m[0] = vec4(R[0] * s.x, 0.0);
+    m[1] = vec4(R[1] * s.y, 0.0);
+    m[2] = vec4(R[2] * s.z, 0.0);
+    m[3] = vec4(t, 1.0);
+    return m;
+}
+
+// SLERP matching CPU (glm::slerp). Input quats are (x,y,z,w).
+vec4 qslerp(vec4 q0, vec4 q1, float t) {
+    float d = dot(q0, q1);
+    if (d < 0.0) { q1 = -q1; d = -d; }
+    if (d > 0.9995) return normalize(mix(q0, q1, t));
+    float theta = acos(clamp(d, -1.0, 1.0));
+    float sinTheta = sin(theta);
+    float w0 = sin((1.0 - t) * theta) / sinTheta;
+    float w1 = sin(t * theta) / sinTheta;
+    return w0 * q0 + w1 * q1;
+}
+
+// Cubic Hermite evaluation matching CPU (AnimationSampling.cpp:31).
+float evalCubicHermite(float v0, float outTan, float outWt,
+                       float v1, float inTan, float inWt,
+                       float dt, float alpha) {
+    float c0dt = dt * clamp(outWt, 0.05, 0.49);
+    float c1dt = dt * clamp(inWt, 0.05, 0.49);
+    float c0 = v0 + outTan * c0dt;
+    float c1 = v1 - inTan * c1dt;
+    float u2 = alpha * alpha;
+    float u3 = u2 * alpha;
+    float inv = 1.0 - alpha;
+    float inv2 = inv * inv;
+    float inv3 = inv2 * inv;
+    return inv3 * v0 + 3.0 * inv2 * alpha * c0 + 3.0 * inv * u2 * c1 + u3 * v1;
+}
+
+// ---------------------------------------------------------------------------
+// Keyframe sampling
+// ---------------------------------------------------------------------------
+
+// Keyframe layout: 28 floats (7 x vec4) per keyframe.
+// [0]=time, [1..3]=translation, [4..7]=rotation(xyzw), [8..10]=scale,
+// [11..14]=inTangent, [15..18]=outTangent, [19..22]=inWeight, [23..26]=outWeight, [27]=pad
+
+// Samples one channel into the bone's translation, rotation or scale and
+// marks the bone as moved.
+void sampleChannel(uint clipDataBase, uint channelDescBase, float time,
+                   inout vec3 translation, inout vec4 rotation, inout vec3 scale, inout bool moved) {
+    uint descBase = channelDescBase; // already points to the 4-uint32 GPUChannelDesc in clipData
+    uint pathInterp = clipData.data[descBase + 1];
+    uint kfOffset   = clipData.data[descBase + 2];
+    uint kfCount    = clipData.data[descBase + 3];
+
+    if (kfCount == 0) return;
+
+    uint path   = pathInterp & 3u;       // 0=T, 1=R, 2=S
+    uint interp = (pathInterp >> 2) & 3u; // 0=step, 1=linear, 2=cubic
+
+    // Linear scan for the bracketing keyframes.
+    uint kfBase = clipDataBase + kfOffset;
+    uint lo = 0, hi = 0;
+    for (hi = 0; hi < kfCount; ++hi) {
+        float kTime = readClipFloat(kfBase + hi * 28);
+        if (kTime >= time) break;
+    }
+    if (hi >= kfCount) hi = kfCount - 1;
+    lo = (hi == 0) ? 0 : hi - 1;
+
+    // Read bracketing keyframes.
+    uint k0Base = kfBase + lo * 28;
+    uint k1Base = kfBase + hi * 28;
+    float t0 = readClipFloat(k0Base);
+    float t1 = readClipFloat(k1Base);
+    float dt = t1 - t0;
+    float alpha = (dt > 0.0) ? clamp((time - t0) / dt, 0.0, 1.0) : 0.0;
+    bool useStep = (interp == 0) || (dt <= 0.0);
+
+    if (path == 0) { // Translation
+        vec3 v0 = vec3(readClipFloat(k0Base+1), readClipFloat(k0Base+2), readClipFloat(k0Base+3));
+        if (useStep) {
+            translation = v0;
+        } else if (interp == 2) { // Cubic
+            vec3 v1 = vec3(readClipFloat(k1Base+1), readClipFloat(k1Base+2), readClipFloat(k1Base+3));
+            translation = vec3(
+                evalCubicHermite(v0.x, readClipFloat(k0Base+15), readClipFloat(k0Base+23), v1.x, readClipFloat(k1Base+11), readClipFloat(k1Base+19), dt, alpha),
+                evalCubicHermite(v0.y, readClipFloat(k0Base+16), readClipFloat(k0Base+24), v1.y, readClipFloat(k1Base+12), readClipFloat(k1Base+20), dt, alpha),
+                evalCubicHermite(v0.z, readClipFloat(k0Base+17), readClipFloat(k0Base+25), v1.z, readClipFloat(k1Base+13), readClipFloat(k1Base+21), dt, alpha));
+        } else { // Linear
+            vec3 v1 = vec3(readClipFloat(k1Base+1), readClipFloat(k1Base+2), readClipFloat(k1Base+3));
+            translation = mix(v0, v1, alpha);
+        }
+    }
+    else if (path == 1) { // Rotation (xyzw)
+        vec4 q0 = vec4(readClipFloat(k0Base+4), readClipFloat(k0Base+5), readClipFloat(k0Base+6), readClipFloat(k0Base+7));
+        if (useStep) {
+            rotation = q0;
+        } else if (interp == 2) { // Cubic — interpolate components, normalize
+            vec4 q1 = vec4(readClipFloat(k1Base+4), readClipFloat(k1Base+5), readClipFloat(k1Base+6), readClipFloat(k1Base+7));
+            rotation = normalize(vec4(
+                evalCubicHermite(q0.x, readClipFloat(k0Base+15), readClipFloat(k0Base+23), q1.x, readClipFloat(k1Base+11), readClipFloat(k1Base+19), dt, alpha),
+                evalCubicHermite(q0.y, readClipFloat(k0Base+16), readClipFloat(k0Base+24), q1.y, readClipFloat(k1Base+12), readClipFloat(k1Base+20), dt, alpha),
+                evalCubicHermite(q0.z, readClipFloat(k0Base+17), readClipFloat(k0Base+25), q1.z, readClipFloat(k1Base+13), readClipFloat(k1Base+21), dt, alpha),
+                evalCubicHermite(q0.w, readClipFloat(k0Base+18), readClipFloat(k0Base+26), q1.w, readClipFloat(k1Base+14), readClipFloat(k1Base+22), dt, alpha)));
+        } else { // Linear SLERP
+            vec4 q1 = vec4(readClipFloat(k1Base+4), readClipFloat(k1Base+5), readClipFloat(k1Base+6), readClipFloat(k1Base+7));
+            rotation = qslerp(q0, q1, alpha);
+        }
+    }
+    else { // Scale
+        vec3 v0 = vec3(readClipFloat(k0Base+8), readClipFloat(k0Base+9), readClipFloat(k0Base+10));
+        if (useStep) {
+            scale = v0;
+        } else if (interp == 2) { // Cubic
+            vec3 v1 = vec3(readClipFloat(k1Base+8), readClipFloat(k1Base+9), readClipFloat(k1Base+10));
+            scale = vec3(
+                evalCubicHermite(v0.x, readClipFloat(k0Base+15), readClipFloat(k0Base+23), v1.x, readClipFloat(k1Base+11), readClipFloat(k1Base+19), dt, alpha),
+                evalCubicHermite(v0.y, readClipFloat(k0Base+16), readClipFloat(k0Base+24), v1.y, readClipFloat(k1Base+12), readClipFloat(k1Base+20), dt, alpha),
+                evalCubicHermite(v0.z, readClipFloat(k0Base+17), readClipFloat(k0Base+25), v1.z, readClipFloat(k1Base+13), readClipFloat(k1Base+21), dt, alpha));
+        } else { // Linear
+            vec3 v1 = vec3(readClipFloat(k1Base+8), readClipFloat(k1Base+9), readClipFloat(k1Base+10));
+            scale = mix(v0, v1, alpha);
+        }
+    }
+    moved = true;
+}
+
+// ---------------------------------------------------------------------------
+// Hierarchy
+// ---------------------------------------------------------------------------
+
+// Turns one hierarchy level's local matrices into world matrices in place,
+// world = parent world * local, row by row. A bone's parent sits at the level
+// before, final since the last barrier; each thread rewrites only its own
+// bones, so no two threads of a level touch the same rows. A parent precedes
+// its children in bone order, so parent < bone bounds every access by the
+// bone; a bone whose header says otherwise keeps its local matrix.
+void composeLevel(uint levelOffsetsOffset, uint parentsOffset, uint level, uint boneCount, uint tid) {
+    uint levelStart = skelData.data[levelOffsetsOffset + level];
+    uint levelEnd   = min(skelData.data[levelOffsetsOffset + level + 1u], boneCount);
+    for (uint bone = levelStart + tid; bone < levelEnd; bone += 64u) {
+        uint parent = skelData.data[parentsOffset + bone];
+        if (parent < bone) {
+            uint parentBase = 3u * parent;
+            uint base = 3u * bone;
+            vec4 parent0 = s_world[parentBase + 0u];
+            vec4 parent1 = s_world[parentBase + 1u];
+            vec4 parent2 = s_world[parentBase + 2u];
+            vec4 local0 = s_world[base + 0u];
+            vec4 local1 = s_world[base + 1u];
+            vec4 local2 = s_world[base + 2u];
+            s_world[base + 0u] = parent0.x * local0 + parent0.y * local1 + parent0.z * local2 + vec4(0.0, 0.0, 0.0, parent0.w);
+            s_world[base + 1u] = parent1.x * local0 + parent1.y * local1 + parent1.z * local2 + vec4(0.0, 0.0, 0.0, parent1.w);
+            s_world[base + 2u] = parent2.x * local0 + parent2.y * local1 + parent2.z * local2 + vec4(0.0, 0.0, 0.0, parent2.w);
+        }
+    }
+}
+
+// ---------------------------------------------------------------------------
+// Main
+// ---------------------------------------------------------------------------
+
+void main() {
+    uint instanceIdx = gl_WorkGroupID.x;
+#if defined(GE_COMPAT_PROFILE)
+    // Over-dispatch and the visibility gate are workgroup-uniform skips, but
+    // the phase barriers below must be reached in control flow WGSL can prove
+    // uniform — so skipped workgroups clamp to a real instance, run every
+    // phase with zero bones/joints, and write nothing.
+    bool instanceActive = instanceIdx < instanceCount;
+    instanceIdx = min(instanceIdx, max(instanceCount, 1u) - 1u);
+#else
+    if (instanceIdx >= instanceCount) return;
+#endif
+
+    AnimInstance inst = animInstances.instances[instanceIdx];
+
+    // Phase 6-iii: skip skinning when no entity using this runtime is visible
+    // to any view (main camera, thumbnails, shadow cascades). Bounds-check the
+    // runtime id against the buffer capacity so a sparse-id mismatch never
+    // reads OOB. runtimeId == 0 means "unskinned" / "no runtime" — treat as
+    // visible (don't skip) to avoid breaking degenerate inputs.
+    if (gateEnabled != 0u && inst.runtimeId != 0u && inst.runtimeId < runtimeVisibleCap) {
+        if (RuntimeVisible.runtimeVisible[inst.runtimeId] == 0u) {
+#if defined(GE_COMPAT_PROFILE)
+            instanceActive = false;
+#else
+            return;
+#endif
+        }
+    }
+    SkeletonHeader skel = skelHeaders.headers[inst.skeletonGPUIndex];
+    ClipHeader clip = clipHeaders.headers[inst.clipGPUIndex];
+
+    // The host uploads at most kMaxBones bones; the clamp keeps a malformed
+    // header inside s_world.
+#if defined(GE_COMPAT_PROFILE)
+    uint boneCount = instanceActive ? min(skel.boneCount, kMaxBones) : 0u;
+#else
+    uint boneCount = min(skel.boneCount, kMaxBones);
+#endif
+    uint tid = gl_LocalInvocationIndex;
+
+    // -----------------------------------------------------------------------
+    // Phase 1: sample each bone's channels over its rest TRS into its local
+    // matrix; a bone no channel moves keeps its exact rest matrix.
+    // -----------------------------------------------------------------------
+    for (uint bone = tid; bone < boneCount; bone += 64u) {
+        uint trsBase = skel.restTRSOffset + bone * 10u;
+        vec3 translation = vec3(readFloat(trsBase), readFloat(trsBase+1), readFloat(trsBase+2));
+        vec4 rotation    = vec4(readFloat(trsBase+3), readFloat(trsBase+4), readFloat(trsBase+5), readFloat(trsBase+6));
+        vec3 scale       = vec3(readFloat(trsBase+7), readFloat(trsBase+8), readFloat(trsBase+9));
+        bool moved = false;
+
+        // The clip's channel table is indexed by skeleton node.
+        uint node = skelData.data[skel.boneNodesOffset + bone];
+        if (clip.channelCount > 0u && node < clip.boneCount) {
+            uint chStart = clipData.data[clip.boneChannelStartOffset + node];
+            uint chCount = clipData.data[clip.boneChannelCountOffset + node];
+            for (uint c = 0u; c < chCount; ++c) {
+                uint channelBase = clip.channelDescOffset + (chStart + c) * 4u;
+                sampleChannel(clip.keyframeDataOffset, channelBase, inst.time,
+                              translation, rotation, scale, moved);
+            }
+        }
+
+        mat4 local = moved ? buildLocalTRS(translation, rotation, scale)
+                           : readMat4(skel.restLocalMatOffset + bone * 16u);
+        storeBoneRows(bone, local);
+    }
+    barrier();
+
+    // -----------------------------------------------------------------------
+    // Phase 2: hierarchy walk, level by level. Level 0 holds the roots, whose
+    // local matrix is their world matrix.
+    // -----------------------------------------------------------------------
+#if defined(GE_COMPAT_PROFILE)
+    // Loop bound as a direct scalar load chain (not through the cached
+    // struct): naga stages struct locals through module-scope privates,
+    // which tint's uniformity analysis refuses; scalar loads from readonly
+    // storage with uniform indices stay provably uniform.
+    uint hierarchyLevelCount =
+        instanceActive
+            ? skelHeaders.headers[animInstances.instances[instanceIdx].skeletonGPUIndex].levelCount
+            : 0u;
+    // Constant-bound level loop with masked bodies: naga stages the builtin
+    // workgroup id through a module-scope private, so every value derived
+    // from it — including the real level count — is non-uniform to tint's
+    // analysis, and a barrier inside a loop with that bound is rejected. The
+    // host routes skeletons deeper than kMaxHierarchyLevels to the CPU path;
+    // empty tail levels do no work.
+    for (uint level = 1u; level < kMaxHierarchyLevels; ++level) {
+        if (level < hierarchyLevelCount) {
+            composeLevel(skel.levelOffsetsOffset, skel.parentsOffset, level, boneCount, tid);
+        }
+        barrier();
+    }
+#else
+    for (uint level = 1u; level < skel.levelCount; ++level) {
+        composeLevel(skel.levelOffsetsOffset, skel.parentsOffset, level, boneCount, tid);
+        barrier();
+    }
+#endif
+
+    // -----------------------------------------------------------------------
+    // Phase 3: skin matrices, in skin order, into the atlas.
+    // -----------------------------------------------------------------------
+#if defined(GE_COMPAT_PROFILE)
+    uint jointCount = instanceActive ? skel.skinJointCount : 0u;
+#else
+    uint jointCount = skel.skinJointCount;
+#endif
+    mat4 meshRootInv = skel.meshRootInverse;
+    for (uint joint = tid; joint < jointCount; joint += 64u) {
+        uint bone = skelData.data[skel.jointBonesOffset + joint];
+        if (bone < boneCount) {
+            mat4 inverseBind = readMat4(skel.inverseBindOffset + joint * 16u);
+            mat4 skinMat = meshRootInv * loadBoneMatrix(bone) * inverseBind;
+            // Write packed (mat3x4) row form into the shared atlas. The
+            // bottom row of skinMat is implicitly (0,0,0,1) for affine
+            // transforms; ge_StoreBonePalette drops it (lossless 25%
+            // bandwidth saving). Layout matches BonePaletteLayout in C++.
+            ge_StoreBonePalette(inst.atlasOutputOffset, joint, skinMat);
+        }
+    }
+}

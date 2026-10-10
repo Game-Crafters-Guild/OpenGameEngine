@@ -1,0 +1,101 @@
+#version 450
+
+#include "Includes/compat_profile.glsl"
+
+layout(local_size_x = 8, local_size_y = 8, local_size_z = 1) in;
+
+layout(set = 0, binding = 0) uniform samplerCube uEnvMap;
+layout(set = 0, binding = 1, rgba16f) writeonly uniform image2DArray uIrradiance;
+
+const float PI = 3.14159265359;
+// Sample a PRE-BLURRED env mip for the (very wide) diffuse cosine lobe. The env
+// cube is box-downsampled into a full chain before this runs; reading a mid/high
+// mip spreads the thin high-frequency horizon glow across the lobe so the cosine
+// integral is smooth (no per-normal banding contours), letting the sample count
+// drop from 2048 to 128. For the default 256 capture, log2(256)-3 = mip 5: an
+// 8x8 face, already heavily blurred yet still carrying the sky's directional shape.
+const uint  SAMPLE_COUNT = 128u;
+layout(constant_id = 0) const uint kEnvCaptureSizeBits = 256u;
+
+float RadicalInverse_VdC(uint bits)
+{
+    bits = (bits << 16u) | (bits >> 16u);
+    bits = ((bits & 0x55555555u) << 1u) | ((bits & 0xAAAAAAAAu) >> 1u);
+    bits = ((bits & 0x33333333u) << 2u) | ((bits & 0xCCCCCCCCu) >> 2u);
+    bits = ((bits & 0x0F0F0F0Fu) << 4u) | ((bits & 0xF0F0F0F0u) >> 4u);
+    bits = ((bits & 0x00FF00FFu) << 8u) | ((bits & 0xFF00FF00u) >> 8u);
+    return float(bits) * 2.3283064365386963e-10; // / 0x100000000
+}
+
+vec2 Hammersley(uint i, uint N)
+{
+    return vec2(float(i) / float(N), RadicalInverse_VdC(i));
+}
+
+vec3 CubemapDirection(int face, vec2 uv)
+{
+    float u = uv.x * 2.0 - 1.0;
+    float v = (1.0 - uv.y) * 2.0 - 1.0; // flip Y to match sky cube rendering
+
+    if (face == 0) return normalize(vec3( 1.0,  v, -u)); // +X
+    if (face == 1) return normalize(vec3(-1.0,  v,  u)); // -X
+    if (face == 2) return normalize(vec3( u,  1.0, -v)); // +Y
+    if (face == 3) return normalize(vec3( u, -1.0,  v)); // -Y
+    if (face == 4) return normalize(vec3( u,  v,  1.0)); // +Z
+    return             normalize(vec3(-u,  v, -1.0));    // -Z
+}
+
+void BuildTangentBasis(vec3 N, out vec3 T, out vec3 B)
+{
+    vec3 up = (abs(N.y) < 0.999) ? vec3(0.0, 1.0, 0.0) : vec3(1.0, 0.0, 0.0);
+    T = normalize(cross(up, N));
+    B = cross(N, T);
+}
+
+// Radiance sanitize: NaN -> 0, clamp to the fp16 finite maximum so a diverged
+// or infinite source (e.g. a reflection-probe capture that fed its own env in a
+// closed room) cannot poison the bake into all-black. A no-op for real sky/HDRI
+// values, which are finite and far below the cap.
+vec3 GE_SanitizeRadiance(vec3 c)
+{
+    c = mix(vec3(0.0), c, equal(c, c));           // NaN != NaN -> 0
+    return clamp(c, vec3(0.0), vec3(65504.0));    // -Inf -> 0, +Inf -> fp16 max
+}
+
+void main()
+{
+    ivec3 size = GE_ARRAY_IMAGE_SIZE(uIrradiance, 6);
+    ivec3 gid  = ivec3(gl_GlobalInvocationID);
+    if (gid.x >= size.x || gid.y >= size.y || gid.z >= size.z) return;
+
+    vec2 uv   = (vec2(gid.xy) + vec2(0.5)) / vec2(size.xy);
+    int  face = gid.z;
+
+    vec3 N = CubemapDirection(face, uv);
+    vec3 T, B;
+    BuildTangentBasis(N, T, B);
+
+    vec3 irradiance = vec3(0.0);
+    float diffuseMip = max(0.0, log2(float(kEnvCaptureSizeBits)) - 3.0);
+
+    for (uint i = 0u; i < SAMPLE_COUNT; ++i)
+    {
+        vec2 Xi = Hammersley(i, SAMPLE_COUNT);
+        float phi      = 2.0 * PI * Xi.x;
+        float cosTheta = sqrt(1.0 - Xi.y);
+        float sinTheta = sqrt(max(0.0, 1.0 - cosTheta * cosTheta));
+
+        vec3 H = vec3(cos(phi) * sinTheta, sin(phi) * sinTheta, cosTheta);
+        vec3 L = normalize(H.x * T + H.y * B + H.z * N);
+
+        // Cosine-weighted sampling: the pdf (cosTheta / PI) cancels the Lambert cosine
+        // and the 1/PI, so the unbiased estimator of E/PI is the unweighted mean of the
+        // sampled radiance. Re-weighting by NdotL would apply the cosine twice and bias
+        // the irradiance toward the surface normal.
+        irradiance += GE_SanitizeRadiance(textureLod(uEnvMap, L, diffuseMip).rgb);
+    }
+
+    irradiance /= float(SAMPLE_COUNT);
+
+    imageStore(uIrradiance, gid, vec4(irradiance, 1.0));
+}

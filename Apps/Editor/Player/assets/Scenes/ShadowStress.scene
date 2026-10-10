@@ -1,0 +1,3635 @@
+[scene name="ShadowStress" version=1]
+
+[entity id="directional_light"]
+HierarchyOrder.order = 10
+Light.enabled = true
+Light.type = 0
+Light.color = (1, 1, 1)
+Light.intensity = 1e+05
+Light.castsLight = true
+Light.castsShadows = true
+Light.cascadeCount = 4
+Name.value = "Directional Light"
+Transform.position = (0, 20, 0)
+Transform.rotation = (0.51504, 0, 0, 0.85717)
+Transform.scale = (1, 1, 1)
+
+[entity id="sky_environment"]
+HierarchyOrder.order = 20
+SkyEnvironment.enabled = true
+Name.value = "Sky Environment"
+Transform.position = (0, 0, 0)
+Transform.rotation = (-0, -0, -0, 1)
+Transform.scale = (1, 1, 1)
+
+[entity id="main_camera"]
+HierarchyOrder.order = 30
+Camera.enabled = true
+Camera.perspective = true
+Camera.fovY = 60
+Camera.nearZ = 0.01
+Camera.farZ = 1000
+Camera.cullingMask = 4294967295
+Camera.postProcessMask = 4294967295
+Name.value = "Main Camera"
+Transform.position = (0, 40, -74)
+Transform.rotation = (0.25038, 0, 0, 0.96815)
+Transform.scale = (1, 1, 1)
+
+[entity id="ground"]
+HierarchyOrder.order = 110
+MeshRenderer.meshPrimitive = Plane
+MeshRenderer.material = [guid="9aae4628-ba39-4546-b3c7-55730e59d1ca"]
+MeshRenderer.enabled = true
+MeshRenderer.renderLayerMask = 1
+MeshRenderer.castShadows = true
+MeshRenderer.receiveShadows = true
+MeshRenderer.motionVectors = true
+Name.value = "Ground"
+Transform.position = (0, 0, 0)
+Transform.rotation = (-0, -0, -0, 1)
+Transform.scale = (140, 1, 140)
+
+[entity id="sphere_0_0"]
+HierarchyOrder.order = 120
+MeshRenderer.meshPrimitive = Sphere
+MeshRenderer.material = [guid="9aae4628-ba39-4546-b3c7-55730e59d1ca"]
+MeshRenderer.enabled = true
+MeshRenderer.renderLayerMask = 1
+MeshRenderer.castShadows = true
+MeshRenderer.receiveShadows = true
+MeshRenderer.motionVectors = true
+Name.value = "Sphere 0-0"
+Transform.position = (-22.1, 0.6, -16.1)
+Transform.rotation = (-0, -0, -0, 1)
+Transform.scale = (1, 1, 1)
+
+[entity id="sphere_0_1"]
+HierarchyOrder.order = 130
+MeshRenderer.meshPrimitive = Sphere
+MeshRenderer.material = [guid="9aae4628-ba39-4546-b3c7-55730e59d1ca"]
+MeshRenderer.enabled = true
+MeshRenderer.renderLayerMask = 1
+MeshRenderer.castShadows = true
+MeshRenderer.receiveShadows = true
+MeshRenderer.motionVectors = true
+Name.value = "Sphere 0-1"
+Transform.position = (-22.1, 3.15, -12.7)
+Transform.rotation = (-0, -0, -0, 1)
+Transform.scale = (1, 1, 1)
+
+[entity id="sphere_0_2"]
+HierarchyOrder.order = 140
+MeshRenderer.meshPrimitive = Sphere
+MeshRenderer.material = [guid="9aae4628-ba39-4546-b3c7-55730e59d1ca"]
+MeshRenderer.enabled = true
+MeshRenderer.renderLayerMask = 1
+MeshRenderer.castShadows = true
+MeshRenderer.receiveShadows = true
+MeshRenderer.motionVectors = true
+Name.value = "Sphere 0-2"
+Transform.position = (-22.1, 5.7, -9.3)
+Transform.rotation = (-0, -0, -0, 1)
+Transform.scale = (1, 1, 1)
+
+[entity id="sphere_0_3"]
+HierarchyOrder.order = 150
+MeshRenderer.meshPrimitive = Sphere
+MeshRenderer.material = [guid="9aae4628-ba39-4546-b3c7-55730e59d1ca"]
+MeshRenderer.enabled = true
+MeshRenderer.renderLayerMask = 1
+MeshRenderer.castShadows = true
+MeshRenderer.receiveShadows = true
+MeshRenderer.motionVectors = true
+Name.value = "Sphere 0-3"
+Transform.position = (-22.1, 2.3, -5.9)
+Transform.rotation = (-0, -0, -0, 1)
+Transform.scale = (1, 1, 1)
+
+[entity id="sphere_0_4"]
+HierarchyOrder.order = 160
+MeshRenderer.meshPrimitive = Sphere
+MeshRenderer.material = [guid="9aae4628-ba39-4546-b3c7-55730e59d1ca"]
+MeshRenderer.enabled = true
+MeshRenderer.renderLayerMask = 1
+MeshRenderer.castShadows = true
+MeshRenderer.receiveShadows = true
+MeshRenderer.motionVectors = true
+Name.value = "Sphere 0-4"
+Transform.position = (-22.1, 4.85, -2.5)
+Transform.rotation = (-0, -0, -0, 1)
+Transform.scale = (1, 1, 1)
+
+[entity id="sphere_0_5"]
+HierarchyOrder.order = 170
+MeshRenderer.meshPrimitive = Sphere
+MeshRenderer.material = [guid="9aae4628-ba39-4546-b3c7-55730e59d1ca"]
+MeshRenderer.enabled = true
+MeshRenderer.renderLayerMask = 1
+MeshRenderer.castShadows = true
+MeshRenderer.receiveShadows = true
+MeshRenderer.motionVectors = true
+Name.value = "Sphere 0-5"
+Transform.position = (-22.1, 1.45, 0.9)
+Transform.rotation = (-0, -0, -0, 1)
+Transform.scale = (1, 1, 1)
+
+[entity id="sphere_0_6"]
+HierarchyOrder.order = 180
+MeshRenderer.meshPrimitive = Sphere
+MeshRenderer.material = [guid="9aae4628-ba39-4546-b3c7-55730e59d1ca"]
+MeshRenderer.enabled = true
+MeshRenderer.renderLayerMask = 1
+MeshRenderer.castShadows = true
+MeshRenderer.receiveShadows = true
+MeshRenderer.motionVectors = true
+Name.value = "Sphere 0-6"
+Transform.position = (-22.1, 4, 4.3)
+Transform.rotation = (-0, -0, -0, 1)
+Transform.scale = (1, 1, 1)
+
+[entity id="sphere_0_7"]
+HierarchyOrder.order = 190
+MeshRenderer.meshPrimitive = Sphere
+MeshRenderer.material = [guid="9aae4628-ba39-4546-b3c7-55730e59d1ca"]
+MeshRenderer.enabled = true
+MeshRenderer.renderLayerMask = 1
+MeshRenderer.castShadows = true
+MeshRenderer.receiveShadows = true
+MeshRenderer.motionVectors = true
+Name.value = "Sphere 0-7"
+Transform.position = (-22.1, 0.6, 7.7)
+Transform.rotation = (-0, -0, -0, 1)
+Transform.scale = (1, 1, 1)
+
+[entity id="sphere_0_8"]
+HierarchyOrder.order = 200
+MeshRenderer.meshPrimitive = Sphere
+MeshRenderer.material = [guid="9aae4628-ba39-4546-b3c7-55730e59d1ca"]
+MeshRenderer.enabled = true
+MeshRenderer.renderLayerMask = 1
+MeshRenderer.castShadows = true
+MeshRenderer.receiveShadows = true
+MeshRenderer.motionVectors = true
+Name.value = "Sphere 0-8"
+Transform.position = (-22.1, 3.15, 11.1)
+Transform.rotation = (-0, -0, -0, 1)
+Transform.scale = (1, 1, 1)
+
+[entity id="sphere_0_9"]
+HierarchyOrder.order = 210
+MeshRenderer.meshPrimitive = Sphere
+MeshRenderer.material = [guid="9aae4628-ba39-4546-b3c7-55730e59d1ca"]
+MeshRenderer.enabled = true
+MeshRenderer.renderLayerMask = 1
+MeshRenderer.castShadows = true
+MeshRenderer.receiveShadows = true
+MeshRenderer.motionVectors = true
+Name.value = "Sphere 0-9"
+Transform.position = (-22.1, 5.7, 14.5)
+Transform.rotation = (-0, -0, -0, 1)
+Transform.scale = (1, 1, 1)
+
+[entity id="sphere_0_10"]
+HierarchyOrder.order = 220
+MeshRenderer.meshPrimitive = Sphere
+MeshRenderer.material = [guid="9aae4628-ba39-4546-b3c7-55730e59d1ca"]
+MeshRenderer.enabled = true
+MeshRenderer.renderLayerMask = 1
+MeshRenderer.castShadows = true
+MeshRenderer.receiveShadows = true
+MeshRenderer.motionVectors = true
+Name.value = "Sphere 0-10"
+Transform.position = (-22.1, 2.3, 17.9)
+Transform.rotation = (-0, -0, -0, 1)
+Transform.scale = (1, 1, 1)
+
+[entity id="sphere_0_11"]
+HierarchyOrder.order = 230
+MeshRenderer.meshPrimitive = Sphere
+MeshRenderer.material = [guid="9aae4628-ba39-4546-b3c7-55730e59d1ca"]
+MeshRenderer.enabled = true
+MeshRenderer.renderLayerMask = 1
+MeshRenderer.castShadows = true
+MeshRenderer.receiveShadows = true
+MeshRenderer.motionVectors = true
+Name.value = "Sphere 0-11"
+Transform.position = (-22.1, 4.85, 21.3)
+Transform.rotation = (-0, -0, -0, 1)
+Transform.scale = (1, 1, 1)
+
+[entity id="sphere_0_12"]
+HierarchyOrder.order = 240
+MeshRenderer.meshPrimitive = Sphere
+MeshRenderer.material = [guid="9aae4628-ba39-4546-b3c7-55730e59d1ca"]
+MeshRenderer.enabled = true
+MeshRenderer.renderLayerMask = 1
+MeshRenderer.castShadows = true
+MeshRenderer.receiveShadows = true
+MeshRenderer.motionVectors = true
+Name.value = "Sphere 0-12"
+Transform.position = (-22.1, 1.45, 24.7)
+Transform.rotation = (-0, -0, -0, 1)
+Transform.scale = (1, 1, 1)
+
+[entity id="sphere_0_13"]
+HierarchyOrder.order = 250
+MeshRenderer.meshPrimitive = Sphere
+MeshRenderer.material = [guid="9aae4628-ba39-4546-b3c7-55730e59d1ca"]
+MeshRenderer.enabled = true
+MeshRenderer.renderLayerMask = 1
+MeshRenderer.castShadows = true
+MeshRenderer.receiveShadows = true
+MeshRenderer.motionVectors = true
+Name.value = "Sphere 0-13"
+Transform.position = (-22.1, 4, 28.1)
+Transform.rotation = (-0, -0, -0, 1)
+Transform.scale = (1, 1, 1)
+
+[entity id="sphere_1_0"]
+HierarchyOrder.order = 260
+MeshRenderer.meshPrimitive = Sphere
+MeshRenderer.material = [guid="9aae4628-ba39-4546-b3c7-55730e59d1ca"]
+MeshRenderer.enabled = true
+MeshRenderer.renderLayerMask = 1
+MeshRenderer.castShadows = true
+MeshRenderer.receiveShadows = true
+MeshRenderer.motionVectors = true
+Name.value = "Sphere 1-0"
+Transform.position = (-18.7, 4.85, -16.1)
+Transform.rotation = (-0, -0, -0, 1)
+Transform.scale = (1, 1, 1)
+
+[entity id="sphere_1_1"]
+HierarchyOrder.order = 270
+MeshRenderer.meshPrimitive = Sphere
+MeshRenderer.material = [guid="9aae4628-ba39-4546-b3c7-55730e59d1ca"]
+MeshRenderer.enabled = true
+MeshRenderer.renderLayerMask = 1
+MeshRenderer.castShadows = true
+MeshRenderer.receiveShadows = true
+MeshRenderer.motionVectors = true
+Name.value = "Sphere 1-1"
+Transform.position = (-18.7, 1.45, -12.7)
+Transform.rotation = (-0, -0, -0, 1)
+Transform.scale = (1, 1, 1)
+
+[entity id="sphere_1_2"]
+HierarchyOrder.order = 280
+MeshRenderer.meshPrimitive = Sphere
+MeshRenderer.material = [guid="9aae4628-ba39-4546-b3c7-55730e59d1ca"]
+MeshRenderer.enabled = true
+MeshRenderer.renderLayerMask = 1
+MeshRenderer.castShadows = true
+MeshRenderer.receiveShadows = true
+MeshRenderer.motionVectors = true
+Name.value = "Sphere 1-2"
+Transform.position = (-18.7, 4, -9.3)
+Transform.rotation = (-0, -0, -0, 1)
+Transform.scale = (1, 1, 1)
+
+[entity id="sphere_1_3"]
+HierarchyOrder.order = 290
+MeshRenderer.meshPrimitive = Sphere
+MeshRenderer.material = [guid="9aae4628-ba39-4546-b3c7-55730e59d1ca"]
+MeshRenderer.enabled = true
+MeshRenderer.renderLayerMask = 1
+MeshRenderer.castShadows = true
+MeshRenderer.receiveShadows = true
+MeshRenderer.motionVectors = true
+Name.value = "Sphere 1-3"
+Transform.position = (-18.7, 0.6, -5.9)
+Transform.rotation = (-0, -0, -0, 1)
+Transform.scale = (1, 1, 1)
+
+[entity id="sphere_1_4"]
+HierarchyOrder.order = 300
+MeshRenderer.meshPrimitive = Sphere
+MeshRenderer.material = [guid="9aae4628-ba39-4546-b3c7-55730e59d1ca"]
+MeshRenderer.enabled = true
+MeshRenderer.renderLayerMask = 1
+MeshRenderer.castShadows = true
+MeshRenderer.receiveShadows = true
+MeshRenderer.motionVectors = true
+Name.value = "Sphere 1-4"
+Transform.position = (-18.7, 3.15, -2.5)
+Transform.rotation = (-0, -0, -0, 1)
+Transform.scale = (1, 1, 1)
+
+[entity id="sphere_1_5"]
+HierarchyOrder.order = 310
+MeshRenderer.meshPrimitive = Sphere
+MeshRenderer.material = [guid="9aae4628-ba39-4546-b3c7-55730e59d1ca"]
+MeshRenderer.enabled = true
+MeshRenderer.renderLayerMask = 1
+MeshRenderer.castShadows = true
+MeshRenderer.receiveShadows = true
+MeshRenderer.motionVectors = true
+Name.value = "Sphere 1-5"
+Transform.position = (-18.7, 5.7, 0.9)
+Transform.rotation = (-0, -0, -0, 1)
+Transform.scale = (1, 1, 1)
+
+[entity id="sphere_1_6"]
+HierarchyOrder.order = 320
+MeshRenderer.meshPrimitive = Sphere
+MeshRenderer.material = [guid="9aae4628-ba39-4546-b3c7-55730e59d1ca"]
+MeshRenderer.enabled = true
+MeshRenderer.renderLayerMask = 1
+MeshRenderer.castShadows = true
+MeshRenderer.receiveShadows = true
+MeshRenderer.motionVectors = true
+Name.value = "Sphere 1-6"
+Transform.position = (-18.7, 2.3, 4.3)
+Transform.rotation = (-0, -0, -0, 1)
+Transform.scale = (1, 1, 1)
+
+[entity id="sphere_1_7"]
+HierarchyOrder.order = 330
+MeshRenderer.meshPrimitive = Sphere
+MeshRenderer.material = [guid="9aae4628-ba39-4546-b3c7-55730e59d1ca"]
+MeshRenderer.enabled = true
+MeshRenderer.renderLayerMask = 1
+MeshRenderer.castShadows = true
+MeshRenderer.receiveShadows = true
+MeshRenderer.motionVectors = true
+Name.value = "Sphere 1-7"
+Transform.position = (-18.7, 4.85, 7.7)
+Transform.rotation = (-0, -0, -0, 1)
+Transform.scale = (1, 1, 1)
+
+[entity id="sphere_1_8"]
+HierarchyOrder.order = 340
+MeshRenderer.meshPrimitive = Sphere
+MeshRenderer.material = [guid="9aae4628-ba39-4546-b3c7-55730e59d1ca"]
+MeshRenderer.enabled = true
+MeshRenderer.renderLayerMask = 1
+MeshRenderer.castShadows = true
+MeshRenderer.receiveShadows = true
+MeshRenderer.motionVectors = true
+Name.value = "Sphere 1-8"
+Transform.position = (-18.7, 1.45, 11.1)
+Transform.rotation = (-0, -0, -0, 1)
+Transform.scale = (1, 1, 1)
+
+[entity id="sphere_1_9"]
+HierarchyOrder.order = 350
+MeshRenderer.meshPrimitive = Sphere
+MeshRenderer.material = [guid="9aae4628-ba39-4546-b3c7-55730e59d1ca"]
+MeshRenderer.enabled = true
+MeshRenderer.renderLayerMask = 1
+MeshRenderer.castShadows = true
+MeshRenderer.receiveShadows = true
+MeshRenderer.motionVectors = true
+Name.value = "Sphere 1-9"
+Transform.position = (-18.7, 4, 14.5)
+Transform.rotation = (-0, -0, -0, 1)
+Transform.scale = (1, 1, 1)
+
+[entity id="sphere_1_10"]
+HierarchyOrder.order = 360
+MeshRenderer.meshPrimitive = Sphere
+MeshRenderer.material = [guid="9aae4628-ba39-4546-b3c7-55730e59d1ca"]
+MeshRenderer.enabled = true
+MeshRenderer.renderLayerMask = 1
+MeshRenderer.castShadows = true
+MeshRenderer.receiveShadows = true
+MeshRenderer.motionVectors = true
+Name.value = "Sphere 1-10"
+Transform.position = (-18.7, 0.6, 17.9)
+Transform.rotation = (-0, -0, -0, 1)
+Transform.scale = (1, 1, 1)
+
+[entity id="sphere_1_11"]
+HierarchyOrder.order = 370
+MeshRenderer.meshPrimitive = Sphere
+MeshRenderer.material = [guid="9aae4628-ba39-4546-b3c7-55730e59d1ca"]
+MeshRenderer.enabled = true
+MeshRenderer.renderLayerMask = 1
+MeshRenderer.castShadows = true
+MeshRenderer.receiveShadows = true
+MeshRenderer.motionVectors = true
+Name.value = "Sphere 1-11"
+Transform.position = (-18.7, 3.15, 21.3)
+Transform.rotation = (-0, -0, -0, 1)
+Transform.scale = (1, 1, 1)
+
+[entity id="sphere_1_12"]
+HierarchyOrder.order = 380
+MeshRenderer.meshPrimitive = Sphere
+MeshRenderer.material = [guid="9aae4628-ba39-4546-b3c7-55730e59d1ca"]
+MeshRenderer.enabled = true
+MeshRenderer.renderLayerMask = 1
+MeshRenderer.castShadows = true
+MeshRenderer.receiveShadows = true
+MeshRenderer.motionVectors = true
+Name.value = "Sphere 1-12"
+Transform.position = (-18.7, 5.7, 24.7)
+Transform.rotation = (-0, -0, -0, 1)
+Transform.scale = (1, 1, 1)
+
+[entity id="sphere_1_13"]
+HierarchyOrder.order = 390
+MeshRenderer.meshPrimitive = Sphere
+MeshRenderer.material = [guid="9aae4628-ba39-4546-b3c7-55730e59d1ca"]
+MeshRenderer.enabled = true
+MeshRenderer.renderLayerMask = 1
+MeshRenderer.castShadows = true
+MeshRenderer.receiveShadows = true
+MeshRenderer.motionVectors = true
+Name.value = "Sphere 1-13"
+Transform.position = (-18.7, 2.3, 28.1)
+Transform.rotation = (-0, -0, -0, 1)
+Transform.scale = (1, 1, 1)
+
+[entity id="sphere_2_0"]
+HierarchyOrder.order = 400
+MeshRenderer.meshPrimitive = Sphere
+MeshRenderer.material = [guid="9aae4628-ba39-4546-b3c7-55730e59d1ca"]
+MeshRenderer.enabled = true
+MeshRenderer.renderLayerMask = 1
+MeshRenderer.castShadows = true
+MeshRenderer.receiveShadows = true
+MeshRenderer.motionVectors = true
+Name.value = "Sphere 2-0"
+Transform.position = (-15.3, 3.15, -16.1)
+Transform.rotation = (-0, -0, -0, 1)
+Transform.scale = (1, 1, 1)
+
+[entity id="sphere_2_1"]
+HierarchyOrder.order = 410
+MeshRenderer.meshPrimitive = Sphere
+MeshRenderer.material = [guid="9aae4628-ba39-4546-b3c7-55730e59d1ca"]
+MeshRenderer.enabled = true
+MeshRenderer.renderLayerMask = 1
+MeshRenderer.castShadows = true
+MeshRenderer.receiveShadows = true
+MeshRenderer.motionVectors = true
+Name.value = "Sphere 2-1"
+Transform.position = (-15.3, 5.7, -12.7)
+Transform.rotation = (-0, -0, -0, 1)
+Transform.scale = (1, 1, 1)
+
+[entity id="sphere_2_2"]
+HierarchyOrder.order = 420
+MeshRenderer.meshPrimitive = Sphere
+MeshRenderer.material = [guid="9aae4628-ba39-4546-b3c7-55730e59d1ca"]
+MeshRenderer.enabled = true
+MeshRenderer.renderLayerMask = 1
+MeshRenderer.castShadows = true
+MeshRenderer.receiveShadows = true
+MeshRenderer.motionVectors = true
+Name.value = "Sphere 2-2"
+Transform.position = (-15.3, 2.3, -9.3)
+Transform.rotation = (-0, -0, -0, 1)
+Transform.scale = (1, 1, 1)
+
+[entity id="sphere_2_3"]
+HierarchyOrder.order = 430
+MeshRenderer.meshPrimitive = Sphere
+MeshRenderer.material = [guid="9aae4628-ba39-4546-b3c7-55730e59d1ca"]
+MeshRenderer.enabled = true
+MeshRenderer.renderLayerMask = 1
+MeshRenderer.castShadows = true
+MeshRenderer.receiveShadows = true
+MeshRenderer.motionVectors = true
+Name.value = "Sphere 2-3"
+Transform.position = (-15.3, 4.85, -5.9)
+Transform.rotation = (-0, -0, -0, 1)
+Transform.scale = (1, 1, 1)
+
+[entity id="sphere_2_4"]
+HierarchyOrder.order = 440
+MeshRenderer.meshPrimitive = Sphere
+MeshRenderer.material = [guid="9aae4628-ba39-4546-b3c7-55730e59d1ca"]
+MeshRenderer.enabled = true
+MeshRenderer.renderLayerMask = 1
+MeshRenderer.castShadows = true
+MeshRenderer.receiveShadows = true
+MeshRenderer.motionVectors = true
+Name.value = "Sphere 2-4"
+Transform.position = (-15.3, 1.45, -2.5)
+Transform.rotation = (-0, -0, -0, 1)
+Transform.scale = (1, 1, 1)
+
+[entity id="sphere_2_5"]
+HierarchyOrder.order = 450
+MeshRenderer.meshPrimitive = Sphere
+MeshRenderer.material = [guid="9aae4628-ba39-4546-b3c7-55730e59d1ca"]
+MeshRenderer.enabled = true
+MeshRenderer.renderLayerMask = 1
+MeshRenderer.castShadows = true
+MeshRenderer.receiveShadows = true
+MeshRenderer.motionVectors = true
+Name.value = "Sphere 2-5"
+Transform.position = (-15.3, 4, 0.9)
+Transform.rotation = (-0, -0, -0, 1)
+Transform.scale = (1, 1, 1)
+
+[entity id="sphere_2_6"]
+HierarchyOrder.order = 460
+MeshRenderer.meshPrimitive = Sphere
+MeshRenderer.material = [guid="9aae4628-ba39-4546-b3c7-55730e59d1ca"]
+MeshRenderer.enabled = true
+MeshRenderer.renderLayerMask = 1
+MeshRenderer.castShadows = true
+MeshRenderer.receiveShadows = true
+MeshRenderer.motionVectors = true
+Name.value = "Sphere 2-6"
+Transform.position = (-15.3, 0.6, 4.3)
+Transform.rotation = (-0, -0, -0, 1)
+Transform.scale = (1, 1, 1)
+
+[entity id="sphere_2_7"]
+HierarchyOrder.order = 470
+MeshRenderer.meshPrimitive = Sphere
+MeshRenderer.material = [guid="9aae4628-ba39-4546-b3c7-55730e59d1ca"]
+MeshRenderer.enabled = true
+MeshRenderer.renderLayerMask = 1
+MeshRenderer.castShadows = true
+MeshRenderer.receiveShadows = true
+MeshRenderer.motionVectors = true
+Name.value = "Sphere 2-7"
+Transform.position = (-15.3, 3.15, 7.7)
+Transform.rotation = (-0, -0, -0, 1)
+Transform.scale = (1, 1, 1)
+
+[entity id="sphere_2_8"]
+HierarchyOrder.order = 480
+MeshRenderer.meshPrimitive = Sphere
+MeshRenderer.material = [guid="9aae4628-ba39-4546-b3c7-55730e59d1ca"]
+MeshRenderer.enabled = true
+MeshRenderer.renderLayerMask = 1
+MeshRenderer.castShadows = true
+MeshRenderer.receiveShadows = true
+MeshRenderer.motionVectors = true
+Name.value = "Sphere 2-8"
+Transform.position = (-15.3, 5.7, 11.1)
+Transform.rotation = (-0, -0, -0, 1)
+Transform.scale = (1, 1, 1)
+
+[entity id="sphere_2_9"]
+HierarchyOrder.order = 490
+MeshRenderer.meshPrimitive = Sphere
+MeshRenderer.material = [guid="9aae4628-ba39-4546-b3c7-55730e59d1ca"]
+MeshRenderer.enabled = true
+MeshRenderer.renderLayerMask = 1
+MeshRenderer.castShadows = true
+MeshRenderer.receiveShadows = true
+MeshRenderer.motionVectors = true
+Name.value = "Sphere 2-9"
+Transform.position = (-15.3, 2.3, 14.5)
+Transform.rotation = (-0, -0, -0, 1)
+Transform.scale = (1, 1, 1)
+
+[entity id="sphere_2_10"]
+HierarchyOrder.order = 500
+MeshRenderer.meshPrimitive = Sphere
+MeshRenderer.material = [guid="9aae4628-ba39-4546-b3c7-55730e59d1ca"]
+MeshRenderer.enabled = true
+MeshRenderer.renderLayerMask = 1
+MeshRenderer.castShadows = true
+MeshRenderer.receiveShadows = true
+MeshRenderer.motionVectors = true
+Name.value = "Sphere 2-10"
+Transform.position = (-15.3, 4.85, 17.9)
+Transform.rotation = (-0, -0, -0, 1)
+Transform.scale = (1, 1, 1)
+
+[entity id="sphere_2_11"]
+HierarchyOrder.order = 510
+MeshRenderer.meshPrimitive = Sphere
+MeshRenderer.material = [guid="9aae4628-ba39-4546-b3c7-55730e59d1ca"]
+MeshRenderer.enabled = true
+MeshRenderer.renderLayerMask = 1
+MeshRenderer.castShadows = true
+MeshRenderer.receiveShadows = true
+MeshRenderer.motionVectors = true
+Name.value = "Sphere 2-11"
+Transform.position = (-15.3, 1.45, 21.3)
+Transform.rotation = (-0, -0, -0, 1)
+Transform.scale = (1, 1, 1)
+
+[entity id="sphere_2_12"]
+HierarchyOrder.order = 520
+MeshRenderer.meshPrimitive = Sphere
+MeshRenderer.material = [guid="9aae4628-ba39-4546-b3c7-55730e59d1ca"]
+MeshRenderer.enabled = true
+MeshRenderer.renderLayerMask = 1
+MeshRenderer.castShadows = true
+MeshRenderer.receiveShadows = true
+MeshRenderer.motionVectors = true
+Name.value = "Sphere 2-12"
+Transform.position = (-15.3, 4, 24.7)
+Transform.rotation = (-0, -0, -0, 1)
+Transform.scale = (1, 1, 1)
+
+[entity id="sphere_2_13"]
+HierarchyOrder.order = 530
+MeshRenderer.meshPrimitive = Sphere
+MeshRenderer.material = [guid="9aae4628-ba39-4546-b3c7-55730e59d1ca"]
+MeshRenderer.enabled = true
+MeshRenderer.renderLayerMask = 1
+MeshRenderer.castShadows = true
+MeshRenderer.receiveShadows = true
+MeshRenderer.motionVectors = true
+Name.value = "Sphere 2-13"
+Transform.position = (-15.3, 0.6, 28.1)
+Transform.rotation = (-0, -0, -0, 1)
+Transform.scale = (1, 1, 1)
+
+[entity id="sphere_3_0"]
+HierarchyOrder.order = 540
+MeshRenderer.meshPrimitive = Sphere
+MeshRenderer.material = [guid="9aae4628-ba39-4546-b3c7-55730e59d1ca"]
+MeshRenderer.enabled = true
+MeshRenderer.renderLayerMask = 1
+MeshRenderer.castShadows = true
+MeshRenderer.receiveShadows = true
+MeshRenderer.motionVectors = true
+Name.value = "Sphere 3-0"
+Transform.position = (-11.9, 1.45, -16.1)
+Transform.rotation = (-0, -0, -0, 1)
+Transform.scale = (1, 1, 1)
+
+[entity id="sphere_3_1"]
+HierarchyOrder.order = 550
+MeshRenderer.meshPrimitive = Sphere
+MeshRenderer.material = [guid="9aae4628-ba39-4546-b3c7-55730e59d1ca"]
+MeshRenderer.enabled = true
+MeshRenderer.renderLayerMask = 1
+MeshRenderer.castShadows = true
+MeshRenderer.receiveShadows = true
+MeshRenderer.motionVectors = true
+Name.value = "Sphere 3-1"
+Transform.position = (-11.9, 4, -12.7)
+Transform.rotation = (-0, -0, -0, 1)
+Transform.scale = (1, 1, 1)
+
+[entity id="sphere_3_2"]
+HierarchyOrder.order = 560
+MeshRenderer.meshPrimitive = Sphere
+MeshRenderer.material = [guid="9aae4628-ba39-4546-b3c7-55730e59d1ca"]
+MeshRenderer.enabled = true
+MeshRenderer.renderLayerMask = 1
+MeshRenderer.castShadows = true
+MeshRenderer.receiveShadows = true
+MeshRenderer.motionVectors = true
+Name.value = "Sphere 3-2"
+Transform.position = (-11.9, 0.6, -9.3)
+Transform.rotation = (-0, -0, -0, 1)
+Transform.scale = (1, 1, 1)
+
+[entity id="sphere_3_3"]
+HierarchyOrder.order = 570
+MeshRenderer.meshPrimitive = Sphere
+MeshRenderer.material = [guid="9aae4628-ba39-4546-b3c7-55730e59d1ca"]
+MeshRenderer.enabled = true
+MeshRenderer.renderLayerMask = 1
+MeshRenderer.castShadows = true
+MeshRenderer.receiveShadows = true
+MeshRenderer.motionVectors = true
+Name.value = "Sphere 3-3"
+Transform.position = (-11.9, 3.15, -5.9)
+Transform.rotation = (-0, -0, -0, 1)
+Transform.scale = (1, 1, 1)
+
+[entity id="sphere_3_4"]
+HierarchyOrder.order = 580
+MeshRenderer.meshPrimitive = Sphere
+MeshRenderer.material = [guid="9aae4628-ba39-4546-b3c7-55730e59d1ca"]
+MeshRenderer.enabled = true
+MeshRenderer.renderLayerMask = 1
+MeshRenderer.castShadows = true
+MeshRenderer.receiveShadows = true
+MeshRenderer.motionVectors = true
+Name.value = "Sphere 3-4"
+Transform.position = (-11.9, 5.7, -2.5)
+Transform.rotation = (-0, -0, -0, 1)
+Transform.scale = (1, 1, 1)
+
+[entity id="sphere_3_5"]
+HierarchyOrder.order = 590
+MeshRenderer.meshPrimitive = Sphere
+MeshRenderer.material = [guid="9aae4628-ba39-4546-b3c7-55730e59d1ca"]
+MeshRenderer.enabled = true
+MeshRenderer.renderLayerMask = 1
+MeshRenderer.castShadows = true
+MeshRenderer.receiveShadows = true
+MeshRenderer.motionVectors = true
+Name.value = "Sphere 3-5"
+Transform.position = (-11.9, 2.3, 0.9)
+Transform.rotation = (-0, -0, -0, 1)
+Transform.scale = (1, 1, 1)
+
+[entity id="sphere_3_6"]
+HierarchyOrder.order = 600
+MeshRenderer.meshPrimitive = Sphere
+MeshRenderer.material = [guid="9aae4628-ba39-4546-b3c7-55730e59d1ca"]
+MeshRenderer.enabled = true
+MeshRenderer.renderLayerMask = 1
+MeshRenderer.castShadows = true
+MeshRenderer.receiveShadows = true
+MeshRenderer.motionVectors = true
+Name.value = "Sphere 3-6"
+Transform.position = (-11.9, 4.85, 4.3)
+Transform.rotation = (-0, -0, -0, 1)
+Transform.scale = (1, 1, 1)
+
+[entity id="sphere_3_7"]
+HierarchyOrder.order = 610
+MeshRenderer.meshPrimitive = Sphere
+MeshRenderer.material = [guid="9aae4628-ba39-4546-b3c7-55730e59d1ca"]
+MeshRenderer.enabled = true
+MeshRenderer.renderLayerMask = 1
+MeshRenderer.castShadows = true
+MeshRenderer.receiveShadows = true
+MeshRenderer.motionVectors = true
+Name.value = "Sphere 3-7"
+Transform.position = (-11.9, 1.45, 7.7)
+Transform.rotation = (-0, -0, -0, 1)
+Transform.scale = (1, 1, 1)
+
+[entity id="sphere_3_8"]
+HierarchyOrder.order = 620
+MeshRenderer.meshPrimitive = Sphere
+MeshRenderer.material = [guid="9aae4628-ba39-4546-b3c7-55730e59d1ca"]
+MeshRenderer.enabled = true
+MeshRenderer.renderLayerMask = 1
+MeshRenderer.castShadows = true
+MeshRenderer.receiveShadows = true
+MeshRenderer.motionVectors = true
+Name.value = "Sphere 3-8"
+Transform.position = (-11.9, 4, 11.1)
+Transform.rotation = (-0, -0, -0, 1)
+Transform.scale = (1, 1, 1)
+
+[entity id="sphere_3_9"]
+HierarchyOrder.order = 630
+MeshRenderer.meshPrimitive = Sphere
+MeshRenderer.material = [guid="9aae4628-ba39-4546-b3c7-55730e59d1ca"]
+MeshRenderer.enabled = true
+MeshRenderer.renderLayerMask = 1
+MeshRenderer.castShadows = true
+MeshRenderer.receiveShadows = true
+MeshRenderer.motionVectors = true
+Name.value = "Sphere 3-9"
+Transform.position = (-11.9, 0.6, 14.5)
+Transform.rotation = (-0, -0, -0, 1)
+Transform.scale = (1, 1, 1)
+
+[entity id="sphere_3_10"]
+HierarchyOrder.order = 640
+MeshRenderer.meshPrimitive = Sphere
+MeshRenderer.material = [guid="9aae4628-ba39-4546-b3c7-55730e59d1ca"]
+MeshRenderer.enabled = true
+MeshRenderer.renderLayerMask = 1
+MeshRenderer.castShadows = true
+MeshRenderer.receiveShadows = true
+MeshRenderer.motionVectors = true
+Name.value = "Sphere 3-10"
+Transform.position = (-11.9, 3.15, 17.9)
+Transform.rotation = (-0, -0, -0, 1)
+Transform.scale = (1, 1, 1)
+
+[entity id="sphere_3_11"]
+HierarchyOrder.order = 650
+MeshRenderer.meshPrimitive = Sphere
+MeshRenderer.material = [guid="9aae4628-ba39-4546-b3c7-55730e59d1ca"]
+MeshRenderer.enabled = true
+MeshRenderer.renderLayerMask = 1
+MeshRenderer.castShadows = true
+MeshRenderer.receiveShadows = true
+MeshRenderer.motionVectors = true
+Name.value = "Sphere 3-11"
+Transform.position = (-11.9, 5.7, 21.3)
+Transform.rotation = (-0, -0, -0, 1)
+Transform.scale = (1, 1, 1)
+
+[entity id="sphere_3_12"]
+HierarchyOrder.order = 660
+MeshRenderer.meshPrimitive = Sphere
+MeshRenderer.material = [guid="9aae4628-ba39-4546-b3c7-55730e59d1ca"]
+MeshRenderer.enabled = true
+MeshRenderer.renderLayerMask = 1
+MeshRenderer.castShadows = true
+MeshRenderer.receiveShadows = true
+MeshRenderer.motionVectors = true
+Name.value = "Sphere 3-12"
+Transform.position = (-11.9, 2.3, 24.7)
+Transform.rotation = (-0, -0, -0, 1)
+Transform.scale = (1, 1, 1)
+
+[entity id="sphere_3_13"]
+HierarchyOrder.order = 670
+MeshRenderer.meshPrimitive = Sphere
+MeshRenderer.material = [guid="9aae4628-ba39-4546-b3c7-55730e59d1ca"]
+MeshRenderer.enabled = true
+MeshRenderer.renderLayerMask = 1
+MeshRenderer.castShadows = true
+MeshRenderer.receiveShadows = true
+MeshRenderer.motionVectors = true
+Name.value = "Sphere 3-13"
+Transform.position = (-11.9, 4.85, 28.1)
+Transform.rotation = (-0, -0, -0, 1)
+Transform.scale = (1, 1, 1)
+
+[entity id="sphere_4_0"]
+HierarchyOrder.order = 680
+MeshRenderer.meshPrimitive = Sphere
+MeshRenderer.material = [guid="9aae4628-ba39-4546-b3c7-55730e59d1ca"]
+MeshRenderer.enabled = true
+MeshRenderer.renderLayerMask = 1
+MeshRenderer.castShadows = true
+MeshRenderer.receiveShadows = true
+MeshRenderer.motionVectors = true
+Name.value = "Sphere 4-0"
+Transform.position = (-8.5, 5.7, -16.1)
+Transform.rotation = (-0, -0, -0, 1)
+Transform.scale = (1, 1, 1)
+
+[entity id="sphere_4_1"]
+HierarchyOrder.order = 690
+MeshRenderer.meshPrimitive = Sphere
+MeshRenderer.material = [guid="9aae4628-ba39-4546-b3c7-55730e59d1ca"]
+MeshRenderer.enabled = true
+MeshRenderer.renderLayerMask = 1
+MeshRenderer.castShadows = true
+MeshRenderer.receiveShadows = true
+MeshRenderer.motionVectors = true
+Name.value = "Sphere 4-1"
+Transform.position = (-8.5, 2.3, -12.7)
+Transform.rotation = (-0, -0, -0, 1)
+Transform.scale = (1, 1, 1)
+
+[entity id="sphere_4_2"]
+HierarchyOrder.order = 700
+MeshRenderer.meshPrimitive = Sphere
+MeshRenderer.material = [guid="9aae4628-ba39-4546-b3c7-55730e59d1ca"]
+MeshRenderer.enabled = true
+MeshRenderer.renderLayerMask = 1
+MeshRenderer.castShadows = true
+MeshRenderer.receiveShadows = true
+MeshRenderer.motionVectors = true
+Name.value = "Sphere 4-2"
+Transform.position = (-8.5, 4.85, -9.3)
+Transform.rotation = (-0, -0, -0, 1)
+Transform.scale = (1, 1, 1)
+
+[entity id="sphere_4_3"]
+HierarchyOrder.order = 710
+MeshRenderer.meshPrimitive = Sphere
+MeshRenderer.material = [guid="9aae4628-ba39-4546-b3c7-55730e59d1ca"]
+MeshRenderer.enabled = true
+MeshRenderer.renderLayerMask = 1
+MeshRenderer.castShadows = true
+MeshRenderer.receiveShadows = true
+MeshRenderer.motionVectors = true
+Name.value = "Sphere 4-3"
+Transform.position = (-8.5, 1.45, -5.9)
+Transform.rotation = (-0, -0, -0, 1)
+Transform.scale = (1, 1, 1)
+
+[entity id="sphere_4_4"]
+HierarchyOrder.order = 720
+MeshRenderer.meshPrimitive = Sphere
+MeshRenderer.material = [guid="9aae4628-ba39-4546-b3c7-55730e59d1ca"]
+MeshRenderer.enabled = true
+MeshRenderer.renderLayerMask = 1
+MeshRenderer.castShadows = true
+MeshRenderer.receiveShadows = true
+MeshRenderer.motionVectors = true
+Name.value = "Sphere 4-4"
+Transform.position = (-8.5, 4, -2.5)
+Transform.rotation = (-0, -0, -0, 1)
+Transform.scale = (1, 1, 1)
+
+[entity id="sphere_4_5"]
+HierarchyOrder.order = 730
+MeshRenderer.meshPrimitive = Sphere
+MeshRenderer.material = [guid="9aae4628-ba39-4546-b3c7-55730e59d1ca"]
+MeshRenderer.enabled = true
+MeshRenderer.renderLayerMask = 1
+MeshRenderer.castShadows = true
+MeshRenderer.receiveShadows = true
+MeshRenderer.motionVectors = true
+Name.value = "Sphere 4-5"
+Transform.position = (-8.5, 0.6, 0.9)
+Transform.rotation = (-0, -0, -0, 1)
+Transform.scale = (1, 1, 1)
+
+[entity id="sphere_4_6"]
+HierarchyOrder.order = 740
+MeshRenderer.meshPrimitive = Sphere
+MeshRenderer.material = [guid="9aae4628-ba39-4546-b3c7-55730e59d1ca"]
+MeshRenderer.enabled = true
+MeshRenderer.renderLayerMask = 1
+MeshRenderer.castShadows = true
+MeshRenderer.receiveShadows = true
+MeshRenderer.motionVectors = true
+Name.value = "Sphere 4-6"
+Transform.position = (-8.5, 3.15, 4.3)
+Transform.rotation = (-0, -0, -0, 1)
+Transform.scale = (1, 1, 1)
+
+[entity id="sphere_4_7"]
+HierarchyOrder.order = 750
+MeshRenderer.meshPrimitive = Sphere
+MeshRenderer.material = [guid="9aae4628-ba39-4546-b3c7-55730e59d1ca"]
+MeshRenderer.enabled = true
+MeshRenderer.renderLayerMask = 1
+MeshRenderer.castShadows = true
+MeshRenderer.receiveShadows = true
+MeshRenderer.motionVectors = true
+Name.value = "Sphere 4-7"
+Transform.position = (-8.5, 5.7, 7.7)
+Transform.rotation = (-0, -0, -0, 1)
+Transform.scale = (1, 1, 1)
+
+[entity id="sphere_4_8"]
+HierarchyOrder.order = 760
+MeshRenderer.meshPrimitive = Sphere
+MeshRenderer.material = [guid="9aae4628-ba39-4546-b3c7-55730e59d1ca"]
+MeshRenderer.enabled = true
+MeshRenderer.renderLayerMask = 1
+MeshRenderer.castShadows = true
+MeshRenderer.receiveShadows = true
+MeshRenderer.motionVectors = true
+Name.value = "Sphere 4-8"
+Transform.position = (-8.5, 2.3, 11.1)
+Transform.rotation = (-0, -0, -0, 1)
+Transform.scale = (1, 1, 1)
+
+[entity id="sphere_4_9"]
+HierarchyOrder.order = 770
+MeshRenderer.meshPrimitive = Sphere
+MeshRenderer.material = [guid="9aae4628-ba39-4546-b3c7-55730e59d1ca"]
+MeshRenderer.enabled = true
+MeshRenderer.renderLayerMask = 1
+MeshRenderer.castShadows = true
+MeshRenderer.receiveShadows = true
+MeshRenderer.motionVectors = true
+Name.value = "Sphere 4-9"
+Transform.position = (-8.5, 4.85, 14.5)
+Transform.rotation = (-0, -0, -0, 1)
+Transform.scale = (1, 1, 1)
+
+[entity id="sphere_4_10"]
+HierarchyOrder.order = 780
+MeshRenderer.meshPrimitive = Sphere
+MeshRenderer.material = [guid="9aae4628-ba39-4546-b3c7-55730e59d1ca"]
+MeshRenderer.enabled = true
+MeshRenderer.renderLayerMask = 1
+MeshRenderer.castShadows = true
+MeshRenderer.receiveShadows = true
+MeshRenderer.motionVectors = true
+Name.value = "Sphere 4-10"
+Transform.position = (-8.5, 1.45, 17.9)
+Transform.rotation = (-0, -0, -0, 1)
+Transform.scale = (1, 1, 1)
+
+[entity id="sphere_4_11"]
+HierarchyOrder.order = 790
+MeshRenderer.meshPrimitive = Sphere
+MeshRenderer.material = [guid="9aae4628-ba39-4546-b3c7-55730e59d1ca"]
+MeshRenderer.enabled = true
+MeshRenderer.renderLayerMask = 1
+MeshRenderer.castShadows = true
+MeshRenderer.receiveShadows = true
+MeshRenderer.motionVectors = true
+Name.value = "Sphere 4-11"
+Transform.position = (-8.5, 4, 21.3)
+Transform.rotation = (-0, -0, -0, 1)
+Transform.scale = (1, 1, 1)
+
+[entity id="sphere_4_12"]
+HierarchyOrder.order = 800
+MeshRenderer.meshPrimitive = Sphere
+MeshRenderer.material = [guid="9aae4628-ba39-4546-b3c7-55730e59d1ca"]
+MeshRenderer.enabled = true
+MeshRenderer.renderLayerMask = 1
+MeshRenderer.castShadows = true
+MeshRenderer.receiveShadows = true
+MeshRenderer.motionVectors = true
+Name.value = "Sphere 4-12"
+Transform.position = (-8.5, 0.6, 24.7)
+Transform.rotation = (-0, -0, -0, 1)
+Transform.scale = (1, 1, 1)
+
+[entity id="sphere_4_13"]
+HierarchyOrder.order = 810
+MeshRenderer.meshPrimitive = Sphere
+MeshRenderer.material = [guid="9aae4628-ba39-4546-b3c7-55730e59d1ca"]
+MeshRenderer.enabled = true
+MeshRenderer.renderLayerMask = 1
+MeshRenderer.castShadows = true
+MeshRenderer.receiveShadows = true
+MeshRenderer.motionVectors = true
+Name.value = "Sphere 4-13"
+Transform.position = (-8.5, 3.15, 28.1)
+Transform.rotation = (-0, -0, -0, 1)
+Transform.scale = (1, 1, 1)
+
+[entity id="sphere_5_0"]
+HierarchyOrder.order = 820
+MeshRenderer.meshPrimitive = Sphere
+MeshRenderer.material = [guid="9aae4628-ba39-4546-b3c7-55730e59d1ca"]
+MeshRenderer.enabled = true
+MeshRenderer.renderLayerMask = 1
+MeshRenderer.castShadows = true
+MeshRenderer.receiveShadows = true
+MeshRenderer.motionVectors = true
+Name.value = "Sphere 5-0"
+Transform.position = (-5.1, 4, -16.1)
+Transform.rotation = (-0, -0, -0, 1)
+Transform.scale = (1, 1, 1)
+
+[entity id="sphere_5_1"]
+HierarchyOrder.order = 830
+MeshRenderer.meshPrimitive = Sphere
+MeshRenderer.material = [guid="9aae4628-ba39-4546-b3c7-55730e59d1ca"]
+MeshRenderer.enabled = true
+MeshRenderer.renderLayerMask = 1
+MeshRenderer.castShadows = true
+MeshRenderer.receiveShadows = true
+MeshRenderer.motionVectors = true
+Name.value = "Sphere 5-1"
+Transform.position = (-5.1, 0.6, -12.7)
+Transform.rotation = (-0, -0, -0, 1)
+Transform.scale = (1, 1, 1)
+
+[entity id="sphere_5_2"]
+HierarchyOrder.order = 840
+MeshRenderer.meshPrimitive = Sphere
+MeshRenderer.material = [guid="9aae4628-ba39-4546-b3c7-55730e59d1ca"]
+MeshRenderer.enabled = true
+MeshRenderer.renderLayerMask = 1
+MeshRenderer.castShadows = true
+MeshRenderer.receiveShadows = true
+MeshRenderer.motionVectors = true
+Name.value = "Sphere 5-2"
+Transform.position = (-5.1, 3.15, -9.3)
+Transform.rotation = (-0, -0, -0, 1)
+Transform.scale = (1, 1, 1)
+
+[entity id="sphere_5_3"]
+HierarchyOrder.order = 850
+MeshRenderer.meshPrimitive = Sphere
+MeshRenderer.material = [guid="9aae4628-ba39-4546-b3c7-55730e59d1ca"]
+MeshRenderer.enabled = true
+MeshRenderer.renderLayerMask = 1
+MeshRenderer.castShadows = true
+MeshRenderer.receiveShadows = true
+MeshRenderer.motionVectors = true
+Name.value = "Sphere 5-3"
+Transform.position = (-5.1, 5.7, -5.9)
+Transform.rotation = (-0, -0, -0, 1)
+Transform.scale = (1, 1, 1)
+
+[entity id="sphere_5_4"]
+HierarchyOrder.order = 860
+MeshRenderer.meshPrimitive = Sphere
+MeshRenderer.material = [guid="9aae4628-ba39-4546-b3c7-55730e59d1ca"]
+MeshRenderer.enabled = true
+MeshRenderer.renderLayerMask = 1
+MeshRenderer.castShadows = true
+MeshRenderer.receiveShadows = true
+MeshRenderer.motionVectors = true
+Name.value = "Sphere 5-4"
+Transform.position = (-5.1, 2.3, -2.5)
+Transform.rotation = (-0, -0, -0, 1)
+Transform.scale = (1, 1, 1)
+
+[entity id="sphere_5_5"]
+HierarchyOrder.order = 870
+MeshRenderer.meshPrimitive = Sphere
+MeshRenderer.material = [guid="9aae4628-ba39-4546-b3c7-55730e59d1ca"]
+MeshRenderer.enabled = true
+MeshRenderer.renderLayerMask = 1
+MeshRenderer.castShadows = true
+MeshRenderer.receiveShadows = true
+MeshRenderer.motionVectors = true
+Name.value = "Sphere 5-5"
+Transform.position = (-5.1, 4.85, 0.9)
+Transform.rotation = (-0, -0, -0, 1)
+Transform.scale = (1, 1, 1)
+
+[entity id="sphere_5_6"]
+HierarchyOrder.order = 880
+MeshRenderer.meshPrimitive = Sphere
+MeshRenderer.material = [guid="9aae4628-ba39-4546-b3c7-55730e59d1ca"]
+MeshRenderer.enabled = true
+MeshRenderer.renderLayerMask = 1
+MeshRenderer.castShadows = true
+MeshRenderer.receiveShadows = true
+MeshRenderer.motionVectors = true
+Name.value = "Sphere 5-6"
+Transform.position = (-5.1, 1.45, 4.3)
+Transform.rotation = (-0, -0, -0, 1)
+Transform.scale = (1, 1, 1)
+
+[entity id="sphere_5_7"]
+HierarchyOrder.order = 890
+MeshRenderer.meshPrimitive = Sphere
+MeshRenderer.material = [guid="9aae4628-ba39-4546-b3c7-55730e59d1ca"]
+MeshRenderer.enabled = true
+MeshRenderer.renderLayerMask = 1
+MeshRenderer.castShadows = true
+MeshRenderer.receiveShadows = true
+MeshRenderer.motionVectors = true
+Name.value = "Sphere 5-7"
+Transform.position = (-5.1, 4, 7.7)
+Transform.rotation = (-0, -0, -0, 1)
+Transform.scale = (1, 1, 1)
+
+[entity id="sphere_5_8"]
+HierarchyOrder.order = 900
+MeshRenderer.meshPrimitive = Sphere
+MeshRenderer.material = [guid="9aae4628-ba39-4546-b3c7-55730e59d1ca"]
+MeshRenderer.enabled = true
+MeshRenderer.renderLayerMask = 1
+MeshRenderer.castShadows = true
+MeshRenderer.receiveShadows = true
+MeshRenderer.motionVectors = true
+Name.value = "Sphere 5-8"
+Transform.position = (-5.1, 0.6, 11.1)
+Transform.rotation = (-0, -0, -0, 1)
+Transform.scale = (1, 1, 1)
+
+[entity id="sphere_5_9"]
+HierarchyOrder.order = 910
+MeshRenderer.meshPrimitive = Sphere
+MeshRenderer.material = [guid="9aae4628-ba39-4546-b3c7-55730e59d1ca"]
+MeshRenderer.enabled = true
+MeshRenderer.renderLayerMask = 1
+MeshRenderer.castShadows = true
+MeshRenderer.receiveShadows = true
+MeshRenderer.motionVectors = true
+Name.value = "Sphere 5-9"
+Transform.position = (-5.1, 3.15, 14.5)
+Transform.rotation = (-0, -0, -0, 1)
+Transform.scale = (1, 1, 1)
+
+[entity id="sphere_5_10"]
+HierarchyOrder.order = 920
+MeshRenderer.meshPrimitive = Sphere
+MeshRenderer.material = [guid="9aae4628-ba39-4546-b3c7-55730e59d1ca"]
+MeshRenderer.enabled = true
+MeshRenderer.renderLayerMask = 1
+MeshRenderer.castShadows = true
+MeshRenderer.receiveShadows = true
+MeshRenderer.motionVectors = true
+Name.value = "Sphere 5-10"
+Transform.position = (-5.1, 5.7, 17.9)
+Transform.rotation = (-0, -0, -0, 1)
+Transform.scale = (1, 1, 1)
+
+[entity id="sphere_5_11"]
+HierarchyOrder.order = 930
+MeshRenderer.meshPrimitive = Sphere
+MeshRenderer.material = [guid="9aae4628-ba39-4546-b3c7-55730e59d1ca"]
+MeshRenderer.enabled = true
+MeshRenderer.renderLayerMask = 1
+MeshRenderer.castShadows = true
+MeshRenderer.receiveShadows = true
+MeshRenderer.motionVectors = true
+Name.value = "Sphere 5-11"
+Transform.position = (-5.1, 2.3, 21.3)
+Transform.rotation = (-0, -0, -0, 1)
+Transform.scale = (1, 1, 1)
+
+[entity id="sphere_5_12"]
+HierarchyOrder.order = 940
+MeshRenderer.meshPrimitive = Sphere
+MeshRenderer.material = [guid="9aae4628-ba39-4546-b3c7-55730e59d1ca"]
+MeshRenderer.enabled = true
+MeshRenderer.renderLayerMask = 1
+MeshRenderer.castShadows = true
+MeshRenderer.receiveShadows = true
+MeshRenderer.motionVectors = true
+Name.value = "Sphere 5-12"
+Transform.position = (-5.1, 4.85, 24.7)
+Transform.rotation = (-0, -0, -0, 1)
+Transform.scale = (1, 1, 1)
+
+[entity id="sphere_5_13"]
+HierarchyOrder.order = 950
+MeshRenderer.meshPrimitive = Sphere
+MeshRenderer.material = [guid="9aae4628-ba39-4546-b3c7-55730e59d1ca"]
+MeshRenderer.enabled = true
+MeshRenderer.renderLayerMask = 1
+MeshRenderer.castShadows = true
+MeshRenderer.receiveShadows = true
+MeshRenderer.motionVectors = true
+Name.value = "Sphere 5-13"
+Transform.position = (-5.1, 1.45, 28.1)
+Transform.rotation = (-0, -0, -0, 1)
+Transform.scale = (1, 1, 1)
+
+[entity id="sphere_6_0"]
+HierarchyOrder.order = 960
+MeshRenderer.meshPrimitive = Sphere
+MeshRenderer.material = [guid="9aae4628-ba39-4546-b3c7-55730e59d1ca"]
+MeshRenderer.enabled = true
+MeshRenderer.renderLayerMask = 1
+MeshRenderer.castShadows = true
+MeshRenderer.receiveShadows = true
+MeshRenderer.motionVectors = true
+Name.value = "Sphere 6-0"
+Transform.position = (-1.7, 2.3, -16.1)
+Transform.rotation = (-0, -0, -0, 1)
+Transform.scale = (1, 1, 1)
+
+[entity id="sphere_6_1"]
+HierarchyOrder.order = 970
+MeshRenderer.meshPrimitive = Sphere
+MeshRenderer.material = [guid="9aae4628-ba39-4546-b3c7-55730e59d1ca"]
+MeshRenderer.enabled = true
+MeshRenderer.renderLayerMask = 1
+MeshRenderer.castShadows = true
+MeshRenderer.receiveShadows = true
+MeshRenderer.motionVectors = true
+Name.value = "Sphere 6-1"
+Transform.position = (-1.7, 4.85, -12.7)
+Transform.rotation = (-0, -0, -0, 1)
+Transform.scale = (1, 1, 1)
+
+[entity id="sphere_6_2"]
+HierarchyOrder.order = 980
+MeshRenderer.meshPrimitive = Sphere
+MeshRenderer.material = [guid="9aae4628-ba39-4546-b3c7-55730e59d1ca"]
+MeshRenderer.enabled = true
+MeshRenderer.renderLayerMask = 1
+MeshRenderer.castShadows = true
+MeshRenderer.receiveShadows = true
+MeshRenderer.motionVectors = true
+Name.value = "Sphere 6-2"
+Transform.position = (-1.7, 1.45, -9.3)
+Transform.rotation = (-0, -0, -0, 1)
+Transform.scale = (1, 1, 1)
+
+[entity id="sphere_6_3"]
+HierarchyOrder.order = 990
+MeshRenderer.meshPrimitive = Sphere
+MeshRenderer.material = [guid="9aae4628-ba39-4546-b3c7-55730e59d1ca"]
+MeshRenderer.enabled = true
+MeshRenderer.renderLayerMask = 1
+MeshRenderer.castShadows = true
+MeshRenderer.receiveShadows = true
+MeshRenderer.motionVectors = true
+Name.value = "Sphere 6-3"
+Transform.position = (-1.7, 4, -5.9)
+Transform.rotation = (-0, -0, -0, 1)
+Transform.scale = (1, 1, 1)
+
+[entity id="sphere_6_4"]
+HierarchyOrder.order = 1000
+MeshRenderer.meshPrimitive = Sphere
+MeshRenderer.material = [guid="9aae4628-ba39-4546-b3c7-55730e59d1ca"]
+MeshRenderer.enabled = true
+MeshRenderer.renderLayerMask = 1
+MeshRenderer.castShadows = true
+MeshRenderer.receiveShadows = true
+MeshRenderer.motionVectors = true
+Name.value = "Sphere 6-4"
+Transform.position = (-1.7, 0.6, -2.5)
+Transform.rotation = (-0, -0, -0, 1)
+Transform.scale = (1, 1, 1)
+
+[entity id="sphere_6_5"]
+HierarchyOrder.order = 1010
+MeshRenderer.meshPrimitive = Sphere
+MeshRenderer.material = [guid="9aae4628-ba39-4546-b3c7-55730e59d1ca"]
+MeshRenderer.enabled = true
+MeshRenderer.renderLayerMask = 1
+MeshRenderer.castShadows = true
+MeshRenderer.receiveShadows = true
+MeshRenderer.motionVectors = true
+Name.value = "Sphere 6-5"
+Transform.position = (-1.7, 3.15, 0.9)
+Transform.rotation = (-0, -0, -0, 1)
+Transform.scale = (1, 1, 1)
+
+[entity id="sphere_6_6"]
+HierarchyOrder.order = 1020
+MeshRenderer.meshPrimitive = Sphere
+MeshRenderer.material = [guid="9aae4628-ba39-4546-b3c7-55730e59d1ca"]
+MeshRenderer.enabled = true
+MeshRenderer.renderLayerMask = 1
+MeshRenderer.castShadows = true
+MeshRenderer.receiveShadows = true
+MeshRenderer.motionVectors = true
+Name.value = "Sphere 6-6"
+Transform.position = (-1.7, 5.7, 4.3)
+Transform.rotation = (-0, -0, -0, 1)
+Transform.scale = (1, 1, 1)
+
+[entity id="sphere_6_7"]
+HierarchyOrder.order = 1030
+MeshRenderer.meshPrimitive = Sphere
+MeshRenderer.material = [guid="9aae4628-ba39-4546-b3c7-55730e59d1ca"]
+MeshRenderer.enabled = true
+MeshRenderer.renderLayerMask = 1
+MeshRenderer.castShadows = true
+MeshRenderer.receiveShadows = true
+MeshRenderer.motionVectors = true
+Name.value = "Sphere 6-7"
+Transform.position = (-1.7, 2.3, 7.7)
+Transform.rotation = (-0, -0, -0, 1)
+Transform.scale = (1, 1, 1)
+
+[entity id="sphere_6_8"]
+HierarchyOrder.order = 1040
+MeshRenderer.meshPrimitive = Sphere
+MeshRenderer.material = [guid="9aae4628-ba39-4546-b3c7-55730e59d1ca"]
+MeshRenderer.enabled = true
+MeshRenderer.renderLayerMask = 1
+MeshRenderer.castShadows = true
+MeshRenderer.receiveShadows = true
+MeshRenderer.motionVectors = true
+Name.value = "Sphere 6-8"
+Transform.position = (-1.7, 4.85, 11.1)
+Transform.rotation = (-0, -0, -0, 1)
+Transform.scale = (1, 1, 1)
+
+[entity id="sphere_6_9"]
+HierarchyOrder.order = 1050
+MeshRenderer.meshPrimitive = Sphere
+MeshRenderer.material = [guid="9aae4628-ba39-4546-b3c7-55730e59d1ca"]
+MeshRenderer.enabled = true
+MeshRenderer.renderLayerMask = 1
+MeshRenderer.castShadows = true
+MeshRenderer.receiveShadows = true
+MeshRenderer.motionVectors = true
+Name.value = "Sphere 6-9"
+Transform.position = (-1.7, 1.45, 14.5)
+Transform.rotation = (-0, -0, -0, 1)
+Transform.scale = (1, 1, 1)
+
+[entity id="sphere_6_10"]
+HierarchyOrder.order = 1060
+MeshRenderer.meshPrimitive = Sphere
+MeshRenderer.material = [guid="9aae4628-ba39-4546-b3c7-55730e59d1ca"]
+MeshRenderer.enabled = true
+MeshRenderer.renderLayerMask = 1
+MeshRenderer.castShadows = true
+MeshRenderer.receiveShadows = true
+MeshRenderer.motionVectors = true
+Name.value = "Sphere 6-10"
+Transform.position = (-1.7, 4, 17.9)
+Transform.rotation = (-0, -0, -0, 1)
+Transform.scale = (1, 1, 1)
+
+[entity id="sphere_6_11"]
+HierarchyOrder.order = 1070
+MeshRenderer.meshPrimitive = Sphere
+MeshRenderer.material = [guid="9aae4628-ba39-4546-b3c7-55730e59d1ca"]
+MeshRenderer.enabled = true
+MeshRenderer.renderLayerMask = 1
+MeshRenderer.castShadows = true
+MeshRenderer.receiveShadows = true
+MeshRenderer.motionVectors = true
+Name.value = "Sphere 6-11"
+Transform.position = (-1.7, 0.6, 21.3)
+Transform.rotation = (-0, -0, -0, 1)
+Transform.scale = (1, 1, 1)
+
+[entity id="sphere_6_12"]
+HierarchyOrder.order = 1080
+MeshRenderer.meshPrimitive = Sphere
+MeshRenderer.material = [guid="9aae4628-ba39-4546-b3c7-55730e59d1ca"]
+MeshRenderer.enabled = true
+MeshRenderer.renderLayerMask = 1
+MeshRenderer.castShadows = true
+MeshRenderer.receiveShadows = true
+MeshRenderer.motionVectors = true
+Name.value = "Sphere 6-12"
+Transform.position = (-1.7, 3.15, 24.7)
+Transform.rotation = (-0, -0, -0, 1)
+Transform.scale = (1, 1, 1)
+
+[entity id="sphere_6_13"]
+HierarchyOrder.order = 1090
+MeshRenderer.meshPrimitive = Sphere
+MeshRenderer.material = [guid="9aae4628-ba39-4546-b3c7-55730e59d1ca"]
+MeshRenderer.enabled = true
+MeshRenderer.renderLayerMask = 1
+MeshRenderer.castShadows = true
+MeshRenderer.receiveShadows = true
+MeshRenderer.motionVectors = true
+Name.value = "Sphere 6-13"
+Transform.position = (-1.7, 5.7, 28.1)
+Transform.rotation = (-0, -0, -0, 1)
+Transform.scale = (1, 1, 1)
+
+[entity id="sphere_7_0"]
+HierarchyOrder.order = 1100
+MeshRenderer.meshPrimitive = Sphere
+MeshRenderer.material = [guid="9aae4628-ba39-4546-b3c7-55730e59d1ca"]
+MeshRenderer.enabled = true
+MeshRenderer.renderLayerMask = 1
+MeshRenderer.castShadows = true
+MeshRenderer.receiveShadows = true
+MeshRenderer.motionVectors = true
+Name.value = "Sphere 7-0"
+Transform.position = (1.7, 0.6, -16.1)
+Transform.rotation = (-0, -0, -0, 1)
+Transform.scale = (1, 1, 1)
+
+[entity id="sphere_7_1"]
+HierarchyOrder.order = 1110
+MeshRenderer.meshPrimitive = Sphere
+MeshRenderer.material = [guid="9aae4628-ba39-4546-b3c7-55730e59d1ca"]
+MeshRenderer.enabled = true
+MeshRenderer.renderLayerMask = 1
+MeshRenderer.castShadows = true
+MeshRenderer.receiveShadows = true
+MeshRenderer.motionVectors = true
+Name.value = "Sphere 7-1"
+Transform.position = (1.7, 3.15, -12.7)
+Transform.rotation = (-0, -0, -0, 1)
+Transform.scale = (1, 1, 1)
+
+[entity id="sphere_7_2"]
+HierarchyOrder.order = 1120
+MeshRenderer.meshPrimitive = Sphere
+MeshRenderer.material = [guid="9aae4628-ba39-4546-b3c7-55730e59d1ca"]
+MeshRenderer.enabled = true
+MeshRenderer.renderLayerMask = 1
+MeshRenderer.castShadows = true
+MeshRenderer.receiveShadows = true
+MeshRenderer.motionVectors = true
+Name.value = "Sphere 7-2"
+Transform.position = (1.7, 5.7, -9.3)
+Transform.rotation = (-0, -0, -0, 1)
+Transform.scale = (1, 1, 1)
+
+[entity id="sphere_7_3"]
+HierarchyOrder.order = 1130
+MeshRenderer.meshPrimitive = Sphere
+MeshRenderer.material = [guid="9aae4628-ba39-4546-b3c7-55730e59d1ca"]
+MeshRenderer.enabled = true
+MeshRenderer.renderLayerMask = 1
+MeshRenderer.castShadows = true
+MeshRenderer.receiveShadows = true
+MeshRenderer.motionVectors = true
+Name.value = "Sphere 7-3"
+Transform.position = (1.7, 2.3, -5.9)
+Transform.rotation = (-0, -0, -0, 1)
+Transform.scale = (1, 1, 1)
+
+[entity id="sphere_7_4"]
+HierarchyOrder.order = 1140
+MeshRenderer.meshPrimitive = Sphere
+MeshRenderer.material = [guid="9aae4628-ba39-4546-b3c7-55730e59d1ca"]
+MeshRenderer.enabled = true
+MeshRenderer.renderLayerMask = 1
+MeshRenderer.castShadows = true
+MeshRenderer.receiveShadows = true
+MeshRenderer.motionVectors = true
+Name.value = "Sphere 7-4"
+Transform.position = (1.7, 4.85, -2.5)
+Transform.rotation = (-0, -0, -0, 1)
+Transform.scale = (1, 1, 1)
+
+[entity id="sphere_7_5"]
+HierarchyOrder.order = 1150
+MeshRenderer.meshPrimitive = Sphere
+MeshRenderer.material = [guid="9aae4628-ba39-4546-b3c7-55730e59d1ca"]
+MeshRenderer.enabled = true
+MeshRenderer.renderLayerMask = 1
+MeshRenderer.castShadows = true
+MeshRenderer.receiveShadows = true
+MeshRenderer.motionVectors = true
+Name.value = "Sphere 7-5"
+Transform.position = (1.7, 1.45, 0.9)
+Transform.rotation = (-0, -0, -0, 1)
+Transform.scale = (1, 1, 1)
+
+[entity id="sphere_7_6"]
+HierarchyOrder.order = 1160
+MeshRenderer.meshPrimitive = Sphere
+MeshRenderer.material = [guid="9aae4628-ba39-4546-b3c7-55730e59d1ca"]
+MeshRenderer.enabled = true
+MeshRenderer.renderLayerMask = 1
+MeshRenderer.castShadows = true
+MeshRenderer.receiveShadows = true
+MeshRenderer.motionVectors = true
+Name.value = "Sphere 7-6"
+Transform.position = (1.7, 4, 4.3)
+Transform.rotation = (-0, -0, -0, 1)
+Transform.scale = (1, 1, 1)
+
+[entity id="sphere_7_7"]
+HierarchyOrder.order = 1170
+MeshRenderer.meshPrimitive = Sphere
+MeshRenderer.material = [guid="9aae4628-ba39-4546-b3c7-55730e59d1ca"]
+MeshRenderer.enabled = true
+MeshRenderer.renderLayerMask = 1
+MeshRenderer.castShadows = true
+MeshRenderer.receiveShadows = true
+MeshRenderer.motionVectors = true
+Name.value = "Sphere 7-7"
+Transform.position = (1.7, 0.6, 7.7)
+Transform.rotation = (-0, -0, -0, 1)
+Transform.scale = (1, 1, 1)
+
+[entity id="sphere_7_8"]
+HierarchyOrder.order = 1180
+MeshRenderer.meshPrimitive = Sphere
+MeshRenderer.material = [guid="9aae4628-ba39-4546-b3c7-55730e59d1ca"]
+MeshRenderer.enabled = true
+MeshRenderer.renderLayerMask = 1
+MeshRenderer.castShadows = true
+MeshRenderer.receiveShadows = true
+MeshRenderer.motionVectors = true
+Name.value = "Sphere 7-8"
+Transform.position = (1.7, 3.15, 11.1)
+Transform.rotation = (-0, -0, -0, 1)
+Transform.scale = (1, 1, 1)
+
+[entity id="sphere_7_9"]
+HierarchyOrder.order = 1190
+MeshRenderer.meshPrimitive = Sphere
+MeshRenderer.material = [guid="9aae4628-ba39-4546-b3c7-55730e59d1ca"]
+MeshRenderer.enabled = true
+MeshRenderer.renderLayerMask = 1
+MeshRenderer.castShadows = true
+MeshRenderer.receiveShadows = true
+MeshRenderer.motionVectors = true
+Name.value = "Sphere 7-9"
+Transform.position = (1.7, 5.7, 14.5)
+Transform.rotation = (-0, -0, -0, 1)
+Transform.scale = (1, 1, 1)
+
+[entity id="sphere_7_10"]
+HierarchyOrder.order = 1200
+MeshRenderer.meshPrimitive = Sphere
+MeshRenderer.material = [guid="9aae4628-ba39-4546-b3c7-55730e59d1ca"]
+MeshRenderer.enabled = true
+MeshRenderer.renderLayerMask = 1
+MeshRenderer.castShadows = true
+MeshRenderer.receiveShadows = true
+MeshRenderer.motionVectors = true
+Name.value = "Sphere 7-10"
+Transform.position = (1.7, 2.3, 17.9)
+Transform.rotation = (-0, -0, -0, 1)
+Transform.scale = (1, 1, 1)
+
+[entity id="sphere_7_11"]
+HierarchyOrder.order = 1210
+MeshRenderer.meshPrimitive = Sphere
+MeshRenderer.material = [guid="9aae4628-ba39-4546-b3c7-55730e59d1ca"]
+MeshRenderer.enabled = true
+MeshRenderer.renderLayerMask = 1
+MeshRenderer.castShadows = true
+MeshRenderer.receiveShadows = true
+MeshRenderer.motionVectors = true
+Name.value = "Sphere 7-11"
+Transform.position = (1.7, 4.85, 21.3)
+Transform.rotation = (-0, -0, -0, 1)
+Transform.scale = (1, 1, 1)
+
+[entity id="sphere_7_12"]
+HierarchyOrder.order = 1220
+MeshRenderer.meshPrimitive = Sphere
+MeshRenderer.material = [guid="9aae4628-ba39-4546-b3c7-55730e59d1ca"]
+MeshRenderer.enabled = true
+MeshRenderer.renderLayerMask = 1
+MeshRenderer.castShadows = true
+MeshRenderer.receiveShadows = true
+MeshRenderer.motionVectors = true
+Name.value = "Sphere 7-12"
+Transform.position = (1.7, 1.45, 24.7)
+Transform.rotation = (-0, -0, -0, 1)
+Transform.scale = (1, 1, 1)
+
+[entity id="sphere_7_13"]
+HierarchyOrder.order = 1230
+MeshRenderer.meshPrimitive = Sphere
+MeshRenderer.material = [guid="9aae4628-ba39-4546-b3c7-55730e59d1ca"]
+MeshRenderer.enabled = true
+MeshRenderer.renderLayerMask = 1
+MeshRenderer.castShadows = true
+MeshRenderer.receiveShadows = true
+MeshRenderer.motionVectors = true
+Name.value = "Sphere 7-13"
+Transform.position = (1.7, 4, 28.1)
+Transform.rotation = (-0, -0, -0, 1)
+Transform.scale = (1, 1, 1)
+
+[entity id="sphere_8_0"]
+HierarchyOrder.order = 1240
+MeshRenderer.meshPrimitive = Sphere
+MeshRenderer.material = [guid="9aae4628-ba39-4546-b3c7-55730e59d1ca"]
+MeshRenderer.enabled = true
+MeshRenderer.renderLayerMask = 1
+MeshRenderer.castShadows = true
+MeshRenderer.receiveShadows = true
+MeshRenderer.motionVectors = true
+Name.value = "Sphere 8-0"
+Transform.position = (5.1, 4.85, -16.1)
+Transform.rotation = (-0, -0, -0, 1)
+Transform.scale = (1, 1, 1)
+
+[entity id="sphere_8_1"]
+HierarchyOrder.order = 1250
+MeshRenderer.meshPrimitive = Sphere
+MeshRenderer.material = [guid="9aae4628-ba39-4546-b3c7-55730e59d1ca"]
+MeshRenderer.enabled = true
+MeshRenderer.renderLayerMask = 1
+MeshRenderer.castShadows = true
+MeshRenderer.receiveShadows = true
+MeshRenderer.motionVectors = true
+Name.value = "Sphere 8-1"
+Transform.position = (5.1, 1.45, -12.7)
+Transform.rotation = (-0, -0, -0, 1)
+Transform.scale = (1, 1, 1)
+
+[entity id="sphere_8_2"]
+HierarchyOrder.order = 1260
+MeshRenderer.meshPrimitive = Sphere
+MeshRenderer.material = [guid="9aae4628-ba39-4546-b3c7-55730e59d1ca"]
+MeshRenderer.enabled = true
+MeshRenderer.renderLayerMask = 1
+MeshRenderer.castShadows = true
+MeshRenderer.receiveShadows = true
+MeshRenderer.motionVectors = true
+Name.value = "Sphere 8-2"
+Transform.position = (5.1, 4, -9.3)
+Transform.rotation = (-0, -0, -0, 1)
+Transform.scale = (1, 1, 1)
+
+[entity id="sphere_8_3"]
+HierarchyOrder.order = 1270
+MeshRenderer.meshPrimitive = Sphere
+MeshRenderer.material = [guid="9aae4628-ba39-4546-b3c7-55730e59d1ca"]
+MeshRenderer.enabled = true
+MeshRenderer.renderLayerMask = 1
+MeshRenderer.castShadows = true
+MeshRenderer.receiveShadows = true
+MeshRenderer.motionVectors = true
+Name.value = "Sphere 8-3"
+Transform.position = (5.1, 0.6, -5.9)
+Transform.rotation = (-0, -0, -0, 1)
+Transform.scale = (1, 1, 1)
+
+[entity id="sphere_8_4"]
+HierarchyOrder.order = 1280
+MeshRenderer.meshPrimitive = Sphere
+MeshRenderer.material = [guid="9aae4628-ba39-4546-b3c7-55730e59d1ca"]
+MeshRenderer.enabled = true
+MeshRenderer.renderLayerMask = 1
+MeshRenderer.castShadows = true
+MeshRenderer.receiveShadows = true
+MeshRenderer.motionVectors = true
+Name.value = "Sphere 8-4"
+Transform.position = (5.1, 3.15, -2.5)
+Transform.rotation = (-0, -0, -0, 1)
+Transform.scale = (1, 1, 1)
+
+[entity id="sphere_8_5"]
+HierarchyOrder.order = 1290
+MeshRenderer.meshPrimitive = Sphere
+MeshRenderer.material = [guid="9aae4628-ba39-4546-b3c7-55730e59d1ca"]
+MeshRenderer.enabled = true
+MeshRenderer.renderLayerMask = 1
+MeshRenderer.castShadows = true
+MeshRenderer.receiveShadows = true
+MeshRenderer.motionVectors = true
+Name.value = "Sphere 8-5"
+Transform.position = (5.1, 5.7, 0.9)
+Transform.rotation = (-0, -0, -0, 1)
+Transform.scale = (1, 1, 1)
+
+[entity id="sphere_8_6"]
+HierarchyOrder.order = 1300
+MeshRenderer.meshPrimitive = Sphere
+MeshRenderer.material = [guid="9aae4628-ba39-4546-b3c7-55730e59d1ca"]
+MeshRenderer.enabled = true
+MeshRenderer.renderLayerMask = 1
+MeshRenderer.castShadows = true
+MeshRenderer.receiveShadows = true
+MeshRenderer.motionVectors = true
+Name.value = "Sphere 8-6"
+Transform.position = (5.1, 2.3, 4.3)
+Transform.rotation = (-0, -0, -0, 1)
+Transform.scale = (1, 1, 1)
+
+[entity id="sphere_8_7"]
+HierarchyOrder.order = 1310
+MeshRenderer.meshPrimitive = Sphere
+MeshRenderer.material = [guid="9aae4628-ba39-4546-b3c7-55730e59d1ca"]
+MeshRenderer.enabled = true
+MeshRenderer.renderLayerMask = 1
+MeshRenderer.castShadows = true
+MeshRenderer.receiveShadows = true
+MeshRenderer.motionVectors = true
+Name.value = "Sphere 8-7"
+Transform.position = (5.1, 4.85, 7.7)
+Transform.rotation = (-0, -0, -0, 1)
+Transform.scale = (1, 1, 1)
+
+[entity id="sphere_8_8"]
+HierarchyOrder.order = 1320
+MeshRenderer.meshPrimitive = Sphere
+MeshRenderer.material = [guid="9aae4628-ba39-4546-b3c7-55730e59d1ca"]
+MeshRenderer.enabled = true
+MeshRenderer.renderLayerMask = 1
+MeshRenderer.castShadows = true
+MeshRenderer.receiveShadows = true
+MeshRenderer.motionVectors = true
+Name.value = "Sphere 8-8"
+Transform.position = (5.1, 1.45, 11.1)
+Transform.rotation = (-0, -0, -0, 1)
+Transform.scale = (1, 1, 1)
+
+[entity id="sphere_8_9"]
+HierarchyOrder.order = 1330
+MeshRenderer.meshPrimitive = Sphere
+MeshRenderer.material = [guid="9aae4628-ba39-4546-b3c7-55730e59d1ca"]
+MeshRenderer.enabled = true
+MeshRenderer.renderLayerMask = 1
+MeshRenderer.castShadows = true
+MeshRenderer.receiveShadows = true
+MeshRenderer.motionVectors = true
+Name.value = "Sphere 8-9"
+Transform.position = (5.1, 4, 14.5)
+Transform.rotation = (-0, -0, -0, 1)
+Transform.scale = (1, 1, 1)
+
+[entity id="sphere_8_10"]
+HierarchyOrder.order = 1340
+MeshRenderer.meshPrimitive = Sphere
+MeshRenderer.material = [guid="9aae4628-ba39-4546-b3c7-55730e59d1ca"]
+MeshRenderer.enabled = true
+MeshRenderer.renderLayerMask = 1
+MeshRenderer.castShadows = true
+MeshRenderer.receiveShadows = true
+MeshRenderer.motionVectors = true
+Name.value = "Sphere 8-10"
+Transform.position = (5.1, 0.6, 17.9)
+Transform.rotation = (-0, -0, -0, 1)
+Transform.scale = (1, 1, 1)
+
+[entity id="sphere_8_11"]
+HierarchyOrder.order = 1350
+MeshRenderer.meshPrimitive = Sphere
+MeshRenderer.material = [guid="9aae4628-ba39-4546-b3c7-55730e59d1ca"]
+MeshRenderer.enabled = true
+MeshRenderer.renderLayerMask = 1
+MeshRenderer.castShadows = true
+MeshRenderer.receiveShadows = true
+MeshRenderer.motionVectors = true
+Name.value = "Sphere 8-11"
+Transform.position = (5.1, 3.15, 21.3)
+Transform.rotation = (-0, -0, -0, 1)
+Transform.scale = (1, 1, 1)
+
+[entity id="sphere_8_12"]
+HierarchyOrder.order = 1360
+MeshRenderer.meshPrimitive = Sphere
+MeshRenderer.material = [guid="9aae4628-ba39-4546-b3c7-55730e59d1ca"]
+MeshRenderer.enabled = true
+MeshRenderer.renderLayerMask = 1
+MeshRenderer.castShadows = true
+MeshRenderer.receiveShadows = true
+MeshRenderer.motionVectors = true
+Name.value = "Sphere 8-12"
+Transform.position = (5.1, 5.7, 24.7)
+Transform.rotation = (-0, -0, -0, 1)
+Transform.scale = (1, 1, 1)
+
+[entity id="sphere_8_13"]
+HierarchyOrder.order = 1370
+MeshRenderer.meshPrimitive = Sphere
+MeshRenderer.material = [guid="9aae4628-ba39-4546-b3c7-55730e59d1ca"]
+MeshRenderer.enabled = true
+MeshRenderer.renderLayerMask = 1
+MeshRenderer.castShadows = true
+MeshRenderer.receiveShadows = true
+MeshRenderer.motionVectors = true
+Name.value = "Sphere 8-13"
+Transform.position = (5.1, 2.3, 28.1)
+Transform.rotation = (-0, -0, -0, 1)
+Transform.scale = (1, 1, 1)
+
+[entity id="sphere_9_0"]
+HierarchyOrder.order = 1380
+MeshRenderer.meshPrimitive = Sphere
+MeshRenderer.material = [guid="9aae4628-ba39-4546-b3c7-55730e59d1ca"]
+MeshRenderer.enabled = true
+MeshRenderer.renderLayerMask = 1
+MeshRenderer.castShadows = true
+MeshRenderer.receiveShadows = true
+MeshRenderer.motionVectors = true
+Name.value = "Sphere 9-0"
+Transform.position = (8.5, 3.15, -16.1)
+Transform.rotation = (-0, -0, -0, 1)
+Transform.scale = (1, 1, 1)
+
+[entity id="sphere_9_1"]
+HierarchyOrder.order = 1390
+MeshRenderer.meshPrimitive = Sphere
+MeshRenderer.material = [guid="9aae4628-ba39-4546-b3c7-55730e59d1ca"]
+MeshRenderer.enabled = true
+MeshRenderer.renderLayerMask = 1
+MeshRenderer.castShadows = true
+MeshRenderer.receiveShadows = true
+MeshRenderer.motionVectors = true
+Name.value = "Sphere 9-1"
+Transform.position = (8.5, 5.7, -12.7)
+Transform.rotation = (-0, -0, -0, 1)
+Transform.scale = (1, 1, 1)
+
+[entity id="sphere_9_2"]
+HierarchyOrder.order = 1400
+MeshRenderer.meshPrimitive = Sphere
+MeshRenderer.material = [guid="9aae4628-ba39-4546-b3c7-55730e59d1ca"]
+MeshRenderer.enabled = true
+MeshRenderer.renderLayerMask = 1
+MeshRenderer.castShadows = true
+MeshRenderer.receiveShadows = true
+MeshRenderer.motionVectors = true
+Name.value = "Sphere 9-2"
+Transform.position = (8.5, 2.3, -9.3)
+Transform.rotation = (-0, -0, -0, 1)
+Transform.scale = (1, 1, 1)
+
+[entity id="sphere_9_3"]
+HierarchyOrder.order = 1410
+MeshRenderer.meshPrimitive = Sphere
+MeshRenderer.material = [guid="9aae4628-ba39-4546-b3c7-55730e59d1ca"]
+MeshRenderer.enabled = true
+MeshRenderer.renderLayerMask = 1
+MeshRenderer.castShadows = true
+MeshRenderer.receiveShadows = true
+MeshRenderer.motionVectors = true
+Name.value = "Sphere 9-3"
+Transform.position = (8.5, 4.85, -5.9)
+Transform.rotation = (-0, -0, -0, 1)
+Transform.scale = (1, 1, 1)
+
+[entity id="sphere_9_4"]
+HierarchyOrder.order = 1420
+MeshRenderer.meshPrimitive = Sphere
+MeshRenderer.material = [guid="9aae4628-ba39-4546-b3c7-55730e59d1ca"]
+MeshRenderer.enabled = true
+MeshRenderer.renderLayerMask = 1
+MeshRenderer.castShadows = true
+MeshRenderer.receiveShadows = true
+MeshRenderer.motionVectors = true
+Name.value = "Sphere 9-4"
+Transform.position = (8.5, 1.45, -2.5)
+Transform.rotation = (-0, -0, -0, 1)
+Transform.scale = (1, 1, 1)
+
+[entity id="sphere_9_5"]
+HierarchyOrder.order = 1430
+MeshRenderer.meshPrimitive = Sphere
+MeshRenderer.material = [guid="9aae4628-ba39-4546-b3c7-55730e59d1ca"]
+MeshRenderer.enabled = true
+MeshRenderer.renderLayerMask = 1
+MeshRenderer.castShadows = true
+MeshRenderer.receiveShadows = true
+MeshRenderer.motionVectors = true
+Name.value = "Sphere 9-5"
+Transform.position = (8.5, 4, 0.9)
+Transform.rotation = (-0, -0, -0, 1)
+Transform.scale = (1, 1, 1)
+
+[entity id="sphere_9_6"]
+HierarchyOrder.order = 1440
+MeshRenderer.meshPrimitive = Sphere
+MeshRenderer.material = [guid="9aae4628-ba39-4546-b3c7-55730e59d1ca"]
+MeshRenderer.enabled = true
+MeshRenderer.renderLayerMask = 1
+MeshRenderer.castShadows = true
+MeshRenderer.receiveShadows = true
+MeshRenderer.motionVectors = true
+Name.value = "Sphere 9-6"
+Transform.position = (8.5, 0.6, 4.3)
+Transform.rotation = (-0, -0, -0, 1)
+Transform.scale = (1, 1, 1)
+
+[entity id="sphere_9_7"]
+HierarchyOrder.order = 1450
+MeshRenderer.meshPrimitive = Sphere
+MeshRenderer.material = [guid="9aae4628-ba39-4546-b3c7-55730e59d1ca"]
+MeshRenderer.enabled = true
+MeshRenderer.renderLayerMask = 1
+MeshRenderer.castShadows = true
+MeshRenderer.receiveShadows = true
+MeshRenderer.motionVectors = true
+Name.value = "Sphere 9-7"
+Transform.position = (8.5, 3.15, 7.7)
+Transform.rotation = (-0, -0, -0, 1)
+Transform.scale = (1, 1, 1)
+
+[entity id="sphere_9_8"]
+HierarchyOrder.order = 1460
+MeshRenderer.meshPrimitive = Sphere
+MeshRenderer.material = [guid="9aae4628-ba39-4546-b3c7-55730e59d1ca"]
+MeshRenderer.enabled = true
+MeshRenderer.renderLayerMask = 1
+MeshRenderer.castShadows = true
+MeshRenderer.receiveShadows = true
+MeshRenderer.motionVectors = true
+Name.value = "Sphere 9-8"
+Transform.position = (8.5, 5.7, 11.1)
+Transform.rotation = (-0, -0, -0, 1)
+Transform.scale = (1, 1, 1)
+
+[entity id="sphere_9_9"]
+HierarchyOrder.order = 1470
+MeshRenderer.meshPrimitive = Sphere
+MeshRenderer.material = [guid="9aae4628-ba39-4546-b3c7-55730e59d1ca"]
+MeshRenderer.enabled = true
+MeshRenderer.renderLayerMask = 1
+MeshRenderer.castShadows = true
+MeshRenderer.receiveShadows = true
+MeshRenderer.motionVectors = true
+Name.value = "Sphere 9-9"
+Transform.position = (8.5, 2.3, 14.5)
+Transform.rotation = (-0, -0, -0, 1)
+Transform.scale = (1, 1, 1)
+
+[entity id="sphere_9_10"]
+HierarchyOrder.order = 1480
+MeshRenderer.meshPrimitive = Sphere
+MeshRenderer.material = [guid="9aae4628-ba39-4546-b3c7-55730e59d1ca"]
+MeshRenderer.enabled = true
+MeshRenderer.renderLayerMask = 1
+MeshRenderer.castShadows = true
+MeshRenderer.receiveShadows = true
+MeshRenderer.motionVectors = true
+Name.value = "Sphere 9-10"
+Transform.position = (8.5, 4.85, 17.9)
+Transform.rotation = (-0, -0, -0, 1)
+Transform.scale = (1, 1, 1)
+
+[entity id="sphere_9_11"]
+HierarchyOrder.order = 1490
+MeshRenderer.meshPrimitive = Sphere
+MeshRenderer.material = [guid="9aae4628-ba39-4546-b3c7-55730e59d1ca"]
+MeshRenderer.enabled = true
+MeshRenderer.renderLayerMask = 1
+MeshRenderer.castShadows = true
+MeshRenderer.receiveShadows = true
+MeshRenderer.motionVectors = true
+Name.value = "Sphere 9-11"
+Transform.position = (8.5, 1.45, 21.3)
+Transform.rotation = (-0, -0, -0, 1)
+Transform.scale = (1, 1, 1)
+
+[entity id="sphere_9_12"]
+HierarchyOrder.order = 1500
+MeshRenderer.meshPrimitive = Sphere
+MeshRenderer.material = [guid="9aae4628-ba39-4546-b3c7-55730e59d1ca"]
+MeshRenderer.enabled = true
+MeshRenderer.renderLayerMask = 1
+MeshRenderer.castShadows = true
+MeshRenderer.receiveShadows = true
+MeshRenderer.motionVectors = true
+Name.value = "Sphere 9-12"
+Transform.position = (8.5, 4, 24.7)
+Transform.rotation = (-0, -0, -0, 1)
+Transform.scale = (1, 1, 1)
+
+[entity id="sphere_9_13"]
+HierarchyOrder.order = 1510
+MeshRenderer.meshPrimitive = Sphere
+MeshRenderer.material = [guid="9aae4628-ba39-4546-b3c7-55730e59d1ca"]
+MeshRenderer.enabled = true
+MeshRenderer.renderLayerMask = 1
+MeshRenderer.castShadows = true
+MeshRenderer.receiveShadows = true
+MeshRenderer.motionVectors = true
+Name.value = "Sphere 9-13"
+Transform.position = (8.5, 0.6, 28.1)
+Transform.rotation = (-0, -0, -0, 1)
+Transform.scale = (1, 1, 1)
+
+[entity id="sphere_10_0"]
+HierarchyOrder.order = 1520
+MeshRenderer.meshPrimitive = Sphere
+MeshRenderer.material = [guid="9aae4628-ba39-4546-b3c7-55730e59d1ca"]
+MeshRenderer.enabled = true
+MeshRenderer.renderLayerMask = 1
+MeshRenderer.castShadows = true
+MeshRenderer.receiveShadows = true
+MeshRenderer.motionVectors = true
+Name.value = "Sphere 10-0"
+Transform.position = (11.9, 1.45, -16.1)
+Transform.rotation = (-0, -0, -0, 1)
+Transform.scale = (1, 1, 1)
+
+[entity id="sphere_10_1"]
+HierarchyOrder.order = 1530
+MeshRenderer.meshPrimitive = Sphere
+MeshRenderer.material = [guid="9aae4628-ba39-4546-b3c7-55730e59d1ca"]
+MeshRenderer.enabled = true
+MeshRenderer.renderLayerMask = 1
+MeshRenderer.castShadows = true
+MeshRenderer.receiveShadows = true
+MeshRenderer.motionVectors = true
+Name.value = "Sphere 10-1"
+Transform.position = (11.9, 4, -12.7)
+Transform.rotation = (-0, -0, -0, 1)
+Transform.scale = (1, 1, 1)
+
+[entity id="sphere_10_2"]
+HierarchyOrder.order = 1540
+MeshRenderer.meshPrimitive = Sphere
+MeshRenderer.material = [guid="9aae4628-ba39-4546-b3c7-55730e59d1ca"]
+MeshRenderer.enabled = true
+MeshRenderer.renderLayerMask = 1
+MeshRenderer.castShadows = true
+MeshRenderer.receiveShadows = true
+MeshRenderer.motionVectors = true
+Name.value = "Sphere 10-2"
+Transform.position = (11.9, 0.6, -9.3)
+Transform.rotation = (-0, -0, -0, 1)
+Transform.scale = (1, 1, 1)
+
+[entity id="sphere_10_3"]
+HierarchyOrder.order = 1550
+MeshRenderer.meshPrimitive = Sphere
+MeshRenderer.material = [guid="9aae4628-ba39-4546-b3c7-55730e59d1ca"]
+MeshRenderer.enabled = true
+MeshRenderer.renderLayerMask = 1
+MeshRenderer.castShadows = true
+MeshRenderer.receiveShadows = true
+MeshRenderer.motionVectors = true
+Name.value = "Sphere 10-3"
+Transform.position = (11.9, 3.15, -5.9)
+Transform.rotation = (-0, -0, -0, 1)
+Transform.scale = (1, 1, 1)
+
+[entity id="sphere_10_4"]
+HierarchyOrder.order = 1560
+MeshRenderer.meshPrimitive = Sphere
+MeshRenderer.material = [guid="9aae4628-ba39-4546-b3c7-55730e59d1ca"]
+MeshRenderer.enabled = true
+MeshRenderer.renderLayerMask = 1
+MeshRenderer.castShadows = true
+MeshRenderer.receiveShadows = true
+MeshRenderer.motionVectors = true
+Name.value = "Sphere 10-4"
+Transform.position = (11.9, 5.7, -2.5)
+Transform.rotation = (-0, -0, -0, 1)
+Transform.scale = (1, 1, 1)
+
+[entity id="sphere_10_5"]
+HierarchyOrder.order = 1570
+MeshRenderer.meshPrimitive = Sphere
+MeshRenderer.material = [guid="9aae4628-ba39-4546-b3c7-55730e59d1ca"]
+MeshRenderer.enabled = true
+MeshRenderer.renderLayerMask = 1
+MeshRenderer.castShadows = true
+MeshRenderer.receiveShadows = true
+MeshRenderer.motionVectors = true
+Name.value = "Sphere 10-5"
+Transform.position = (11.9, 2.3, 0.9)
+Transform.rotation = (-0, -0, -0, 1)
+Transform.scale = (1, 1, 1)
+
+[entity id="sphere_10_6"]
+HierarchyOrder.order = 1580
+MeshRenderer.meshPrimitive = Sphere
+MeshRenderer.material = [guid="9aae4628-ba39-4546-b3c7-55730e59d1ca"]
+MeshRenderer.enabled = true
+MeshRenderer.renderLayerMask = 1
+MeshRenderer.castShadows = true
+MeshRenderer.receiveShadows = true
+MeshRenderer.motionVectors = true
+Name.value = "Sphere 10-6"
+Transform.position = (11.9, 4.85, 4.3)
+Transform.rotation = (-0, -0, -0, 1)
+Transform.scale = (1, 1, 1)
+
+[entity id="sphere_10_7"]
+HierarchyOrder.order = 1590
+MeshRenderer.meshPrimitive = Sphere
+MeshRenderer.material = [guid="9aae4628-ba39-4546-b3c7-55730e59d1ca"]
+MeshRenderer.enabled = true
+MeshRenderer.renderLayerMask = 1
+MeshRenderer.castShadows = true
+MeshRenderer.receiveShadows = true
+MeshRenderer.motionVectors = true
+Name.value = "Sphere 10-7"
+Transform.position = (11.9, 1.45, 7.7)
+Transform.rotation = (-0, -0, -0, 1)
+Transform.scale = (1, 1, 1)
+
+[entity id="sphere_10_8"]
+HierarchyOrder.order = 1600
+MeshRenderer.meshPrimitive = Sphere
+MeshRenderer.material = [guid="9aae4628-ba39-4546-b3c7-55730e59d1ca"]
+MeshRenderer.enabled = true
+MeshRenderer.renderLayerMask = 1
+MeshRenderer.castShadows = true
+MeshRenderer.receiveShadows = true
+MeshRenderer.motionVectors = true
+Name.value = "Sphere 10-8"
+Transform.position = (11.9, 4, 11.1)
+Transform.rotation = (-0, -0, -0, 1)
+Transform.scale = (1, 1, 1)
+
+[entity id="sphere_10_9"]
+HierarchyOrder.order = 1610
+MeshRenderer.meshPrimitive = Sphere
+MeshRenderer.material = [guid="9aae4628-ba39-4546-b3c7-55730e59d1ca"]
+MeshRenderer.enabled = true
+MeshRenderer.renderLayerMask = 1
+MeshRenderer.castShadows = true
+MeshRenderer.receiveShadows = true
+MeshRenderer.motionVectors = true
+Name.value = "Sphere 10-9"
+Transform.position = (11.9, 0.6, 14.5)
+Transform.rotation = (-0, -0, -0, 1)
+Transform.scale = (1, 1, 1)
+
+[entity id="sphere_10_10"]
+HierarchyOrder.order = 1620
+MeshRenderer.meshPrimitive = Sphere
+MeshRenderer.material = [guid="9aae4628-ba39-4546-b3c7-55730e59d1ca"]
+MeshRenderer.enabled = true
+MeshRenderer.renderLayerMask = 1
+MeshRenderer.castShadows = true
+MeshRenderer.receiveShadows = true
+MeshRenderer.motionVectors = true
+Name.value = "Sphere 10-10"
+Transform.position = (11.9, 3.15, 17.9)
+Transform.rotation = (-0, -0, -0, 1)
+Transform.scale = (1, 1, 1)
+
+[entity id="sphere_10_11"]
+HierarchyOrder.order = 1630
+MeshRenderer.meshPrimitive = Sphere
+MeshRenderer.material = [guid="9aae4628-ba39-4546-b3c7-55730e59d1ca"]
+MeshRenderer.enabled = true
+MeshRenderer.renderLayerMask = 1
+MeshRenderer.castShadows = true
+MeshRenderer.receiveShadows = true
+MeshRenderer.motionVectors = true
+Name.value = "Sphere 10-11"
+Transform.position = (11.9, 5.7, 21.3)
+Transform.rotation = (-0, -0, -0, 1)
+Transform.scale = (1, 1, 1)
+
+[entity id="sphere_10_12"]
+HierarchyOrder.order = 1640
+MeshRenderer.meshPrimitive = Sphere
+MeshRenderer.material = [guid="9aae4628-ba39-4546-b3c7-55730e59d1ca"]
+MeshRenderer.enabled = true
+MeshRenderer.renderLayerMask = 1
+MeshRenderer.castShadows = true
+MeshRenderer.receiveShadows = true
+MeshRenderer.motionVectors = true
+Name.value = "Sphere 10-12"
+Transform.position = (11.9, 2.3, 24.7)
+Transform.rotation = (-0, -0, -0, 1)
+Transform.scale = (1, 1, 1)
+
+[entity id="sphere_10_13"]
+HierarchyOrder.order = 1650
+MeshRenderer.meshPrimitive = Sphere
+MeshRenderer.material = [guid="9aae4628-ba39-4546-b3c7-55730e59d1ca"]
+MeshRenderer.enabled = true
+MeshRenderer.renderLayerMask = 1
+MeshRenderer.castShadows = true
+MeshRenderer.receiveShadows = true
+MeshRenderer.motionVectors = true
+Name.value = "Sphere 10-13"
+Transform.position = (11.9, 4.85, 28.1)
+Transform.rotation = (-0, -0, -0, 1)
+Transform.scale = (1, 1, 1)
+
+[entity id="sphere_11_0"]
+HierarchyOrder.order = 1660
+MeshRenderer.meshPrimitive = Sphere
+MeshRenderer.material = [guid="9aae4628-ba39-4546-b3c7-55730e59d1ca"]
+MeshRenderer.enabled = true
+MeshRenderer.renderLayerMask = 1
+MeshRenderer.castShadows = true
+MeshRenderer.receiveShadows = true
+MeshRenderer.motionVectors = true
+Name.value = "Sphere 11-0"
+Transform.position = (15.3, 5.7, -16.1)
+Transform.rotation = (-0, -0, -0, 1)
+Transform.scale = (1, 1, 1)
+
+[entity id="sphere_11_1"]
+HierarchyOrder.order = 1670
+MeshRenderer.meshPrimitive = Sphere
+MeshRenderer.material = [guid="9aae4628-ba39-4546-b3c7-55730e59d1ca"]
+MeshRenderer.enabled = true
+MeshRenderer.renderLayerMask = 1
+MeshRenderer.castShadows = true
+MeshRenderer.receiveShadows = true
+MeshRenderer.motionVectors = true
+Name.value = "Sphere 11-1"
+Transform.position = (15.3, 2.3, -12.7)
+Transform.rotation = (-0, -0, -0, 1)
+Transform.scale = (1, 1, 1)
+
+[entity id="sphere_11_2"]
+HierarchyOrder.order = 1680
+MeshRenderer.meshPrimitive = Sphere
+MeshRenderer.material = [guid="9aae4628-ba39-4546-b3c7-55730e59d1ca"]
+MeshRenderer.enabled = true
+MeshRenderer.renderLayerMask = 1
+MeshRenderer.castShadows = true
+MeshRenderer.receiveShadows = true
+MeshRenderer.motionVectors = true
+Name.value = "Sphere 11-2"
+Transform.position = (15.3, 4.85, -9.3)
+Transform.rotation = (-0, -0, -0, 1)
+Transform.scale = (1, 1, 1)
+
+[entity id="sphere_11_3"]
+HierarchyOrder.order = 1690
+MeshRenderer.meshPrimitive = Sphere
+MeshRenderer.material = [guid="9aae4628-ba39-4546-b3c7-55730e59d1ca"]
+MeshRenderer.enabled = true
+MeshRenderer.renderLayerMask = 1
+MeshRenderer.castShadows = true
+MeshRenderer.receiveShadows = true
+MeshRenderer.motionVectors = true
+Name.value = "Sphere 11-3"
+Transform.position = (15.3, 1.45, -5.9)
+Transform.rotation = (-0, -0, -0, 1)
+Transform.scale = (1, 1, 1)
+
+[entity id="sphere_11_4"]
+HierarchyOrder.order = 1700
+MeshRenderer.meshPrimitive = Sphere
+MeshRenderer.material = [guid="9aae4628-ba39-4546-b3c7-55730e59d1ca"]
+MeshRenderer.enabled = true
+MeshRenderer.renderLayerMask = 1
+MeshRenderer.castShadows = true
+MeshRenderer.receiveShadows = true
+MeshRenderer.motionVectors = true
+Name.value = "Sphere 11-4"
+Transform.position = (15.3, 4, -2.5)
+Transform.rotation = (-0, -0, -0, 1)
+Transform.scale = (1, 1, 1)
+
+[entity id="sphere_11_5"]
+HierarchyOrder.order = 1710
+MeshRenderer.meshPrimitive = Sphere
+MeshRenderer.material = [guid="9aae4628-ba39-4546-b3c7-55730e59d1ca"]
+MeshRenderer.enabled = true
+MeshRenderer.renderLayerMask = 1
+MeshRenderer.castShadows = true
+MeshRenderer.receiveShadows = true
+MeshRenderer.motionVectors = true
+Name.value = "Sphere 11-5"
+Transform.position = (15.3, 0.6, 0.9)
+Transform.rotation = (-0, -0, -0, 1)
+Transform.scale = (1, 1, 1)
+
+[entity id="sphere_11_6"]
+HierarchyOrder.order = 1720
+MeshRenderer.meshPrimitive = Sphere
+MeshRenderer.material = [guid="9aae4628-ba39-4546-b3c7-55730e59d1ca"]
+MeshRenderer.enabled = true
+MeshRenderer.renderLayerMask = 1
+MeshRenderer.castShadows = true
+MeshRenderer.receiveShadows = true
+MeshRenderer.motionVectors = true
+Name.value = "Sphere 11-6"
+Transform.position = (15.3, 3.15, 4.3)
+Transform.rotation = (-0, -0, -0, 1)
+Transform.scale = (1, 1, 1)
+
+[entity id="sphere_11_7"]
+HierarchyOrder.order = 1730
+MeshRenderer.meshPrimitive = Sphere
+MeshRenderer.material = [guid="9aae4628-ba39-4546-b3c7-55730e59d1ca"]
+MeshRenderer.enabled = true
+MeshRenderer.renderLayerMask = 1
+MeshRenderer.castShadows = true
+MeshRenderer.receiveShadows = true
+MeshRenderer.motionVectors = true
+Name.value = "Sphere 11-7"
+Transform.position = (15.3, 5.7, 7.7)
+Transform.rotation = (-0, -0, -0, 1)
+Transform.scale = (1, 1, 1)
+
+[entity id="sphere_11_8"]
+HierarchyOrder.order = 1740
+MeshRenderer.meshPrimitive = Sphere
+MeshRenderer.material = [guid="9aae4628-ba39-4546-b3c7-55730e59d1ca"]
+MeshRenderer.enabled = true
+MeshRenderer.renderLayerMask = 1
+MeshRenderer.castShadows = true
+MeshRenderer.receiveShadows = true
+MeshRenderer.motionVectors = true
+Name.value = "Sphere 11-8"
+Transform.position = (15.3, 2.3, 11.1)
+Transform.rotation = (-0, -0, -0, 1)
+Transform.scale = (1, 1, 1)
+
+[entity id="sphere_11_9"]
+HierarchyOrder.order = 1750
+MeshRenderer.meshPrimitive = Sphere
+MeshRenderer.material = [guid="9aae4628-ba39-4546-b3c7-55730e59d1ca"]
+MeshRenderer.enabled = true
+MeshRenderer.renderLayerMask = 1
+MeshRenderer.castShadows = true
+MeshRenderer.receiveShadows = true
+MeshRenderer.motionVectors = true
+Name.value = "Sphere 11-9"
+Transform.position = (15.3, 4.85, 14.5)
+Transform.rotation = (-0, -0, -0, 1)
+Transform.scale = (1, 1, 1)
+
+[entity id="sphere_11_10"]
+HierarchyOrder.order = 1760
+MeshRenderer.meshPrimitive = Sphere
+MeshRenderer.material = [guid="9aae4628-ba39-4546-b3c7-55730e59d1ca"]
+MeshRenderer.enabled = true
+MeshRenderer.renderLayerMask = 1
+MeshRenderer.castShadows = true
+MeshRenderer.receiveShadows = true
+MeshRenderer.motionVectors = true
+Name.value = "Sphere 11-10"
+Transform.position = (15.3, 1.45, 17.9)
+Transform.rotation = (-0, -0, -0, 1)
+Transform.scale = (1, 1, 1)
+
+[entity id="sphere_11_11"]
+HierarchyOrder.order = 1770
+MeshRenderer.meshPrimitive = Sphere
+MeshRenderer.material = [guid="9aae4628-ba39-4546-b3c7-55730e59d1ca"]
+MeshRenderer.enabled = true
+MeshRenderer.renderLayerMask = 1
+MeshRenderer.castShadows = true
+MeshRenderer.receiveShadows = true
+MeshRenderer.motionVectors = true
+Name.value = "Sphere 11-11"
+Transform.position = (15.3, 4, 21.3)
+Transform.rotation = (-0, -0, -0, 1)
+Transform.scale = (1, 1, 1)
+
+[entity id="sphere_11_12"]
+HierarchyOrder.order = 1780
+MeshRenderer.meshPrimitive = Sphere
+MeshRenderer.material = [guid="9aae4628-ba39-4546-b3c7-55730e59d1ca"]
+MeshRenderer.enabled = true
+MeshRenderer.renderLayerMask = 1
+MeshRenderer.castShadows = true
+MeshRenderer.receiveShadows = true
+MeshRenderer.motionVectors = true
+Name.value = "Sphere 11-12"
+Transform.position = (15.3, 0.6, 24.7)
+Transform.rotation = (-0, -0, -0, 1)
+Transform.scale = (1, 1, 1)
+
+[entity id="sphere_11_13"]
+HierarchyOrder.order = 1790
+MeshRenderer.meshPrimitive = Sphere
+MeshRenderer.material = [guid="9aae4628-ba39-4546-b3c7-55730e59d1ca"]
+MeshRenderer.enabled = true
+MeshRenderer.renderLayerMask = 1
+MeshRenderer.castShadows = true
+MeshRenderer.receiveShadows = true
+MeshRenderer.motionVectors = true
+Name.value = "Sphere 11-13"
+Transform.position = (15.3, 3.15, 28.1)
+Transform.rotation = (-0, -0, -0, 1)
+Transform.scale = (1, 1, 1)
+
+[entity id="sphere_12_0"]
+HierarchyOrder.order = 1800
+MeshRenderer.meshPrimitive = Sphere
+MeshRenderer.material = [guid="9aae4628-ba39-4546-b3c7-55730e59d1ca"]
+MeshRenderer.enabled = true
+MeshRenderer.renderLayerMask = 1
+MeshRenderer.castShadows = true
+MeshRenderer.receiveShadows = true
+MeshRenderer.motionVectors = true
+Name.value = "Sphere 12-0"
+Transform.position = (18.7, 4, -16.1)
+Transform.rotation = (-0, -0, -0, 1)
+Transform.scale = (1, 1, 1)
+
+[entity id="sphere_12_1"]
+HierarchyOrder.order = 1810
+MeshRenderer.meshPrimitive = Sphere
+MeshRenderer.material = [guid="9aae4628-ba39-4546-b3c7-55730e59d1ca"]
+MeshRenderer.enabled = true
+MeshRenderer.renderLayerMask = 1
+MeshRenderer.castShadows = true
+MeshRenderer.receiveShadows = true
+MeshRenderer.motionVectors = true
+Name.value = "Sphere 12-1"
+Transform.position = (18.7, 0.6, -12.7)
+Transform.rotation = (-0, -0, -0, 1)
+Transform.scale = (1, 1, 1)
+
+[entity id="sphere_12_2"]
+HierarchyOrder.order = 1820
+MeshRenderer.meshPrimitive = Sphere
+MeshRenderer.material = [guid="9aae4628-ba39-4546-b3c7-55730e59d1ca"]
+MeshRenderer.enabled = true
+MeshRenderer.renderLayerMask = 1
+MeshRenderer.castShadows = true
+MeshRenderer.receiveShadows = true
+MeshRenderer.motionVectors = true
+Name.value = "Sphere 12-2"
+Transform.position = (18.7, 3.15, -9.3)
+Transform.rotation = (-0, -0, -0, 1)
+Transform.scale = (1, 1, 1)
+
+[entity id="sphere_12_3"]
+HierarchyOrder.order = 1830
+MeshRenderer.meshPrimitive = Sphere
+MeshRenderer.material = [guid="9aae4628-ba39-4546-b3c7-55730e59d1ca"]
+MeshRenderer.enabled = true
+MeshRenderer.renderLayerMask = 1
+MeshRenderer.castShadows = true
+MeshRenderer.receiveShadows = true
+MeshRenderer.motionVectors = true
+Name.value = "Sphere 12-3"
+Transform.position = (18.7, 5.7, -5.9)
+Transform.rotation = (-0, -0, -0, 1)
+Transform.scale = (1, 1, 1)
+
+[entity id="sphere_12_4"]
+HierarchyOrder.order = 1840
+MeshRenderer.meshPrimitive = Sphere
+MeshRenderer.material = [guid="9aae4628-ba39-4546-b3c7-55730e59d1ca"]
+MeshRenderer.enabled = true
+MeshRenderer.renderLayerMask = 1
+MeshRenderer.castShadows = true
+MeshRenderer.receiveShadows = true
+MeshRenderer.motionVectors = true
+Name.value = "Sphere 12-4"
+Transform.position = (18.7, 2.3, -2.5)
+Transform.rotation = (-0, -0, -0, 1)
+Transform.scale = (1, 1, 1)
+
+[entity id="sphere_12_5"]
+HierarchyOrder.order = 1850
+MeshRenderer.meshPrimitive = Sphere
+MeshRenderer.material = [guid="9aae4628-ba39-4546-b3c7-55730e59d1ca"]
+MeshRenderer.enabled = true
+MeshRenderer.renderLayerMask = 1
+MeshRenderer.castShadows = true
+MeshRenderer.receiveShadows = true
+MeshRenderer.motionVectors = true
+Name.value = "Sphere 12-5"
+Transform.position = (18.7, 4.85, 0.9)
+Transform.rotation = (-0, -0, -0, 1)
+Transform.scale = (1, 1, 1)
+
+[entity id="sphere_12_6"]
+HierarchyOrder.order = 1860
+MeshRenderer.meshPrimitive = Sphere
+MeshRenderer.material = [guid="9aae4628-ba39-4546-b3c7-55730e59d1ca"]
+MeshRenderer.enabled = true
+MeshRenderer.renderLayerMask = 1
+MeshRenderer.castShadows = true
+MeshRenderer.receiveShadows = true
+MeshRenderer.motionVectors = true
+Name.value = "Sphere 12-6"
+Transform.position = (18.7, 1.45, 4.3)
+Transform.rotation = (-0, -0, -0, 1)
+Transform.scale = (1, 1, 1)
+
+[entity id="sphere_12_7"]
+HierarchyOrder.order = 1870
+MeshRenderer.meshPrimitive = Sphere
+MeshRenderer.material = [guid="9aae4628-ba39-4546-b3c7-55730e59d1ca"]
+MeshRenderer.enabled = true
+MeshRenderer.renderLayerMask = 1
+MeshRenderer.castShadows = true
+MeshRenderer.receiveShadows = true
+MeshRenderer.motionVectors = true
+Name.value = "Sphere 12-7"
+Transform.position = (18.7, 4, 7.7)
+Transform.rotation = (-0, -0, -0, 1)
+Transform.scale = (1, 1, 1)
+
+[entity id="sphere_12_8"]
+HierarchyOrder.order = 1880
+MeshRenderer.meshPrimitive = Sphere
+MeshRenderer.material = [guid="9aae4628-ba39-4546-b3c7-55730e59d1ca"]
+MeshRenderer.enabled = true
+MeshRenderer.renderLayerMask = 1
+MeshRenderer.castShadows = true
+MeshRenderer.receiveShadows = true
+MeshRenderer.motionVectors = true
+Name.value = "Sphere 12-8"
+Transform.position = (18.7, 0.6, 11.1)
+Transform.rotation = (-0, -0, -0, 1)
+Transform.scale = (1, 1, 1)
+
+[entity id="sphere_12_9"]
+HierarchyOrder.order = 1890
+MeshRenderer.meshPrimitive = Sphere
+MeshRenderer.material = [guid="9aae4628-ba39-4546-b3c7-55730e59d1ca"]
+MeshRenderer.enabled = true
+MeshRenderer.renderLayerMask = 1
+MeshRenderer.castShadows = true
+MeshRenderer.receiveShadows = true
+MeshRenderer.motionVectors = true
+Name.value = "Sphere 12-9"
+Transform.position = (18.7, 3.15, 14.5)
+Transform.rotation = (-0, -0, -0, 1)
+Transform.scale = (1, 1, 1)
+
+[entity id="sphere_12_10"]
+HierarchyOrder.order = 1900
+MeshRenderer.meshPrimitive = Sphere
+MeshRenderer.material = [guid="9aae4628-ba39-4546-b3c7-55730e59d1ca"]
+MeshRenderer.enabled = true
+MeshRenderer.renderLayerMask = 1
+MeshRenderer.castShadows = true
+MeshRenderer.receiveShadows = true
+MeshRenderer.motionVectors = true
+Name.value = "Sphere 12-10"
+Transform.position = (18.7, 5.7, 17.9)
+Transform.rotation = (-0, -0, -0, 1)
+Transform.scale = (1, 1, 1)
+
+[entity id="sphere_12_11"]
+HierarchyOrder.order = 1910
+MeshRenderer.meshPrimitive = Sphere
+MeshRenderer.material = [guid="9aae4628-ba39-4546-b3c7-55730e59d1ca"]
+MeshRenderer.enabled = true
+MeshRenderer.renderLayerMask = 1
+MeshRenderer.castShadows = true
+MeshRenderer.receiveShadows = true
+MeshRenderer.motionVectors = true
+Name.value = "Sphere 12-11"
+Transform.position = (18.7, 2.3, 21.3)
+Transform.rotation = (-0, -0, -0, 1)
+Transform.scale = (1, 1, 1)
+
+[entity id="sphere_12_12"]
+HierarchyOrder.order = 1920
+MeshRenderer.meshPrimitive = Sphere
+MeshRenderer.material = [guid="9aae4628-ba39-4546-b3c7-55730e59d1ca"]
+MeshRenderer.enabled = true
+MeshRenderer.renderLayerMask = 1
+MeshRenderer.castShadows = true
+MeshRenderer.receiveShadows = true
+MeshRenderer.motionVectors = true
+Name.value = "Sphere 12-12"
+Transform.position = (18.7, 4.85, 24.7)
+Transform.rotation = (-0, -0, -0, 1)
+Transform.scale = (1, 1, 1)
+
+[entity id="sphere_12_13"]
+HierarchyOrder.order = 1930
+MeshRenderer.meshPrimitive = Sphere
+MeshRenderer.material = [guid="9aae4628-ba39-4546-b3c7-55730e59d1ca"]
+MeshRenderer.enabled = true
+MeshRenderer.renderLayerMask = 1
+MeshRenderer.castShadows = true
+MeshRenderer.receiveShadows = true
+MeshRenderer.motionVectors = true
+Name.value = "Sphere 12-13"
+Transform.position = (18.7, 1.45, 28.1)
+Transform.rotation = (-0, -0, -0, 1)
+Transform.scale = (1, 1, 1)
+
+[entity id="sphere_13_0"]
+HierarchyOrder.order = 1940
+MeshRenderer.meshPrimitive = Sphere
+MeshRenderer.material = [guid="9aae4628-ba39-4546-b3c7-55730e59d1ca"]
+MeshRenderer.enabled = true
+MeshRenderer.renderLayerMask = 1
+MeshRenderer.castShadows = true
+MeshRenderer.receiveShadows = true
+MeshRenderer.motionVectors = true
+Name.value = "Sphere 13-0"
+Transform.position = (22.1, 2.3, -16.1)
+Transform.rotation = (-0, -0, -0, 1)
+Transform.scale = (1, 1, 1)
+
+[entity id="sphere_13_1"]
+HierarchyOrder.order = 1950
+MeshRenderer.meshPrimitive = Sphere
+MeshRenderer.material = [guid="9aae4628-ba39-4546-b3c7-55730e59d1ca"]
+MeshRenderer.enabled = true
+MeshRenderer.renderLayerMask = 1
+MeshRenderer.castShadows = true
+MeshRenderer.receiveShadows = true
+MeshRenderer.motionVectors = true
+Name.value = "Sphere 13-1"
+Transform.position = (22.1, 4.85, -12.7)
+Transform.rotation = (-0, -0, -0, 1)
+Transform.scale = (1, 1, 1)
+
+[entity id="sphere_13_2"]
+HierarchyOrder.order = 1960
+MeshRenderer.meshPrimitive = Sphere
+MeshRenderer.material = [guid="9aae4628-ba39-4546-b3c7-55730e59d1ca"]
+MeshRenderer.enabled = true
+MeshRenderer.renderLayerMask = 1
+MeshRenderer.castShadows = true
+MeshRenderer.receiveShadows = true
+MeshRenderer.motionVectors = true
+Name.value = "Sphere 13-2"
+Transform.position = (22.1, 1.45, -9.3)
+Transform.rotation = (-0, -0, -0, 1)
+Transform.scale = (1, 1, 1)
+
+[entity id="sphere_13_3"]
+HierarchyOrder.order = 1970
+MeshRenderer.meshPrimitive = Sphere
+MeshRenderer.material = [guid="9aae4628-ba39-4546-b3c7-55730e59d1ca"]
+MeshRenderer.enabled = true
+MeshRenderer.renderLayerMask = 1
+MeshRenderer.castShadows = true
+MeshRenderer.receiveShadows = true
+MeshRenderer.motionVectors = true
+Name.value = "Sphere 13-3"
+Transform.position = (22.1, 4, -5.9)
+Transform.rotation = (-0, -0, -0, 1)
+Transform.scale = (1, 1, 1)
+
+[entity id="sphere_13_4"]
+HierarchyOrder.order = 1980
+MeshRenderer.meshPrimitive = Sphere
+MeshRenderer.material = [guid="9aae4628-ba39-4546-b3c7-55730e59d1ca"]
+MeshRenderer.enabled = true
+MeshRenderer.renderLayerMask = 1
+MeshRenderer.castShadows = true
+MeshRenderer.receiveShadows = true
+MeshRenderer.motionVectors = true
+Name.value = "Sphere 13-4"
+Transform.position = (22.1, 0.6, -2.5)
+Transform.rotation = (-0, -0, -0, 1)
+Transform.scale = (1, 1, 1)
+
+[entity id="sphere_13_5"]
+HierarchyOrder.order = 1990
+MeshRenderer.meshPrimitive = Sphere
+MeshRenderer.material = [guid="9aae4628-ba39-4546-b3c7-55730e59d1ca"]
+MeshRenderer.enabled = true
+MeshRenderer.renderLayerMask = 1
+MeshRenderer.castShadows = true
+MeshRenderer.receiveShadows = true
+MeshRenderer.motionVectors = true
+Name.value = "Sphere 13-5"
+Transform.position = (22.1, 3.15, 0.9)
+Transform.rotation = (-0, -0, -0, 1)
+Transform.scale = (1, 1, 1)
+
+[entity id="sphere_13_6"]
+HierarchyOrder.order = 2000
+MeshRenderer.meshPrimitive = Sphere
+MeshRenderer.material = [guid="9aae4628-ba39-4546-b3c7-55730e59d1ca"]
+MeshRenderer.enabled = true
+MeshRenderer.renderLayerMask = 1
+MeshRenderer.castShadows = true
+MeshRenderer.receiveShadows = true
+MeshRenderer.motionVectors = true
+Name.value = "Sphere 13-6"
+Transform.position = (22.1, 5.7, 4.3)
+Transform.rotation = (-0, -0, -0, 1)
+Transform.scale = (1, 1, 1)
+
+[entity id="sphere_13_7"]
+HierarchyOrder.order = 2010
+MeshRenderer.meshPrimitive = Sphere
+MeshRenderer.material = [guid="9aae4628-ba39-4546-b3c7-55730e59d1ca"]
+MeshRenderer.enabled = true
+MeshRenderer.renderLayerMask = 1
+MeshRenderer.castShadows = true
+MeshRenderer.receiveShadows = true
+MeshRenderer.motionVectors = true
+Name.value = "Sphere 13-7"
+Transform.position = (22.1, 2.3, 7.7)
+Transform.rotation = (-0, -0, -0, 1)
+Transform.scale = (1, 1, 1)
+
+[entity id="sphere_13_8"]
+HierarchyOrder.order = 2020
+MeshRenderer.meshPrimitive = Sphere
+MeshRenderer.material = [guid="9aae4628-ba39-4546-b3c7-55730e59d1ca"]
+MeshRenderer.enabled = true
+MeshRenderer.renderLayerMask = 1
+MeshRenderer.castShadows = true
+MeshRenderer.receiveShadows = true
+MeshRenderer.motionVectors = true
+Name.value = "Sphere 13-8"
+Transform.position = (22.1, 4.85, 11.1)
+Transform.rotation = (-0, -0, -0, 1)
+Transform.scale = (1, 1, 1)
+
+[entity id="sphere_13_9"]
+HierarchyOrder.order = 2030
+MeshRenderer.meshPrimitive = Sphere
+MeshRenderer.material = [guid="9aae4628-ba39-4546-b3c7-55730e59d1ca"]
+MeshRenderer.enabled = true
+MeshRenderer.renderLayerMask = 1
+MeshRenderer.castShadows = true
+MeshRenderer.receiveShadows = true
+MeshRenderer.motionVectors = true
+Name.value = "Sphere 13-9"
+Transform.position = (22.1, 1.45, 14.5)
+Transform.rotation = (-0, -0, -0, 1)
+Transform.scale = (1, 1, 1)
+
+[entity id="sphere_13_10"]
+HierarchyOrder.order = 2040
+MeshRenderer.meshPrimitive = Sphere
+MeshRenderer.material = [guid="9aae4628-ba39-4546-b3c7-55730e59d1ca"]
+MeshRenderer.enabled = true
+MeshRenderer.renderLayerMask = 1
+MeshRenderer.castShadows = true
+MeshRenderer.receiveShadows = true
+MeshRenderer.motionVectors = true
+Name.value = "Sphere 13-10"
+Transform.position = (22.1, 4, 17.9)
+Transform.rotation = (-0, -0, -0, 1)
+Transform.scale = (1, 1, 1)
+
+[entity id="sphere_13_11"]
+HierarchyOrder.order = 2050
+MeshRenderer.meshPrimitive = Sphere
+MeshRenderer.material = [guid="9aae4628-ba39-4546-b3c7-55730e59d1ca"]
+MeshRenderer.enabled = true
+MeshRenderer.renderLayerMask = 1
+MeshRenderer.castShadows = true
+MeshRenderer.receiveShadows = true
+MeshRenderer.motionVectors = true
+Name.value = "Sphere 13-11"
+Transform.position = (22.1, 0.6, 21.3)
+Transform.rotation = (-0, -0, -0, 1)
+Transform.scale = (1, 1, 1)
+
+[entity id="sphere_13_12"]
+HierarchyOrder.order = 2060
+MeshRenderer.meshPrimitive = Sphere
+MeshRenderer.material = [guid="9aae4628-ba39-4546-b3c7-55730e59d1ca"]
+MeshRenderer.enabled = true
+MeshRenderer.renderLayerMask = 1
+MeshRenderer.castShadows = true
+MeshRenderer.receiveShadows = true
+MeshRenderer.motionVectors = true
+Name.value = "Sphere 13-12"
+Transform.position = (22.1, 3.15, 24.7)
+Transform.rotation = (-0, -0, -0, 1)
+Transform.scale = (1, 1, 1)
+
+[entity id="sphere_13_13"]
+HierarchyOrder.order = 2070
+MeshRenderer.meshPrimitive = Sphere
+MeshRenderer.material = [guid="9aae4628-ba39-4546-b3c7-55730e59d1ca"]
+MeshRenderer.enabled = true
+MeshRenderer.renderLayerMask = 1
+MeshRenderer.castShadows = true
+MeshRenderer.receiveShadows = true
+MeshRenderer.motionVectors = true
+Name.value = "Sphere 13-13"
+Transform.position = (22.1, 5.7, 28.1)
+Transform.rotation = (-0, -0, -0, 1)
+Transform.scale = (1, 1, 1)
+
+[entity id="house0_0_wn"]
+HierarchyOrder.order = 2080
+MeshRenderer.meshPrimitive = Cube
+MeshRenderer.material = [guid="9aae4628-ba39-4546-b3c7-55730e59d1ca"]
+MeshRenderer.enabled = true
+MeshRenderer.renderLayerMask = 1
+MeshRenderer.castShadows = true
+MeshRenderer.receiveShadows = true
+MeshRenderer.motionVectors = true
+Name.value = "House 0_0 N"
+Transform.position = (-25.5, 2, -37.5)
+Transform.rotation = (-0, -0, -0, 1)
+Transform.scale = (6, 4, 0.4)
+
+[entity id="house0_0_ws"]
+HierarchyOrder.order = 2090
+MeshRenderer.meshPrimitive = Cube
+MeshRenderer.material = [guid="9aae4628-ba39-4546-b3c7-55730e59d1ca"]
+MeshRenderer.enabled = true
+MeshRenderer.renderLayerMask = 1
+MeshRenderer.castShadows = true
+MeshRenderer.receiveShadows = true
+MeshRenderer.motionVectors = true
+Name.value = "House 0_0 S"
+Transform.position = (-25.5, 2, -42.5)
+Transform.rotation = (-0, -0, -0, 1)
+Transform.scale = (6, 4, 0.4)
+
+[entity id="house0_0_we"]
+HierarchyOrder.order = 2100
+MeshRenderer.meshPrimitive = Cube
+MeshRenderer.material = [guid="9aae4628-ba39-4546-b3c7-55730e59d1ca"]
+MeshRenderer.enabled = true
+MeshRenderer.renderLayerMask = 1
+MeshRenderer.castShadows = true
+MeshRenderer.receiveShadows = true
+MeshRenderer.motionVectors = true
+Name.value = "House 0_0 E"
+Transform.position = (-22.5, 2, -40)
+Transform.rotation = (-0, -0, -0, 1)
+Transform.scale = (0.4, 4, 5)
+
+[entity id="house0_0_ww"]
+HierarchyOrder.order = 2110
+MeshRenderer.meshPrimitive = Cube
+MeshRenderer.material = [guid="9aae4628-ba39-4546-b3c7-55730e59d1ca"]
+MeshRenderer.enabled = true
+MeshRenderer.renderLayerMask = 1
+MeshRenderer.castShadows = true
+MeshRenderer.receiveShadows = true
+MeshRenderer.motionVectors = true
+Name.value = "House 0_0 W"
+Transform.position = (-28.5, 2, -40)
+Transform.rotation = (-0, -0, -0, 1)
+Transform.scale = (0.4, 4, 5)
+
+[entity id="house0_0_roof"]
+HierarchyOrder.order = 2120
+MeshRenderer.meshPrimitive = Cube
+MeshRenderer.material = [guid="9aae4628-ba39-4546-b3c7-55730e59d1ca"]
+MeshRenderer.enabled = true
+MeshRenderer.renderLayerMask = 1
+MeshRenderer.castShadows = true
+MeshRenderer.receiveShadows = true
+MeshRenderer.motionVectors = true
+Name.value = "House 0_0 Roof"
+Transform.position = (-25.5, 4.2, -40)
+Transform.rotation = (-0, -0, -0, 1)
+Transform.scale = (6.6, 0.4, 5.6)
+
+[entity id="house0_1_wn"]
+HierarchyOrder.order = 2130
+MeshRenderer.meshPrimitive = Cube
+MeshRenderer.material = [guid="9aae4628-ba39-4546-b3c7-55730e59d1ca"]
+MeshRenderer.enabled = true
+MeshRenderer.renderLayerMask = 1
+MeshRenderer.castShadows = true
+MeshRenderer.receiveShadows = true
+MeshRenderer.motionVectors = true
+Name.value = "House 0_1 N"
+Transform.position = (-25.5, 2, -23.5)
+Transform.rotation = (-0, -0, -0, 1)
+Transform.scale = (6, 4, 0.4)
+
+[entity id="house0_1_ws"]
+HierarchyOrder.order = 2140
+MeshRenderer.meshPrimitive = Cube
+MeshRenderer.material = [guid="9aae4628-ba39-4546-b3c7-55730e59d1ca"]
+MeshRenderer.enabled = true
+MeshRenderer.renderLayerMask = 1
+MeshRenderer.castShadows = true
+MeshRenderer.receiveShadows = true
+MeshRenderer.motionVectors = true
+Name.value = "House 0_1 S"
+Transform.position = (-25.5, 2, -28.5)
+Transform.rotation = (-0, -0, -0, 1)
+Transform.scale = (6, 4, 0.4)
+
+[entity id="house0_1_we"]
+HierarchyOrder.order = 2150
+MeshRenderer.meshPrimitive = Cube
+MeshRenderer.material = [guid="9aae4628-ba39-4546-b3c7-55730e59d1ca"]
+MeshRenderer.enabled = true
+MeshRenderer.renderLayerMask = 1
+MeshRenderer.castShadows = true
+MeshRenderer.receiveShadows = true
+MeshRenderer.motionVectors = true
+Name.value = "House 0_1 E"
+Transform.position = (-22.5, 2, -26)
+Transform.rotation = (-0, -0, -0, 1)
+Transform.scale = (0.4, 4, 5)
+
+[entity id="house0_1_ww"]
+HierarchyOrder.order = 2160
+MeshRenderer.meshPrimitive = Cube
+MeshRenderer.material = [guid="9aae4628-ba39-4546-b3c7-55730e59d1ca"]
+MeshRenderer.enabled = true
+MeshRenderer.renderLayerMask = 1
+MeshRenderer.castShadows = true
+MeshRenderer.receiveShadows = true
+MeshRenderer.motionVectors = true
+Name.value = "House 0_1 W"
+Transform.position = (-28.5, 2, -26)
+Transform.rotation = (-0, -0, -0, 1)
+Transform.scale = (0.4, 4, 5)
+
+[entity id="house0_1_roof"]
+HierarchyOrder.order = 2170
+MeshRenderer.meshPrimitive = Cube
+MeshRenderer.material = [guid="9aae4628-ba39-4546-b3c7-55730e59d1ca"]
+MeshRenderer.enabled = true
+MeshRenderer.renderLayerMask = 1
+MeshRenderer.castShadows = true
+MeshRenderer.receiveShadows = true
+MeshRenderer.motionVectors = true
+Name.value = "House 0_1 Roof"
+Transform.position = (-25.5, 4.2, -26)
+Transform.rotation = (-0, -0, -0, 1)
+Transform.scale = (6.6, 0.4, 5.6)
+
+[entity id="house0_2_wn"]
+HierarchyOrder.order = 2180
+MeshRenderer.meshPrimitive = Cube
+MeshRenderer.material = [guid="9aae4628-ba39-4546-b3c7-55730e59d1ca"]
+MeshRenderer.enabled = true
+MeshRenderer.renderLayerMask = 1
+MeshRenderer.castShadows = true
+MeshRenderer.receiveShadows = true
+MeshRenderer.motionVectors = true
+Name.value = "House 0_2 N"
+Transform.position = (-25.5, 2, -9.5)
+Transform.rotation = (-0, -0, -0, 1)
+Transform.scale = (6, 4, 0.4)
+
+[entity id="house0_2_ws"]
+HierarchyOrder.order = 2190
+MeshRenderer.meshPrimitive = Cube
+MeshRenderer.material = [guid="9aae4628-ba39-4546-b3c7-55730e59d1ca"]
+MeshRenderer.enabled = true
+MeshRenderer.renderLayerMask = 1
+MeshRenderer.castShadows = true
+MeshRenderer.receiveShadows = true
+MeshRenderer.motionVectors = true
+Name.value = "House 0_2 S"
+Transform.position = (-25.5, 2, -14.5)
+Transform.rotation = (-0, -0, -0, 1)
+Transform.scale = (6, 4, 0.4)
+
+[entity id="house0_2_we"]
+HierarchyOrder.order = 2200
+MeshRenderer.meshPrimitive = Cube
+MeshRenderer.material = [guid="9aae4628-ba39-4546-b3c7-55730e59d1ca"]
+MeshRenderer.enabled = true
+MeshRenderer.renderLayerMask = 1
+MeshRenderer.castShadows = true
+MeshRenderer.receiveShadows = true
+MeshRenderer.motionVectors = true
+Name.value = "House 0_2 E"
+Transform.position = (-22.5, 2, -12)
+Transform.rotation = (-0, -0, -0, 1)
+Transform.scale = (0.4, 4, 5)
+
+[entity id="house0_2_ww"]
+HierarchyOrder.order = 2210
+MeshRenderer.meshPrimitive = Cube
+MeshRenderer.material = [guid="9aae4628-ba39-4546-b3c7-55730e59d1ca"]
+MeshRenderer.enabled = true
+MeshRenderer.renderLayerMask = 1
+MeshRenderer.castShadows = true
+MeshRenderer.receiveShadows = true
+MeshRenderer.motionVectors = true
+Name.value = "House 0_2 W"
+Transform.position = (-28.5, 2, -12)
+Transform.rotation = (-0, -0, -0, 1)
+Transform.scale = (0.4, 4, 5)
+
+[entity id="house0_2_roof"]
+HierarchyOrder.order = 2220
+MeshRenderer.meshPrimitive = Cube
+MeshRenderer.material = [guid="9aae4628-ba39-4546-b3c7-55730e59d1ca"]
+MeshRenderer.enabled = true
+MeshRenderer.renderLayerMask = 1
+MeshRenderer.castShadows = true
+MeshRenderer.receiveShadows = true
+MeshRenderer.motionVectors = true
+Name.value = "House 0_2 Roof"
+Transform.position = (-25.5, 4.2, -12)
+Transform.rotation = (-0, -0, -0, 1)
+Transform.scale = (6.6, 0.4, 5.6)
+
+[entity id="house1_0_wn"]
+HierarchyOrder.order = 2230
+MeshRenderer.meshPrimitive = Cube
+MeshRenderer.material = [guid="9aae4628-ba39-4546-b3c7-55730e59d1ca"]
+MeshRenderer.enabled = true
+MeshRenderer.renderLayerMask = 1
+MeshRenderer.castShadows = true
+MeshRenderer.receiveShadows = true
+MeshRenderer.motionVectors = true
+Name.value = "House 1_0 N"
+Transform.position = (-8.5, 2, -37.5)
+Transform.rotation = (-0, -0, -0, 1)
+Transform.scale = (6, 4, 0.4)
+
+[entity id="house1_0_ws"]
+HierarchyOrder.order = 2240
+MeshRenderer.meshPrimitive = Cube
+MeshRenderer.material = [guid="9aae4628-ba39-4546-b3c7-55730e59d1ca"]
+MeshRenderer.enabled = true
+MeshRenderer.renderLayerMask = 1
+MeshRenderer.castShadows = true
+MeshRenderer.receiveShadows = true
+MeshRenderer.motionVectors = true
+Name.value = "House 1_0 S"
+Transform.position = (-8.5, 2, -42.5)
+Transform.rotation = (-0, -0, -0, 1)
+Transform.scale = (6, 4, 0.4)
+
+[entity id="house1_0_we"]
+HierarchyOrder.order = 2250
+MeshRenderer.meshPrimitive = Cube
+MeshRenderer.material = [guid="9aae4628-ba39-4546-b3c7-55730e59d1ca"]
+MeshRenderer.enabled = true
+MeshRenderer.renderLayerMask = 1
+MeshRenderer.castShadows = true
+MeshRenderer.receiveShadows = true
+MeshRenderer.motionVectors = true
+Name.value = "House 1_0 E"
+Transform.position = (-5.5, 2, -40)
+Transform.rotation = (-0, -0, -0, 1)
+Transform.scale = (0.4, 4, 5)
+
+[entity id="house1_0_ww"]
+HierarchyOrder.order = 2260
+MeshRenderer.meshPrimitive = Cube
+MeshRenderer.material = [guid="9aae4628-ba39-4546-b3c7-55730e59d1ca"]
+MeshRenderer.enabled = true
+MeshRenderer.renderLayerMask = 1
+MeshRenderer.castShadows = true
+MeshRenderer.receiveShadows = true
+MeshRenderer.motionVectors = true
+Name.value = "House 1_0 W"
+Transform.position = (-11.5, 2, -40)
+Transform.rotation = (-0, -0, -0, 1)
+Transform.scale = (0.4, 4, 5)
+
+[entity id="house1_0_roof"]
+HierarchyOrder.order = 2270
+MeshRenderer.meshPrimitive = Cube
+MeshRenderer.material = [guid="9aae4628-ba39-4546-b3c7-55730e59d1ca"]
+MeshRenderer.enabled = true
+MeshRenderer.renderLayerMask = 1
+MeshRenderer.castShadows = true
+MeshRenderer.receiveShadows = true
+MeshRenderer.motionVectors = true
+Name.value = "House 1_0 Roof"
+Transform.position = (-8.5, 4.2, -40)
+Transform.rotation = (-0, -0, -0, 1)
+Transform.scale = (6.6, 0.4, 5.6)
+
+[entity id="house1_1_wn"]
+HierarchyOrder.order = 2280
+MeshRenderer.meshPrimitive = Cube
+MeshRenderer.material = [guid="9aae4628-ba39-4546-b3c7-55730e59d1ca"]
+MeshRenderer.enabled = true
+MeshRenderer.renderLayerMask = 1
+MeshRenderer.castShadows = true
+MeshRenderer.receiveShadows = true
+MeshRenderer.motionVectors = true
+Name.value = "House 1_1 N"
+Transform.position = (-8.5, 2, -23.5)
+Transform.rotation = (-0, -0, -0, 1)
+Transform.scale = (6, 4, 0.4)
+
+[entity id="house1_1_ws"]
+HierarchyOrder.order = 2290
+MeshRenderer.meshPrimitive = Cube
+MeshRenderer.material = [guid="9aae4628-ba39-4546-b3c7-55730e59d1ca"]
+MeshRenderer.enabled = true
+MeshRenderer.renderLayerMask = 1
+MeshRenderer.castShadows = true
+MeshRenderer.receiveShadows = true
+MeshRenderer.motionVectors = true
+Name.value = "House 1_1 S"
+Transform.position = (-8.5, 2, -28.5)
+Transform.rotation = (-0, -0, -0, 1)
+Transform.scale = (6, 4, 0.4)
+
+[entity id="house1_1_we"]
+HierarchyOrder.order = 2300
+MeshRenderer.meshPrimitive = Cube
+MeshRenderer.material = [guid="9aae4628-ba39-4546-b3c7-55730e59d1ca"]
+MeshRenderer.enabled = true
+MeshRenderer.renderLayerMask = 1
+MeshRenderer.castShadows = true
+MeshRenderer.receiveShadows = true
+MeshRenderer.motionVectors = true
+Name.value = "House 1_1 E"
+Transform.position = (-5.5, 2, -26)
+Transform.rotation = (-0, -0, -0, 1)
+Transform.scale = (0.4, 4, 5)
+
+[entity id="house1_1_ww"]
+HierarchyOrder.order = 2310
+MeshRenderer.meshPrimitive = Cube
+MeshRenderer.material = [guid="9aae4628-ba39-4546-b3c7-55730e59d1ca"]
+MeshRenderer.enabled = true
+MeshRenderer.renderLayerMask = 1
+MeshRenderer.castShadows = true
+MeshRenderer.receiveShadows = true
+MeshRenderer.motionVectors = true
+Name.value = "House 1_1 W"
+Transform.position = (-11.5, 2, -26)
+Transform.rotation = (-0, -0, -0, 1)
+Transform.scale = (0.4, 4, 5)
+
+[entity id="house1_1_roof"]
+HierarchyOrder.order = 2320
+MeshRenderer.meshPrimitive = Cube
+MeshRenderer.material = [guid="9aae4628-ba39-4546-b3c7-55730e59d1ca"]
+MeshRenderer.enabled = true
+MeshRenderer.renderLayerMask = 1
+MeshRenderer.castShadows = true
+MeshRenderer.receiveShadows = true
+MeshRenderer.motionVectors = true
+Name.value = "House 1_1 Roof"
+Transform.position = (-8.5, 4.2, -26)
+Transform.rotation = (-0, -0, -0, 1)
+Transform.scale = (6.6, 0.4, 5.6)
+
+[entity id="house1_2_wn"]
+HierarchyOrder.order = 2330
+MeshRenderer.meshPrimitive = Cube
+MeshRenderer.material = [guid="9aae4628-ba39-4546-b3c7-55730e59d1ca"]
+MeshRenderer.enabled = true
+MeshRenderer.renderLayerMask = 1
+MeshRenderer.castShadows = true
+MeshRenderer.receiveShadows = true
+MeshRenderer.motionVectors = true
+Name.value = "House 1_2 N"
+Transform.position = (-8.5, 2, -9.5)
+Transform.rotation = (-0, -0, -0, 1)
+Transform.scale = (6, 4, 0.4)
+
+[entity id="house1_2_ws"]
+HierarchyOrder.order = 2340
+MeshRenderer.meshPrimitive = Cube
+MeshRenderer.material = [guid="9aae4628-ba39-4546-b3c7-55730e59d1ca"]
+MeshRenderer.enabled = true
+MeshRenderer.renderLayerMask = 1
+MeshRenderer.castShadows = true
+MeshRenderer.receiveShadows = true
+MeshRenderer.motionVectors = true
+Name.value = "House 1_2 S"
+Transform.position = (-8.5, 2, -14.5)
+Transform.rotation = (-0, -0, -0, 1)
+Transform.scale = (6, 4, 0.4)
+
+[entity id="house1_2_we"]
+HierarchyOrder.order = 2350
+MeshRenderer.meshPrimitive = Cube
+MeshRenderer.material = [guid="9aae4628-ba39-4546-b3c7-55730e59d1ca"]
+MeshRenderer.enabled = true
+MeshRenderer.renderLayerMask = 1
+MeshRenderer.castShadows = true
+MeshRenderer.receiveShadows = true
+MeshRenderer.motionVectors = true
+Name.value = "House 1_2 E"
+Transform.position = (-5.5, 2, -12)
+Transform.rotation = (-0, -0, -0, 1)
+Transform.scale = (0.4, 4, 5)
+
+[entity id="house1_2_ww"]
+HierarchyOrder.order = 2360
+MeshRenderer.meshPrimitive = Cube
+MeshRenderer.material = [guid="9aae4628-ba39-4546-b3c7-55730e59d1ca"]
+MeshRenderer.enabled = true
+MeshRenderer.renderLayerMask = 1
+MeshRenderer.castShadows = true
+MeshRenderer.receiveShadows = true
+MeshRenderer.motionVectors = true
+Name.value = "House 1_2 W"
+Transform.position = (-11.5, 2, -12)
+Transform.rotation = (-0, -0, -0, 1)
+Transform.scale = (0.4, 4, 5)
+
+[entity id="house1_2_roof"]
+HierarchyOrder.order = 2370
+MeshRenderer.meshPrimitive = Cube
+MeshRenderer.material = [guid="9aae4628-ba39-4546-b3c7-55730e59d1ca"]
+MeshRenderer.enabled = true
+MeshRenderer.renderLayerMask = 1
+MeshRenderer.castShadows = true
+MeshRenderer.receiveShadows = true
+MeshRenderer.motionVectors = true
+Name.value = "House 1_2 Roof"
+Transform.position = (-8.5, 4.2, -12)
+Transform.rotation = (-0, -0, -0, 1)
+Transform.scale = (6.6, 0.4, 5.6)
+
+[entity id="house2_0_wn"]
+HierarchyOrder.order = 2380
+MeshRenderer.meshPrimitive = Cube
+MeshRenderer.material = [guid="9aae4628-ba39-4546-b3c7-55730e59d1ca"]
+MeshRenderer.enabled = true
+MeshRenderer.renderLayerMask = 1
+MeshRenderer.castShadows = true
+MeshRenderer.receiveShadows = true
+MeshRenderer.motionVectors = true
+Name.value = "House 2_0 N"
+Transform.position = (8.5, 2, -37.5)
+Transform.rotation = (-0, -0, -0, 1)
+Transform.scale = (6, 4, 0.4)
+
+[entity id="house2_0_ws"]
+HierarchyOrder.order = 2390
+MeshRenderer.meshPrimitive = Cube
+MeshRenderer.material = [guid="9aae4628-ba39-4546-b3c7-55730e59d1ca"]
+MeshRenderer.enabled = true
+MeshRenderer.renderLayerMask = 1
+MeshRenderer.castShadows = true
+MeshRenderer.receiveShadows = true
+MeshRenderer.motionVectors = true
+Name.value = "House 2_0 S"
+Transform.position = (8.5, 2, -42.5)
+Transform.rotation = (-0, -0, -0, 1)
+Transform.scale = (6, 4, 0.4)
+
+[entity id="house2_0_we"]
+HierarchyOrder.order = 2400
+MeshRenderer.meshPrimitive = Cube
+MeshRenderer.material = [guid="9aae4628-ba39-4546-b3c7-55730e59d1ca"]
+MeshRenderer.enabled = true
+MeshRenderer.renderLayerMask = 1
+MeshRenderer.castShadows = true
+MeshRenderer.receiveShadows = true
+MeshRenderer.motionVectors = true
+Name.value = "House 2_0 E"
+Transform.position = (11.5, 2, -40)
+Transform.rotation = (-0, -0, -0, 1)
+Transform.scale = (0.4, 4, 5)
+
+[entity id="house2_0_ww"]
+HierarchyOrder.order = 2410
+MeshRenderer.meshPrimitive = Cube
+MeshRenderer.material = [guid="9aae4628-ba39-4546-b3c7-55730e59d1ca"]
+MeshRenderer.enabled = true
+MeshRenderer.renderLayerMask = 1
+MeshRenderer.castShadows = true
+MeshRenderer.receiveShadows = true
+MeshRenderer.motionVectors = true
+Name.value = "House 2_0 W"
+Transform.position = (5.5, 2, -40)
+Transform.rotation = (-0, -0, -0, 1)
+Transform.scale = (0.4, 4, 5)
+
+[entity id="house2_0_roof"]
+HierarchyOrder.order = 2420
+MeshRenderer.meshPrimitive = Cube
+MeshRenderer.material = [guid="9aae4628-ba39-4546-b3c7-55730e59d1ca"]
+MeshRenderer.enabled = true
+MeshRenderer.renderLayerMask = 1
+MeshRenderer.castShadows = true
+MeshRenderer.receiveShadows = true
+MeshRenderer.motionVectors = true
+Name.value = "House 2_0 Roof"
+Transform.position = (8.5, 4.2, -40)
+Transform.rotation = (-0, -0, -0, 1)
+Transform.scale = (6.6, 0.4, 5.6)
+
+[entity id="house2_1_wn"]
+HierarchyOrder.order = 2430
+MeshRenderer.meshPrimitive = Cube
+MeshRenderer.material = [guid="9aae4628-ba39-4546-b3c7-55730e59d1ca"]
+MeshRenderer.enabled = true
+MeshRenderer.renderLayerMask = 1
+MeshRenderer.castShadows = true
+MeshRenderer.receiveShadows = true
+MeshRenderer.motionVectors = true
+Name.value = "House 2_1 N"
+Transform.position = (8.5, 2, -23.5)
+Transform.rotation = (-0, -0, -0, 1)
+Transform.scale = (6, 4, 0.4)
+
+[entity id="house2_1_ws"]
+HierarchyOrder.order = 2440
+MeshRenderer.meshPrimitive = Cube
+MeshRenderer.material = [guid="9aae4628-ba39-4546-b3c7-55730e59d1ca"]
+MeshRenderer.enabled = true
+MeshRenderer.renderLayerMask = 1
+MeshRenderer.castShadows = true
+MeshRenderer.receiveShadows = true
+MeshRenderer.motionVectors = true
+Name.value = "House 2_1 S"
+Transform.position = (8.5, 2, -28.5)
+Transform.rotation = (-0, -0, -0, 1)
+Transform.scale = (6, 4, 0.4)
+
+[entity id="house2_1_we"]
+HierarchyOrder.order = 2450
+MeshRenderer.meshPrimitive = Cube
+MeshRenderer.material = [guid="9aae4628-ba39-4546-b3c7-55730e59d1ca"]
+MeshRenderer.enabled = true
+MeshRenderer.renderLayerMask = 1
+MeshRenderer.castShadows = true
+MeshRenderer.receiveShadows = true
+MeshRenderer.motionVectors = true
+Name.value = "House 2_1 E"
+Transform.position = (11.5, 2, -26)
+Transform.rotation = (-0, -0, -0, 1)
+Transform.scale = (0.4, 4, 5)
+
+[entity id="house2_1_ww"]
+HierarchyOrder.order = 2460
+MeshRenderer.meshPrimitive = Cube
+MeshRenderer.material = [guid="9aae4628-ba39-4546-b3c7-55730e59d1ca"]
+MeshRenderer.enabled = true
+MeshRenderer.renderLayerMask = 1
+MeshRenderer.castShadows = true
+MeshRenderer.receiveShadows = true
+MeshRenderer.motionVectors = true
+Name.value = "House 2_1 W"
+Transform.position = (5.5, 2, -26)
+Transform.rotation = (-0, -0, -0, 1)
+Transform.scale = (0.4, 4, 5)
+
+[entity id="house2_1_roof"]
+HierarchyOrder.order = 2470
+MeshRenderer.meshPrimitive = Cube
+MeshRenderer.material = [guid="9aae4628-ba39-4546-b3c7-55730e59d1ca"]
+MeshRenderer.enabled = true
+MeshRenderer.renderLayerMask = 1
+MeshRenderer.castShadows = true
+MeshRenderer.receiveShadows = true
+MeshRenderer.motionVectors = true
+Name.value = "House 2_1 Roof"
+Transform.position = (8.5, 4.2, -26)
+Transform.rotation = (-0, -0, -0, 1)
+Transform.scale = (6.6, 0.4, 5.6)
+
+[entity id="house2_2_wn"]
+HierarchyOrder.order = 2480
+MeshRenderer.meshPrimitive = Cube
+MeshRenderer.material = [guid="9aae4628-ba39-4546-b3c7-55730e59d1ca"]
+MeshRenderer.enabled = true
+MeshRenderer.renderLayerMask = 1
+MeshRenderer.castShadows = true
+MeshRenderer.receiveShadows = true
+MeshRenderer.motionVectors = true
+Name.value = "House 2_2 N"
+Transform.position = (8.5, 2, -9.5)
+Transform.rotation = (-0, -0, -0, 1)
+Transform.scale = (6, 4, 0.4)
+
+[entity id="house2_2_ws"]
+HierarchyOrder.order = 2490
+MeshRenderer.meshPrimitive = Cube
+MeshRenderer.material = [guid="9aae4628-ba39-4546-b3c7-55730e59d1ca"]
+MeshRenderer.enabled = true
+MeshRenderer.renderLayerMask = 1
+MeshRenderer.castShadows = true
+MeshRenderer.receiveShadows = true
+MeshRenderer.motionVectors = true
+Name.value = "House 2_2 S"
+Transform.position = (8.5, 2, -14.5)
+Transform.rotation = (-0, -0, -0, 1)
+Transform.scale = (6, 4, 0.4)
+
+[entity id="house2_2_we"]
+HierarchyOrder.order = 2500
+MeshRenderer.meshPrimitive = Cube
+MeshRenderer.material = [guid="9aae4628-ba39-4546-b3c7-55730e59d1ca"]
+MeshRenderer.enabled = true
+MeshRenderer.renderLayerMask = 1
+MeshRenderer.castShadows = true
+MeshRenderer.receiveShadows = true
+MeshRenderer.motionVectors = true
+Name.value = "House 2_2 E"
+Transform.position = (11.5, 2, -12)
+Transform.rotation = (-0, -0, -0, 1)
+Transform.scale = (0.4, 4, 5)
+
+[entity id="house2_2_ww"]
+HierarchyOrder.order = 2510
+MeshRenderer.meshPrimitive = Cube
+MeshRenderer.material = [guid="9aae4628-ba39-4546-b3c7-55730e59d1ca"]
+MeshRenderer.enabled = true
+MeshRenderer.renderLayerMask = 1
+MeshRenderer.castShadows = true
+MeshRenderer.receiveShadows = true
+MeshRenderer.motionVectors = true
+Name.value = "House 2_2 W"
+Transform.position = (5.5, 2, -12)
+Transform.rotation = (-0, -0, -0, 1)
+Transform.scale = (0.4, 4, 5)
+
+[entity id="house2_2_roof"]
+HierarchyOrder.order = 2520
+MeshRenderer.meshPrimitive = Cube
+MeshRenderer.material = [guid="9aae4628-ba39-4546-b3c7-55730e59d1ca"]
+MeshRenderer.enabled = true
+MeshRenderer.renderLayerMask = 1
+MeshRenderer.castShadows = true
+MeshRenderer.receiveShadows = true
+MeshRenderer.motionVectors = true
+Name.value = "House 2_2 Roof"
+Transform.position = (8.5, 4.2, -12)
+Transform.rotation = (-0, -0, -0, 1)
+Transform.scale = (6.6, 0.4, 5.6)
+
+[entity id="house3_0_wn"]
+HierarchyOrder.order = 2530
+MeshRenderer.meshPrimitive = Cube
+MeshRenderer.material = [guid="9aae4628-ba39-4546-b3c7-55730e59d1ca"]
+MeshRenderer.enabled = true
+MeshRenderer.renderLayerMask = 1
+MeshRenderer.castShadows = true
+MeshRenderer.receiveShadows = true
+MeshRenderer.motionVectors = true
+Name.value = "House 3_0 N"
+Transform.position = (25.5, 2, -37.5)
+Transform.rotation = (-0, -0, -0, 1)
+Transform.scale = (6, 4, 0.4)
+
+[entity id="house3_0_ws"]
+HierarchyOrder.order = 2540
+MeshRenderer.meshPrimitive = Cube
+MeshRenderer.material = [guid="9aae4628-ba39-4546-b3c7-55730e59d1ca"]
+MeshRenderer.enabled = true
+MeshRenderer.renderLayerMask = 1
+MeshRenderer.castShadows = true
+MeshRenderer.receiveShadows = true
+MeshRenderer.motionVectors = true
+Name.value = "House 3_0 S"
+Transform.position = (25.5, 2, -42.5)
+Transform.rotation = (-0, -0, -0, 1)
+Transform.scale = (6, 4, 0.4)
+
+[entity id="house3_0_we"]
+HierarchyOrder.order = 2550
+MeshRenderer.meshPrimitive = Cube
+MeshRenderer.material = [guid="9aae4628-ba39-4546-b3c7-55730e59d1ca"]
+MeshRenderer.enabled = true
+MeshRenderer.renderLayerMask = 1
+MeshRenderer.castShadows = true
+MeshRenderer.receiveShadows = true
+MeshRenderer.motionVectors = true
+Name.value = "House 3_0 E"
+Transform.position = (28.5, 2, -40)
+Transform.rotation = (-0, -0, -0, 1)
+Transform.scale = (0.4, 4, 5)
+
+[entity id="house3_0_ww"]
+HierarchyOrder.order = 2560
+MeshRenderer.meshPrimitive = Cube
+MeshRenderer.material = [guid="9aae4628-ba39-4546-b3c7-55730e59d1ca"]
+MeshRenderer.enabled = true
+MeshRenderer.renderLayerMask = 1
+MeshRenderer.castShadows = true
+MeshRenderer.receiveShadows = true
+MeshRenderer.motionVectors = true
+Name.value = "House 3_0 W"
+Transform.position = (22.5, 2, -40)
+Transform.rotation = (-0, -0, -0, 1)
+Transform.scale = (0.4, 4, 5)
+
+[entity id="house3_0_roof"]
+HierarchyOrder.order = 2570
+MeshRenderer.meshPrimitive = Cube
+MeshRenderer.material = [guid="9aae4628-ba39-4546-b3c7-55730e59d1ca"]
+MeshRenderer.enabled = true
+MeshRenderer.renderLayerMask = 1
+MeshRenderer.castShadows = true
+MeshRenderer.receiveShadows = true
+MeshRenderer.motionVectors = true
+Name.value = "House 3_0 Roof"
+Transform.position = (25.5, 4.2, -40)
+Transform.rotation = (-0, -0, -0, 1)
+Transform.scale = (6.6, 0.4, 5.6)
+
+[entity id="house3_1_wn"]
+HierarchyOrder.order = 2580
+MeshRenderer.meshPrimitive = Cube
+MeshRenderer.material = [guid="9aae4628-ba39-4546-b3c7-55730e59d1ca"]
+MeshRenderer.enabled = true
+MeshRenderer.renderLayerMask = 1
+MeshRenderer.castShadows = true
+MeshRenderer.receiveShadows = true
+MeshRenderer.motionVectors = true
+Name.value = "House 3_1 N"
+Transform.position = (25.5, 2, -23.5)
+Transform.rotation = (-0, -0, -0, 1)
+Transform.scale = (6, 4, 0.4)
+
+[entity id="house3_1_ws"]
+HierarchyOrder.order = 2590
+MeshRenderer.meshPrimitive = Cube
+MeshRenderer.material = [guid="9aae4628-ba39-4546-b3c7-55730e59d1ca"]
+MeshRenderer.enabled = true
+MeshRenderer.renderLayerMask = 1
+MeshRenderer.castShadows = true
+MeshRenderer.receiveShadows = true
+MeshRenderer.motionVectors = true
+Name.value = "House 3_1 S"
+Transform.position = (25.5, 2, -28.5)
+Transform.rotation = (-0, -0, -0, 1)
+Transform.scale = (6, 4, 0.4)
+
+[entity id="house3_1_we"]
+HierarchyOrder.order = 2600
+MeshRenderer.meshPrimitive = Cube
+MeshRenderer.material = [guid="9aae4628-ba39-4546-b3c7-55730e59d1ca"]
+MeshRenderer.enabled = true
+MeshRenderer.renderLayerMask = 1
+MeshRenderer.castShadows = true
+MeshRenderer.receiveShadows = true
+MeshRenderer.motionVectors = true
+Name.value = "House 3_1 E"
+Transform.position = (28.5, 2, -26)
+Transform.rotation = (-0, -0, -0, 1)
+Transform.scale = (0.4, 4, 5)
+
+[entity id="house3_1_ww"]
+HierarchyOrder.order = 2610
+MeshRenderer.meshPrimitive = Cube
+MeshRenderer.material = [guid="9aae4628-ba39-4546-b3c7-55730e59d1ca"]
+MeshRenderer.enabled = true
+MeshRenderer.renderLayerMask = 1
+MeshRenderer.castShadows = true
+MeshRenderer.receiveShadows = true
+MeshRenderer.motionVectors = true
+Name.value = "House 3_1 W"
+Transform.position = (22.5, 2, -26)
+Transform.rotation = (-0, -0, -0, 1)
+Transform.scale = (0.4, 4, 5)
+
+[entity id="house3_1_roof"]
+HierarchyOrder.order = 2620
+MeshRenderer.meshPrimitive = Cube
+MeshRenderer.material = [guid="9aae4628-ba39-4546-b3c7-55730e59d1ca"]
+MeshRenderer.enabled = true
+MeshRenderer.renderLayerMask = 1
+MeshRenderer.castShadows = true
+MeshRenderer.receiveShadows = true
+MeshRenderer.motionVectors = true
+Name.value = "House 3_1 Roof"
+Transform.position = (25.5, 4.2, -26)
+Transform.rotation = (-0, -0, -0, 1)
+Transform.scale = (6.6, 0.4, 5.6)
+
+[entity id="house3_2_wn"]
+HierarchyOrder.order = 2630
+MeshRenderer.meshPrimitive = Cube
+MeshRenderer.material = [guid="9aae4628-ba39-4546-b3c7-55730e59d1ca"]
+MeshRenderer.enabled = true
+MeshRenderer.renderLayerMask = 1
+MeshRenderer.castShadows = true
+MeshRenderer.receiveShadows = true
+MeshRenderer.motionVectors = true
+Name.value = "House 3_2 N"
+Transform.position = (25.5, 2, -9.5)
+Transform.rotation = (-0, -0, -0, 1)
+Transform.scale = (6, 4, 0.4)
+
+[entity id="house3_2_ws"]
+HierarchyOrder.order = 2640
+MeshRenderer.meshPrimitive = Cube
+MeshRenderer.material = [guid="9aae4628-ba39-4546-b3c7-55730e59d1ca"]
+MeshRenderer.enabled = true
+MeshRenderer.renderLayerMask = 1
+MeshRenderer.castShadows = true
+MeshRenderer.receiveShadows = true
+MeshRenderer.motionVectors = true
+Name.value = "House 3_2 S"
+Transform.position = (25.5, 2, -14.5)
+Transform.rotation = (-0, -0, -0, 1)
+Transform.scale = (6, 4, 0.4)
+
+[entity id="house3_2_we"]
+HierarchyOrder.order = 2650
+MeshRenderer.meshPrimitive = Cube
+MeshRenderer.material = [guid="9aae4628-ba39-4546-b3c7-55730e59d1ca"]
+MeshRenderer.enabled = true
+MeshRenderer.renderLayerMask = 1
+MeshRenderer.castShadows = true
+MeshRenderer.receiveShadows = true
+MeshRenderer.motionVectors = true
+Name.value = "House 3_2 E"
+Transform.position = (28.5, 2, -12)
+Transform.rotation = (-0, -0, -0, 1)
+Transform.scale = (0.4, 4, 5)
+
+[entity id="house3_2_ww"]
+HierarchyOrder.order = 2660
+MeshRenderer.meshPrimitive = Cube
+MeshRenderer.material = [guid="9aae4628-ba39-4546-b3c7-55730e59d1ca"]
+MeshRenderer.enabled = true
+MeshRenderer.renderLayerMask = 1
+MeshRenderer.castShadows = true
+MeshRenderer.receiveShadows = true
+MeshRenderer.motionVectors = true
+Name.value = "House 3_2 W"
+Transform.position = (22.5, 2, -12)
+Transform.rotation = (-0, -0, -0, 1)
+Transform.scale = (0.4, 4, 5)
+
+[entity id="house3_2_roof"]
+HierarchyOrder.order = 2670
+MeshRenderer.meshPrimitive = Cube
+MeshRenderer.material = [guid="9aae4628-ba39-4546-b3c7-55730e59d1ca"]
+MeshRenderer.enabled = true
+MeshRenderer.renderLayerMask = 1
+MeshRenderer.castShadows = true
+MeshRenderer.receiveShadows = true
+MeshRenderer.motionVectors = true
+Name.value = "House 3_2 Roof"
+Transform.position = (25.5, 4.2, -12)
+Transform.rotation = (-0, -0, -0, 1)
+Transform.scale = (6.6, 0.4, 5.6)

@@ -1,0 +1,46 @@
+#version 450
+
+// Bakes the 32^3 cloud detail (erosion) noise: three channels of 3-octave
+// inverted tileable Worley (upstream NoiseGenerator detail texture). Alpha is
+// unused and stays zero; the normalize pass skips flat channels.
+
+#include "volumetric_clouds_worley.glsl"
+
+layout(local_size_x = 8, local_size_y = 8, local_size_z = 8) in;
+
+layout(set = 0, binding = 0, rgba16f) uniform writeonly image3D TargetTexture;
+
+layout(set = 0, binding = 1, std430) buffer NoiseMinMaxBlock
+{
+    int minMax[8];
+} NoiseMinMax;
+
+const int kResolution = 32;
+const int kMinMaxAccuracy = 1 << 22;
+
+const ivec3 kChannelCells[3] = ivec3[3](
+    ivec3(5, 10, 15),
+    ivec3(10, 20, 30),
+    ivec3(15, 30, 45));
+
+void main()
+{
+    ivec3 id = ivec3(gl_GlobalInvocationID.xyz);
+    if (any(greaterThanEqual(id, ivec3(kResolution))))
+        return;
+
+    vec3 samplePos = vec3(id) / float(kResolution);
+    vec4 noise = vec4(0.0);
+    for (int channel = 0; channel < 3; ++channel)
+    {
+        ivec3 cells = kChannelCells[channel];
+        float value = VcLayeredWorley(samplePos, cells.x, cells.y, cells.z, 100.0 + float(channel) * 71.0);
+        noise[channel] = value;
+
+        int quantized = int(clamp(value, 0.0, 1.0) * float(kMinMaxAccuracy));
+        atomicMax(NoiseMinMax.minMax[channel * 2 + 0], quantized);
+        atomicMax(NoiseMinMax.minMax[channel * 2 + 1], kMinMaxAccuracy - quantized);
+    }
+
+    imageStore(TargetTexture, id, noise);
+}

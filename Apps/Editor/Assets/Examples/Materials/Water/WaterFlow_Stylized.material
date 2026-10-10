@@ -1,0 +1,28 @@
+{
+  "schemaVersion": 3,
+  "materialName": "Stylized Water — Flow",
+  "lightingModel": "StandardPBR",
+  "alphaMode": "Opaque",
+  "doubleSided": false,
+  "surfaceShader": "water_stylized.glsl",
+  "properties": {
+    "baseColor": [
+      0.2456,
+      0.3797,
+      0.4528,
+      0.85
+    ],
+    "metallic": 0.1,
+    "roughness": 0.3
+  },
+  "textures": {
+    "albedoMap": {
+      "guid": "b4971ee8-3049-4ab6-8228-352fc117c53e",
+      "tiling": [
+        5,
+        5
+      ]
+    },
+    "normalMap": "3688ca23-69ce-4f2d-ac69-5eb6a42d8c5b"
+  }
+}

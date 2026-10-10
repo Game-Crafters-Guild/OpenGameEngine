@@ -1,0 +1,7 @@
+<!-- FolderBakeStatus (Apps/Editor/Include/Thumbnails/FolderBakeStatus.h): the plate, its text and the
+     dismiss button. The classes are the contract with FolderBakeStatus.cpp. The button stays hidden
+     until the bake finishes. -->
+<UIElement class="folder-bake-status-plate">
+  <Label class="folder-bake-status-text" />
+  <Button class="folder-bake-status-dismiss small hidden" text="Dismiss" />
+</UIElement>

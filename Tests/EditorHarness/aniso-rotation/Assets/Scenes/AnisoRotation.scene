@@ -1,0 +1,71 @@
+[scene name="AnisoRotation" version=1]
+; Anisotropy-rotation test. Two identical brushed-metal spheres under one sharp
+; sun (low ambient so the anisotropic highlight streak dominates). They differ
+; ONLY in anisotropyRotation: LEFT = 0, RIGHT = 90 degrees (1.5708 rad). If
+; rotation works, the elongated specular streak is oriented differently on the
+; two spheres (rotated ~90 degrees relative to each other).
+
+[entity id="e_cam"]
+Camera.enabled = true
+Camera.fovY = 50
+Camera.nearZ = 0.1
+Camera.farZ = 300
+Name.value = "Main Camera"
+Transform.position = (0, 2, -5)
+Transform.rotation = (0, 0, 0, 1)
+Transform.scale = (1, 1, 1)
+
+[entity id="e_sun"]
+Light.type = 0
+Light.color = (1, 0.98, 0.95)
+Light.intensity = 5.0
+Light.castsShadows = true
+Light.cascadeCount = 4
+Name.value = "Sun"
+Transform.position = (0, 10, 0)
+Transform.rotation = (0.36, -0.16, 0, 0.92)
+Transform.scale = (1, 1, 1)
+
+[entity id="e_amb"]
+Light.type = 3
+Light.color = (0.5, 0.55, 0.7)
+Light.intensity = 0.4
+Name.value = "Ambient"
+Transform.position = (0, 0, 0)
+Transform.rotation = (0, 0, 0, 1)
+Transform.scale = (1, 1, 1)
+
+[entity id="e_sky"]
+SkyEnvironment.TimeOfDayHours = 14
+SkyEnvironment.AutoSunMoon = false
+Name.value = "Sky"
+Transform.position = (0, 0, 0)
+Transform.rotation = (0, 0, 0, 1)
+Transform.scale = (1, 1, 1)
+
+[entity id="e_ground"]
+MeshRenderer.meshPrimitive = Plane
+MeshRenderer.renderLayerMask = 1
+MeshRenderer.receiveShadows = true
+Name.value = "Ground"
+Transform.position = (0, 0, 0)
+Transform.rotation = (0, 0, 0, 1)
+Transform.scale = (40, 1, 40)
+
+[entity id="e_sphere_rot0"]
+MeshRenderer.meshPrimitive = Sphere
+MeshRenderer.material = [path="Materials/Aniso_Rot0.material"]
+MeshRenderer.renderLayerMask = 1
+Name.value = "AnisoRot0"
+Transform.position = (-1.6, 2, 0)
+Transform.rotation = (0, 0, 0, 1)
+Transform.scale = (1.4, 1.4, 1.4)
+
+[entity id="e_sphere_rot90"]
+MeshRenderer.meshPrimitive = Sphere
+MeshRenderer.material = [path="Materials/Aniso_Rot90.material"]
+MeshRenderer.renderLayerMask = 1
+Name.value = "AnisoRot90"
+Transform.position = (1.6, 2, 0)
+Transform.rotation = (0, 0, 0, 1)
+Transform.scale = (1.4, 1.4, 1.4)

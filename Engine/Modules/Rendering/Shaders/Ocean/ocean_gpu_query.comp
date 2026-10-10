@@ -1,0 +1,124 @@
+#version 450
+
+#include "Includes/storage_access.glsl"
+
+#include "Ocean/ocean_cascade_common.glsl"
+
+layout(local_size_x = 64, local_size_y = 1, local_size_z = 1) in;
+
+const uint GE_GPU_QUERY_POINTS = 256u;
+const uint GE_FFT_CASCADES = 16u;
+
+layout(std140, set = 0, binding = 0) uniform OceanGPUQueryParams
+{
+    uint uPointCount;
+    uint uFFTCascadeCount;
+    uint uCombinedAvailable;
+    uint _uPad0;
+    float uSeaLevel;
+    float uWeight;
+    float uMaxHorizontal;
+    float uMaxVertical;
+    float uWaveOriginOffsetX;
+    float uWaveOriginOffsetZ;
+    float uNormalStep;
+    float _uPad1;
+    vec4 uCombinedOriginScale[GE_OCEAN_LOD_CASCADES];
+    uvec4 uCombinedMeta;
+    vec4 uPoints[GE_GPU_QUERY_POINTS];
+};
+
+layout(set = 0, binding = 1) uniform sampler2DArray uFFT;
+layout(set = 0, binding = 2) uniform sampler2DArray uCombined;
+
+struct QueryResult
+{
+    vec4 Position;
+    vec4 Normal;
+    vec4 Displacement;
+};
+layout(std430, set = 0, binding = 3) GE_STORAGE_WRITEONLY buffer QueryResults
+{
+    QueryResult uResults[];
+};
+
+vec3 SampleRaw(vec2 worldXZ, float minimumSpatialLength)
+{
+    vec2 phaseXZ = worldXZ + vec2(uWaveOriginOffsetX, uWaveOriginOffsetZ);
+    vec3 displacement = vec3(0.0);
+    uint count = min(uFFTCascadeCount, GE_FFT_CASCADES);
+    for (uint cascade = 0u; cascade < count; ++cascade)
+    {
+        float worldSize = 0.5 * float(1u << cascade);
+        float wavelength = worldSize / 8.0;
+        if (minimumSpatialLength > 0.0 && wavelength < minimumSpatialLength)
+            continue;
+        displacement += textureLod(uFFT, vec3(phaseXZ / worldSize, float(cascade)), 0.0).xyz;
+    }
+    return displacement;
+}
+
+vec3 SampleCombined(vec2 worldXZ, float minimumSpatialLength, out bool covered)
+{
+    covered = false;
+    uint count = min(uCombinedMeta.x, uint(GE_OCEAN_LOD_CASCADES));
+    if (uCombinedAvailable == 0u || count == 0u)
+        return vec3(0.0);
+    for (uint lod = 0u; lod < count; ++lod)
+    {
+        vec4 layer = uCombinedOriginScale[lod];
+        if (minimumSpatialLength > 0.0 && layer.z * 2.0 < minimumSpatialLength)
+            continue;
+        float resolution = float(textureSize(uCombined, 0).x);
+        vec2 uv = OceanCascadeUV(worldXZ, layer.xy, layer.z, resolution);
+        if (all(greaterThanEqual(uv, vec2(0.0))) && all(lessThanEqual(uv, vec2(1.0))))
+        {
+            covered = true;
+            return textureLod(uCombined, vec3(uv, float(lod)), 0.0).xyz;
+        }
+    }
+    return vec3(0.0);
+}
+
+vec3 SampleDisplacement(vec2 worldXZ, float minimumSpatialLength)
+{
+    bool covered = false;
+    vec3 displacement = SampleCombined(worldXZ, minimumSpatialLength, covered);
+    if (!covered)
+        displacement = SampleRaw(worldXZ, minimumSpatialLength);
+    displacement *= uWeight;
+    displacement.xz = clamp(displacement.xz, vec2(-uMaxHorizontal), vec2(uMaxHorizontal));
+    displacement.y = clamp(displacement.y, -uMaxVertical, uMaxVertical);
+    return displacement;
+}
+
+void main()
+{
+    uint index = gl_GlobalInvocationID.x;
+    if (index >= uPointCount)
+        return;
+    vec2 queryXZ = uPoints[index].xy;
+    float minimumSpatialLength = max(uPoints[index].z, 0.0);
+
+    // Fixed-point horizontal inversion maps the undisplaced query coordinate to
+    // the source coordinate whose displaced XZ lands at the requested point.
+    vec2 sourceXZ = queryXZ;
+    vec3 displacement = vec3(0.0);
+    for (uint iteration = 0u; iteration < 4u; ++iteration)
+    {
+        displacement = SampleDisplacement(sourceXZ, minimumSpatialLength);
+        sourceXZ = queryXZ - displacement.xz;
+    }
+    displacement = SampleDisplacement(sourceXZ, minimumSpatialLength);
+
+    float e = max(uNormalStep, 0.05);
+    float hL = SampleDisplacement(sourceXZ - vec2(e, 0.0), minimumSpatialLength).y;
+    float hR = SampleDisplacement(sourceXZ + vec2(e, 0.0), minimumSpatialLength).y;
+    float hD = SampleDisplacement(sourceXZ - vec2(0.0, e), minimumSpatialLength).y;
+    float hU = SampleDisplacement(sourceXZ + vec2(0.0, e), minimumSpatialLength).y;
+    vec3 normal = normalize(vec3(hL - hR, 2.0 * e, hD - hU));
+
+    uResults[index].Position = vec4(queryXZ.x, uSeaLevel + displacement.y, queryXZ.y, 1.0);
+    uResults[index].Normal = vec4(normal, 0.0);
+    uResults[index].Displacement = vec4(displacement, 0.0);
+}

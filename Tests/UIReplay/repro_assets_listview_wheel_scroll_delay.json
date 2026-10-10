@@ -1,0 +1,105 @@
+{
+  "name": "repro_assets_listview_wheel_scroll_delay",
+  "windowIndex": 0,
+  "minFrames": 360,
+  "probe": {
+    "listViewUnderId": "assets-views-container",
+    "scrollViewUnderId": "assets-list",
+    "scrollbarVUnderId": "assets-list",
+    "scrollbarHUnderId": "assets-list",
+    "elementId": "assets-list-header",
+    "visualPatchElementIds": { "enabled": true, "max": 12 }
+  },
+  "asserts": [
+    {
+      "kind": "elementVisible",
+      "elementId": "assets-list",
+      "frameStart": 40,
+      "frameEnd": 320
+    },
+    {
+      "kind": "paintOffsetsMatch",
+      "elementId": "assets-list",
+      "requiredClass": "list-cell",
+      "frameStart": 120,
+      "frameEnd": 260,
+      "maxMismatchCount": 0
+    },
+    {
+      "kind": "paintOffsetsMatch",
+      "elementId": "assets-list-header",
+      "requiredClass": "axis-header-cell",
+      "frameStart": 200,
+      "frameEnd": 320,
+      "maxMismatchCount": 0
+    },
+    {
+      "kind": "visibleTextNotFullyClipped",
+      "subtreeId": "assets-list",
+      "scrollViewUnderId": "assets-list",
+      "requiredClasses": ["axis-header-title", "col-tag", "col-referenced", "col-custom", "col-creator"],
+      "frameStart": 200,
+      "frameEnd": 280,
+      "minVisiblePx": 2.0,
+      "maxChecks": 2000
+    },
+    {
+      "kind": "visibleTextNotFullyClipped",
+      "subtreeId": "assets-list",
+      "scrollViewUnderId": "assets-list",
+      "requiredClasses": ["list-cell"],
+      "frameStart": 200,
+      "frameEnd": 280,
+      "minVisiblePx": 2.0,
+      "maxChecks": 2000
+    }
+  ],
+  "events": [
+    { "frame": 2, "type": "mouseMove", "target": { "kind": "elementId", "id": "tab:Assets", "relX": 0.5, "relY": 0.5 } },
+    { "frame": 3, "type": "mouseDown", "button": 0 },
+    { "frame": 4, "type": "mouseUp", "button": 0 },
+
+    { "frame": 35, "type": "mouseMove", "target": { "kind": "elementId", "id": "assets-views-container", "relX": 0.5, "relY": 0.5 } },
+    { "frame": 36, "type": "mouseDown", "button": 0 },
+    { "frame": 37, "type": "mouseUp", "button": 0 },
+    { "frame": 38, "type": "keyDown", "key": 76, "mods": 0 },
+    { "frame": 39, "type": "keyUp", "key": 76, "mods": 0 },
+
+    { "frame": 60, "type": "mouseMove", "target": { "kind": "elementId", "id": "assets-splitter", "relX": 0.5, "relY": 0.5 } },
+    { "frame": 61, "type": "mouseDown", "button": 0 },
+    { "frame": 62, "type": "mouseMove", "dx": 1000.0, "dy": 0.0 },
+    { "frame": 63, "type": "mouseMove", "dx": 220.0, "dy": 0.0 },
+    { "frame": 64, "type": "mouseUp", "button": 0 },
+
+    { "frame": 110, "type": "mouseMove", "target": { "kind": "elementId", "id": "assets-list", "relX": 0.5, "relY": 0.5 } },
+    { "frame": 120, "type": "scroll", "dx": 0.0, "dy": -8.0 },
+    { "frame": 125, "type": "scroll", "dx": 0.0, "dy": -8.0 },
+    { "frame": 130, "type": "scroll", "dx": 0.0, "dy": -8.0 },
+    { "frame": 135, "type": "scroll", "dx": 0.0, "dy": -8.0 },
+    { "frame": 140, "type": "scroll", "dx": 0.0, "dy": -8.0 },
+    { "frame": 145, "type": "scroll", "dx": 0.0, "dy": -8.0 },
+
+    { "frame": 200, "type": "keyDown", "key": 340, "mods": 1 },
+    { "frame": 201, "type": "scroll", "dx": 0.0, "dy": -30.0 },
+    { "frame": 204, "type": "scroll", "dx": 0.0, "dy": -30.0 },
+    { "frame": 207, "type": "scroll", "dx": 0.0, "dy": -30.0 },
+    { "frame": 210, "type": "scroll", "dx": 0.0, "dy": -30.0 },
+    { "frame": 213, "type": "scroll", "dx": 0.0, "dy": -30.0 },
+    { "frame": 216, "type": "scroll", "dx": 0.0, "dy": -30.0 },
+    { "frame": 219, "type": "scroll", "dx": 0.0, "dy": -30.0 },
+    { "frame": 222, "type": "scroll", "dx": 0.0, "dy": -30.0 },
+    { "frame": 225, "type": "scroll", "dx": 0.0, "dy": -30.0 },
+    { "frame": 228, "type": "scroll", "dx": 0.0, "dy": -30.0 },
+    { "frame": 231, "type": "scroll", "dx": 0.0, "dy": -30.0 },
+    { "frame": 234, "type": "scroll", "dx": 0.0, "dy": -30.0 },
+
+    { "frame": 238, "type": "uiTextDebugDump" },
+    { "frame": 239, "type": "keyDown", "key": 297, "mods": 1 },
+    { "frame": 240, "type": "keyUp", "key": 297, "mods": 1 },
+
+    { "frame": 244, "type": "scroll", "dx": 0.0, "dy": 30.0 },
+    { "frame": 247, "type": "scroll", "dx": 0.0, "dy": 30.0 },
+    { "frame": 250, "type": "scroll", "dx": 0.0, "dy": 30.0 },
+    { "frame": 254, "type": "keyUp", "key": 340, "mods": 0 }
+  ]
+}

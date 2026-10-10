@@ -1,0 +1,137 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>CPU Texture Sources in Render Pipelines</title>
+<script src="https://cdn.jsdelivr.net/npm/mermaid@10/dist/mermaid.min.js"></script>
+<style>
+  :root {
+    --bg: #1a1d23; --panel: #232831; --panel-light: #2c323d; --border: #3a414d;
+    --text: #d8dde6; --muted: #8a93a3; --accent: #6db4ff; --danger: #ff8a6e; --bad: #ff8a6e;
+    --ok: #7bd88f; --good: #7bd88f; --warn: #f6c177;
+  }
+  * { box-sizing: border-box; }
+  html, body { background: var(--bg); color: var(--text); font-family: -apple-system, "Segoe UI", system-ui, sans-serif; line-height: 1.55; margin: 0; padding: 0; }
+  .container { max-width: 1180px; margin: 0 auto; padding: 48px 32px 96px; }
+  h1 { font-size: 28px; margin: 0 0 8px; letter-spacing: -0.01em; }
+  h2 { font-size: 20px; margin: 48px 0 16px; padding-top: 12px; border-top: 1px solid var(--border); }
+  h3 { font-size: 16px; margin: 24px 0 8px; color: var(--accent); }
+  p { margin: 8px 0 14px; }
+  code, .mono { font-family: "JetBrains Mono", Consolas, monospace; font-size: 0.85em; background: var(--panel-light); padding: 1px 6px; border-radius: 3px; }
+  pre { background: var(--panel-light); border: 1px solid var(--border); border-radius: 6px; padding: 14px 16px; overflow-x: auto; }
+  pre code { background: none; padding: 0; }
+  .lede { color: var(--muted); margin-bottom: 4px; font-size: 14px; }
+  .panel { background: var(--panel); border: 1px solid var(--border); border-radius: 8px; padding: 20px 24px; margin: 16px 0; }
+  .panel.danger { border-color: var(--danger); } .panel.ok { border-color: var(--ok); } .panel.warn { border-color: var(--warn); }
+  .panel-title { font-weight: 600; font-size: 14px; margin: 0 0 8px; text-transform: uppercase; letter-spacing: 0.06em; color: var(--muted); }
+  .panel.danger .panel-title { color: var(--danger); } .panel.ok .panel-title { color: var(--ok); } .panel.warn .panel-title { color: var(--warn); }
+  table { border-collapse: collapse; width: 100%; margin: 12px 0 20px; font-size: 13.5px; }
+  th { text-align: left; background: var(--panel-light); padding: 8px 10px; border-bottom: 1px solid var(--border); color: var(--muted); font-weight: 600; }
+  td { padding: 8px 10px; border-bottom: 1px solid var(--border); vertical-align: top; }
+  tr:hover td { background: rgba(255,255,255,0.02); }
+  .pill { display: inline-block; padding: 1px 8px; border-radius: 999px; font-size: 12px; font-weight: 600; }
+  .pill.keep { background: rgba(109,180,255,0.15); color: var(--accent); }
+  .pill.new { background: rgba(123,216,143,0.15); color: var(--ok); }
+  .two-col { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+  hr { border: 0; border-top: 1px solid var(--border); margin: 32px 0; }
+  footer { color: var(--muted); font-size: 13px; margin-top: 48px; }
+</style>
+</head>
+<body>
+<div class="container">
+<p class="lede">GUIDE · rendering · TextureService and render pipeline nodes</p>
+<h1>CPU Texture Sources in Render Pipelines</h1>
+<p>An engine-owned way for runtime code to hand a small, changing CPU image plus a fixed block of metadata to an authored fullscreen pass. Runtime masks and simulation fields (a visibility mask, a flow field, a paint layer) are the intended producers. <code>TextureService</code> owns the retained bytes, the upload and the GPU texture; the producer holds only a move-only lease.</p>
+
+<div class="panel warn">
+  <p class="panel-title">Not a fog or visibility system</p>
+  <p>This is a producer API. It defines no factions, bounds or fallback policy. The consuming composition decides what to draw when the source is absent; the existing <code>FullscreenShader</code> node skips a stage whose input is missing (the chain threads through), which is not a fail-closed visibility curtain.</p>
+</div>
+
+<h2>Producer</h2>
+<pre><code>struct MaskBounds { float OriginX, OriginZ, SizeX, SizeZ; };
+
+auto source = services.Textures().CreateCpuTextureSource({
+    {world.GetWorldId(), world.GetLifecycleResetGeneration()},
+    HashStringId("Visibility"),
+    Rendering::TextureFormat::R8G8_UNORM,
+    sizeof(MaskBounds)});
+
+const bool accepted = source.Publish(width, height, pixels,
+                                     std::as_bytes(std::span(&amp;bounds, 1)));</code></pre>
+
+<table>
+  <tr><th>Rule</th><th>Detail</th></tr>
+  <tr><td>Scope</td><td>The lease is fixed to one <code>(world id, lifecycle reset generation)</code>. A world reset closes every lease of the previous generation; the producer sees <code>!source</code> and creates a new one.</td></tr>
+  <tr><td>Identity</td><td><code>Name</code> is a <code>StringId</code>. Two live publishers of the same scope and name are rejected: the second <code>CreateCpuTextureSource</code> returns an empty lease.</td></tr>
+  <tr><td>Image</td><td>Tightly packed <code>R8_UNORM</code>, <code>R8G8_UNORM</code> or <code>RGBA8_UNORM</code>; at most 4096 pixels per axis and 16 MiB per revision. Linear formats only.</td></tr>
+  <tr><td>Metadata</td><td>Optional, fixed size, a multiple of 16 bytes, at most 256 bytes. Its shader layout belongs to the producer and its consuming shader. Zero bytes means no buffer is published.</td></tr>
+  <tr><td>Publish</td><td>Copies image and metadata together as one revision, outside the lease's mutex. The newest pending revision replaces the previous one; there is no queue and no callback. <code>false</code> means invalid arguments, allocation failure or a closed lease, and the previous revision stays.</td></tr>
+  <tr><td>Acceptance</td><td><code>true</code> means the CPU bytes were retained. The GPU receives them at the next render-thread drain.</td></tr>
+  <tr><td>Threads</td><td><code>Publish</code> may run on any thread; calls on one lease object need caller synchronisation (it is a plain move-only value).</td></tr>
+  <tr><td>Release</td><td>Reset or destroy the lease when the producer stops. Service shutdown and world resets revoke leases; a revoked lease cannot be revived by publishing.</td></tr>
+</table>
+
+<h2>Pipeline node</h2>
+<pre><code>{
+  "id": "VisibilityInput",
+  "type": "CpuTextureInput",
+  "source": "Visibility",
+  "output": "VisibilityMask",
+  "parameters": "VisibilityBounds",
+  "viewPurpose": "Game"
+}</code></pre>
+<p><code>CpuTextureInput</code> is a per-view node. It imports the uploaded texture into the view's render graph under <code>output</code> and, when the source carries metadata, copies it into the frame's upload ring and publishes it under <code>parameters</code>. <code>FullscreenShader.inputs</code> and <code>.buffers</code> consume both names unchanged. <code>viewPurpose</code> defaults to <code>Game</code>; <code>EditorScene</code>, <code>EditorPreview</code> and <code>UtilityCapture</code> are the other values. Views of other worlds, and world zero, never see the source.</p>
+<p>The node publishes neither resource when the lease is absent, the scope is stale, no revision has uploaded, the node's <code>parameters</code> presence disagrees with the source's metadata size, the device is not healthy, or the per-frame metadata allocation fails.</p>
+
+<h2>Lifetime and execution</h2>
+<pre class="mermaid">
+sequenceDiagram
+    participant P as Producer (any thread)
+    participant S as TextureService (render thread)
+    participant RG as Render graph
+    P->>S: CreateCpuTextureSource(scope, name, format, bytes)
+    P->>S: Publish(revision N)
+    Note over S: RenderingLoop::Update observes the world scope
+    S->>S: FlushPendingUploads uploads N when N differs from the uploaded revision
+    Note over S: a native OnPostSimulation publication drains again in FlushCpuTextureUploads
+    RG->>S: CpuTextureInput calls GetCpuTextureForView
+    S-->>RG: borrowed texture and a metadata copy
+    P->>S: Publish(revision N+1)
+    Note over S: next drain overwrites in place, or resizes into a new texture
+</pre>
+<table>
+  <tr><th>Event</th><th>Behavior</th></tr>
+  <tr><td>Drain</td><td><code>TextureService::FlushPendingUploads</code>, once per application frame inside <code>BeginWorldDrawFrame</code>, before extraction and graph declaration. Only sources whose pending revision differs from the uploaded one submit; an unchanged source costs no upload. A second drain, <code>FlushCpuTextureUploads</code>, runs from <code>NativePostSimulationSystem</code> once a native <code>OnPostSimulation</code> hook has been delivered, so a lease created or published in that hook uploads in the same frame (see <a href="../Scripting/native-user-systems.html">Native user systems</a>).</td></tr>
+  <tr><td>Upload</td><td>One staging buffer and one graphics-queue command list per dirty source, through <code>UploadTexturesBatched</code>. Every staging allocation and the command list exist before anything is submitted; a preparation failure submits nothing and keeps the previous image and metadata, including on resize.</td></tr>
+  <tr><td>Ordering</td><td>The in-place copy is bracketed <code>ShaderResource</code> to <code>CopyDest</code> and back on the graphics queue, which orders it after the previous frame's sampling of the same image. Consumers are sampled reads on that queue; the backend resolves the image layout from its own tracking.</td></tr>
+  <tr><td>Resize</td><td>A revision with new dimensions uploads into a fresh texture; the previous one is destroyed only after the new upload was submitted. A failed resize retires the replacement and keeps the previous pair.</td></tr>
+  <tr><td>Dispatch exception</td><td>The device's submit API is void. If it throws after a copy may have run, an in-place image is invalidated (no binding until a complete retry) and the exception propagates.</td></tr>
+  <tr><td>Borrowing</td><td>A <code>CpuTextureBinding</code> is valid until the next drain. Nothing retains it across frames; the node looks it up again at every declaration.</td></tr>
+  <tr><td>Destruction</td><td>Textures retire through the device's fence-deferred destroy, so frames already submitted keep sampling safely. The service's entry table is the owner: it destroys on close, resize and shutdown.</td></tr>
+  <tr><td>Device rebuild</td><td><code>ReprovisionAfterDeviceRebuild</code> forgets the dead handles without destroying them; retained CPU revisions upload again at the next drain.</td></tr>
+  <tr><td>World reset and shutdown</td><td><code>ObserveCpuTextureWorld</code> closes leases whose reset generation no longer matches; <code>Shutdown</code> closes everything and destroys the textures.</td></tr>
+  <tr><td>Module unload</td><td>The engine retains no function pointer, deleter or renderer feature from the producer. A native module releases its lease and can unload.</td></tr>
+</table>
+
+<div class="panel warn">
+  <p class="panel-title">Per-frame cost of a streaming publisher</p>
+  <p>A source that publishes every frame pays one revision copy on the publisher's thread and, on the render thread, one staging buffer create and retire, one command list and one queue submit per frame. The engine's video path (<code>VideoFrameUploader</code>) amortizes the same work with a persistent staging ring and a single submit per tick; sharing that uploader is the planned follow-up for publishers that stream every frame.</p>
+</div>
+
+<h2>Verification</h2>
+<p><code>CpuTextureSourceTests</code> (Engine tests, headless Vulkan) reads pixels back and checks: latest-revision coalescing across views, preparation-failure retention, dispatch-after-copy invalidation, failed-resize cleanup, scope and reset revocation, duplicate-lease rejection, invalid payload rejection, device reprovision re-upload, a publisher thread racing the drain, an authored pipeline compiling with a <code>FullscreenShader</code> consumer, and the real <code>TextureService</code> plus node publishing only coherent view-scoped pairs. <code>RenderPipelineDeclareTests</code> and <code>EngineTextureTests</code> gate the touched pipeline and service paths.</p>
+
+<h2>Changelog</h2>
+<table>
+  <tr><th>Date</th><th>Change</th></tr>
+  <tr><td>2026-09-17</td><td>Initial canonical, replacing the Markdown draft that shipped with the feature.</td></tr>
+  <tr><td>2026-09-17</td><td>Late drain after the native post-simulation hook.</td></tr>
+  <tr><td>2026-09-29</td><td>Verification names <code>EngineTextureTests</code>, which holds the texture-service tests since the render-services test executable was split by responsibility.</td></tr>
+</table>
+
+<footer>CPU texture sources · v1 · 2026-09-17</footer>
+</div>
+<script>mermaid.initialize({ startOnLoad: true, theme: 'dark' });</script>
+</body>
+</html>

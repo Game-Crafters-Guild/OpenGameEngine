@@ -1,0 +1,18 @@
+/* CurveField (Apps/Editor/Include/UI/Controls/CurveField.h).
+ *
+ * The graph is painted by the control, so what it paints text and lines with comes from here: the
+ * time labels under the graph take this element's font-size and color, and the reference line, the
+ * playback time's pill, the shaded spans and the value-axis marks read the custom properties below. The control requests this sheet for
+ * its own subtree. With time labels on, the control sizes its own height: a 110 px plot, or the
+ * --curve-field-plot-height a host sheet sets on the graph in px (another unit is reported and
+ * ignored), with the label strip under it.
+ */
+.curve-field {
+    font-size: 12px;
+    color: var(--ui_color_text_secondary);
+    --curve-field-reference-line-color: var(--ui_color_text_dim);
+    --curve-field-playback-label-background: var(--ui_color_bg_plate);
+    --curve-field-playback-label-color: var(--ui_color_text_bright);
+    --curve-field-shaded-span-color: rgba(120, 140, 200, 0.12);
+    --curve-field-value-mark-color: rgba(150, 160, 175, 0.22);
+}

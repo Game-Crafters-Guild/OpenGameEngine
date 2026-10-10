@@ -1,0 +1,31 @@
+{
+  "name": "gameengine-mcp",
+  "version": "2.0.0",
+  "type": "module",
+  "description": "Game Engine MCP Server — AI agent introspection and control for the editor",
+  "main": "dist/index.js",
+  "bin": {
+    "gameengine-mcp": "dist/index.js",
+    "ge": "dist/cli.js"
+  },
+  "scripts": {
+    "build": "tsc",
+    "build:exe": "npm run build && node scripts/build-sea.mjs",
+    "start": "node dist/index.js",
+    "dev": "tsc --watch"
+  },
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "^1.12.0",
+    "zod": "^3.23.0",
+    "zod-to-json-schema": "^3.24.0"
+  },
+  "devDependencies": {
+    "@types/node": "^22.0.0",
+    "esbuild": "^0.25.0",
+    "postject": "^1.0.0-alpha.6",
+    "typescript": "^5.7.0"
+  },
+  "engines": {
+    "node": ">=20.0.0"
+  }
+}

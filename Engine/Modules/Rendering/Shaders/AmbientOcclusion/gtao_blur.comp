@@ -1,0 +1,69 @@
+#version 450
+
+// Depth-aware joint-bilateral DENOISE for the GTAO result, run at the sweep's own
+// resolution (half-res in the default path). This 5x5 spatial filter smooths
+// both the bent normal (rgb) and the
+// visibility (a) while preserving depth edges. Input and output share resolution
+// (the kernel step is one input texel); a separate cheap pass (gtao_upsample.comp)
+// takes the half-res result to full res.
+//
+// This denoise is original engine code; the GTAO buffer it operates on is produced by
+// gtao.comp, a port of SpartanEngine's MIT-licensed ssao.hlsl (see that file's header).
+
+layout(local_size_x = 8, local_size_y = 8, local_size_z = 1) in;
+
+layout(set = 0, binding = 0) uniform sampler2D uAOIn;   // raw GTAO (rgba16f)
+layout(set = 0, binding = 1) uniform sampler2D uDepth;  // resolved reverse-Z depth
+layout(set = 0, binding = 3) uniform sampler2D uGuide;
+layout(set = 0, binding = 2, rgba16f) uniform writeonly image2D uAOOut;
+
+#include "AmbientOcclusion/gtao_denoise_common.glsl"  // depth reconstruction and plane-aware weights
+
+const int kRadius = 2;     // 5x5 kernel
+
+void main()
+{
+    ivec2 outSize = imageSize(uAOOut);
+    ivec2 pix     = ivec2(gl_GlobalInvocationID.xy);
+    if (pix.x >= outSize.x || pix.y >= outSize.y)
+        return;
+
+    vec3 center = GE_GtaoGuide(uGuide, pix, textureSize(uDepth, 0));
+    vec2 uv = center.xy;
+    float rawC = center.z;
+    if (rawC <= 0.0) // sky: copy through (no occlusion)
+    {
+        imageStore(uAOOut, pix, vec4(0.0, 0.0, 0.0, 1.0));
+        return;
+    }
+
+    float linC    = GE_LinearizeDepth(rawC);
+    vec2 depthUV = GE_GtaoDepthUV(uDepth, uv);
+    vec2 depthSlope = GE_GtaoDepthSlope(uDepth, depthUV, rawC);
+    // Guide locations may differ inside their 2x2 source footprints.
+    vec4  sum     = vec4(0.0);
+    float wsum    = 0.0;
+
+    for (int y = -kRadius; y <= kRadius; ++y)
+    for (int x = -kRadius; x <= kRadius; ++x)
+    {
+        ivec2 tap = pix + ivec2(x, y);
+        if (any(lessThan(tap, ivec2(0))) || any(greaterThanEqual(tap, outSize))) continue;
+        vec3 guide = GE_GtaoGuide(uGuide, tap, textureSize(uDepth, 0));
+        vec2 tapUV = guide.xy;
+        float raws = guide.z;
+        if (raws <= 0.0)
+            continue;
+        float predictedRaw = rawC + dot(depthSlope, GE_GtaoDepthUV(uDepth, tapUV) - depthUV);
+        float spatial = exp(-0.5 * float(x * x + y * y) / 2.25);
+        float w = spatial * GE_GtaoDepthWeight(raws, predictedRaw, linC);
+        sum  += texelFetch(uAOIn, tap, 0) * w;
+        wsum += w;
+    }
+
+    vec4 result = wsum > 0.0 ? sum / wsum : texelFetch(uAOIn, pix, 0);
+    // Re-normalise the averaged bent normal; keep the (0,0,0) sentinel if it
+    // collapsed (the consumer then falls back to the geometric normal).
+    result.rgb = dot(result.rgb, result.rgb) > 1e-8 ? normalize(result.rgb) : vec3(0.0);
+    imageStore(uAOOut, pix, result);
+}

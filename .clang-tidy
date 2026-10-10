@@ -1,0 +1,57 @@
+Checks: '-*,readability-identifier-naming,modernize-use-nullptr,modernize-use-auto,readability-braces-around-statements,readability-redundant-member-init,readability-static-accessed-through-instance,readability-container-size-empty,performance-for-range-copy,performance-unnecessary-copy-initialization'
+WarningsAsErrors: ''
+HeaderFilterRegex: '^(?!.*(third_party|external|extern|Generated|build|bin)).*'
+FormatStyle: none
+CheckOptions:
+  # Functions and Methods: PascalCase (per coding style guide)
+  - key:             readability-identifier-naming.FunctionCase
+    value:           CamelCase
+  - key:             readability-identifier-naming.MethodCase
+    value:           CamelCase
+  # Types: PascalCase
+  - key:             readability-identifier-naming.ClassCase
+    value:           CamelCase
+  - key:             readability-identifier-naming.StructCase
+    value:           CamelCase
+  - key:             readability-identifier-naming.EnumCase
+    value:           CamelCase
+  - key:             readability-identifier-naming.EnumConstantCase
+    value:           CamelCase
+  # Private members: m_PascalCase
+  - key:             readability-identifier-naming.PrivateMemberCase
+    value:           CamelCase
+  - key:             readability-identifier-naming.PrivateMemberPrefix
+    value:           m_
+  - key:             readability-identifier-naming.ProtectedMemberCase
+    value:           CamelCase
+  - key:             readability-identifier-naming.ProtectedMemberPrefix
+    value:           m_
+  # Public members: PascalCase (no m_ prefix for POD structs)
+  - key:             readability-identifier-naming.PublicMemberCase
+    value:           CamelCase
+  # Constants: kPascalCase
+  - key:             readability-identifier-naming.GlobalConstantPrefix
+    value:           k
+  - key:             readability-identifier-naming.GlobalConstantCase
+    value:           CamelCase
+  - key:             readability-identifier-naming.ConstantCase
+    value:           CamelCase
+  - key:             readability-identifier-naming.LocalConstantCase
+    value:           camelBack
+  # Variables and parameters: camelCase
+  - key:             readability-identifier-naming.VariableCase
+    value:           camelBack
+  - key:             readability-identifier-naming.ParameterCase
+    value:           camelBack
+  # Namespaces: PascalCase
+  - key:             readability-identifier-naming.NamespaceCase
+    value:           CamelCase
+  # Template parameters: PascalCase
+  - key:             readability-identifier-naming.TemplateParameterCase
+    value:           CamelCase
+  # Ignore main-like functions and failed splits
+  - key:             readability-identifier-naming.IgnoreMainLikeFunctions
+    value:           '1'
+  - key:             readability-identifier-naming.IgnoreFailedSplit
+    value:           '1'
+

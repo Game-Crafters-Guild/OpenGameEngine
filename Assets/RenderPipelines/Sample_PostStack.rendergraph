@@ -1,0 +1,20 @@
+{
+  "schemaVersion": 2,
+  "pipelineName": "Sample_PostStack",
+  "passes": [
+    { "id": "World", "type": "WorldRender", "enabled": true },
+    { "id": "SortedTransparent", "type": "SortedTransparent", "enabled": true },
+    {
+      "id": "SolidColor",
+      "type": "FullscreenShader",
+      "enabled": false,
+      "output": "View.Resolve",
+      "shaderPkg": "Shaders/solidcolor.shaderpkg"
+    }
+  ],
+  "outputs": {
+    "FinalColor": "View.Resolve"
+  }
+}
+
+

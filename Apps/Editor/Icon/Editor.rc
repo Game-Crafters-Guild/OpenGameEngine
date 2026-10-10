@@ -1,0 +1,10 @@
+// Windows resource file for Editor application icon
+// The icon ID 1 is typically used by Windows as the main application icon
+
+#include <windows.h>
+
+// Main application icon - shown in Explorer, taskbar, Alt+Tab, title bar
+// Using numeric id 1 ensures Windows picks this as the primary icon and
+// lets native code load it via MAKEINTRESOURCEW(1).
+1 ICON "AppIcon.ico"
+

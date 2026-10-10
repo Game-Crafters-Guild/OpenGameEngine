@@ -1,0 +1,20 @@
+#version 450
+
+#include "Includes/storage_access.glsl"
+
+// Minimal compute shader for testing basic compute functionality
+layout(local_size_x = 64, local_size_y = 1, local_size_z = 1) in;
+
+// Simple output buffer
+layout(set = 0, binding = 0, std430) restrict GE_STORAGE_WRITEONLY buffer OutputBuffer {
+    uint results[];
+};
+
+void main() {
+    uint index = gl_GlobalInvocationID.x;
+    
+    // Write a simple pattern to verify compute shader execution
+    if (index < 10) {
+        results[index] = index + 42;
+    }
+}

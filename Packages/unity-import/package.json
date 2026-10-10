@@ -1,0 +1,15 @@
+{
+  "name": "unity-import",
+  "version": "1.0.0",
+  "displayName": "Unity Package Importer",
+  "assets": "",
+  "modules": [
+    {
+      "name": "unity-import-editor",
+      "kind": "Editor",
+      "lang": "Cpp",
+      "root": "Editor/",
+      "prebuilt": "Binaries/"
+    }
+  ]
+}

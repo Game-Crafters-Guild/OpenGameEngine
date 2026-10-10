@@ -1,0 +1,112 @@
+#version 450
+
+#include "Includes/compat_profile.glsl"
+
+// GameEngine adaptation of AMD FidelityFX DoF 1.1's bilateral reduction.
+// AMD's MIT notice is retained in the package root.
+layout(local_size_x = 8, local_size_y = 8, local_size_z = 1) in;
+
+layout(set = 0, binding = 0) uniform sampler2D uSceneColor;
+layout(set = 0, binding = 1) uniform sampler2D uDepth;
+layout(set = 0, binding = 2, rgba16f) uniform writeonly image2D uHalfColorCoc;
+
+layout(set = 0, binding = 3, std140) uniform ViewParamsBlock
+{
+    mat4 ge_invProj;
+    mat4 ge_view;
+    vec4 ge_nearFar;
+    vec4 ge_cameraPosWS;
+} ViewParams;
+
+layout(push_constant) uniform DofPC
+{
+    float dofIntensity;
+    float dofMaxRadius;
+    float dofFocusDistance;
+    float dofFocalLengthMm;
+    float dofAperture;
+    float dofSensorHeightMm;
+    int dofApertureBladeCount;
+    float dofApertureRoundness;
+    float dofApertureRotation;
+    float dofAnamorphicSqueeze;
+    int dofDebugMode;
+    float dofDebugAlpha;
+} pc;
+
+float LinearizeReverseZ(float depth)
+{
+    float n = max(ViewParams.ge_nearFar.x, 1e-5);
+    float f = max(ViewParams.ge_nearFar.y, n + 1.0);
+    return (n * f) / max(depth * (f - n) + n, 1e-6);
+}
+
+float PhysicalCocMeters(float rawDepth)
+{
+    float focal = max(pc.dofFocalLengthMm, 1.0) * 0.001;
+    float focus = max(pc.dofFocusDistance, focal + 0.001);
+    float apertureDiameter = focal / max(pc.dofAperture, 0.95);
+    // Reverse-Z clear depth belongs to the sky/background at infinity. Use
+    // the thin-lens limit as distance tends to infinity so it still responds
+    // to focus distance and aperture instead of forcing the artistic cap.
+    if (rawDepth <= 0.0)
+        return -apertureDiameter * focal / max(focus - focal, 1e-6);
+    float d = LinearizeReverseZ(rawDepth);
+    return apertureDiameter * focal * (focus - d) /
+           max(d * (focus - focal), 1e-6);
+}
+
+// FidelityFX convention: near is positive, far is negative. Units are
+// half-resolution pixels, matching the blur targets.
+float SignedCocHalfPx(float rawDepth, float fullHeight)
+{
+    float cocMeters = PhysicalCocMeters(rawDepth);
+    float sensorHeight = max(pc.dofSensorHeightMm, 1.0) * 0.001;
+    float radiusFullPx = 0.5 * cocMeters * (fullHeight / sensorHeight);
+    return clamp(radiusFullPx * clamp(pc.dofIntensity, 0.0, 1.0),
+                 -pc.dofMaxRadius, pc.dofMaxRadius) * 0.5;
+}
+
+vec3 Sanitize(vec3 c)
+{
+    c = mix(c, vec3(0.0), vec3(GE_IS_NAN(c)));
+    return clamp(c, vec3(0.0), vec3(65504.0));
+}
+
+void main()
+{
+    ivec2 dstSize = imageSize(uHalfColorCoc);
+    ivec2 dst = ivec2(gl_GlobalInvocationID.xy);
+    if (any(greaterThanEqual(dst, dstSize)))
+        return;
+
+    ivec2 srcSize = textureSize(uSceneColor, 0);
+    ivec2 base = dst * 2;
+    float coc[4];
+    vec3 color[4];
+    float reference = 0.0;
+    for (int i = 0; i < 4; ++i)
+    {
+        ivec2 o = ivec2(i & 1, i >> 1);
+        ivec2 p = clamp(base + o, ivec2(0), srcSize - ivec2(1));
+        float raw = texelFetch(uDepth, p, 0).r;
+        coc[i] = SignedCocHalfPx(raw, float(srcSize.y));
+        color[i] = Sanitize(texelFetch(uSceneColor, p, 0).rgb);
+        if (i == 0) reference = coc[i];
+    }
+
+    vec3 sum = vec3(0.0);
+    float cocSum = 0.0;
+    float weightSum = 0.0;
+    for (int i = 0; i < 4; ++i)
+    {
+        // FidelityFX bilateral rule: reject samples whose CoC differs by more
+        // than one half-resolution pixel, preserving depth silhouettes.
+        float w = 1.0 - step(1.0, abs(coc[i] - reference));
+        sum += color[i] * w;
+        cocSum += coc[i] * w;
+        weightSum += w;
+    }
+    imageStore(uHalfColorCoc, dst, vec4(sum / max(weightSum, 1.0),
+                                        cocSum / max(weightSum, 1.0)));
+}

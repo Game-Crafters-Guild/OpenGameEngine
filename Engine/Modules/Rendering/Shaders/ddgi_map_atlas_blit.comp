@@ -1,0 +1,47 @@
+#version 450
+
+// Resamples ONE material texture (base colour, emissive or metallic-roughness)
+// into ONE layer of DDGI's material map array texture (DDGIMaterialMapAtlas). One dispatch per
+// layer; the layer index arrives in the params UBO rather than gl_WorkGroupID.z
+// so the dispatch grid stays exactly the atlas square. Nothing here is specific
+// to a map kind — the source binding is the whole difference.
+//
+// The source is sampled through a normal combined image sampler, so the
+// hardware does the filtering and, for an *_SRGB view, the sRGB->linear
+// decode. Base-colour and emissive maps are colour data and upload sRGB-tagged
+// (RenderServicesDetail.cpp's IsLinearTextureSlot lists neither), while the
+// metallic-roughness map is listed there and uploads linear, so what lands in
+// the atlas is already LINEAR either way — which is why the trace kernels
+// sample it with no decode of their own. (The ported reference stacks raw sRGB
+// bytes and decodes in-kernel; it reads its maps off a 2D canvas with no format
+// knowledge, whereas here the engine already tags colour space at upload and
+// the sampler applies it for free.)
+
+layout(local_size_x = 8, local_size_y = 8, local_size_z = 1) in;
+
+layout(set = 0, binding = 0) uniform sampler2D uSourceTexture;
+
+layout(set = 0, binding = 1, rgba8) writeonly uniform image2DArray uAtlas;
+
+layout(std140, set = 0, binding = 2) uniform DDGIAtlasBlitParams
+{
+    uvec4 uLayerAndSize;  // x = destination layer, y = atlas square size in texels
+} DDGIParams;
+
+void main()
+{
+    const ivec2 texel = ivec2(gl_GlobalInvocationID.xy);
+    const int size = int(DDGIParams.uLayerAndSize.y);
+    if (texel.x >= size || texel.y >= size)
+        return;
+
+    const vec2 uv = (vec2(texel) + 0.5) / float(size);
+    // Downsampling a 2K source with a single mip-0 bilinear tap would alias
+    // badly and give the bounce term a per-layer noise floor, so pick the mip
+    // whose footprint matches the atlas square. Clamps to 0 on a source with
+    // no mip chain.
+    const ivec2 sourceSize = textureSize(uSourceTexture, 0);
+    const float lod = max(log2(float(max(sourceSize.x, sourceSize.y)) / float(size)), 0.0);
+    const vec4 source = textureLod(uSourceTexture, uv, lod);
+    imageStore(uAtlas, ivec3(texel, int(DDGIParams.uLayerAndSize.x)), source);
+}

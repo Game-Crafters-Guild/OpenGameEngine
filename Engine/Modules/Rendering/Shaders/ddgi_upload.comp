@@ -1,0 +1,181 @@
+#version 450
+
+// DDGI atlas upload kernel (M2/M3): copies the persistent irradiance STATE
+// SSBO (Includes/ddgi_common.glsl's doc — read_write, updated in place by
+// ddgi_blend.comp) into the write-only atlas STORAGE TEXTURE the forward
+// pass samples with hardware bilinear filtering, and likewise copies the
+// depth-moment STATE SSBO (M3) into its own atlas for the forward consumer's
+// Chebyshev visibility test. This split (SSBO state + separate texture
+// upload) is mandatory on WebGPU (no read_write storage textures) and is
+// kept on every backend for one shared code path — see ddgi_common.glsl's
+// header doc.
+//
+// Irradiance passes through an intra-tile spatial denoise on the way out (see
+// GE_DDGIFilterTile). The filter belongs HERE and not in ddgi_blend.comp
+// precisely because this kernel reads the state read-only and writes only the
+// atlas: the denoised result never re-enters the temporal history, so it
+// cannot compound tick over tick into an over-blurred field, and the same
+// state can be re-uploaded any number of times for the same result. Taps stay
+// inside one probe's tile, so no radiance can cross between probes and the
+// atlas addressing is untouched.
+//
+// One workgroup per probe (matches ddgi_blend.comp's dispatch shape), one
+// thread per atlas texel.
+
+#include "Includes/ddgi_common.glsl"
+
+layout(local_size_x = GE_DDGI_TILE, local_size_y = GE_DDGI_TILE, local_size_z = 1) in;
+
+layout(std140, set = 0, binding = 0) uniform DDGIUploadParams
+{
+    vec4 uGridMinWS;     // xyz; the cell record compare needs the grid's placement
+    vec4 uGridSizeWS;    // xyz
+    ivec4 uProbeCount;   // xyz = res; w = probeTotal
+    uvec4 uDispatch0;    // x = probeBase, y = probesThisTick
+    vec4 uParams0;       // x = filterStrength, y = filterSmoothness,
+                         // z = depth atlas interior tile resolution: the depth
+                         //     copy below runs only while it equals
+                         //     GE_DDGI_OCT_RES (ddgi_depth_upload.comp owns a
+                         //     Fine atlas), w unused
+} DDGIParams;
+
+layout(std430, set = 0, binding = 1) readonly buffer DDGIIrradianceStateRO
+{
+    vec4 ge_ddgiIrradianceState[];
+};
+
+layout(set = 0, binding = 2, rgba16f) uniform writeonly image2D uIrradianceAtlas;
+
+layout(std430, set = 0, binding = 3) readonly buffer DDGIDepthStateRO
+{
+    vec4 ge_ddgiDepthState[];
+};
+
+layout(set = 0, binding = 4, rgba16f) uniform writeonly image2D uDepthAtlas;
+
+// Cell record (ddgi_blend.comp stamps it for the probes it visited this
+// tick). A slot the scroll handed to a new cell that no blend has visited
+// yet still holds another place's field; uploading that would let the
+// consumer and the recursive bounce read it until the round-robin arrives.
+// Such a slot uploads as black with zero depth instead — the same thing a
+// cleared slot shows, and what makes a scroll converge like a clear.
+layout(std430, set = 0, binding = 5) readonly buffer DDGIProbeCellRO
+{
+    vec4 ge_ddgiProbeCell[];
+};
+
+// Intra-tile denoise shaping constants, ported from the reference library's
+// upload kernel (gi_probes.js). None of them is authored: the two knobs that
+// ARE authored (strength, smoothness) ride in uParams0.xy.
+//
+// The filter exists because the ray set is re-rotated every tick, so a texel's
+// estimate always carries Monte-Carlo noise that the temporal policy alone can
+// only trade against reactivity. Neighbouring texels of one tile look at
+// nearby directions from the SAME point, so averaging them — weighted by how
+// far apart their luminance is relative to the texel's own measured noise —
+// removes grain that is noise while leaving a genuine directional edge (a red
+// wall next to a white one) sharp.
+const float GE_DDGI_FILTER_K = 8.0;             // variance -> edge-stop bandwidth
+const float GE_DDGI_FILTER_EPS = 0.001;         // absolute luma^2 floor (keeps a black texel finite)
+const float GE_DDGI_FILTER_REL = 0.0225;        // relative floor, (~15% luma)^2
+const float GE_DDGI_FILTER_SMOOTH_RANGE = 6.0;  // smoothness widens the band up to 7x
+const int GE_DDGI_OCT_LO = GE_DDGI_BORDER;                        // first interior texel
+const int GE_DDGI_OCT_HI = GE_DDGI_BORDER + GE_DDGI_OCT_RES - 1;  // last interior texel
+
+// Which texel the 3x3 neighbourhood is centred on: the interior texel this
+// one octahedrally corresponds to (GE_DDGIOctMirrorTexel, shared with the
+// glossy lobe's gutter fill). Leaving the gutter unfiltered beside a filtered
+// interior would put a discontinuity exactly where the sampler straddles the
+// two -- GE_DDGIProbeTexelUV lands on the texel boundary at the octahedral
+// extremes, giving the gutter up to half the bilinear weight there.
+
+// Variance-adaptive bilateral filter over one probe tile's octahedral
+// interior, centred on `anchor` (GE_DDGIOctMirrorTexel) whose state entry is
+// `anchorState`: rgb = blended irradiance, w = the luminance second moment
+// ddgi_blend.comp already keeps for its temporal policy — so the texel's own
+// noise scale costs nothing extra here.
+vec3 GE_DDGIFilterTile(uint stateBase, ivec2 anchor, vec4 anchorState, float smoothness)
+{
+    const vec3 kLuma = vec3(0.2126, 0.7152, 0.0722);
+    float lumaC = dot(anchorState.rgb, kLuma);
+    float varC = max(anchorState.w - lumaC * lumaC, 0.0);
+    // Smoothness widens the edge stop (1x .. 7x): a wider band trusts more
+    // neighbours, trading directional detail for a smoother tile.
+    float smoothW = 1.0 + smoothness * GE_DDGI_FILTER_SMOOTH_RANGE;
+    float kEff = GE_DDGI_FILTER_K * smoothW;
+    float relEff = GE_DDGI_FILTER_REL * smoothW;
+    // Floor under the bandwidth, so a temporally CONVERGED texel (variance
+    // -> 0) still smooths neighbours that differ by less than noise scale
+    // instead of collapsing to a pure copy of itself. The absolute term keeps
+    // it finite where luminance is zero.
+    float bandFloor = max(GE_DDGI_FILTER_EPS, lumaC * lumaC * relEff);
+
+    vec3 acc = vec3(0.0);
+    float weightSum = 0.0;
+    for (int jy = -1; jy <= 1; ++jy)
+    {
+        for (int jx = -1; jx <= 1; ++jx)
+        {
+            // Taps clamp to the INTERIOR: a gutter texel holds all but the
+            // same direction as the interior texel it wraps to, so tapping it
+            // would just double-weight that direction.
+            ivec2 n = clamp(anchor + ivec2(jx, jy), ivec2(GE_DDGI_OCT_LO), ivec2(GE_DDGI_OCT_HI));
+            vec3 en = ge_ddgiIrradianceState[stateBase + uint(n.y * GE_DDGI_TILE + n.x)].rgb;
+            float dLum = dot(en, kLuma) - lumaC;
+            float spatialW = exp(-0.5 * float(jx * jx + jy * jy));
+            // Noisy texel (high variance) -> wide trust -> blur; converged
+            // texel -> narrow -> directional detail survives.
+            float edgeW = exp(-(dLum * dLum) / max(varC * kEff + bandFloor, 1.0e-8));
+            float w = spatialW * edgeW;
+            acc += en * w;
+            weightSum += w;
+        }
+    }
+    return acc / max(weightSum, 1.0e-4);
+}
+
+void main()
+{
+    uint probeLocal = gl_WorkGroupID.x;
+    int probeIdx = int(DDGIParams.uDispatch0.x) + int(probeLocal);
+    if (probeLocal >= DDGIParams.uDispatch0.y || probeIdx >= DDGIParams.uProbeCount.w)
+        return;
+
+    GE_DDGIGridInfo grid;
+    grid.gridMinWS = DDGIParams.uGridMinWS.xyz;
+    grid.gridSizeWS = DDGIParams.uGridSizeWS.xyz;
+    grid.probeCount = DDGIParams.uProbeCount.xyz;
+    grid.probeTotal = DDGIParams.uProbeCount.w;
+
+    uvec2 texel = gl_LocalInvocationID.xy;
+    uint stateBase = uint(probeIdx) * uint(GE_DDGI_TILE * GE_DDGI_TILE);
+    uint stateIdx = stateBase + texel.y * uint(GE_DDGI_TILE) + texel.x;
+
+    ivec2 tileOrigin = GE_DDGIProbeTileOrigin(grid, probeIdx);
+    if (GE_DDGIProbeCellChanged(ge_ddgiProbeCell[probeIdx], grid, probeIdx))
+    {
+        imageStore(uIrradianceAtlas, tileOrigin + ivec2(texel), vec4(0.0, 0.0, 0.0, 1.0));
+        if (int(DDGIParams.uParams0.z) == GE_DDGI_OCT_RES)
+            imageStore(uDepthAtlas, tileOrigin + ivec2(texel), vec4(0.0));
+        return;
+    }
+
+    vec3 irradiance = ge_ddgiIrradianceState[stateIdx].rgb;
+    float filterStrength = DDGIParams.uParams0.x;
+    // Uniform across the dispatch, so this branch costs nothing in divergence
+    // and makes strength 0 exactly the unfiltered copy rather than a mix that
+    // would still have to evaluate (and could propagate a NaN from) the filter.
+    if (filterStrength > 0.0)
+    {
+        ivec2 anchor = GE_DDGIOctMirrorTexel(ivec2(texel), GE_DDGI_TILE, GE_DDGI_OCT_RES);
+        vec4 anchorState = ge_ddgiIrradianceState[stateBase + uint(anchor.y * GE_DDGI_TILE + anchor.x)];
+        vec3 filtered = GE_DDGIFilterTile(stateBase, anchor, anchorState, DDGIParams.uParams0.y);
+        irradiance = mix(irradiance, filtered, filterStrength);
+    }
+    // The state's .w carries ddgi_blend.comp's luminance second moment (its
+    // variance history), not an alpha — write 1.0 so no sampler can ever pick
+    // it up as one.
+    imageStore(uIrradianceAtlas, tileOrigin + ivec2(texel), vec4(irradiance, 1.0));
+    if (int(DDGIParams.uParams0.z) == GE_DDGI_OCT_RES)
+        imageStore(uDepthAtlas, tileOrigin + ivec2(texel), ge_ddgiDepthState[stateIdx]);
+}

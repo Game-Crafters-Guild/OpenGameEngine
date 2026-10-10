@@ -1,0 +1,38 @@
+{
+  "FormatVersion": 1,
+  "Revision": 0,
+  "Values": {
+    "Surface.DeepColor": [
+      0.01,
+      0.08,
+      0.065,
+      1
+    ],
+    "Surface.Diffuse": [
+      0.01,
+      0.1,
+      0.07,
+      1
+    ],
+    "Surface.SubSurfaceShallowCol": [
+      0.1,
+      0.46,
+      0.25,
+      1
+    ],
+    "Surface.DepthFogDensity": [
+      0.13,
+      0.05,
+      0.1,
+      1
+    ],
+    "Surface.Roughness": 0.18,
+    "Surface.NormalsStrength": 0.5,
+    "Surface.FoamColor": [
+      0.88,
+      0.99,
+      0.88,
+      1
+    ]
+  }
+}

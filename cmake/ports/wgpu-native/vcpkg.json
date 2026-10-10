@@ -1,0 +1,8 @@
+{
+  "name": "wgpu-native",
+  "version": "29.0.1.1",
+  "description": "Prebuilt wgpu-native: the desktop WebGPU implementation (standard webgpu.h ABI) used by the engine's WebGPU rendering backend for native development and debugging.",
+  "homepage": "https://github.com/gfx-rs/wgpu-native",
+  "license": "MIT OR Apache-2.0",
+  "supports": "(osx & (arm64 | x64)) | (windows & x64 & !uwp) | (linux & x64)"
+}

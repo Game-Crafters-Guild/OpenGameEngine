@@ -1,0 +1,59 @@
+#version 450
+
+layout(local_size_x = 8, local_size_y = 8, local_size_z = 1) in;
+layout(set = 0, binding = 0) uniform sampler2D uSceneColor;
+layout(set = 0, binding = 1) uniform sampler2D uReflections;
+layout(set = 0, binding = 2) uniform sampler2D uDepth;
+layout(set = 0, binding = 3) uniform sampler2D uNormalRoughness;
+layout(set = 0, binding = 4, rgba16f) uniform writeonly image2D uOutput;
+layout(set = 0, binding = 5) uniform sampler2D uSpecularRadiance;
+layout(set = 0, binding = 6, rgba16f) uniform writeonly image2D uSceneHistoryOut;
+layout(set = 0, binding = 8) uniform sampler2D uSpecularWeight;
+
+#include "ScreenSpaceReflections/sssr_common.glsl"
+#include "ScreenSpaceReflections/sssr_composite_policy.glsl"
+
+void main()
+{
+    ivec2 size = imageSize(uOutput);
+    ivec2 pixel = ivec2(gl_GlobalInvocationID.xy);
+    if (any(greaterThanEqual(pixel, size))) return;
+    vec4 scene = texelFetch(uSceneColor, pixel, 0);
+    float rawDepth = texelFetch(uDepth, pixel, 0).r;
+    vec4 nr = texelFetch(uNormalRoughness, pixel, 0);
+    vec4 reflection = texelFetch(uReflections, pixel, 0);
+    // Zero confidence scales the substitution below to exactly zero, whatever
+    // the fallback state, so the fetches can be skipped — except for the debug
+    // views, which exist to explain that very state and are written past this
+    // exit, at the end of main().
+    if (rawDepth <= kSssrMinRawDepth || (reflection.a <= 1e-5 && sssr.debugMode == 0u))
+    {
+        imageStore(uOutput, pixel, scene);
+        imageStore(uSceneHistoryOut, pixel, vec4(scene.rgb, rawDepth));
+        return;
+    }
+    vec3 N = GE_DecodeNormalVS(nr);
+    float roughness = GE_Roughness(nr);
+    // Use the actual forward response, including authored F0, thin film,
+    // multiscatter, AO, horizon, and attenuation through coat/fuzz layers.
+    vec3 specBrdf = texelFetch(uSpecularWeight, pixel, 0).rgb;
+    // Upper edge is kSssrMaxRoughness: the same threshold classify rejects at and
+    // the prefilter's tile list is built from, so the set of pixels the denoiser
+    // works on is exactly the set that can still contribute here.
+    float roughnessVisibility = 1.0 - smoothstep(0.65, kSssrMaxRoughness, roughness);
+    // This is the same texel the intersect miss path writes. No independent
+    // environment reconstruction can disagree with the forward material.
+    vec3 env = texelFetch(uSpecularRadiance, pixel, 0).rgb;
+    float confidence = clamp(reflection.a, 0.0, 1.0);
+    float replace = clamp(sssr.sssrIntensity, 0.0, 1.0) * confidence * roughnessVisibility;
+    vec3 color = GE_SssrComposite(scene.rgb, reflection.rgb, env, specBrdf, replace);
+    // History gets the REAL composited color even in debug views, so the
+    // multi-bounce source is never poisoned by a visualization. Alpha carries
+    // the writer's raw depth: next frame's bounce sample validates against it
+    // so a moved camera cannot reflect the WRONG geometry (motion ghosts).
+    imageStore(uSceneHistoryOut, pixel, vec4(color, rawDepth));
+    if (sssr.debugMode == 1u) color = N * 0.5 + 0.5;
+    else if (sssr.debugMode == 2u) color = reflection.rgb;
+    else if (sssr.debugMode == 3u) color = vec3(reflection.a);
+    imageStore(uOutput, pixel, vec4(color, scene.a));
+}

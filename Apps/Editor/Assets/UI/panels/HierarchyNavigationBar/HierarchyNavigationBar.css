@@ -1,0 +1,45 @@
+/* HierarchyNavigationBar (Apps/Editor/Include/Editor/Hierarchy/HierarchyNavigationBar.h).
+ *
+ * The Hierarchy's row of item size slider and search. The panel reserves the row's strip with
+ * its own padding (theme/views.css, .hierarchy-panel); this sheet places the row in that strip
+ * and lays out its two items. The row requests it for its own subtree.
+ */
+.hierarchy-navigation-bar {
+    position: absolute;
+    left: 8px;
+    right: 8px;
+    bottom: 8px;
+    height: 22px;
+    display: flex;
+    flex-direction: row;
+    align-items: center;
+    gap: 8px;
+    z-index: 2;
+}
+
+/* The tree's horizontal scrollbar takes the bottom of the panel: a 12px bar 4px above the panel
+   edge. The row rides 3px clear of it: 4 + 12 + 3 = 19px. A literal, because the bar's
+   thickness is Scrollbar::kDefaultThicknessPx in C++, not a value any stylesheet can read. */
+.hierarchy-navigation-bar-above-scrollbar {
+    bottom: 19px;
+}
+
+/* EditorSearchBars sets search-bar-at-top on the row when search bars sit at the top; the search
+   inside the row never carries it (EditorSearchBars::RegisterHosted), and this sheet applies only
+   to the row's subtree, so one class names the row. After the scrollbar lift, so it wins over it. */
+.search-bar-at-top {
+    top: 8px;
+    bottom: unset;
+}
+
+/* The panel search as the row's flexible item, in place of the panel-anchored placement that
+   .panel-search-bar gives a search sitting directly in a panel. */
+.hierarchy-navigation-bar-search {
+    position: relative;
+    top: unset;
+    bottom: unset;
+    left: unset;
+    right: unset;
+    flex: 1 1 auto;
+    min-width: 0;
+}

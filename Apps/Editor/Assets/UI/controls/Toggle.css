@@ -1,0 +1,35 @@
+/* Toggle (switch) control — disabled presentation.
+   The track, knob and interactive states live in theme/toggle.css with the
+   rest of the .toggle family; this file carries only the state the control
+   itself refuses input in, attached by Toggle's constructor
+   (RequestSubtreeStyleAssetPath).
+
+   A disabled toggle still has to READ as on or off, so the checked track keeps
+   its accent hue at a muted strength rather than going flat grey. The :hover
+   pairs exist so the resting look wins on specificity alone rather than on
+   this sheet's position relative to the theme. */
+
+.toggle:disabled {
+	background-color: var(--ui_color_bg_grid);
+	border-color: var(--ui_color_border_subtle);
+	cursor: default;
+}
+
+.toggle:disabled:hover {
+	background-color: var(--ui_color_bg_grid);
+	border-color: var(--ui_color_border_subtle);
+}
+
+.toggle:disabled:checked {
+	background-color: var(--ui_color_accent_blue_disabled);
+	border-color: var(--ui_color_accent_blue_disabled);
+}
+
+.toggle:disabled:checked:hover {
+	background-color: var(--ui_color_accent_blue_disabled);
+	border-color: var(--ui_color_accent_blue_disabled);
+}
+
+.toggle:disabled .toggle-knob {
+	background-color: var(--ui_color_toggle_knob_disabled);
+}

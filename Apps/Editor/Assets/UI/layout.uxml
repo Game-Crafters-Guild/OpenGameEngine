@@ -1,0 +1,120 @@
+<UIElement id="root" class="dock-root">
+  <!-- Instantiated by the UI factory (EditorTopToolbar.cpp); the control loads
+       its own controls/EditorTopToolbar.uxml and .css. The authored id must
+       match the ctor-assigned id: hot-reload layout reconciliation matches by
+       id, and an id-less template node would re-clone the control instead of
+       adopting the live, already-wired instance (duplicate toolbar). -->
+  <EditorTopToolbar id="EditorTopToolbar" />
+  <dockspace id="dock" class="dockspace">
+    <!--
+      Dock configuration metadata (parsed by the Editor on startup).
+      Note: DockspaceElement will rebuild its runtime children from the docking model,
+      so these nodes are only needed during initialization / hot-reload parsing.
+    -->
+    <DockConfig id="dock-config">
+      <!-- Panel inventory (declares *available panels*, even if not docked by default) -->
+      <DockPanels>
+        <DockablePanel id="Assets"    type="AssetsPanel"    title="Assets" />
+        <DockablePanel id="AssetView" type="AssetViewPanel" title="Asset View"
+                      style="panels/AssetViewPanel.css" />
+        <DockablePanel id="Todo"      type="TodoPanel"      title="Todo" />
+        <DockablePanel id="Bookmarks" type="BookmarksPanel" title="Bookmarks" />
+        <DockablePanel id="Hierarchy" type="HierarchyPanel" title="Hierarchy" />
+        <DockablePanel id="Inspector" type="InspectorPanel" title="Inspector" />
+        <DockablePanel id="SceneView" type="SceneViewPanel" title="Scene View"
+                      layout="panels/SceneViewPanel.uxml" style="panels/SceneViewPanel.css" />
+        <DockablePanel id="GameView" type="GameViewPanel" title="Game View"
+                      layout="panels/GameViewPanel.uxml" style="panels/GameViewPanel.css" />
+        <DockablePanel id="UI Demo"   type="UIDemoPanel"    title="UI Demo" />
+        <DockablePanel id="Log"       type="LogPanel"       title="Log" />
+        <DockablePanel id="ScriptErrors" type="ScriptErrorsPanel" title="Script Errors"
+                      style="panels/ScriptErrorsPanel.css" />
+        <DockablePanel id="ShaderErrors" type="ShaderErrorsPanel" title="Shader Errors"
+                      style="panels/ScriptErrorsPanel.css" />
+        <DockablePanel id="Monitors"  type="MonitorsPanel"  title="Monitors"
+                      style="panels/MonitorsPanel.css" />
+        <DockablePanel id="RenderGraph" type="RenderGraphPanel" title="Render Graph"
+                      style="panels/RenderGraphPanel.css" />
+        <DockablePanel id="CpuProfiler" type="CpuProfilerPanel" title="CPU Profiler"
+                      style="panels/CpuProfilerPanel.css" />
+        <DockablePanel id="VisualProfiler" type="VisualProfilerPanel" title="Visual Profiler"
+                      style="panels/VisualProfilerPanel.css" />
+        <DockablePanel id="Vram" type="VramPanel" title="VRAM"
+                      style="panels/VramPanel.css" />
+        <DockablePanel id="Settings"  type="SettingsPanel"  title="Settings"
+                      layout="panels/SettingsPanel.uxml" style="panels/SettingsPanel.css" />
+        <DockablePanel id="ScriptEditor" type="ScriptEditorPanel" title="Script Editor" />
+        <DockablePanel id="Diff" type="DiffPanel" title="Diff" />
+        <DockablePanel id="Web" type="WebPanel" title="Web"
+                      layout="panels/WebPanel.uxml" style="panels/WebPanel.css" />
+        <!-- Graph docks are per kind. NodeGraph keeps its id so saved layouts
+             still restore the shader-graph tab. Opened from the panel menu or
+             by opening a graph asset. -->
+        <DockablePanel id="NodeGraph" type="ShaderGraphPanel" title="Shader Graph" />
+        <DockablePanel id="AnimationGraph" type="AnimationGraphPanel" title="Animation Graph" />
+        <DockablePanel id="GameLogicGraph" type="GameLogicGraphPanel" title="Game Logic Graph" />
+        <DockablePanel id="Build" type="BuildPanel" title="Build" />
+        <DockablePanel id="Animation" type="AnimationWindowPanel" title="Animation"
+                      layout="panels/AnimationWindowPanel.uxml" style="panels/AnimationWindowPanel.css" />
+        <DockablePanel id="Timeline" type="AnimationTimelinePanel" title="Timeline"
+                      layout="panels/AnimationWindowPanel.uxml" style="panels/AnimationWindowPanel.css" />
+        <DockablePanel id="ClipEditor" type="AnimationClipEditorPanel" title="Clip Editor"
+                      layout="panels/AnimationWindowPanel.uxml" style="panels/AnimationWindowPanel.css" />
+        <DockablePanel id="Mixer" type="MixerPanel" title="Mixer"
+                      style="panels/MixerPanel.css" />
+        <DockablePanel id="UndoHistory" type="UndoHistoryPanel" title="Undo History" />
+        <DockablePanel id="MissingAssets" type="MissingAssetsPanel" title="Missing Assets" />
+        <DockablePanel id="PackageManager" type="PackageManagerPanel" title="Packages" />
+      </DockPanels>
+
+      <!-- Default docking tree (describes *placement* using panel ids from the inventory) -->
+      <DockLayout id="default">
+        <!-- Root: [ Workspace (left ~80%) | Inspector (right ~20%) ] -->
+        <DockSplit dir="Left" ratio="0.80">
+          <!-- Left workspace: vertical split [ Top ~75% / Bottom ~25% ] -->
+          <DockSplit dir="Top" ratio="0.75">
+            <!-- Top: [ Hierarchy (left ~25%) | SceneView (right) ]; Build opens from toolbar below Hierarchy -->
+            <DockSplit dir="Left" ratio="0.25">
+              <DockLeafNode>
+                <DockTabNode panel="Hierarchy" />
+              </DockLeafNode>
+              <DockLeafNode active="SceneView">
+                <DockTabNode panel="SceneView" />
+                <DockTabNode panel="GameView" />
+              </DockLeafNode>
+            </DockSplit>
+
+            <!-- Bottom: [ Assets / Asset View ] split horizontally (Assets ~70.5%, Asset View ~29.5%); diagnostics remain tabs with Assets -->
+            <DockSplit dir="Left" ratio="0.705">
+              <DockLeafNode active="Assets">
+                <DockTabNode panel="Assets" />
+                <DockTabNode panel="Log" />
+                <DockTabNode panel="ScriptErrors" />
+                <DockTabNode panel="ShaderErrors" />
+                <DockTabNode panel="Monitors" />
+              </DockLeafNode>
+              <DockLeafNode active="AssetView">
+                <DockTabNode panel="AssetView" />
+              </DockLeafNode>
+            </DockSplit>
+          </DockSplit>
+
+          <!-- Right side: Inspector -->
+          <DockLeafNode>
+            <DockTabNode panel="Inspector" />
+          </DockLeafNode>
+        </DockSplit>
+      </DockLayout>
+    </DockConfig>
+  </dockspace>
+  <UIElement class="editor-bottom-toolbar">
+    <UIElement class="bottom-toolbar-side">
+      <Label id="BuildConfigStatus" class="bottom-toolbar-build-config" />
+    </UIElement>
+    <LayoutPresetToolbar id="LayoutButtonContainer" class="bottom-toolbar-center" />
+    <UIElement class="bottom-toolbar-side bottom-toolbar-side-right">
+      <Label id="VkValidationStatus" class="bottom-toolbar-status vk-validation-badge" />
+      <Label id="NativeScriptStatus" class="bottom-toolbar-status" />
+    </UIElement>
+  </UIElement>
+</UIElement>

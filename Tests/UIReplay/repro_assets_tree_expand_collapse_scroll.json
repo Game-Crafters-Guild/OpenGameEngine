@@ -1,0 +1,84 @@
+{
+  "name": "repro_assets_tree_expand_collapse_scroll",
+  "windowIndex": 0,
+  "minFrames": 260,
+  "probe": {
+    "treeViewUnderId": "assets-tree",
+    "scrollViewUnderId": "assets-tree",
+    "scrollbarVUnderId": "assets-tree",
+    "elementId": "assets-tree",
+    "visualPatchElementIds": { "enabled": true, "max": 12 }
+  },
+  "asserts": [
+    {
+      "kind": "elementVisible",
+      "elementId": "assets-tree",
+      "frameStart": 40,
+      "frameEnd": 220
+    },
+    {
+      "kind": "paintOffsetsMatch",
+      "elementId": "assets-tree",
+      "requiredClass": "tree-item",
+      "frameStart": 60,
+      "frameEnd": 180,
+      "maxMismatchCount": 0
+    },
+    {
+      "kind": "layoutConverged",
+      "elementId": "assets-tree",
+      "frameStart": 180,
+      "frameEnd": 220,
+      "includeStyleDirty": false
+    },
+    {
+      "kind": "visibleTextNotFullyClipped",
+      "subtreeId": "assets-tree",
+      "scrollViewUnderId": "assets-tree",
+      "requiredClasses": ["tree-title"],
+      "frameStart": 60,
+      "frameEnd": 220,
+      "minVisiblePx": 2.0,
+      "maxChecks": 1500
+    },
+    {
+      "kind": "visibleTextNotFullyClipped",
+      "subtreeId": "assets-tree",
+      "scrollViewUnderId": "assets-tree",
+      "requiredClasses": ["tree-item"],
+      "frameStart": 60,
+      "frameEnd": 220,
+      "minVisiblePx": 2.0,
+      "maxChecks": 1500
+    }
+  ],
+  "events": [
+    { "frame": 2, "type": "mouseMove", "target": { "kind": "elementId", "id": "tab:Assets", "relX": 0.5, "relY": 0.5 } },
+    { "frame": 3, "type": "mouseDown", "button": 0 },
+    { "frame": 4, "type": "mouseUp", "button": 0 },
+
+    { "frame": 40, "type": "mouseMove", "target": { "kind": "elementId", "id": "assets-tree", "relX": 0.08, "relY": 0.08 } },
+    { "frame": 41, "type": "mouseDown", "button": 0 },
+    { "frame": 42, "type": "mouseUp", "button": 0 },
+
+    { "frame": 70, "type": "mouseMove", "target": { "kind": "elementId", "id": "assets-tree", "relX": 0.5, "relY": 0.5 } },
+    { "frame": 72, "type": "scroll", "dx": 0.0, "dy": -12.0 },
+    { "frame": 76, "type": "scroll", "dx": 0.0, "dy": -12.0 },
+    { "frame": 80, "type": "scroll", "dx": 0.0, "dy": -12.0 },
+    { "frame": 84, "type": "scroll", "dx": 0.0, "dy": -12.0 },
+
+    { "frame": 100, "type": "mouseMove", "target": { "kind": "elementId", "id": "assets-tree", "relX": 0.08, "relY": 0.12 } },
+    { "frame": 101, "type": "mouseDown", "button": 0 },
+    { "frame": 102, "type": "mouseUp", "button": 0 },
+
+    { "frame": 120, "type": "mouseMove", "target": { "kind": "elementId", "id": "assets-tree", "relX": 0.6, "relY": 0.6 } },
+    { "frame": 122, "type": "scroll", "dx": 0.0, "dy": 12.0 },
+    { "frame": 126, "type": "scroll", "dx": 0.0, "dy": 12.0 },
+    { "frame": 130, "type": "scroll", "dx": 0.0, "dy": 12.0 },
+
+    { "frame": 150, "type": "mouseMove", "target": { "kind": "elementId", "id": "assets-tree", "relX": 0.08, "relY": 0.08 } },
+    { "frame": 151, "type": "mouseDown", "button": 0 },
+    { "frame": 152, "type": "mouseUp", "button": 0 }
+  ]
+}
+

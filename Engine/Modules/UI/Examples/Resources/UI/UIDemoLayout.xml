@@ -1,0 +1,18 @@
+<?xml version="1.0"?>
+<UI id="root" class="root column">
+    <UIElement id="header" class="header">
+        <Label id="titleLabel" class="title">UI Demo</Label>
+    </UIElement>
+    <UIElement id="content" class="row content">
+        <UIElement id="left" class="column panel">
+            <Button id="btn1" class="button primary" text="Primary"/>
+            <Button id="btn2" class="button" text="Secondary"/>
+            <Label id="clickEcho" class="click-echo" text="(click a button)"/>
+            <UIElement id="box1" class="box"><Label class="effect-outline" text="Adventure"/></UIElement>
+        </UIElement>
+        <UIElement id="right" class="column panel">
+            <UIElement id="box2" class="box"/>
+            <UIElement id="box3" class="box"/>
+        </UIElement>
+    </UIElement>
+</UI>

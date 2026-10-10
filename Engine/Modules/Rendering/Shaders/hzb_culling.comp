@@ -1,0 +1,195 @@
+#version 450
+
+#include "Includes/storage_access.glsl"
+
+// Two-phase HZB occlusion cull (R2.1 P2, design §1 + §5-A2/A5).
+//
+// Companion to frustum_culling.comp. That shader stays a lean 3-binding
+// frustum-only dispatch for every frustum-only view (cascades, probes,
+// thumbnails, non-HZB main views); this one adds the persistent prevVisible
+// history buffer and the HZB pyramid needed for the UE-model two-phase
+// occlusion of the opted-in main view.
+//
+// Mode is chosen per DISPATCH via GPUCullingData.hzbMode (not a spec constant —
+// one PSO drives both phases):
+//   Mode 1 (PHASE A): visibility[i] = frustum(i) AND prevVisible[i]. prevVisible
+//     is read-only here. This redraws last frame's visible set (cheap — a subset
+//     of the frustum set), whose depth seeds the HZB pyramid.
+//   Mode 2 (PHASE B): the full occlusion test against the fresh HZB.
+//       f = frustum(i);
+//       h = f AND hzbTest(i);
+//       visibility[i]  = (h AND NOT(f AND prevVisibleOld[i]))   // draw only what A didn't
+//       prevVisible[i] = h                                      // §5-A2: occluded persistents DROP
+//
+// Reverse-Z (design §5-A5): the pyramid is a MIN reduction (farthest surface),
+// so the test passes (possibly-visible) iff the sphere's NEAREST NDC depth is
+// >= the HZB min. Near-plane crossings / behind-camera force-visible.
+
+layout(local_size_x = 64, local_size_y = 1, local_size_z = 1) in;
+
+// Input structures — GPUInstance mirrors GPUScene.h via the shared include.
+struct GPUInstance {
+#include "Includes/gpu_instance_fields.glsl"
+};
+
+// Complete shared std430 mirror of GPUScene.h::GPUCullingData.
+struct GPUCullingData {
+#include "Includes/gpu_culling_data_fields.glsl"
+};
+
+layout(set = 0, binding = 0, std430) restrict readonly buffer InstanceBuffer {
+    GPUInstance instances[];
+};
+
+layout(set = 0, binding = 1, std430) restrict readonly buffer CullingDataBuffer {
+    GPUCullingData cullingData;
+};
+
+layout(set = 0, binding = 2, std430) restrict GE_STORAGE_WRITEONLY buffer VisibilityBuffer {
+    uint visibility[]; // 1 = draw this slice, 0 = skip
+};
+
+// Per-instance visibility history (GPU-only, persistent across frames, indexed
+// by the GLOBAL instance index — session-stable per R1.3 F3). Read-only in
+// mode 1; read-then-rewritten in mode 2.
+layout(set = 0, binding = 3, std430) restrict buffer PrevVisibleBuffer {
+    uint prevVisible[];
+};
+
+// The HZB pyramid, sampled point-clamp. Mode 1 binds a 1x1 sentinel it never
+// reads; mode 2 binds the freshly-built View.HZB.
+layout(set = 0, binding = 4) uniform sampler2D uHZB;
+
+// Eventually-consistent per-slice stats (host-visible; lags frames-in-flight).
+// Written by mode 2 only.
+layout(set = 0, binding = 5, std430) restrict coherent buffer OcclusionStatsBuffer {
+    uint frustumPassed;
+    uint hzbCulled;
+    uint recovered;
+    uint prevVisibleNew;
+} stats;
+
+layout(push_constant) uniform PushConstants {
+    uint instanceCount; // dispatch bound (candidate count for this slice)
+    uint sliceOffset;   // element base into the shared visibility buffer for this slice
+} pc;
+
+// Inward-pointing, CPU-normalized planes (ExtractFrustumPlanes). Identical to
+// frustum_culling.comp's TestSphereFrustum: camera-relative (plane offsets were
+// translated by n*cameraPos on the CPU), so testing (center - cameraPos) keeps
+// the dot small-magnitude and avoids the big-minus-big collapse at planetary
+// distance. Bit-identical when cameraPos is (0,0,0).
+bool TestSphereFrustum(vec3 center, float radius, vec4 planes[6], vec3 cameraPos) {
+    vec3 rel = center - cameraPos;
+    for (int i = 0; i < 6; ++i) {
+        vec4 p = planes[i];
+        if (dot(rel, p.xyz) + p.w < -radius) return false;
+    }
+    return true;
+}
+
+// NDC.xy -> UV with the engine's negative-viewport Y flip (matches
+// gtao.comp::view_pos_from_raw and shadow_sampling::GE_CascadeShadowUV). The
+// HZB was built from the phase-A depth, rasterized with that flip, so this
+// maps a projected point to the texel that covers it.
+vec2 NdcToUV(vec2 ndc) {
+    return vec2(ndc.x * 0.5 + 0.5, 0.5 - 0.5 * ndc.y);
+}
+
+// Reverse-Z Hi-Z occlusion test. Returns true = possibly visible (do NOT cull).
+bool HzbTest(vec3 worldCenter, float radius) {
+    // View space (LH, +Z forward).
+    vec3 viewCenter = (cullingData.viewMatrix * vec4(worldCenter, 1.0)).xyz;
+    float viewZ = viewCenter.z;
+
+    // Near-plane crossing / behind camera: the sphere bound is unreliable there
+    // (w<=0, projection folds) -> force visible.
+    if (viewZ - radius <= cullingData.nearPlane)
+        return true;
+
+    float proj00 = cullingData.projMatrix[0][0];
+    float proj11 = cullingData.projMatrix[1][1];
+
+    // Center NDC (proj only; viewCenter is already view space, clip.w == viewZ).
+    vec4 clip = cullingData.projMatrix * vec4(viewCenter, 1.0);
+    vec2 ndcCenter = clip.xy / clip.w;
+
+    // Projected NDC half-extents — the ge_SelectLOD coverage idiom
+    // (r * projScale / z), a conservative tangent approximation of the sphere.
+    float ndcRx = radius * proj00 / viewZ;
+    float ndcRy = radius * proj11 / viewZ;
+
+    vec2 ndcMin = clamp(ndcCenter - vec2(ndcRx, ndcRy), vec2(-1.0), vec2(1.0));
+    vec2 ndcMax = clamp(ndcCenter + vec2(ndcRx, ndcRy), vec2(-1.0), vec2(1.0));
+
+    // UV rect. The Y flip swaps min/max on the Y axis.
+    float uvMinX = ndcMin.x * 0.5 + 0.5;
+    float uvMaxX = ndcMax.x * 0.5 + 0.5;
+    float uvMinY = 0.5 - 0.5 * ndcMax.y;
+    float uvMaxY = 0.5 - 0.5 * ndcMin.y;
+
+    // Texel span at mip 0 -> mip pick: ceil(log2(max(w,h))) so the rect covers
+    // ~1-2 texels of the chosen level (design §5-A5).
+    ivec2 hzbSize = textureSize(uHZB, 0);
+    float rectW = (uvMaxX - uvMinX) * float(hzbSize.x);
+    float rectH = (uvMaxY - uvMinY) * float(hzbSize.y);
+    float maxDim = max(rectW, rectH);
+    int mip = int(ceil(log2(max(maxDim, 1.0))));
+    mip = clamp(mip, 0, max(int(cullingData.hzbMipCount) - 1, 0));
+    float lod = float(mip);
+
+    // Clamped 2x2 gather of the rect corners; MIN = the farthest occluder.
+    float hzbMin = textureLod(uHZB, vec2(uvMinX, uvMinY), lod).r;
+    hzbMin = min(hzbMin, textureLod(uHZB, vec2(uvMaxX, uvMinY), lod).r);
+    hzbMin = min(hzbMin, textureLod(uHZB, vec2(uvMinX, uvMaxY), lod).r);
+    hzbMin = min(hzbMin, textureLod(uHZB, vec2(uvMaxX, uvMaxY), lod).r);
+
+    // Sphere's nearest point (smallest viewZ -> LARGEST reverse-Z NDC depth).
+    float nearestNdcZ = cullingData.projMatrix[2][2]
+                      + cullingData.projMatrix[3][2] / (viewZ - radius);
+
+    // Possibly visible iff the sphere can be in front of the farthest occluder.
+    return nearestNdcZ >= hzbMin;
+}
+
+void main() {
+    uint localIndex = gl_GlobalInvocationID.x;
+    if (localIndex >= pc.instanceCount)
+        return;
+
+    // Map the local candidate index into the global instance buffer. prevVisible
+    // is global-indexed; the visibility slice is offset-indexed.
+    uint instanceIndex = cullingData.firstInstance + localIndex;
+    GPUInstance instance = instances[instanceIndex];
+
+    float radius = instance.boundingRadius * cullingData.cullMargins[0];
+    bool f = TestSphereFrustum(instance.boundingCenter, radius, cullingData.frustumPlanes[0], cullingData.cameraPosition);
+    f = f && (instance.renderLayerMask & cullingData.renderLayerMask) != 0u;
+    // Mirror frustum_culling.comp's shadow-caster drop (a no-op for HZB main
+    // views, whose cullShadowCasters is 0).
+    if (cullingData.cullShadowCasters != 0u && (instance.flags & 1u) == 0u)
+        f = false;
+
+    uint outVis;
+    if (cullingData.hzbMode == 2u) {
+        // PHASE B: full HZB test; prevVisible history rewrite (§5-A2).
+        // The occlusion test uses the same margined radius as the frustum test:
+        // the margin carries skinned-pose slack (bind-pose bounds), and a false
+        // occlusion cull persists via the prevVisible drop-out — unlike a
+        // frustum miss, it is not confined to screen edges.
+        bool h = f && HzbTest(instance.boundingCenter, radius);
+        bool drawnInA = f && (prevVisible[instanceIndex] != 0u);
+        outVis = (h && !drawnInA) ? 1u : 0u;
+        prevVisible[instanceIndex] = h ? 1u : 0u;
+
+        if (f) atomicAdd(stats.frustumPassed, 1u);
+        if (f && !h) atomicAdd(stats.hzbCulled, 1u);
+        if (outVis != 0u) atomicAdd(stats.recovered, 1u);
+        if (h) atomicAdd(stats.prevVisibleNew, 1u);
+    } else {
+        // PHASE A: frustum AND last frame's visible set (prevVisible read-only).
+        outVis = (f && (prevVisible[instanceIndex] != 0u)) ? 1u : 0u;
+    }
+
+    visibility[pc.sliceOffset + localIndex] = outVis;
+}

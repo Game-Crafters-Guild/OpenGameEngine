@@ -1,0 +1,1137 @@
+.prompt-panel-root {
+	display: flex;
+	flex-direction: column;
+	flex-grow: 1;
+	flex-shrink: 1;
+	min-width: 0;
+	min-height: 0;
+	width: 100%;
+	height: 100%;
+	background-color: var(--ui_color_bg_tabbar);
+}
+
+.prompt-panel-toolbar {
+	display: flex;
+	flex-direction: row;
+	align-items: center;
+	gap: 6px;
+	padding: 5px 8px;
+	min-height: 34px;
+	flex-shrink: 0;
+	background-color: var(--ui_color_bg_grid);
+	border-bottom: 1px solid var(--ui_color_border);
+	box-sizing: border-box;
+	flex-wrap: wrap;
+}
+
+/* The connection dropdown: its full label at rest, narrower in a narrow panel. */
+.prompt-panel-task {
+	width: 176px;
+	min-width: 48px;
+	flex-shrink: 1;
+}
+
+.prompt-panel-body {
+	display: flex;
+	flex-direction: column;
+	flex-grow: 1;
+	flex-shrink: 1;
+	min-width: 0;
+	min-height: 0;
+}
+
+.prompt-panel-history-scroll {
+	flex-grow: 1;
+	flex-shrink: 1;
+	min-width: 0;
+	min-height: 0;
+	background-color: var(--ui_color_bg_tabbar);
+	border-right: 0;
+}
+
+.prompt-panel-history-list {
+	display: flex;
+	flex-direction: column;
+	flex-grow: 0;
+	flex-shrink: 0;
+	min-width: 0;
+	min-height: 0;
+	padding: 0 0 8px 0;
+	background-color: var(--ui_color_bg_tabbar);
+}
+
+/* Instructions, so the dimmest text tier that still reads as text (8.0:1 here). */
+/* The first row of a conversation that continues an earlier session: a break in the
+   history, in the status tier of a reply's footer, set in italic over a hairline so
+   it does not read as the empty-conversation hint. */
+.prompt-panel-continued {
+	padding: 10px 12px 6px 12px;
+	margin-bottom: 4px;
+	font-size: 12px;
+	font-style: italic;
+	color: var(--ui_color_text_secondary);
+	border-bottom: 1px solid var(--ui_color_border_subtle);
+	white-space: normal;
+	flex-shrink: 0;
+}
+
+.prompt-panel-history-empty {
+	padding: 10px 12px;
+	font-size: 14px;
+	color: var(--ui_color_text_dim);
+	white-space: normal;
+	flex-shrink: 0;
+}
+
+/* One message: AgentConversationRow.uxml. The card is capped to a reading column
+   (its text wraps at about 100 characters of the body font) so a wide dock keeps
+   lines readable and the reply actions beside the text they act on. */
+.agent-row {
+	display: flex;
+	flex-direction: column;
+	align-items: stretch;
+	flex-grow: 0;
+	flex-shrink: 0;
+	min-width: 0;
+	min-height: 0;
+	max-width: 800px;
+	overflow: hidden;
+	margin: 8px 8px 0 8px;
+	padding: 4px 0 8px 0;
+	background-color: var(--ui_color_bg_panel);
+	border: 1px solid var(--ui_color_border_panel);
+	border-radius: 6px;
+}
+
+/* The user's own messages: a darker card framed in the accent, thicker on the
+   leading edge. The frame is one colour all round: a box draws a single border
+   colour, so a left edge alone cannot carry the accent. */
+.agent-row-user {
+	background-color: var(--ui_color_bg_tabbar);
+	border-color: var(--ui_color_accent_blue_inactive);
+	border-left-width: 3px;
+}
+
+.agent-row-header-line {
+	display: flex;
+	flex-direction: row;
+	align-items: center;
+	flex-shrink: 0;
+	height: 28px;
+	min-height: 28px;
+	padding: 0 8px 0 12px;
+	gap: 8px;
+}
+
+.agent-row-header {
+	flex-grow: 1;
+	flex-shrink: 1;
+	min-width: 0;
+	font-size: 12px;
+	color: var(--ui_color_text_primary);
+	white-space: nowrap;
+	overflow: hidden;
+	text-overflow: ellipsis;
+}
+
+.agent-row-time {
+	flex-shrink: 0;
+	font-size: 12px;
+	color: var(--ui_color_text_secondary);
+	white-space: nowrap;
+}
+
+.agent-row-stop {
+	flex-shrink: 0;
+}
+
+/* Beside the rules below, the text takes `width: 100%`, `border: none` and
+   `box-sizing: border-box` from the `script-editor-textarea` theme class it also
+   carries (AgentConversationRow.uxml). That width is what sizes the text, and it
+   resolves against the card after the card's max-width clamps it (measured: 796 px
+   of text in the 800 px card). */
+.agent-row-text {
+	flex-grow: 0;
+	flex-shrink: 0;
+	min-width: 0;
+	min-height: 0;
+	font-family: var(--ui_font_family);
+	font-size: 14px;
+	line-height: var(--script_line_height, 1.0);
+	padding: 4px 12px;
+	background-color: transparent;
+	white-space: normal;
+	overflow-wrap: break-word;
+	word-break: break-word;
+	text-align: left;
+	color: var(--ui_color_text);
+}
+
+/* A reply waiting for the user's answer on one of its calls: the card is framed in the
+   waiting tier, so it is found in a long history. */
+.agent-row-asks {
+	border-color: var(--ui_color_warning_text);
+}
+
+/* The reply's calls (AgentCallRow), one row each under the text, in the status tier,
+   hairlines between them. */
+.agent-row-calls {
+	display: flex;
+	flex-direction: column;
+	flex-shrink: 0;
+	min-width: 0;
+	margin: 4px 12px 4px 12px;
+	border-top: 1px solid var(--ui_color_border_subtle);
+}
+
+.agent-call {
+	display: flex;
+	flex-direction: column;
+	flex-shrink: 0;
+	min-width: 0;
+	padding: 6px 0 5px 0;
+	border-bottom: 1px solid var(--ui_color_border_subtle);
+}
+
+/* The line wraps in a narrow panel: the undo state and Details move under the summary
+   before the summary would get less than its minimum width. Its pieces sit at the top, so
+   on a tall summary the action, the undo state and Details stay level with its first line. */
+.agent-call-line {
+	display: flex;
+	flex-direction: row;
+	flex-wrap: wrap;
+	align-items: flex-start;
+	flex-shrink: 0;
+	min-width: 0;
+	gap: 8px;
+}
+
+/* The glyph: done (a check), view only (a ring), refused (a cross), waiting (a question
+   mark); a call the editor never received has none. Icons, since the UI face has no
+   check or cross. */
+.agent-call-glyph {
+	width: 14px;
+	height: 14px;
+	min-width: 14px;
+	min-height: 14px;
+	flex-shrink: 0;
+	margin-top: 2px;
+	background-size: 14px 14px;
+	background-repeat: no-repeat;
+	background-position: center;
+}
+
+.agent-call-glyph-done {
+	background-image: url("editor:Icons/checked.png");
+	background-image-tint: var(--ui_color_accent_green);
+}
+
+/* A ring with a stroke of about 1.75 px at the glyph's 14 px, tinted bright: thick enough
+   to clear the 3:1 floor for a glyph. */
+.agent-call-glyph-view {
+	background-image: url("ai-assistant:Editor/Icons/view-ring.png");
+	background-image-tint: var(--ui_color_text_bright);
+}
+
+.agent-call-glyph-refused {
+	background-image: url("editor:Icons/xclose.png");
+	background-image-tint: var(--ui_color_badge_background);
+}
+
+.agent-call-glyph-waiting {
+	background-image: url("editor:Icons/help.png");
+	background-image-tint: var(--ui_color_warning_text);
+}
+
+/* The action leads the row: a step heavier and brighter than the summary beside it. */
+.agent-call-action {
+	flex-shrink: 0;
+	font-size: 13px;
+	font-weight: 500;
+	color: var(--ui_color_text_bright);
+	white-space: nowrap;
+}
+
+/* What the call acted on, and why one did not run (AgentCallPieceView): its words, entity
+   links and vectors in a wrapping row. Its width comes from the line, not from its pieces
+   (flex-basis 0), so it wraps inside the box it gets instead of running under the undo
+   state; below 140 px the line wraps instead. */
+.agent-call-summary {
+	display: flex;
+	flex-direction: row;
+	flex-wrap: wrap;
+	align-items: flex-start;
+	flex-grow: 1;
+	flex-shrink: 1;
+	flex-basis: 0;
+	min-width: 140px;
+	gap: 2px 4px;
+}
+
+/* Words wrap between words only: a word is never broken, so a component name stays whole. */
+.agent-call-words {
+	flex-shrink: 1;
+	font-size: 12px;
+	color: var(--ui_color_text_secondary);
+	white-space: normal;
+	text-align: left;
+}
+
+/* Pieces that stay together on one line (AgentCallPieceView): a key and its vector, a
+   separator and what follows it, a chip and its comma. At the top, so a separator before
+   wrapped words sits on their first line. */
+.agent-call-unit {
+	display: flex;
+	flex-direction: row;
+	align-items: flex-start;
+	flex-shrink: 1;
+	gap: 4px;
+}
+
+/* A key, a separator, an axis: the words' tier faded, a step below them and above the 4.5:1
+   text floor. */
+.agent-call-muted {
+	flex-shrink: 0;
+	font-size: 12px;
+	color: var(--ui_color_text_secondary);
+	opacity: 0.8;
+	white-space: nowrap;
+}
+
+/* A list's comma sits against the item before it. */
+.agent-call-comma {
+	flex-shrink: 0;
+	margin-left: -4px;
+	font-size: 12px;
+	color: var(--ui_color_text_secondary);
+	opacity: 0.8;
+}
+
+/* An entity link in a summary takes the summary's face, so the row reads its action first
+   (its name inherits the size). */
+.agent-call-link {
+	font-size: 12px;
+}
+
+/* A Details line's indentation: one step per nesting level. */
+.agent-call-indent {
+	flex-shrink: 0;
+	height: 1px;
+}
+
+/* A vector: "x 12  y 0  z 4", the axes muted, the numbers in the script face so their
+   digits line up. */
+.agent-call-vector {
+	display: flex;
+	flex-direction: row;
+	align-items: baseline;
+	flex-shrink: 0;
+	gap: 3px;
+}
+
+.agent-call-vector-axis {
+	white-space: nowrap;
+	font-size: 12px;
+	color: var(--ui_color_text_secondary);
+	opacity: 0.8;
+}
+
+.agent-call-vector-number {
+	white-space: nowrap;
+	margin-right: 5px;
+	font-family: var(--ui_font_script);
+	font-size: 12px;
+	color: var(--ui_color_text_primary);
+}
+
+/* The undo state and Details, at the line's end on its own line or not, and wrapping as
+   one unit; at most half the line, so the summary keeps its part in a narrow panel. */
+.agent-call-trail {
+	display: flex;
+	flex-direction: row;
+	align-items: flex-start;
+	flex-shrink: 1;
+	min-width: 0;
+	max-width: 50%;
+	margin-left: auto;
+	gap: 8px;
+}
+
+.agent-call-undo {
+	flex-shrink: 1;
+	min-width: 0;
+	font-size: 12px;
+	color: var(--ui_color_text_secondary);
+	white-space: normal;
+	text-align: right;
+}
+
+/* "nothing changed" beside a refused or failed call: the cross's red family, not the
+   waiting amber. */
+.agent-call-undo-refused {
+	color: var(--ui_color_error_text);
+}
+
+/* Details reads as a quiet text link at the line's end. It is one line in the summary's
+   face, and AgentCallRow::FitReason cuts a reason to two of its lines. */
+.agent-call-details-toggle {
+	flex-shrink: 0;
+	padding: 0 4px;
+	font-size: 12px;
+	color: var(--ui_color_text_dim);
+	cursor: pointer;
+}
+
+.agent-call-details-toggle:hover {
+	color: var(--ui_color_text_primary);
+}
+
+/* Allow, Allow for this turn and Deny under a call that asks, with what it waits for at
+   the end; the waiting words alone under a call that waits for the user's own edit. */
+.agent-call-answer {
+	display: flex;
+	flex-direction: row;
+	align-items: center;
+	flex-wrap: wrap;
+	flex-shrink: 0;
+	min-width: 0;
+	gap: 8px;
+	padding: 4px 0 2px 22px;
+}
+
+.agent-call-waiting {
+	flex-grow: 1;
+	min-width: 0;
+	font-size: 12px;
+	font-style: italic;
+	color: var(--ui_color_warning_text);
+	white-space: normal;
+	text-align: right;
+}
+
+/* What a call's result shows inline, under its line and indented with it: the image it
+   names and the assets it names. */
+.agent-call-media {
+	display: flex;
+	flex-direction: column;
+	align-items: flex-start;
+	flex-shrink: 0;
+	min-width: 0;
+	gap: 6px;
+	padding: 4px 0 4px 22px;
+}
+
+/* A screenshot or a captured texture: its own aspect, as wide as the row at most and no
+   taller than max-height, the hairline included (AgentCallImageView::Fit sizes the picture
+   to fill what the hairline leaves). The hairline is the asset tile's, so a dark frame keeps
+   its edge against the card. A click opens it in the Asset View. */
+.agent-call-image {
+	flex-shrink: 0;
+	max-height: 180px;
+	border: 1px solid var(--ui_color_border_subtle);
+	background-color: var(--ui_color_bg_grid);
+	cursor: pointer;
+}
+
+/* Hovered: a ring outside the picture, on the card, so it reads whatever the picture holds. */
+.agent-call-image:hover {
+	outline: 1px solid var(--ui_color_text_dim);
+	outline-offset: 2px;
+}
+
+/* Keyboard focus: the house ring (Button.css). */
+.agent-call-image:focus-visible {
+	outline: 2px solid var(--ui_color_accent_blue);
+	outline-offset: 2px;
+}
+
+/* The assets a call names: one tile each, wrapping as whole tiles. */
+.agent-call-resources {
+	display: flex;
+	flex-direction: row;
+	flex-wrap: wrap;
+	flex-shrink: 0;
+	min-width: 0;
+	gap: 6px;
+}
+
+/* An asset: its thumbnail, name, type and Open on one line, on the raised plate the entity
+   chip uses (--ui_color_bg_selected), the row family's one plate for a thing a call named. */
+.agent-call-resource {
+	display: flex;
+	flex-direction: row;
+	align-items: center;
+	flex-shrink: 1;
+	min-width: 0;
+	gap: 6px;
+	padding: 3px 8px 3px 3px;
+	border: 1px solid var(--ui_color_border_subtle);
+	border-radius: 3px;
+	background-color: var(--ui_color_bg_selected);
+}
+
+.agent-call-resource-missing {
+	padding-left: 8px;
+}
+
+.agent-call-resource-thumbnail {
+	width: 32px;
+	height: 32px;
+	min-width: 32px;
+	min-height: 32px;
+	flex-shrink: 0;
+	border-radius: 2px;
+	background-color: var(--ui_color_bg_tabbar);
+}
+
+/* While the thumbnail service has no picture yet (EditorAssetActions::kThumbnailPendingClass,
+   given to a tile's well or the inline image): a timer glyph, so a tile still rendering or a
+   capture being downscaled reads as loading, not as a tiny asset or an empty box. After the
+   well and image rules, so its background wins at the same specificity. */
+.thumbnail-pending {
+	background-image: url("editor:Icons/timer.png");
+	background-image-tint: var(--ui_color_text_dim);
+	background-size: 16px 16px;
+	background-repeat: no-repeat;
+	background-position: center;
+}
+
+/* No picture came (EditorAssetActions::kThumbnailUnavailableClass): a dimmed object glyph, so
+   the well reads as "no preview" rather than as an empty or broken thumbnail. */
+.thumbnail-unavailable {
+	background-image: url("editor:Icons/Cube.png");
+	background-image-tint: var(--ui_color_text_disabled);
+	background-size: 16px 16px;
+	background-repeat: no-repeat;
+	background-position: center;
+}
+
+.agent-call-resource-name {
+	flex-shrink: 1;
+	min-width: 0;
+	font-size: 12px;
+	color: var(--ui_color_text_bright);
+	white-space: nowrap;
+}
+
+.agent-call-resource-type {
+	flex-shrink: 0;
+	font-size: 12px;
+	color: var(--ui_color_text_secondary);
+	white-space: nowrap;
+}
+
+/* "not found" in the refused family, so a missing asset reads as a problem, not a type. */
+.agent-call-resource-missing-text {
+	flex-shrink: 0;
+	font-size: 12px;
+	color: var(--ui_color_error_text);
+	white-space: nowrap;
+}
+
+/* Open is the tile's action: set apart from the name and type by a hairline, at least as bright
+   as the type, and on a plate when hovered. */
+.agent-call-resource-open {
+	flex-shrink: 0;
+	margin-left: 2px;
+	padding: 1px 5px;
+	border-left: 1px solid var(--ui_color_border_subtle);
+	font-size: 12px;
+	color: var(--ui_color_text_primary);
+	cursor: pointer;
+}
+
+.agent-call-resource-open:focus-visible {
+	outline: 2px solid var(--ui_color_accent_blue);
+	outline-offset: 2px;
+}
+
+.agent-call-resource-open:hover {
+	border-radius: 2px;
+	background-color: var(--ui_color_dropdown_outline_hover);
+	color: var(--ui_color_text_bright);
+}
+
+/* The raw call and the editor's answer, pretty-printed one line each in the script face,
+   keys muted (AgentCallJsonLines). */
+.agent-call-details {
+	display: flex;
+	flex-direction: column;
+	flex-shrink: 0;
+	min-width: 0;
+	padding: 2px 0 4px 22px;
+}
+
+.agent-call-details-line {
+	display: flex;
+	flex-direction: row;
+	flex-wrap: wrap;
+	align-items: center;
+	flex-shrink: 0;
+	min-width: 0;
+	gap: 0 6px;
+}
+
+/* A Details value, a step brighter than the summary's words so the keys read apart. */
+.agent-call-detail-value {
+	flex-shrink: 1;
+	font-family: var(--ui_font_script);
+	font-size: 12px;
+	color: var(--ui_color_text_muted);
+	white-space: normal;
+	text-align: left;
+}
+
+/* A Details key, at the muted tier. */
+.agent-call-detail-key {
+	flex-shrink: 0;
+	font-family: var(--ui_font_script);
+	font-size: 12px;
+	color: var(--ui_color_text_secondary);
+	opacity: 0.8;
+	white-space: nowrap;
+}
+
+.agent-row-footer {
+	display: flex;
+	flex-direction: row;
+	align-items: center;
+	flex-wrap: wrap;
+	flex-shrink: 0;
+	padding: 0 12px;
+	gap: 8px;
+}
+
+/* The status's parts (AgentConversationRow::ShowStatus) wrap between each other: a part
+   that fits a line is never broken, a longer one (an error) wraps on its own lines. */
+.agent-row-status {
+	display: flex;
+	flex-direction: row;
+	flex-wrap: wrap;
+	align-items: center;
+	flex-grow: 1;
+	flex-shrink: 1;
+	min-width: 0;
+	gap: 0 4px;
+}
+
+.agent-row-status-part {
+	flex-shrink: 1;
+	min-width: 0;
+	font-size: 12px;
+	color: var(--ui_color_text_secondary);
+	white-space: normal;
+}
+
+/* A narrow panel (AgentConversationRow::SetCallsStacked): the footer stacks, the status on
+   a line of its own across the card and the actions under it, right-aligned. */
+.agent-row-footer-stacked {
+	flex-direction: column;
+	align-items: stretch;
+}
+
+.agent-row-actions-stacked {
+	align-self: flex-end;
+	margin-left: 0;
+}
+
+.agent-row-status-failed {
+	color: var(--ui_color_warning_text);
+}
+
+/* The accent tier that reads as text on the reply card (5.3:1); the base accent
+   blue is under the 4.5:1 text floor there. */
+.agent-row-status-stopped {
+	color: var(--ui_color_accent_blue_hover);
+}
+
+/* At the footer's end, and right-aligned on a line of their own when the status leaves
+   them no room. */
+.agent-row-actions {
+	display: flex;
+	flex-direction: row;
+	align-items: center;
+	flex-shrink: 0;
+	margin-left: auto;
+	gap: 8px;
+}
+
+.agent-row-retried {
+	font-size: 12px;
+	color: var(--ui_color_text_secondary);
+	white-space: nowrap;
+}
+
+/* A stacked call row (a narrow panel, AgentCallRow::SetStacked): the glyph and the action
+   on the first line, the summary under them at its own width, and the undo state and
+   Details as the summary's last piece: beside its last line when they fit, on the next
+   line when they do not. */
+.agent-call-line-stacked {
+	gap: 2px 8px;
+}
+
+.agent-call-break {
+	flex-basis: 100%;
+	height: 0;
+}
+
+.agent-call-summary-stacked {
+	flex-basis: auto;
+	min-width: 0;
+	padding-left: 22px;
+}
+
+/* Inside the summary, whose 4 px gap and this padding keep the line's 8 px from the words. */
+.agent-call-trail-stacked {
+	max-width: 100%;
+	padding-left: 4px;
+}
+
+/* The input pane reads as a layer over the conversation: its top edge casts a soft shadow
+   up over the scrolled history. */
+.prompt-panel-input-splitter {
+	box-shadow: var(--ui_shadow_layer_above);
+	flex-grow: 0;
+	flex-shrink: 0;
+	flex-basis: 6px;
+	height: 6px;
+	min-height: 6px;
+	max-height: 6px;
+	width: 100%;
+	cursor: row-resize;
+	position: relative;
+	z-index: 100;
+	pointer-events: auto;
+	background-color: var(--ui_color_bg_grid);
+	border-width: 0;
+}
+
+.prompt-panel-input-splitter:focus {
+	outline: 2px solid var(--ui_color_accent_blue);
+	outline-offset: -2px;
+}
+
+.prompt-panel-input-pane {
+	height: 52px;
+	min-height: 44px;
+	max-height: 200px;
+	flex-shrink: 0;
+	overflow: hidden;
+	padding: 4px 8px 8px 8px;
+	background-color: var(--ui_color_bg_grid);
+}
+
+.prompt-panel-input-column {
+	display: flex;
+	flex-direction: column;
+	flex-grow: 1;
+	flex-shrink: 1;
+	min-width: 0;
+	min-height: 0;
+	overflow: hidden;
+	background-color: transparent;
+}
+
+.prompt-panel-input-row {
+	display: flex;
+	flex-direction: row;
+	align-items: stretch;
+	flex-grow: 1;
+	flex-shrink: 1;
+	min-width: 0;
+	min-height: 0;
+	height: 100%;
+	overflow: hidden;
+	background-color: var(--ui_color_bg_plate);
+	border: 1px solid var(--ui_color_border_subtle);
+	border-radius: 8px;
+}
+
+/* The prompt field with its clear button and placeholder; it takes the row's free width. */
+.prompt-panel-input-field {
+	position: relative;
+	display: flex;
+	flex-direction: row;
+	align-items: stretch;
+	flex-grow: 1;
+	flex-shrink: 1;
+	min-width: 0;
+	min-height: 0;
+}
+
+/* Mode, Session…, connection and Send, right of the field; below it in a narrow panel. */
+.prompt-panel-input-controls {
+	display: flex;
+	flex-direction: row;
+	align-items: center;
+	flex-shrink: 0;
+	min-width: 0;
+}
+
+/* A panel too narrow for the field (PromptPanel::kMinPromptFieldPx) beside the visible
+   controls puts the controls on a line of their own under the field. */
+.prompt-panel-input-row-stacked {
+	flex-direction: column;
+}
+
+.prompt-panel-input-controls-stacked {
+	align-self: flex-end;
+	flex-shrink: 1;
+	max-width: 100%;
+	height: 36px;
+	min-height: 36px;
+}
+
+.prompt-panel-input-scroll {
+	display: flex;
+	flex-direction: column;
+	flex-grow: 1;
+	flex-shrink: 1;
+	min-width: 0;
+	min-height: 0;
+	height: 100%;
+	background-color: transparent;
+	border-width: 0;
+	border-color: transparent;
+}
+
+.prompt-panel-input-scroll-viewport {
+	min-height: 100%;
+	background-color: transparent;
+	border-width: 0;
+	border-color: transparent;
+}
+
+.prompt-panel-input-scroll-content {
+	min-height: 100%;
+	background-color: transparent;
+	border-width: 0;
+	border-color: transparent;
+}
+
+/* 24 px wide, the shared icon button's size (.button.icon-button sets it too). */
+.prompt-panel-send-button {
+	width: 24px;
+	min-width: 24px;
+	max-width: 24px;
+	height: 28px;
+	min-height: 28px;
+	max-height: 28px;
+	flex-shrink: 0;
+	padding: 0;
+	margin: 0 8px 0 0;
+	background-image: url("ai-assistant:Editor/Icons/arrow-up-circle.png");
+	background-size: 24px 24px;
+	background-repeat: no-repeat;
+	background-position: center;
+	background-color: transparent;
+	border-width: 0;
+	border-color: transparent;
+	opacity: 0.5;
+	cursor: pointer;
+	transition: opacity 0.15s ease;
+}
+
+.prompt-panel-send-button:hover {
+	background-color: transparent;
+	border-color: transparent;
+	opacity: 1;
+}
+
+.prompt-panel-send-button:active {
+	opacity: 1;
+}
+
+.prompt-panel-input-placeholder {
+	position: absolute;
+	left: 12px;
+	/* Inside the field, clear of the clear button (20 px and its 4 px margin). */
+	right: 28px;
+	top: 0;
+	height: 100%;
+	display: flex;
+	align-items: center;
+	min-width: 0;
+	font-family: var(--ui_font_script);
+	font-size: 14px;
+	line-height: var(--script_line_height, 1.0);
+	/* Instructions: the dimmest text tier that reads as text (6.8:1 on the plate),
+	   still below the typed text. */
+	color: var(--ui_color_text_dim);
+	white-space: nowrap;
+	overflow: hidden;
+	text-overflow: ellipsis;
+	pointer-events: none;
+	z-index: 11;
+}
+
+.prompt-panel-placeholder-hidden {
+	display: none;
+}
+
+.prompt-panel-input {
+	text-align: left;
+	font-family: var(--ui_font_script);
+	font-size: 16px;
+	line-height: var(--script_line_height, 1.0);
+	padding: 10px 12px;
+	min-height: 100%;
+	flex-grow: 1;
+	flex-shrink: 1;
+	color: var(--ui_color_text);
+	background-color: transparent;
+	border-width: 0;
+	border-color: transparent;
+	box-shadow: none;
+	outline: none;
+}
+
+.prompt-panel-input:hover {
+	background-color: transparent;
+	border-width: 0;
+	border-color: transparent;
+	box-shadow: none;
+	outline: none;
+}
+
+.prompt-panel-input:focus {
+	background-color: transparent;
+	border-width: 0;
+	border-color: transparent;
+	box-shadow: none;
+	outline: none;
+}
+
+.prompt-panel-status {
+	flex-shrink: 0;
+	width: 100%;
+	box-sizing: border-box;
+	min-height: 24px;
+	padding: 0 8px 4px 8px;
+	border-top: 1px solid var(--ui_color_border);
+	color: var(--ui_color_text_primary);
+	font-size: 12px;
+	background-color: var(--ui_color_bg_hover_alt);
+}
+
+.prompt-panel-icon-button {
+	width: 24px;
+	height: 24px;
+	min-width: 24px;
+	min-height: 24px;
+	max-width: 24px;
+	max-height: 24px;
+	box-sizing: border-box;
+	padding: 0;
+	background-size: 20px 20px;
+	background-repeat: no-repeat;
+	background-position: center;
+	background-color: transparent;
+	border-width: 0;
+	border-color: transparent;
+	background-image-tint: var(--ui_color_text_bright);
+	opacity: 0.6;
+	flex-shrink: 0;
+}
+
+.prompt-panel-icon-button:hover {
+	background-color: transparent;
+	border-color: transparent;
+	opacity: 1.0;
+}
+
+.prompt-panel-icon-button:active {
+	background-color: transparent;
+	border-color: transparent;
+	opacity: 1.0;
+}
+
+.prompt-panel-icon-button:focus {
+	background-color: transparent;
+	border-color: transparent;
+	opacity: 1.0;
+}
+
+.prompt-panel-horizontal-scrollbar {
+	display: none;
+}
+
+.prompt-panel-scrollbar {
+	background-color: transparent;
+}
+
+.prompt-panel-provider-settings {
+	display: flex;
+	flex-direction: row;
+	flex-wrap: wrap;
+	gap: 6px;
+	padding: 8px;
+	flex-shrink: 0;
+	background-color: var(--ui_color_bg_panel);
+}
+
+.prompt-panel-input-task {
+	align-self: center;
+	height: 28px;
+	min-height: 28px;
+	max-height: 28px;
+	margin-right: 4px;
+}
+
+/* The Session control: as tall as the dropdowns beside it, as wide as its label plus
+   the dropdowns' 11 px side padding (82 px for "Session…"), so a narrow panel's line
+   leaves the room to the labels that change. Selected by id: the shared .button rule's
+   32 px minimum height and 8 px vertical and 16 px side padding outrank a class rule
+   here. */
+#PromptSessionButton {
+	align-self: center;
+	flex-shrink: 0;
+	height: 28px;
+	min-height: 28px;
+	max-height: 28px;
+	padding: 0 11px;
+	margin-right: 4px;
+}
+
+/* The model control: the Session control's shape. Its width is set from the longest
+   text it can show (AgentModelPopover::SizeButton), so it follows the panel's width,
+   never its text. In a narrow row it gives way after the mode control (.prompt-panel-mode)
+   and faster than the connection, down to 56 px; its text drops "(latest)" before it is
+   cut, and its tooltip holds the whole text. */
+#PromptModelButton {
+	align-self: center;
+	flex-shrink: 4;
+	min-width: 56px;
+	height: 28px;
+	min-height: 28px;
+	max-height: 28px;
+	padding: 0 11px;
+	margin-right: 4px;
+}
+
+/* The model popover (AgentModelPopover.uxml): a zero-size anchor at the panel's origin
+   that gives the popover a coordinate space (a full-size box would count every press
+   in the panel as inside it), and the panel placed in it above the model button. */
+.agent-model-popover {
+	position: absolute;
+	left: 0;
+	top: 0;
+	width: 0;
+	height: 0;
+	pointer-events: none;
+}
+
+/* AgentModelPopover.cpp's kPanelWidthEstimatePx until the first layout. */
+.agent-model-popover-panel {
+	position: absolute;
+	width: 300px;
+	pointer-events: auto;
+}
+
+/* The model popover's rows: the theme's popover rows with a label column
+   narrow enough for "Model" and "Effort", the dropdown and the slider taking the rest,
+   and the effort's label in a column as wide as "Extra high". */
+.agent-model-row-label {
+	width: 48px;
+}
+
+.agent-model-dropdown {
+	flex-grow: 1;
+	min-width: 0;
+}
+
+.agent-model-effort-value {
+	width: 64px;
+	font-size: var(--ui_font_size_small);
+}
+
+/* The effort slider's two ends named under its track. */
+.agent-model-effort-ends {
+	flex-direction: row;
+	justify-content: space-between;
+}
+
+.agent-model-header {
+	margin-top: 0;
+}
+
+.agent-model-caption {
+	font-size: var(--ui_font_size_small);
+	color: var(--ui_color_text_dim);
+}
+
+/* The mode control: wide enough for its longest label, "Ask before every edit", on one
+   line at rest and in its list (the list takes the control's width), as wide as the
+   connection dropdown. On the controls' own line in a narrow panel it gives way first,
+   down to the longest label it offers now (PromptPanel::FitModeControl), then to its
+   compact labels ("Read", "Chat"); then the model button gives way faster than the
+   connection, down to 56 and 48 px, while Session… and Send keep their width; a row too
+   narrow for those minimums lets the mode go down to 48 px. Send, the primary action, stays in the pane down to a 300 px pane (Session… 82,
+   the model button 56, Send 24 and its 8 px margin, four 4 px gaps, 2 x 48, the pane's
+   16 px padding and the row's 2 px border). */
+.prompt-panel-mode {
+	width: 176px;
+	min-width: 48px;
+	flex-shrink: 8;
+}
+
+.prompt-panel-input-task-chevron {
+	margin-right: 4px;
+}
+
+/* A dropdown narrowed in a narrow panel keeps its label on one line and cuts it. */
+.prompt-panel-input-task-label {
+	white-space: nowrap;
+	overflow: hidden;
+	text-overflow: ellipsis;
+}
+
+.prompt-panel-input-task-header {
+	background-color: var(--ui_color_bg_selected);
+}
+
+.prompt-panel-settings-button {
+	width: 22px;
+	min-width: 22px;
+	max-width: 22px;
+	height: 22px;
+	min-height: 22px;
+	max-height: 22px;
+	padding: 0;
+	margin-left: auto;
+	margin-right: 2px;
+	background-image: url("editor:Icons/options.png");
+	background-size: 16px 16px;
+	background-image-tint: var(--ui_color_text_soft);
+	background-color: transparent;
+	border-width: 0;
+	border-radius: 4px;
+}
+
+.prompt-panel-input-clear {
+	align-self: center;
+	width: 20px;
+	min-width: 20px;
+	max-width: 20px;
+	height: 20px;
+	min-height: 20px;
+	max-height: 20px;
+	flex-shrink: 0;
+	padding: 0;
+	margin: 0 4px 0 0;
+	background-size: 12px 12px;
+	background-color: transparent;
+	border-width: 0;
+	opacity: 0.7;
+}
+
+.prompt-panel-input-clear:hover {
+	background-color: transparent;
+	opacity: 1;
+}
+
+.prompt-panel-input-clear-hidden {
+	display: flex;
+	opacity: 0;
+	pointer-events: none;
+}

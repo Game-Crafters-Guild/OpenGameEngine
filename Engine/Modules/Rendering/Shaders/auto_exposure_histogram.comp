@@ -1,0 +1,85 @@
+#version 450
+
+// Auto-exposure pass 1: two 256-bin log-luminance histograms of the HDR scene colour, split by depth.
+// Geometry pixels (reverse-Z depth above 0) go to histogram[0..255]; far-plane pixels (the sky, the
+// sun disc, clouds, anything drawn without depth) go to histogram[256..511]. The resolve meters the
+// geometry and lets the sky hold the exposure back only when it is a large, bright share of the frame
+// (auto_exposure_resolve.comp). Each 8x8 group accumulates tile histograms in shared memory, then
+// folds them into the global SSBO with one atomicAdd per non-empty bin. Bin 0 of each histogram is
+// reserved for near-black pixels (so they do not drag the average down). The SSBO is a PERSISTENT
+// per-view buffer the node zero-fills at the top of this pass each frame.
+
+layout(local_size_x = 8, local_size_y = 8, local_size_z = 1) in;
+
+const uint kBinCount = 256u;
+const uint kHistogramCount = 2u; // 0 = geometry, 1 = sky (far plane)
+// The window must span the engine's PHYSICAL scene-linear range (203 nits == 1.0). Ceiling: a
+// 100k-lux sun drives white to ~157 and the sky dome into the hundreds, so the top stays at
+// 2^14 (~16384) — bright pixels are metered, not collapsed into the top bin (which biased the
+// average low -> washout). Floor: AutoExposureMinEv = -4 needs a meterable average down to
+// key / 2^(log2(203)+4) ~= 2^-14.2; a floor of 2^-16 reaches it with margin (the old -10 floor
+// silently stopped dark adaptation ~4 stops early). 254 bins over 30 log2 units ~= 1/8 EV each.
+const float kMinLogLum = -16.0;             // log2 luminance mapped to bin 1
+const float kLogLumRange = 30.0;            // window spans up to log2 = +14 (~16384 scene-linear)
+const float kInvLogLumRange = 1.0 / kLogLumRange;
+
+layout(set = 0, binding = 0) uniform sampler2D uHDRColor;                       // RGBA16F, pre-exposure
+layout(set = 0, binding = 1, std430) restrict buffer HistogramBuffer { uint histogram[]; };
+// The view's resolved depth (reverse-Z: the far plane, where nothing was drawn, is exactly 0.0).
+// It may be a different size than the colour input; pixels map by normalized position.
+layout(set = 0, binding = 2) uniform sampler2D uSceneDepth;
+
+layout(push_constant) uniform PC {
+    uint pixelCountX;
+    uint pixelCountY;
+} pc;
+
+shared uint sTile[kBinCount * kHistogramCount];
+const vec3 kLumaWeights = vec3(0.2126, 0.7152, 0.0722); // Rec.709 relative luminance
+
+uint LuminanceToBin(float lum)
+{
+    if (lum < 7.6e-6) // ~2^-17, below the metering window's floor
+        return 0u;    // near-black -> reserved bin 0
+    float t = clamp((log2(lum) - kMinLogLum) * kInvLogLumRange, 0.0, 1.0);
+    return uint(t * float(kBinCount - 2u) + 1.0);
+}
+
+// 0 for geometry, 1 for the far plane.
+uint HistogramForPixel(ivec2 pix)
+{
+    ivec2 depthSize = textureSize(uSceneDepth, 0);
+    vec2 uv = (vec2(pix) + 0.5) / vec2(float(pc.pixelCountX), float(pc.pixelCountY));
+    ivec2 depthPix = clamp(ivec2(uv * vec2(depthSize)), ivec2(0), depthSize - 1);
+    return (texelFetch(uSceneDepth, depthPix, 0).r <= 0.0) ? 1u : 0u;
+}
+
+void main()
+{
+    uint local = gl_LocalInvocationIndex; // 0..63 (8x8)
+    for (uint i = local; i < kBinCount * kHistogramCount; i += 64u)
+        sTile[i] = 0u;
+    barrier();
+
+    ivec2 pix = ivec2(gl_GlobalInvocationID.xy);
+    if (uint(pix.x) < pc.pixelCountX && uint(pix.y) < pc.pixelCountY)
+    {
+#if defined(GE_COMPAT_PROFILE)
+        // WebGPU rejects a filtering sampler on this unfilterable layout.
+        vec3 hdr = max(texelFetch(uHDRColor, pix, 0).rgb, vec3(0.0));
+#else
+        vec2 uv = (vec2(pix) + 0.5) / vec2(float(pc.pixelCountX), float(pc.pixelCountY));
+        vec3 hdr = max(textureLod(uHDRColor, uv, 0.0).rgb, vec3(0.0));
+#endif
+        uint bin = LuminanceToBin(dot(hdr, kLumaWeights));
+        atomicAdd(sTile[HistogramForPixel(pix) * kBinCount + bin], 1u);
+    }
+    barrier();
+
+    for (uint i = local; i < kBinCount * kHistogramCount; i += 64u)
+    {
+        uint c = sTile[i];
+        if (c > 0u)
+            atomicAdd(histogram[i], c);
+    }
+}

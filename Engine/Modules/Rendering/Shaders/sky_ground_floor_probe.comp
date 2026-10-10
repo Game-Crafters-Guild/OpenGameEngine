@@ -1,0 +1,84 @@
+#version 450
+
+// Test-only probe for the at-surface ground-floor composite (SkyGroundFloorParityTests).
+//
+// It exists because the property it checks cannot be reached from the CPU: when the camera
+// sits on the planet sphere the ray-sphere solve is degenerate (t0 = tca - thc = 0 for every
+// below-horizon direction), so what the shipped `t0 > 0` form returned was decided by float32
+// rounding -- and the analytic branch that replaced it is only correct if the DRIVER's
+// float32 agrees. SPIR-V permits 3 ULP in sqrt, and one ULP at planetRadius 6.36e6 is ~0.5 m,
+// so this has to run on a real device to mean anything.
+//
+// The property: in the analytic branch the floor is direction-independent (upAtHit is the
+// camera's own up, distToFloor is 0, so aerial perspective is inert). Every below-horizon
+// direction must therefore return the SAME colour, bit for bit. The pre-fix form returned a
+// patchwork of floor and sky across those directions.
+//
+// Dispatched by the test with one invocation per probed direction.
+
+#include "Includes/sky_composite.glsl"
+
+layout(local_size_x = 64) in;
+
+layout(set = 0, binding = 0) uniform sampler2D uTransLUT;
+layout(set = 0, binding = 1) buffer ProbeOut { vec4 result[]; } uOut;
+
+layout(push_constant) uniform ProbePC
+{
+    vec4 camPosAndRadius;       // xyz camera position, w planet radius
+    vec4 centerAndBrightness;   // xyz planet centre,   w ground brightness
+    vec4 sunDirAndIntensity;    // xyz sun direction,   w sun intensity
+    vec4 albedoAndScaleHeight;  // xyz ground albedo,   w rayleigh scale height
+    vec4 sunColorAndHaze;       // xyz sun colour,      w ground haze strength
+    vec4 betaAndPad;            // xyz beta rayleigh,   w unused
+    vec4 skyColorAndCount;      // xyz incoming sky,    w direction count
+    vec4 meanRadiance;          // xyz cosine-weighted mean sky radiance
+} pc;
+
+void main()
+{
+    // camR is computed HERE, from the same length() the production call sites use, rather
+    // than handed down as a push constant: the hazard this test guards is the DRIVER's
+    // float32 (SPIR-V allows 3 ULP in sqrt at a radius where one ULP is ~0.5 m). A
+    // CPU-computed camR would close that gap with double precision the shipped path never
+    // has, and the test would be proving the tolerance's arithmetic instead of the driver's.
+    float camR = length(pc.camPosAndRadius.xyz - pc.centerAndBrightness.xyz);
+
+    uint i = gl_GlobalInvocationID.x;
+    uint count = uint(pc.skyColorAndCount.w);
+    if (i >= count)
+        return;
+
+    // Spread the probes over the lower hemisphere, staying clear of the horizon blend band
+    // so every one of them should receive the floor outright.
+    float u    = (float(i) + 0.5) / float(count);
+    float cosT = -mix(0.02, 1.0, u);
+    float sinT = sqrt(max(1.0 - cosT * cosT, 0.0));
+    float phi  = float(i) * 2.39996323;
+    vec3  dirWS = normalize(vec3(sinT * cos(phi), cosT, sinT * sin(phi)));
+
+    vec3 outColor = GE_CompositeGroundFloor(pc.skyColorAndCount.rgb,
+                                            uTransLUT,
+                                            pc.meanRadiance.rgb,
+                                            pc.camPosAndRadius.xyz,
+                                            dirWS,
+                                            pc.centerAndBrightness.xyz,
+                                            pc.camPosAndRadius.w,
+                                            camR,
+                                            dirWS.y,
+                                            pc.albedoAndScaleHeight.xyz,
+                                            pc.centerAndBrightness.w,
+                                            normalize(pc.sunDirAndIntensity.xyz),
+                                            pc.sunColorAndHaze.xyz,
+                                            pc.sunDirAndIntensity.w,
+                                            pc.betaAndPad.xyz,
+                                            pc.albedoAndScaleHeight.w,
+                                            pc.sunColorAndHaze.w,
+                                            // Daytime: the property under test is the
+                                            // at-surface degeneracy, not the night blend
+                                            // (which is a mix on the result and is covered
+                                            // end to end by the night arm measurement).
+                                            vec3(0.0), 0.0);
+
+    uOut.result[i] = vec4(outColor, cosT);
+}

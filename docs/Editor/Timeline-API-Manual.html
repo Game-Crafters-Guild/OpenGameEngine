@@ -1,0 +1,609 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Timeline API Manual</title>
+<script src="https://cdn.jsdelivr.net/npm/mermaid@10/dist/mermaid.min.js"></script>
+<style>
+  :root {
+    --bg: #1a1d23;
+    --panel: #232831;
+    --panel-light: #2c323d;
+    --border: #3a414d;
+    --text: #d8dde6;
+    --muted: #8a93a3;
+    --accent: #6db4ff;
+    --danger: #ff8a6e;
+    --ok: #7bd88f;
+    --warn: #f6c177;
+  }
+  * { box-sizing: border-box; }
+  html, body {
+    background: var(--bg);
+    color: var(--text);
+    font-family: -apple-system, "Segoe UI", system-ui, sans-serif;
+    line-height: 1.55;
+    margin: 0;
+    padding: 0;
+  }
+  .container { max-width: 1100px; margin: 0 auto; padding: 48px 32px 96px; }
+  h1 { font-size: 28px; margin: 0 0 8px; letter-spacing: -0.01em; }
+  h2 {
+    font-size: 20px;
+    margin: 48px 0 16px;
+    padding-top: 12px;
+    border-top: 1px solid var(--border);
+  }
+  h3 { font-size: 16px; margin: 28px 0 10px; color: var(--accent); }
+  h4 { font-size: 14px; margin: 20px 0 8px; color: var(--muted); text-transform: uppercase; letter-spacing: 0.05em; }
+  p { margin: 8px 0 14px; }
+  .lede { color: var(--muted); margin-bottom: 4px; font-size: 14px; }
+  a { color: #91c4ff; text-decoration: none; }
+  a:hover { text-decoration: underline; }
+  code, .mono {
+    font-family: "JetBrains Mono", Consolas, ui-monospace, monospace;
+    font-size: 0.85em;
+    background: var(--panel-light);
+    padding: 1px 6px;
+    border-radius: 3px;
+  }
+  pre {
+    background: var(--panel-light);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    padding: 14px 16px;
+    overflow-x: auto;
+    font-size: 12.5px;
+    line-height: 1.45;
+    margin: 12px 0 20px;
+  }
+  pre code { background: none; padding: 0; font-size: inherit; }
+  .panel {
+    background: var(--panel);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 18px 22px;
+    margin: 16px 0;
+  }
+  .panel.ok { border-color: rgba(123, 216, 143, 0.45); }
+  .panel.warn { border-color: rgba(246, 193, 119, 0.45); }
+  .panel.danger { border-color: rgba(255, 138, 110, 0.45); }
+  .panel-title {
+    font-weight: 600;
+    font-size: 12px;
+    margin: 0 0 8px;
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+    color: var(--muted);
+  }
+  .panel.ok .panel-title { color: var(--ok); }
+  .panel.warn .panel-title { color: var(--warn); }
+  table {
+    border-collapse: collapse;
+    width: 100%;
+    margin: 12px 0 20px;
+    font-size: 13.5px;
+  }
+  th, td {
+    text-align: left;
+    padding: 10px 12px;
+    border-bottom: 1px solid var(--border);
+    vertical-align: top;
+  }
+  th {
+    color: var(--muted);
+    font-weight: 600;
+    font-size: 11px;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+  }
+  tbody tr:hover { background: rgba(44, 50, 61, 0.5); }
+  .pill {
+    display: inline-block;
+    padding: 2px 8px;
+    border-radius: 10px;
+    font-size: 10px;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+  }
+  .pill.keep { background: rgba(109, 180, 255, 0.13); color: var(--accent); border: 1px solid rgba(109, 180, 255, 0.35); }
+  .pill.new { background: rgba(123, 216, 143, 0.13); color: var(--ok); border: 1px solid rgba(123, 216, 143, 0.35); }
+  .pill.mod { background: rgba(246, 193, 119, 0.13); color: var(--warn); border: 1px solid rgba(246, 193, 119, 0.35); }
+  .two-col { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+  @media (max-width: 900px) { .two-col { grid-template-columns: 1fr; } }
+  .diagram-wrap {
+    background: var(--panel);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 20px;
+    margin: 16px 0;
+    overflow-x: auto;
+  }
+  ul, ol { margin: 8px 0 16px; padding-left: 22px; }
+  li { margin: 4px 0; }
+  hr { border: none; border-top: 1px solid var(--border); margin: 32px 0; }
+  .footer { text-align: center; color: var(--muted); font-size: 12px; margin-top: 64px; }
+  .toc a { display: block; padding: 4px 0; font-size: 14px; }
+  .toc { columns: 2; column-gap: 32px; }
+  @media (max-width: 700px) { .toc { columns: 1; } }
+</style>
+</head>
+<body>
+<div class="container">
+
+<p class="lede">API MANUAL · 2026-05-28 · Animation / Editor</p>
+<h1>Timeline API Manual</h1>
+<p>
+  Reference for the engine timeline evaluator (<code>GameEngine::Animation</code>),
+  <code>.timeline</code> assets, editor animation windows, and timeline bar UI controls.
+  C# scripts evaluate timelines and drive playback through <code>TimelineApi</code>
+  (<a href="#csharp">C# scripting API</a>).
+</p>
+
+<div class="panel ok">
+  <p class="panel-title">How the pieces fit</p>
+  <ul>
+    <li><strong><code>Timeline</code> + <code>EvaluateTimeline</code></strong>: a <code>.timeline</code> asset holds tracks and clips; evaluating it at a time range returns the blended samples and the events crossed.</li>
+    <li><strong><code>AnimationClip</code> + Dope Sheet / Curves</strong>: per-clip curve editing in the Animation window (not this evaluator’s JSON tracks).</li>
+    <li><strong><code>AnimationWindowPanel</code> / Timeline tab</strong>: the editor windows for scrubbing and sequencing.</li>
+  </ul>
+</div>
+
+<nav class="panel toc">
+  <p class="panel-title">Contents</p>
+  <a href="#layers">Architecture layers</a>
+  <a href="#engine">Engine runtime API</a>
+  <a href="#json">JSON asset format</a>
+  <a href="#evaluate">EvaluateTimeline</a>
+  <a href="#assets">Assets &amp; Animator</a>
+  <a href="#playback-system">TimelinePlaybackSystem</a>
+  <a href="#csharp">C# scripting API</a>
+  <a href="#editor">Editor panel API</a>
+  <a href="#ui-widgets">Timeline bar UI widgets</a>
+  <a href="#files">Source file index</a>
+  <a href="#recipes">Common recipes</a>
+</nav>
+
+<h2 id="layers">Architecture layers</h2>
+
+<div class="diagram-wrap">
+<pre class="mermaid">
+flowchart TB
+  subgraph Editor["Editor (Apps/Editor)"]
+    AWP["AnimationWindowPanel\nAnimationTimelinePanel"]
+    TS["TimelineState\nscrub / play / loop"]
+    TBE["TimelineBarElement\nruler UI"]
+    AWP --> TS
+    AWP --> TBE
+  end
+
+  subgraph Assets["Asset pipeline"]
+    TA["TimelineAsset\n.timeline JSON blob"]
+    AWP -->|OpenTimeline / SaveCurrentTimeline| TA
+  end
+
+  subgraph Engine["Engine runtime"]
+    TL["Animation::Timeline"]
+    EV["EvaluateTimeline()"]
+    TA -->|LoadTimelineFromJson| TL
+    TL --> EV
+    AN["Animator::PlayTimeline(guid)"]
+    EV --> AN
+  end
+</pre>
+</div>
+
+<div class="two-col">
+  <div class="panel">
+    <p class="panel-title">Pick this API when…</p>
+    <ul>
+      <li>Runtime sequencing, cinematics, gameplay timelines → <a href="#engine">Engine API</a></li>
+      <li>Loading/saving <code>.timeline</code> files → <a href="#json">JSON</a> + <a href="#assets">TimelineAsset</a></li>
+      <li>Editor scrubber, playhead, dock tab → <a href="#editor">AnimationWindowPanel</a></li>
+      <li>Custom ruler/marker UI → <a href="#ui-widgets">Timeline bar widgets</a></li>
+    </ul>
+  </div>
+  <div class="panel warn">
+    <p class="panel-title">Not timeline API</p>
+    <ul>
+      <li><code>IDevice::CreateTimelineSemaphore</code> — Vulkan GPU sync, unrelated.</li>
+      <li><code>TimeCompositeModel</code> / <code>LaneClipModel</code> — editor-only sequencing models; not in <code>AnimationTimeline.h</code>.</li>
+    </ul>
+  </div>
+</div>
+
+<h2 id="engine">Engine runtime API</h2>
+
+<p><strong>Namespace:</strong> <code>GameEngine::Animation</code><br>
+<strong>Header:</strong> <code>Engine/Modules/Animation/Include/Animation/AnimationTimeline.h</code><br>
+<strong>Implementation:</strong> <code>Engine/Modules/Animation/Source/AnimationTimeline.cpp</code></p>
+
+<h3>Enumerations</h3>
+
+<table>
+  <thead><tr><th>Type</th><th>Values (JSON string where noted)</th></tr></thead>
+  <tbody>
+    <tr><td><code>TimelineTrackType</code></td><td>
+      <code>animation</code>, <code>audio</code>, <code>property</code>, <code>position3d</code>, <code>rotation3d</code>,
+      <code>scale3d</code>, <code>blendShape</code>, <code>method</code>, <code>event</code> (alias <code>animationEvent</code>),
+      <code>bezier</code>
+    </td></tr>
+    <tr><td><code>TimelineTrackUpdateMode</code></td><td><code>continuous</code>, <code>discrete</code>, <code>capture</code></td></tr>
+    <tr><td><code>TimelineTrackInterpolation</code></td><td><code>nearest</code>, <code>linear</code>, <code>cubic</code></td></tr>
+    <tr><td><code>TimelineBezierHandleMode</code></td><td><code>Free</code>, <code>Linear</code>, <code>Balanced</code>, <code>Mirrored</code> (value keys)</td></tr>
+  </tbody>
+</table>
+
+<h3>Track capability helpers</h3>
+
+<table>
+  <thead><tr><th>Function</th><th>Returns true when track uses…</th></tr></thead>
+  <tbody>
+    <tr><td><code>TimelineTrackTypeUsesValueKeys</code></td><td><code>property</code>, <code>position3d</code>, <code>rotation3d</code>, <code>scale3d</code>, <code>blendShape</code>, <code>bezier</code></td></tr>
+    <tr><td><code>TimelineTrackTypeUsesClips</code></td><td><code>animation</code>, <code>audio</code></td></tr>
+    <tr><td><code>TimelineTrackTypeUsesAudioKeys</code></td><td><code>audio</code></td></tr>
+    <tr><td><code>TimelineTrackTypeUsesAnimationKeys</code></td><td><code>animation</code></td></tr>
+    <tr><td><code>TimelineTrackTypeComponentCount</code></td><td>Default component count for value keys (1, 3, or 4)</td></tr>
+  </tbody>
+</table>
+
+<h3>Core structs</h3>
+
+<table>
+  <thead><tr><th>Struct</th><th>Key fields</th></tr></thead>
+  <tbody>
+    <tr><td><code>Timeline</code></td><td><code>SchemaVersion</code>, <code>Tracks[]</code></td></tr>
+    <tr><td><code>TimelineTrack</code></td><td><code>Type</code>, <code>Name</code>, <code>TargetPath</code>, <code>PropertyPath</code>, <code>Clips</code>, <code>ValueKeys</code>, <code>MethodKeys</code>, <code>AudioKeys</code>, <code>AnimationKeys</code>, <code>Markers</code>, <code>UpdateMode</code>, <code>Interpolation</code>, <code>Enabled</code>, …</td></tr>
+    <tr><td><code>TimelineClip</code></td><td><code>ClipGuid</code>, <code>ClipAssetType</code>, <code>OffsetOnTimeline</code>, <code>InTime</code>/<code>OutTime</code>, <code>Muted</code>, <code>FadeInDuration</code>/<code>FadeOutDuration</code></td></tr>
+    <tr><td><code>TimelineValueKey</code></td><td><code>Time</code>, <code>Value[4]</code>, <code>ComponentCount</code>, bezier handles</td></tr>
+    <tr><td><code>TimelineMethodKey</code></td><td><code>Time</code>, <code>MethodName</code>, <code>Arguments</code></td></tr>
+    <tr><td><code>TimelineAudioKey</code></td><td><code>Time</code>, <code>AudioGuid</code>, offsets, volume, pitch</td></tr>
+    <tr><td><code>TimelineAnimationKey</code></td><td><code>Time</code>, <code>AnimationName</code>, <code>AnimationGuid</code>, <code>SpeedScale</code></td></tr>
+    <tr><td><code>TimelineEvaluateOptions</code></td><td><code>Loop</code>, <code>DurationOverride</code></td></tr>
+  </tbody>
+</table>
+
+<h3>Evaluation outputs</h3>
+
+<table>
+  <thead><tr><th>Struct</th><th>Contents</th></tr></thead>
+  <tbody>
+    <tr><td><code>TimelineEvaluationResult</code></td><td>Aggregates all samples for one evaluation step</td></tr>
+    <tr><td><code>TimelineValueSample</code></td><td>Interpolated property/position/rotation/scale at <code>sampleTime</code></td></tr>
+    <tr><td><code>TimelineMethodEvent</code></td><td>Method keys that crossed the time window (forward or loop wrap)</td></tr>
+    <tr><td><code>TimelineAudioEvent</code></td><td>Audio keys fired in the window</td></tr>
+    <tr><td><code>TimelineClipSample</code></td><td>Active clips: <code>LocalTime</code>, <code>Weight</code> (fade), <code>ClipGuid</code></td></tr>
+  </tbody>
+</table>
+
+<h3>Free functions <span class="pill keep">primary API</span></h3>
+
+<pre><code>bool LoadTimelineFromJson(const nlohmann::json&amp; doc, Timeline&amp; outTimeline, std::string* outError = nullptr);
+nlohmann::json SaveTimelineToJson(const Timeline&amp; timeline);
+float32 GetTimelineDuration(const Timeline&amp; timeline);
+
+TimelineEvaluationResult EvaluateTimeline(
+    const Timeline&amp; timeline,
+    float32 previousTime,
+    float32 currentTime,
+    const TimelineEvaluateOptions&amp; options = {});
+
+const char* TimelineTrackTypeToString(TimelineTrackType type);
+TimelineTrackType TimelineTrackTypeFromString(const std::string&amp; value);</code></pre>
+
+<h2 id="json">JSON asset format (<code>.timeline</code>)</h2>
+
+<p>On disk, timelines are JSON objects. <code>SaveTimelineToJson</code> always writes <code>assetType: "Timeline"</code> and <code>schemaVersion</code> (default 1).</p>
+
+<h4>Root</h4>
+<pre><code>{
+  "schemaVersion": 1,
+  "assetType": "Timeline",
+  "tracks": [ /* TimelineTrack objects */ ]
+}</code></pre>
+
+<h4>Track object (common fields)</h4>
+<table>
+  <thead><tr><th>JSON field</th><th>C++ member</th><th>Notes</th></tr></thead>
+  <tbody>
+    <tr><td><code>type</code></td><td><code>Type</code></td><td>See track type strings above</td></tr>
+    <tr><td><code>name</code></td><td><code>Name</code></td><td>Display / debug name</td></tr>
+    <tr><td><code>targetPath</code></td><td><code>TargetPath</code></td><td>Binding path (e.g. <code>Root</code>)</td></tr>
+    <tr><td><code>propertyPath</code></td><td><code>PropertyPath</code></td><td>e.g. <code>Transform.position</code></td></tr>
+    <tr><td><code>updateMode</code></td><td><code>UpdateMode</code></td><td><code>continuous</code> | <code>discrete</code> | <code>capture</code></td></tr>
+    <tr><td><code>interpolation</code></td><td><code>Interpolation</code></td><td><code>nearest</code> | <code>linear</code> | <code>cubic</code></td></tr>
+    <tr><td><code>enabled</code></td><td><code>Enabled</code></td><td>Default <code>true</code></td></tr>
+    <tr><td><code>clips</code></td><td><code>Clips</code></td><td>Animation / audio tracks</td></tr>
+    <tr><td><code>valueKeys</code></td><td><code>ValueKeys</code></td><td>Property / transform tracks</td></tr>
+    <tr><td><code>methodKeys</code></td><td><code>MethodKeys</code></td><td>Scripting-style events</td></tr>
+  </tbody>
+</table>
+
+<h4>Clip object</h4>
+<pre><code>{
+  "clipGuid": "01234567-89ab-cdef-0123-456789abcdef",
+  "assetType": "Animation",
+  "name": "Walk",
+  "offsetOnTimeline": 2.0,
+  "inTime": 0.25,
+  "outTime": 1.25,
+  "muted": false,
+  "fadeInDuration": 0.5,
+  "fadeOutDuration": 0.25
+}</code></pre>
+
+<h4>Value key object</h4>
+<pre><code>{
+  "time": 0.5,
+  "value": [5.0, 1.0, -2.0],
+  "componentCount": 3,
+  "label": "mid"
+}</code></pre>
+
+<p>Tests with full examples: <code>Engine/Modules/Animation/Tests/AnimationTimelineTests.cpp</code>.</p>
+
+<h2 id="evaluate">EvaluateTimeline semantics</h2>
+
+<div class="panel">
+  <p class="panel-title">Signature</p>
+  <pre><code>EvaluateTimeline(timeline, previousTime, currentTime, options)</code></pre>
+</div>
+
+<ul>
+  <li><strong>Sample time</strong> — If <code>options.Loop</code>, <code>currentTime</code> is wrapped with <code>GetTimelineDuration</code> (or <code>DurationOverride</code> when &gt; 0).</li>
+  <li><strong>Value tracks</strong> — Interpolated at the wrapped sample time; result in <code>ValueSamples</code>.</li>
+  <li><strong>Clips</strong> — Active when global time ∈ [<code>OffsetOnTimeline</code>, <code>OffsetOnTimeline + (OutTime - InTime)</code>]; <code>LocalTime = global - offset + InTime</code>; weight from fade in/out.</li>
+  <li><strong>Method / audio keys</strong> — Fired when key time falls in <code>(previousTime, currentTime]</code> (handles reverse scrub and loop via <code>IsTrackEventInRange</code>).</li>
+  <li><strong>Disabled tracks</strong> — Skipped entirely (<code>Enabled == false</code>).</li>
+</ul>
+
+<pre><code>// Runtime example pattern (see ModelAnimationPlayMode.cpp)
+Animation::Timeline timeline;
+std::string err;
+if (!Animation::LoadTimelineFromJson(timelineAsset->GetDocument(), timeline, &amp;err))
+    return false;
+
+Animation::TimelineEvaluateOptions options;
+options.Loop = loop;
+auto result = Animation::EvaluateTimeline(timeline, t, t, options);
+
+for (const auto&amp; sample : result.ActiveClips) {
+    // Resolve sample.ClipGuid → AnimationClip, drive animator at sample.LocalTime
+}</code></pre>
+
+<h2 id="assets">Assets &amp; Animator</h2>
+
+<h3>TimelineAsset</h3>
+<p><strong>Header:</strong> <code>Engine/Include/Assets/TimelineAsset.h</code><br>
+Asset type: <code>AssetType::Timeline</code>, file extension <code>.timeline</code>.</p>
+
+<table>
+  <thead><tr><th>Method</th><th>Description</th></tr></thead>
+  <tbody>
+    <tr><td><code>Load() / LoadFromData()</code></td><td>Parse JSON into internal document</td></tr>
+    <tr><td><code>GetDocument()</code></td><td>Const <code>nlohmann::json</code> for <code>LoadTimelineFromJson</code></td></tr>
+    <tr><td><code>SetDocument(json)</code></td><td>Replace document (editor save path)</td></tr>
+  </tbody>
+</table>
+
+<h3>Animator component</h3>
+<p><strong>Header:</strong> <code>Engine/Include/Components/Animation/Animator.h</code></p>
+
+<pre><code>void PlayTimeline(const GUID&amp; guid);  // sets timelineGuid, source = Timeline, pendingCommand = Play</code></pre>
+
+<p>Playback source enum includes <code>AnimatorPlaybackSource::Timeline</code> alongside clip and library modes.</p>
+
+<h3 id="playback-system">TimelinePlaybackSystem <span class="pill keep">runtime</span></h3>
+<p>
+  When <code>Animator.source == Timeline</code>, <code>TimelinePlaybackSystem</code> advances
+  <code>TimelinePlaybackState</code>, calls <code>EvaluateTimeline</code>, and applies results via
+  <code>ApplyTimelineEvaluation</code>. Register gameplay hooks with
+  <code>RegisterTimelineMethodCallback</code> (<code>Engine/Include/Engine/Rendering/TimelinePlayback.h</code>); method-track keys dispatch by <code>MethodName</code> during playback.
+</p>
+<pre><code>RegisterTimelineMethodCallback("OnDoorOpen",
+    [](ECS::World&amp; world, ECS::EntityHandle root, const Animation::TimelineMethodEvent&amp; event) {
+        // ...
+    });</code></pre>
+
+<h2 id="editor">Editor panel API</h2>
+
+<p><strong>Header:</strong> <code>Apps/Editor/Include/Panels/AnimationWindowPanel.h</code><br>
+<strong>Overview doc:</strong> <code>docs/Editor/ANIMATION_WINDOW.md</code></p>
+
+<h3>Panel types</h3>
+
+<table>
+  <thead><tr><th>Class</th><th>Dock id</th><th>PanelKind</th></tr></thead>
+  <tbody>
+    <tr><td><code>AnimationWindowPanel</code></td><td><code>Animation</code></td><td><code>Animation</code></td></tr>
+    <tr><td><code>AnimationTimelinePanel</code></td><td><code>Timeline</code></td><td><code>Timeline</code></td></tr>
+    <tr><td><code>AnimationClipEditorPanel</code></td><td><code>ClipEditor</code></td><td><code>ClipEditor</code></td></tr>
+  </tbody>
+</table>
+
+<p><code>AnimationTimelinePanel</code> is an empty subclass — same API as <code>AnimationWindowPanel</code>, different default layout/tab.</p>
+
+<h3>TimelineState <span class="pill mod">playback</span></h3>
+
+<p>Owned by the panel; advanced each frame via <code>TickTimeline(deltaTime)</code> when <code>playing</code>.</p>
+
+<table>
+  <thead><tr><th>Field</th><th>Meaning</th></tr></thead>
+  <tbody>
+    <tr><td><code>currentTime</code></td><td>Playhead position (seconds)</td></tr>
+    <tr><td><code>fullStart</code> / <code>fullEnd</code></td><td>Full timeline domain</td></tr>
+    <tr><td><code>rangeStart</code> / <code>rangeEnd</code></td><td>Playback loop range</td></tr>
+    <tr><td><code>viewStart</code> / <code>viewEnd</code></td><td>Visible zoom window</td></tr>
+    <tr><td><code>fps</code></td><td>Frames per second (frame ruler)</td></tr>
+    <tr><td><code>playing</code> / <code>paused</code> / <code>loop</code> / <code>reverse</code></td><td>Transport flags</td></tr>
+  </tbody>
+</table>
+
+<pre><code>const TimelineState&amp; GetTimelineState() const;
+TimelineState&amp; GetTimelineState();
+void TickTimeline(float deltaTimeSeconds);</code></pre>
+
+<h3>Asset I/O</h3>
+
+<table>
+  <thead><tr><th>Method</th><th>Description</th></tr></thead>
+  <tbody>
+    <tr><td><code>OpenTimeline(path)</code></td><td>Load <code>.timeline</code> into editor model</td></tr>
+    <tr><td><code>SaveCurrentTimeline()</code></td><td>Save bound timeline file</td></tr>
+    <tr><td><code>OpenClipSet(path)</code> / <code>SaveCurrentClipSet()</code></td><td>Clip-set assets</td></tr>
+    <tr><td><code>SetCurrentClip(const AnimationClip*)</code></td><td>Feed dope sheet / curves (single clip)</td></tr>
+    <tr><td><code>OpenAnimation(path)</code> / <code>SaveCurrentClip()</code></td><td>Animation clip workflow</td></tr>
+    <tr><td><code>HasUnsavedChanges()</code></td><td>Clip, timeline, or clipset dirty</td></tr>
+  </tbody>
+</table>
+
+<h3>Child views (getters)</h3>
+
+<pre><code>TimelineBarElement* GetTimelineBarElement() const;
+DopeSheetView* GetDopeSheetView() const;
+CurvesGraphView* GetCurvesGraphView() const;
+TimeCompositeView* GetTimeCompositeView() const;
+LaneClipEditorView* GetLaneClipEditorView() const;
+TreeView* GetPropertiesTree() const;</code></pre>
+
+<h3>Integration callbacks</h3>
+
+<table>
+  <thead><tr><th>Setter</th><th>Use</th></tr></thead>
+  <tbody>
+    <tr><td><code>SetOnTimelineInspectorRequested(title, buildContent)</code></td><td>Push custom Inspector UI</td></tr>
+    <tr><td><code>SetOnOpenTimelinePanel</code> / <code>SetOnOpenAnimationPanel</code></td><td>Cross-panel navigation</td></tr>
+    <tr><td><code>SetOnPreviewToggled</code></td><td>Scene / asset view preview</td></tr>
+    <tr><td><code>SetUndoRedoService</code></td><td>Editor undo</td></tr>
+    <tr><td><code>SetContext(EditorContext*)</code></td><td>Asset manager, thumbnails, etc.</td></tr>
+  </tbody>
+</table>
+
+<h3>Opening the Timeline dock tab</h3>
+
+<pre><code>#include "EditorPanelManager.h"
+#include "EditorPanelIds.h"
+
+panelManager->ShowOrActivatePanel(ctx, EditorPanelIds::Timeline, EditorPanelIds::Animation);</code></pre>
+
+<p>Panel type string in UXML: <code>AnimationTimelinePanel</code> (<code>Apps/Editor/Assets/UI/layout.uxml</code>).</p>
+
+<h2 id="ui-widgets">Timeline bar UI widgets</h2>
+
+<p><strong>Header:</strong> <code>Apps/Editor/Include/Panels/TimelineBarElement.h</code><br>
+Wired by <code>AnimationWindowPanel</code> during layout bind.</p>
+
+<table>
+  <thead><tr><th>Class</th><th>Role</th><th>Key API</th></tr></thead>
+  <tbody>
+    <tr><td><code>TimelineBarElement</code></td><td>Ruler, playhead pill, scrub</td><td><code>SetTimelineState</code>, <code>SetOnTimeChange</code>, <code>SetOnPan</code>, <code>SetOnZoom</code>, scrub begin/end</td></tr>
+    <tr><td><code>TimelineTimeLabelsElement</code></td><td>Seconds labels (top)</td><td>Same scrub/pan/zoom callbacks</td></tr>
+    <tr><td><code>TimelineFrameLabelsElement</code></td><td>Frame numbers (bottom)</td><td>Same scrub/pan/zoom callbacks</td></tr>
+    <tr><td><code>TimelineMarkersElement</code></td><td>Marker diamonds</td><td><code>SetMarkerTimes</code>, <code>SetOnMarkerTimeChanged</code>, <code>SetOnMarkerRemoved</code></td></tr>
+    <tr><td><code>TimeRangeSliderElement</code></td><td>Range thumbs / pan strip</td><td><code>SetFullRange</code>, <code>SetVisibleRange</code>, <code>SetOnRangeChanged</code></td></tr>
+  </tbody>
+</table>
+
+<p>All elements draw via <code>OnGeneratePrimitives</code> (custom UI primitives, not textured quads).</p>
+
+<h2 id="files">Source file index</h2>
+
+<table>
+  <thead><tr><th>Path</th><th>Layer</th></tr></thead>
+  <tbody>
+    <tr><td><code>Engine/Modules/Animation/Include/Animation/AnimationTimeline.h</code></td><td>Runtime types + evaluate API</td></tr>
+    <tr><td><code>Engine/Modules/Animation/Source/AnimationTimeline.cpp</code></td><td>JSON + evaluation</td></tr>
+    <tr><td><code>Engine/Modules/Animation/Tests/AnimationTimelineTests.cpp</code></td><td>Unit tests / JSON examples</td></tr>
+    <tr><td><code>Engine/Include/Assets/TimelineAsset.h</code></td><td>Asset wrapper</td></tr>
+    <tr><td><code>Engine/Include/Components/Animation/Animator.h</code></td><td><code>PlayTimeline</code></td></tr>
+    <tr><td><code>Apps/Editor/Include/Panels/AnimationWindowPanel.h</code></td><td>Editor panel + <code>TimelineState</code></td></tr>
+    <tr><td><code>Apps/Editor/Source/Panels/AnimationWindowPanel.cpp</code></td><td>Implementation</td></tr>
+    <tr><td><code>Apps/Editor/Include/Panels/TimelineBarElement.h</code></td><td>Ruler UI controls</td></tr>
+    <tr><td><code>Apps/Editor/Source/PlayMode/ModelAnimationPlayMode.cpp</code></td><td>Runtime resolve example</td></tr>
+    <tr><td><code>docs/Editor/ANIMATION_WINDOW.md</code></td><td>Short editor overview (Markdown)</td></tr>
+  </tbody>
+</table>
+
+<h2 id="recipes">Common recipes</h2>
+
+<h3>Evaluate a timeline at play time</h3>
+<ol>
+  <li>Acquire <code>TimelineAsset</code> by GUID from <code>AssetManager</code>.</li>
+  <li><code>LoadTimelineFromJson(asset->GetDocument(), timeline)</code>.</li>
+  <li><code>EvaluateTimeline(timeline, prevT, currT, options)</code>.</li>
+  <li>Consume <code>ActiveClips</code>, <code>ValueSamples</code>, or events.</li>
+</ol>
+
+<h3>Author in editor, run in game</h3>
+<ol>
+  <li>Create <code>.timeline</code> in Assets (context menu → Create Timeline).</li>
+  <li>Open Timeline dock tab; edit tracks; <code>SaveCurrentTimeline()</code>.</li>
+  <li>Assign timeline GUID to <code>Animator</code>; call <code>PlayTimeline(guid)</code> from gameplay code.</li>
+</ol>
+
+<h3>Custom inspector from timeline UI</h3>
+<pre><code>panel->SetOnTimelineInspectorRequested(
+    [inspector](const std::string&amp; title, std::function&lt;void(UIElement*)&gt; build) {
+        inspector->ShowCustomInspector(title, "inspector-header-kind-node", std::move(build));
+    });</code></pre>
+
+<div class="panel ok">
+  <p class="panel-title">Runtime playback</p>
+  <p>
+    <code>TimelinePlaybackSystem</code> evaluates and applies timelines each frame (clips, transforms, audio, method callbacks).
+  </p>
+</div>
+
+<h2 id="csharp">C# scripting API</h2>
+
+<p><strong>Assembly:</strong> <code>GameEngine.Scripting.ABI</code> · <code>Managed/Scripting.ABI/TimelineApi.cs</code><br>
+<strong>Native:</strong> <code>Engine/Include/Scripting/TimelineABI.h</code></p>
+
+<pre><code>using GameEngine.Scripting;
+using GameEngine.ECS;
+
+// Sample a .timeline JSON string (mirrors EvaluateTimeline)
+string resultJson = TimelineApi.EvaluateDocument(timelineJson, prevTime, currTime, loop: true);
+
+// Drive playback on an entity (TimelinePlaybackSystem applies each frame)
+TimelineApi.Play(Ecs.PrimaryWorld, entityId, timelineAssetGuid, loop: true);
+TimelineApi.SetMethodListener((entity, method, args) =&gt; { /* method track */ });</code></pre>
+
+<div class="panel ok">
+  <p class="panel-title">Editor → runtime serialization</p>
+  <p>
+    <code>SaveTimelineDocumentFromCompositeModel</code> converts <code>TimeCompositeModel</code> to
+    <code>Animation::Timeline</code> and writes via <code>SaveTimelineToJson</code>. Editor-only video tracks are preserved under
+    <code>editorOnly.videoTracks</code>. Load uses <code>LoadTimelineFromJson</code> + merge.
+  </p>
+</div>
+
+<div class="panel warn">
+  <p class="panel-title">Remaining limitations</p>
+  <ul>
+    <li>Multi-clip skeletal blending uses dominant weight only (not full pose layers).</li>
+    <li>Video tracks are editor-only until a runtime video evaluator exists.</li>
+  </ul>
+</div>
+
+<p class="footer">Game Engine · Timeline API Manual · 2026-05-28</p>
+</div>
+
+<script>
+  mermaid.initialize({
+    startOnLoad: true,
+    theme: 'dark',
+    themeVariables: {
+      primaryColor: '#2c323d',
+      primaryTextColor: '#d8dde6',
+      primaryBorderColor: '#3a414d',
+      lineColor: '#6db4ff',
+      secondaryColor: '#232831',
+      tertiaryColor: '#1a1d23'
+    }
+  });
+</script>
+</body>
+</html>

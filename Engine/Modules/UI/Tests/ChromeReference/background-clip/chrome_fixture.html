@@ -1,0 +1,16 @@
+<!doctype html>
+<html><head><meta charset="utf-8"><style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  #root { width: 800px; height: 600px; background: #272727; display: flex; flex-direction: column; }
+  .row  { display: flex; flex-direction: row; }
+  .probe { width: 200px; height: 120px; margin: 20px; }
+  #hud { background: #161923; border: 10px solid rgba(92,152,232,0.85); }
+  #tt  { background: rgba(255,255,255,0.5); border: 10px solid rgba(255,0,0,0.5); }
+  #rad { background: #161923; border: 10px solid rgba(92,152,232,0.85); border-radius: 20px; }
+  #op  { background: #161923; border: 10px solid rgb(92,152,232); }
+  #nb  { background: rgba(255,255,255,0.5); }
+</style></head>
+<body><div id="root">
+  <div class="row"><div id="hud" class="probe"></div><div id="tt" class="probe"></div><div id="rad" class="probe"></div></div>
+  <div class="row"><div id="op" class="probe"></div><div id="nb" class="probe"></div></div>
+</div></body></html>

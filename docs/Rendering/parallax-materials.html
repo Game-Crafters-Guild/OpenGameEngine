@@ -1,0 +1,218 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Parallax materials</title>
+<style>
+  :root {
+    --bg: #0f1115; --panel: #171a21; --panel-light: #1f232c; --border: #2a2f3a;
+    --text: #d7dae0; --muted: #8b93a3; --accent: #6aa9ff; --danger: #ff6b6b; --bad: #ff6b6b;
+    --ok: #5fd38d; --good: #5fd38d; --warn: #ffc857;
+  }
+  body { margin: 0; background: var(--bg); color: var(--text); font: 15px/1.55 -apple-system, Segoe UI, Roboto, sans-serif; }
+  .wrap { max-width: 1040px; margin: 0 auto; padding: 40px 28px 64px; }
+  h1 { font-size: 30px; margin: 0 0 4px; }
+  h2 { font-size: 21px; margin: 40px 0 14px; padding: 8px 0; border-bottom: 2px solid var(--border); }
+  h3 { font-size: 16px; margin: 22px 0 8px; color: var(--accent); }
+  .lede { color: var(--muted); margin: 0 0 24px; letter-spacing: .04em; text-transform: uppercase; font-size: 12px; }
+  code, pre { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 13px; }
+  code { background: var(--panel-light); padding: 1px 5px; border-radius: 4px; }
+  pre { background: var(--panel); border: 1px solid var(--border); border-radius: 8px; padding: 14px 16px; overflow-x: auto; }
+  pre code { background: none; padding: 0; }
+  table { width: 100%; border-collapse: collapse; margin: 12px 0 18px; background: var(--panel); border: 1px solid var(--border); border-radius: 8px; overflow: hidden; }
+  th { text-align: left; background: var(--panel-light); color: var(--muted); font-weight: 600; font-size: 12px; text-transform: uppercase; letter-spacing: .04em; }
+  th, td { padding: 8px 12px; border-bottom: 1px solid var(--border); }
+  tr:last-child td { border-bottom: none; }
+  tr:hover td { background: rgba(255,255,255,.02); }
+  td.num, th.num { text-align: right; font-variant-numeric: tabular-nums; }
+  .panel { background: var(--panel); border: 1px solid var(--border); border-left: 4px solid var(--accent); border-radius: 8px; padding: 12px 16px; margin: 14px 0; }
+  .panel.warn { border-left-color: var(--warn); }
+  .panel.ok { border-left-color: var(--ok); }
+  .panel.danger { border-left-color: var(--danger); }
+  .muted { color: var(--muted); }
+  hr { border: 0; border-top: 1px solid var(--border); margin: 36px 0; }
+  .footer { color: var(--muted); font-size: 13px; margin-top: 48px; padding-top: 16px; border-top: 1px solid var(--border); }
+</style>
+</head>
+<body>
+<div class="wrap">
+
+<h1>Parallax materials</h1>
+<p class="lede">Guide · rendering · materials · living document</p>
+
+<p>A height map on a Standard PBR material makes a flat surface read as carved: bricks stand
+proud of their mortar, cobbles of the gaps between them, roof tiles of the row below, and the relief
+shadows itself away from the sun, most visibly under a low one. The mesh does not change. The relief is carved
+<em>below</em> the polygon, so collision, navigation and everything placed on the surface stay
+exactly where they were.</p>
+
+<h2>Setting it up</h2>
+
+<table>
+  <thead><tr><th>Row</th><th>What to put there</th></tr></thead>
+  <tbody>
+    <tr><td><b>Height</b></td><td>A grayscale height map: white is the polygon surface, black the
+      deepest point. Give it the same tiling as the material's other maps. It is imported as one
+      linear channel, whatever its file format or color tag.</td></tr>
+    <tr><td><b>Relief Depth</b></td><td>Appears once a height map is bound. How deep the relief is,
+      as a fraction of one texture repeat: 0.02 on a 2 m repeat is 4 cm. The default is 0.02, the
+      most is 0.04 (see Limits), and 0 turns parallax off without unbinding the map. While the Height
+      row reports a problem (below),
+      the row is inactive: the depth does nothing until the problem is fixed.</td></tr>
+  </tbody>
+</table>
+
+<p>Because the depth is a fraction of a repeat, a texture tiled twice as densely gets a relief half
+as deep, which keeps its shape: its bricks are half as wide. There is nothing else to set. The
+engine chooses how many samples each pixel takes, whether the relief shadows itself, and the
+texture detail it reads, from what the pixel shows (below).</p>
+
+<div class="panel warn">
+<b>When the Height row says no.</b> A message under the Height row means the material renders
+without parallax, and says what to change:
+<ul>
+  <li><i>Parallax cannot combine with hex tiling: turn Hex Tiling off, or remove the Height map.</i></li>
+  <li><i>&lt;surface&gt; does not use a Height map; bind it on a Standard PBR material.</i> The
+    Height row is offered only on surfaces that read a height map; a map carried over from another
+    surface lands in the list of other textures, with this message.</li>
+</ul>
+</div>
+
+<h2>What the engine decides</h2>
+
+<h3>How many samples</h3>
+<p>Each pixel works out how far, in pixels, the full relief depth would shift what it sees. Under
+half a pixel the relief shifts nothing the pixel can show, so it skips the march and shades the
+surface where it lies. From half a pixel to one and a half the depth fades in, so there is no line
+where it starts. Beyond that the pixel takes one step per pixel of shift, up to 32, and then
+refines the step where the ray entered the relief. A distant surface therefore costs almost
+nothing, a surface seen head on pays only for its self-shadow, and a grazing close-up gets the full
+march.</p>
+
+<h3>Self-shadow</h3>
+<p>The relief shadows itself toward the main directional light, the sun by day and the moon at
+night: mortar joints and the gaps between stones darken on the side away from the light. Whether a
+pixel shows it depends on the shadow, not on the view: a wall seen head on shifts nothing on screen
+but still shows the shadow its bricks cast across the joints below them. The shadow appears once
+the one the full depth casts is a pixel long on screen and is at full strength by three.</p>
+<p>The shadow's edge is softened: relief that only just rises into the light's path lets part of the
+light through. The softening is a fixed share of each shadow's length, its last fifth or so behind the
+edge of the relief that casts it, so on screen it grows with the shadow: a shadow a few pixels long
+still ends in about one pixel, and a long one close to the camera ends in a few pixels of partial shade;
+within about a metre of a wall the eight-sample march shows in that edge as a short lighter strip. Under
+a low sun the shadows stay close to hard, often because a shadow reaches the far side of its joint
+before its softened tip does. It is
+wider than a real sun's penumbra, chosen for the look and for a steadier image in motion, and it lies
+inside the shadow, so the thinnest shadows are a little lighter for it. The same occluder shadows a
+point the same way whether that point lies deep in a joint or near the top of the relief.</p>
+<p>The shadow reads the height map at a level of detail halfway between two. The finer is the
+detail a pixel resolves along the shadow's own direction, at which a stone gap a pixel wide across
+that direction keeps its whole shadow; the coarser is the detail across the whole pixel, at which a
+groove too fine to see rarely darkens a pixel on its own. Halfway is a trade between the two: gaps a
+few metres away keep most of their shadow, and a surface whose grooves are narrower than a pixel can
+keep some isolated dark pixels.</p>
+<p>How much of a surface the shadow darkens depends on the relief: a deep, narrow mortar
+joint shows a clear shadow under the default sun, while rounded cobbles at the default depth show
+little until the sun is low. Point, spot and area lights light the relief but are not shadowed by
+it.</p>
+
+<h3>Depth</h3>
+<p>Where the relief shifts the surface, the depth buffer holds the depth of the relief itself, not
+the flat polygon: a crate sunk into cobbles shows between the stones down to where the gaps carve
+below it, and its edge follows the stones instead of cutting a straight line across them. Temporal
+anti-aliasing reprojects the previous frame through that depth. Shadows stay on the polygon: the surface casts and receives the sun's shadow there,
+so the part of a sunk prop below the polygon sits in the polygon's shadow, a thin dark band along its
+base where it meets the relief. Nothing needs setting.</p>
+<p>The relief is carved below the polygon, so other geometry that meets the polygon at its edge stands
+above the carved surface there: a wall whose top is level with a roof's eave shows a thin line of its
+top along the eave. Keep the top of whatever a parallax surface rests on at least the relief depth
+below the surface's polygon where the two meet; a roof that sits on its walls rather than flush with
+their tops does so already.</p>
+
+<h3>Browsers and other WebGPU-class devices</h3>
+<p>These take a fixed, cheaper version: at most 12 steps, no refinement, no self-shadow, and the
+depth buffer keeps the flat polygon. Nothing needs setting; the same material works on both.</p>
+
+<h2>Cost</h2>
+
+<p id="cost">Parallax costs GPU time only where the relief marches or casts its self-shadow.
+On a current desktop GPU (a release build on an RTX 5080 at 3067 &times; 900
+with 4&times; MSAA), a view of height-mapped cobbles, bricks and roof tiles costs 0.01 to 0.07 ms more
+per frame seen from high above (0.014 ms from 53 m, 0.035 to 0.066 ms from 19 m), where most of the
+relief is under half a pixel, and about 0.1 ms at eye height beside a brick wall, whether the wall is
+seen at a slant or head on. A low sun, whose longer shadows the self-shadow follows further, keeps it
+near 0.1 ms. The browser arm, run on the same GPU, costs a little less. Materials without a height map cost what they did before.</p>
+<p>Writing the relief's depth (see Depth) adds the march to the depth prepass; the pass that draws the
+world then reads that depth instead of marching again. On the same GPU, with a cobbled floor filling the
+view from eye height beside a sunk crate, that adds about 0.15 ms per frame.</p>
+<p>The cost follows the pixels that march or cast a self-shadow and how far their relief shifts, so it
+grows with the resolution and with how much of the screen a close parallax surface covers. The steps
+view (below) shows where that is.</p>
+
+<h2>Limits</h2>
+<ul>
+  <li><b>Silhouettes stay straight.</b> The relief changes what a surface shows, not its outline:
+    the edge of a wall is the edge of its polygon.</li>
+  <li><b>Shadows meet the polygon, not the relief.</b> The sun's shadow of a crate falls on the flat
+    surface and the relief casts its outline from the polygon; the relief's own shadowing is the
+    self-shadow above.</li>
+  <li><b>Cut-outs</b> (Mask alpha) are decided at the undisplaced surface.</li>
+  <li><b>Animated meshes</b> march with their bind-pose tangents.</li>
+  <li><b>Relief keeps a few dark dots wherever a groove is narrower than a pixel.</b> At the default
+    depth that is a roof across a street, the far cobbles at a game camera, or an authored brick wall
+    seen head on a few metres away: a scattering of isolated dark pixels where the self-shadow falls
+    into a groove narrower than a pixel (see Self-shadow above). They do not travel with the surface:
+    as the camera moves they come and go from frame to frame, in lines along a roof's courses, a
+    twinkle that MSAA does not smooth and supersampling removes.</li>
+  <li><b>Relief Depth stops at 0.04.</b> The self-shadow follows its path in at most eight
+    samples, and a deeper relief casts a longer path. At 0.04 of a repeat a distant surface already
+    shows scattered dark dots where 0.02 shows none; deeper, the dots
+    multiply and a long shadow's edge breaks into steps near the camera. The row therefore goes no
+    deeper; a later version raises the cap (#2271). The cap is the inspector's: a material file that
+    carries a larger value (an import, a hand edit) renders as written until the row is touched.</li>
+  <li><b>MSAA does not smooth the self-shadow.</b> The shadow is worked out once per pixel, so under
+    MSAA without TAA its edges shimmer while the camera moves. The softened edge removes most of the
+    strong pops at a hard edge but keeps a faint crawl of a level or two; supersampling removes both.
+    TAA holds the edges steady.</li>
+</ul>
+
+<h2>Seeing what the march does</h2>
+<p>The <b>Parallax steps</b> view shows, in the Scene View, how many height samples each pixel of a
+height-mapped material took, the relief march's and the self-shadow's together, as a color at the
+brightness of the lit surface. Turn it on with the debug command <code>set_parallax_steps_view</code>
+(<code>node mcp/ge.mjs set_parallax_steps_view --enable</code>).</p>
+<table>
+  <thead><tr><th>Color</th><th>Samples</th><th>Typical of</th></tr></thead>
+  <tbody>
+    <tr><td><span style="color:#aaaaaa">&#9632;</span> gray</td><td>none</td><td>relief and shadow both under a pixel on screen: distant surfaces</td></tr>
+    <tr><td><span style="color:#5a8cff">&#9632;</span> blue</td><td>1 to 4</td><td>a self-shadow alone (a wall seen head on), or the shortest march</td></tr>
+    <tr><td><span style="color:#33d9e6">&#9632;</span> cyan</td><td>5 to 8</td><td>a short march, or a self-shadow with its full path</td></tr>
+    <tr><td><span style="color:#59e659">&#9632;</span> green</td><td>9 to 12</td><td>a surface a few metres away at a moderate angle</td></tr>
+    <tr><td><span style="color:#f2e640">&#9632;</span> yellow</td><td>13 to 16</td><td>the most the browser arm takes</td></tr>
+    <tr><td><span style="color:#ff8c26">&#9632;</span> orange</td><td>17 to 24</td><td>close surfaces seen at a slant</td></tr>
+    <tr><td><span style="color:#ff4040">&#9632;</span> red</td><td>25 to 53</td><td>close, grazing surfaces: 53 is the most a desktop pixel takes</td></tr>
+  </tbody>
+</table>
+<p>The colors keep their brightness under the view's exposure, but the sky's aerial perspective
+tints the far distance blue over them, so a distant band can read as blue that is really gray.
+To read bands exactly, capture the view's scene color target with <code>capture_resource</code> on
+a scene without a sky and take the palette color nearest each pixel's red, green and blue divided
+by their sum.</p>
+
+<h2>Changelog</h2>
+<ul>
+  <li><b>2026-09-30</b> — First version: the Height and Relief Depth rows (Relief Depth up to 0.04),
+    what the engine decides, cost, limits and the steps view.</li>
+  <li><b>2026-10-01</b> — The self-shadow's edge is softened by a share of each shadow's length; the
+    MSAA limit states what that changes in motion; the measured dot counts are withdrawn until they are
+    re-measured.</li>
+  <li><b>2026-10-01</b> — The depth buffer holds the relief's depth (Depth), with the band at a sunk
+    prop's base and the eave line it brings; shadows meet the polygon (Limits); its cost.</li>
+</ul>
+
+<hr>
+<p class="footer">Parallax materials · rendering · living document · last revised 2026-10-01</p>
+
+</div>
+</body>
+</html>

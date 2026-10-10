@@ -1,0 +1,112 @@
+/* In-canvas stand-in for a torn-off OS window, for hosts with one window.
+   Chrome is FloatingPanel.uxml; the frame's open state, position, size and
+   stacking order are per-instance and set by the control. */
+
+.floating-panel {
+	position: absolute;
+	flex-direction: column;
+	pointer-events: auto;
+	background-color: var(--ui_color_bg_panel);
+	border-width: 1px;
+	border-color: var(--ui_color_border);
+	border-radius: 8px;
+	overflow: visible;
+	box-shadow: var(--popup-shadow, 0 -1px 24px rgba(0, 0, 0, 0.45));
+	/* Same type scale as .dockspace. This frame is a sibling of the dock, not
+	   a descendant, so without this it inherits the engine initial 18px. */
+	font-size: var(--ui_font_size_base);
+	font-family: var(--ui_font_family);
+	color: var(--ui_color_text);
+}
+
+.floating-panel-titlebar {
+	display: flex;
+	flex-direction: row;
+	align-items: center;
+	height: 28px;
+	flex-shrink: 0;
+	padding-left: 10px;
+	padding-right: 6px;
+	gap: 6px;
+	background-color: var(--ui_color_bg_tabbar);
+	border-radius: 8px 8px 0 0;
+	cursor: move;
+	pointer-events: auto;
+}
+
+/* The hosted panel's tab icon, at title-bar size. `.no-tab-icons` in the
+   theme hides it with every other .dock-tab-icon. */
+.floating-panel-icon {
+	width: 15px;
+	height: 15px;
+	min-width: 15px;
+	min-height: 15px;
+	flex-shrink: 0;
+	pointer-events: none;
+	background-size: contain;
+	background-repeat: no-repeat;
+	background-position: center;
+	background-image-tint: #BFBFBF;
+}
+
+.floating-panel-icon-hidden {
+	display: none;
+}
+
+.floating-panel-title {
+	flex-grow: 1;
+	flex-shrink: 1;
+	min-width: 0;
+	color: var(--ui_color_text);
+	font-size: var(--ui_font_size_base);
+	pointer-events: none;
+}
+
+/* Type+class, not a bare class: Button.css styles `.button` at the same
+   specificity, so a lone `.floating-panel-close` would be decided by sheet
+   order. `.button.floating-panel-close` never matched at all — the element
+   carries the class, not a `button` class. */
+button.floating-panel-close {
+	width: 24px;
+	height: 24px;
+	min-width: 24px;
+	min-height: 24px;
+	padding: 0px;
+	flex-shrink: 0;
+	background-color: transparent;
+	border-width: 0px;
+	cursor: pointer;
+}
+
+.floating-panel-body {
+	display: flex;
+	flex-direction: column;
+	flex: 1 1 0%;
+	min-width: 0;
+	min-height: 0;
+	width: 100%;
+	height: 100%;
+	overflow: hidden;
+	/* Bottom only: the title bar owns the top corners. Scene/Game fill this
+	   box; keep the clip in CSS px so it does not track viewport size. */
+	border-radius: 0 0 8px 8px;
+}
+
+/* The Mount that shows the hosted panel; fills the body. */
+.floating-panel-mount {
+	display: flex;
+	flex-direction: column;
+	flex-grow: 1;
+	min-width: 0;
+	min-height: 0;
+}
+
+.floating-panel-resize {
+	position: absolute;
+	right: 0px;
+	bottom: 0px;
+	width: 14px;
+	height: 14px;
+	cursor: nwse-resize;
+	pointer-events: auto;
+}

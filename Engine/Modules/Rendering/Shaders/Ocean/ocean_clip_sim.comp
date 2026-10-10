@@ -1,0 +1,165 @@
+#version 450
+// Clip-surface bake. Writes, per texel of each camera-snapped clip LOD layer, the
+// surface clip state (1 = clipped/hole, 0 = solid water) accumulated from the
+// tagged clip sources (rectangular footprints) over a default clip state. Like the
+// flow bake, this is a closed-form evaluation — each texel maps to a fixed world
+// XZ via the shared cascade layout, and the clip state there is composed from
+// sources over the default — so no geometry pass is needed and it degrades to "the
+// default state everywhere" when nothing is tagged.
+//
+// The clip cascade has the foam cascade's resolution and base scale, its four
+// camera layers plus one anchored over all authored water, and snaps on its own
+// schedule: the surface samples it with this layout and discards where it
+// exceeds 0.5.
+
+#include "Ocean/ocean_cascade_common.glsl"
+
+layout(local_size_x = 8, local_size_y = 8, local_size_z = 1) in;
+
+// Must match kMaxOceanClipSources / kMaxOceanClipPolygons /
+// kMaxOceanClipPolygonPoints in Ocean/OceanTypes.h.
+const int GE_OCEAN_MAX_CLIP = 8;
+const int GE_OCEAN_MAX_CLIP_POLYGONS = 4;
+const int GE_OCEAN_MAX_CLIP_POLYGON_POINTS = 8;
+
+struct OceanClipSourceGPU
+{
+    vec4 OriginExtent; // xy = center XZ, zw = half-extent (X, Z)
+    vec4 ClipState;    // x = value, y = feather, z = encoded typed blend + 1
+};
+
+struct OceanClipPolygonGPU
+{
+    vec4 Meta;   // x = point count, y = clip value, z = inward feather meters
+    vec4 Bounds; // xy = min XZ, zw = max XZ
+    vec4 Points[GE_OCEAN_MAX_CLIP_POLYGON_POINTS]; // xy = world XZ
+};
+
+// std140 — must match OceanClipParamsGPU in Ocean/OceanTypes.h.
+layout(std140, set = 0, binding = 0) uniform OceanClipParams
+{
+    uint  uResolution;
+    uint  uLodCount;
+    uint  uSourceCount;
+    float uDefaultClippingState;
+
+    // Embedded OceanCascadeLayoutGPU: per-LOD vec4 (xy=origin, z=texel, w=scale)
+    // then a padded uint lane (LodCount + 3 pad).
+    vec4  uCascadeOriginScale[GE_OCEAN_LOD_CASCADES];
+    uvec4 uCascadeMeta; // x = LodCount
+
+    OceanClipSourceGPU uSources[GE_OCEAN_MAX_CLIP];
+    uvec4 uPolygonMeta; // x = polygon count
+    OceanClipPolygonGPU uPolygons[GE_OCEAN_MAX_CLIP_POLYGONS];
+};
+
+layout(set = 0, binding = 1, r8) uniform writeonly image2DArray uClipOut;
+
+float OceanSegmentDistance(vec2 p, vec2 a, vec2 b)
+{
+    vec2 ab = b - a;
+    float t = clamp(dot(p - a, ab) / max(dot(ab, ab), 1e-12), 0.0, 1.0);
+    return length(p - (a + ab * t));
+}
+
+float OceanPolygonWeight(vec2 p, OceanClipPolygonGPU poly)
+{
+    uint count = uint(clamp(poly.Meta.x, 0.0, float(GE_OCEAN_MAX_CLIP_POLYGON_POINTS)));
+    if (count < 3u)
+        return 0.0;
+    if (p.x < poly.Bounds.x || p.y < poly.Bounds.y || p.x > poly.Bounds.z || p.y > poly.Bounds.w)
+        return 0.0;
+
+    bool inside = false;
+    float minEdgeDist = 1e20;
+    vec2 prev = poly.Points[count - 1u].xy;
+    for (uint i = 0u; i < count; ++i)
+    {
+        vec2 curr = poly.Points[i].xy;
+        minEdgeDist = min(minEdgeDist, OceanSegmentDistance(p, curr, prev));
+        bool crosses = ((curr.y > p.y) != (prev.y > p.y));
+        float denom = prev.y - curr.y;
+        denom = abs(denom) < 1e-6 ? (denom < 0.0 ? -1e-6 : 1e-6) : denom;
+        float xAtY = (prev.x - curr.x) * (p.y - curr.y) / denom + curr.x;
+        if (crosses && p.x < xAtY)
+            inside = !inside;
+        prev = curr;
+    }
+    if (!inside)
+        return 0.0;
+
+    float feather = max(poly.Meta.z, 0.0);
+    if (feather <= 1e-3)
+        return 1.0;
+    return smoothstep(0.0, feather, minEdgeDist);
+}
+
+float OceanRectWeight(vec2 d, vec2 halfExtent, float feather)
+{
+    if (feather > 1e-3)
+    {
+        float insideDist = min(halfExtent.x - d.x, halfExtent.y - d.y);
+        return smoothstep(0.0, feather, insideDist);
+    }
+
+    vec2 edge = vec2(1.0) - smoothstep(0.7, 1.0, d / max(halfExtent, vec2(1e-3)));
+    return min(edge.x, edge.y);
+}
+
+float OceanComposeClip(float clip, bool defaultClipped, float sourceClip)
+{
+    return defaultClipped ? min(clip, sourceClip) : max(clip, sourceClip);
+}
+
+void main()
+{
+    const ivec3 id = ivec3(gl_GlobalInvocationID);
+    if (uint(id.x) >= uResolution || uint(id.y) >= uResolution || uint(id.z) >= uLodCount)
+        return;
+
+    const vec4 layer = uCascadeOriginScale[id.z];
+    const vec2 worldXZ = OceanCascadeTexelToWorld(id.xy, layer.xy, layer.z);
+
+    // Start at the default clip state. When default is solid water (0), clip
+    // sources use max so holes punch through. When default is clipped (1), sources
+    // use min so authored water bodies can restore water inside their footprint.
+    float clip = uDefaultClippingState;
+    bool defaultClipped = uDefaultClippingState >= 0.5;
+    uint count = min(uSourceCount, uint(GE_OCEAN_MAX_CLIP));
+    for (uint s = 0u; s < count; ++s)
+    {
+        OceanClipSourceGPU src = uSources[s];
+        vec2 d = abs(worldXZ - src.OriginExtent.xy);
+        if (d.x > src.OriginExtent.z || d.y > src.OriginExtent.w)
+            continue; // outside this source's footprint
+        float w = OceanRectWeight(d, src.OriginExtent.zw, src.ClipState.y);
+        if (src.ClipState.z <= 0.5)
+        {
+            float sourceClip = mix(uDefaultClippingState, src.ClipState.x, w);
+            clip = OceanComposeClip(clip, defaultClipped, sourceClip);
+        }
+        else
+        {
+            int mode = int(clamp(floor(src.ClipState.z - 0.5), 0.0, 4.0));
+            float combined = src.ClipState.x;
+            if (mode == 1) combined = clip + src.ClipState.x;
+            else if (mode == 2) combined = clip * src.ClipState.x;
+            else if (mode == 3) combined = min(clip, src.ClipState.x);
+            else if (mode == 4) combined = max(clip, src.ClipState.x);
+            clip = mix(clip, combined, w);
+        }
+    }
+
+    uint polygonCount = min(uPolygonMeta.x, uint(GE_OCEAN_MAX_CLIP_POLYGONS));
+    for (uint p = 0u; p < polygonCount; ++p)
+    {
+        OceanClipPolygonGPU poly = uPolygons[p];
+        float w = OceanPolygonWeight(worldXZ, poly);
+        if (w <= 0.0)
+            continue;
+        float sourceClip = mix(uDefaultClippingState, poly.Meta.y, w);
+        clip = OceanComposeClip(clip, defaultClipped, sourceClip);
+    }
+
+    imageStore(uClipOut, id, vec4(clip, 0.0, 0.0, 0.0));
+}

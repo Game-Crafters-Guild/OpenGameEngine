@@ -1,0 +1,33 @@
+#version 450
+
+// Stretches each channel of a baked noise texture to full [0,1] range using
+// the per-channel min/max the bake kernel recorded (upstream CSNormalize).
+// Resolution-agnostic via imageSize so the shape and detail textures share it.
+
+layout(local_size_x = 8, local_size_y = 8, local_size_z = 8) in;
+
+layout(set = 0, binding = 0, rgba16f) uniform image3D TargetTexture;
+
+layout(set = 0, binding = 1, std430) readonly buffer NoiseMinMaxBlock
+{
+    int minMax[8];
+} NoiseMinMax;
+
+const int kMinMaxAccuracy = 1 << 22;
+
+void main()
+{
+    ivec3 id = ivec3(gl_GlobalInvocationID.xyz);
+    if (any(greaterThanEqual(id, imageSize(TargetTexture))))
+        return;
+
+    vec4 noise = imageLoad(TargetTexture, id);
+    for (int channel = 0; channel < 4; ++channel)
+    {
+        float maxVal = float(NoiseMinMax.minMax[channel * 2 + 0]) / float(kMinMaxAccuracy);
+        float minVal = 1.0 - float(NoiseMinMax.minMax[channel * 2 + 1]) / float(kMinMaxAccuracy);
+        if (maxVal - minVal > 1e-5)
+            noise[channel] = (noise[channel] - minVal) / (maxVal - minVal);
+    }
+    imageStore(TargetTexture, id, noise);
+}

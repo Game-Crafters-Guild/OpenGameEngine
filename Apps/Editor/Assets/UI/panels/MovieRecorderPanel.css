@@ -1,0 +1,557 @@
+.movie-recorder-panel-scroll {
+    flex: 1 1 auto;
+    min-width: 0;
+    min-height: 0;
+    background-color: var(--ui_color_bg_panel);
+    overflow-x: hidden;
+    --ui_scrollbar_force_vertical: 1;
+}
+
+.movie-recorder-panel-scroll .scroll-content {
+    min-width: 0;
+}
+
+.movie-recorder-panel {
+    display: flex;
+    flex-direction: column;
+    flex: 0 0 auto;
+    min-width: 0;
+    background-color: var(--ui_color_bg_panel);
+    color: var(--ui_color_text);
+    overflow: visible;
+}
+
+.movie-recorder-settings-section {
+    flex-shrink: 0;
+    margin-bottom: 0;
+}
+
+.movie-recorder-settings.inspector-section-body {
+    padding: 8px 12px 7px 8px;
+    width: 100%;
+    max-width: 760px;
+    box-sizing: border-box;
+}
+
+.movie-recorder-settings .inspector-row {
+    flex-wrap: nowrap;
+    align-items: center;
+    width: 100%;
+    min-height: var(--inspector-row-height, 27px);
+}
+
+.movie-recorder-settings .inspector-label-cell {
+    flex: 0 0 60px;
+    width: 60px;
+    min-width: 0;
+    max-width: 60px;
+}
+
+.movie-recorder-settings-section.inspector-section:not(.inspector-section-transform) .movie-recorder-settings.inspector-section-body .inspector-row .inspector-label-cell {
+    flex: 0 0 60px;
+    width: 60px;
+    min-width: 0;
+    max-width: 60px;
+}
+
+.movie-recorder-settings .inspector-label {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.movie-recorder-settings .inspector-field {
+    display: flex;
+    flex: 0 0 300px;
+    flex-direction: row;
+    align-items: center;
+    gap: 8px;
+    min-width: 0;
+    width: 300px;
+    max-width: 300px;
+    margin-right: 0;
+}
+
+.movie-recorder-settings-section.inspector-section:not(.inspector-section-transform) .movie-recorder-settings.inspector-section-body .inspector-row .inspector-field {
+    flex: 0 0 300px;
+    width: 300px;
+    min-width: 0;
+    max-width: 300px;
+    margin-right: 0;
+}
+
+.movie-recorder-settings .movie-recorder-output-field-container {
+    flex: 1 1 0%;
+    width: auto;
+    max-width: none;
+}
+
+.movie-recorder-settings-section.inspector-section:not(.inspector-section-transform) .movie-recorder-settings.inspector-section-body .inspector-row .movie-recorder-output-field-container {
+    flex: 1 1 0%;
+    width: auto;
+    max-width: none;
+}
+
+.movie-recorder-settings .movie-recorder-action-row .inspector-field {
+    flex-basis: auto;
+    width: auto;
+    max-width: none;
+}
+
+.movie-recorder-settings-section.inspector-section:not(.inspector-section-transform) .movie-recorder-settings.inspector-section-body .movie-recorder-action-row .inspector-field {
+    flex: 0 0 auto;
+    width: auto;
+    max-width: none;
+}
+
+.movie-recorder-status-row .inspector-label-cell {
+    visibility: hidden;
+}
+
+.movie-recorder-settings .movie-recorder-status-row .movie-recorder-status-field {
+    flex: 0 0 300px;
+    width: 300px;
+    max-width: 300px;
+    justify-content: flex-start;
+}
+
+.movie-recorder-settings-section.inspector-section:not(.inspector-section-transform) .movie-recorder-settings.inspector-section-body .movie-recorder-status-row .movie-recorder-status-field {
+    flex: 0 0 300px;
+    width: 300px;
+    max-width: 300px;
+}
+
+.movie-recorder-settings .inspector-field > .dropdown {
+    flex: 0 0 260px;
+    width: 260px;
+    max-width: 260px;
+}
+
+.movie-recorder-settings .inspector-field > .float-field,
+.movie-recorder-settings .inspector-field > .int-field {
+    flex: 0 0 112px;
+    width: 112px;
+    max-width: 112px;
+}
+
+.movie-recorder-settings .inspector-field > .float-field TextInput,
+.movie-recorder-settings .inspector-field > .int-field TextInput {
+    width: 112px;
+    max-width: 112px;
+    box-sizing: border-box;
+}
+
+.movie-recorder-output-field {
+    flex-grow: 1;
+    flex-shrink: 1;
+    min-width: 160px;
+    height: var(--inspector-row-height, 27px);
+    min-height: var(--inspector-row-height, 27px);
+    max-height: var(--inspector-row-height, 27px);
+    overflow: hidden;
+}
+
+.movie-recorder-output-field TextInput {
+    padding: 6px 12px;
+    border-width: 1px;
+    border-radius: 6px;
+    border-color: transparent;
+    background-color: #202020;
+    height: var(--inspector-row-height, 27px);
+    min-height: var(--inspector-row-height, 27px);
+    max-height: var(--inspector-row-height, 27px);
+    width: 100%;
+    box-sizing: border-box;
+    overflow: hidden;
+}
+
+.movie-recorder-output-field:hover TextInput,
+.movie-recorder-output-field TextInput:focus {
+    border-color: var(--ui_color_accent);
+    color: #FFFFFF;
+}
+
+.movie-recorder-browse-button,
+button.movie-recorder-browse-button {
+    height: var(--inspector-row-height, 27px);
+    min-height: var(--inspector-row-height, 27px);
+    max-height: var(--inspector-row-height, 27px);
+    min-width: 72px;
+    padding-left: 10px;
+    padding-right: 10px;
+}
+
+.movie-recorder-record-button,
+button.movie-recorder-record-button,
+.movie-recorder-record-button.icon-button,
+button.movie-recorder-record-button.icon-button,
+.movie-recorder-record-button.record-icon,
+button.movie-recorder-record-button.record-icon {
+    width: 132px;
+    min-width: 132px;
+    max-width: 132px;
+    height: 44px;
+    min-height: 44px;
+    max-height: 44px;
+    padding: 10px 14px 10px 62px;
+    background-color: #2C2C2C !important;
+    background-position: 22px 50%;
+    background-size: 36px 36px;
+    background-repeat: no-repeat;
+    border-width: 1px !important;
+    border-style: solid !important;
+    border-color: #4E4E4E !important;
+    border-radius: 6px;
+    color: var(--ui_color_text_bright);
+    justify-content: flex-start;
+    text-align: left;
+    font-size: 14px;
+    opacity: 1.0;
+}
+
+.movie-recorder-record-button .button-text,
+button.movie-recorder-record-button .button-text {
+    line-height: normal;
+}
+
+.movie-recorder-record-button:hover,
+button.movie-recorder-record-button:hover,
+.movie-recorder-record-button.icon-button:hover,
+button.movie-recorder-record-button.icon-button:hover,
+.movie-recorder-record-button.record-icon:hover,
+button.movie-recorder-record-button.record-icon:hover,
+.movie-recorder-record-button.active,
+button.movie-recorder-record-button.active,
+.movie-recorder-record-button.record-icon.active,
+button.movie-recorder-record-button.record-icon.active {
+    opacity: 1.0;
+}
+
+.movie-recorder-record-button:hover,
+button.movie-recorder-record-button:hover,
+.movie-recorder-record-button.icon-button:hover,
+button.movie-recorder-record-button.icon-button:hover,
+.movie-recorder-record-button.record-icon:hover,
+button.movie-recorder-record-button.record-icon:hover {
+    background-color: #363636 !important;
+    border-color: #6A6A6A !important;
+    border-width: 1px !important;
+    border-style: solid !important;
+}
+
+.movie-recorder-record-button.active,
+button.movie-recorder-record-button.active,
+.movie-recorder-record-button.record-icon.active,
+button.movie-recorder-record-button.record-icon.active,
+.movie-recorder-panel .movie-recorder-record-button.icon-button.secondary.active,
+.movie-recorder-panel button.movie-recorder-record-button.icon-button.secondary.active,
+.movie-recorder-panel .movie-recorder-record-button.record-icon.secondary.active,
+.movie-recorder-panel button.movie-recorder-record-button.record-icon.secondary.active,
+.movie-recorder-panel .movie-recorder-record-button.record-icon:active,
+.movie-recorder-panel button.movie-recorder-record-button.record-icon:active,
+.movie-recorder-panel .movie-recorder-record-button.record-icon.pressed,
+.movie-recorder-panel button.movie-recorder-record-button.record-icon.pressed {
+    background-color: #3A2224 !important;
+    border-color: #B4434C !important;
+    border-width: 1px !important;
+    border-style: solid !important;
+    opacity: 1.0;
+}
+
+.movie-recorder-panel .movie-recorder-record-button.record-icon.active:hover,
+.movie-recorder-panel button.movie-recorder-record-button.record-icon.active:hover,
+.movie-recorder-panel .movie-recorder-record-button.record-icon.secondary.active:hover,
+.movie-recorder-panel button.movie-recorder-record-button.record-icon.secondary.active:hover {
+    background-color: #47282B !important;
+    border-color: #CC5962 !important;
+    border-width: 1px !important;
+    border-style: solid !important;
+}
+
+.movie-recorder-action-row .inspector-label-cell {
+    visibility: hidden;
+}
+
+.movie-recorder-status {
+    flex-shrink: 0;
+    margin-top: 0;
+    padding: 0;
+    width: 300px;
+    font-size: 13px;
+    color: var(--ui_color_text_dim);
+    opacity: 1.0;
+    text-align: left;
+    white-space: nowrap;
+}
+
+.movie-recorder-status.warning {
+    color: var(--ui_color_text_dim);
+    opacity: 1.0;
+}
+
+.movie-recorder-recent-header {
+    display: flex;
+    flex-shrink: 0;
+    flex-direction: row;
+    align-items: center;
+    justify-content: space-between;
+    min-height: 30px;
+    padding: 6px 12px;
+}
+
+.movie-recorder-section-title {
+    font-size: 12px;
+    font-weight: 600;
+}
+
+.movie-recorder-refresh-button {
+    background-image: url("editor:Icons/ResetReload.png");
+    background-image-tint: rgba(200, 200, 200, 1.0);
+    background-size: 16px 16px;
+    background-repeat: no-repeat;
+    background-position: center;
+    flex: 0 0 auto;
+    width: 22px;
+    height: 22px;
+    min-width: 22px;
+    min-height: 22px;
+    padding: 0;
+}
+
+.movie-recorder-refresh-button:hover,
+.movie-recorder-refresh-button:active {
+    background-image-tint: var(--ui_color_accent);
+}
+
+.movie-recorder-recent-scroll {
+    flex: 1 1 auto;
+    min-height: 0;
+    overflow: auto;
+    padding-right: 8px;
+    box-sizing: border-box;
+}
+
+.movie-recorder-recent-rows {
+    display: flex;
+    flex-direction: column;
+    min-width: 0;
+    padding-right: 28px;
+    padding-bottom: 10px;
+    box-sizing: border-box;
+}
+
+.movie-recorder-row {
+    display: flex;
+    flex-direction: row;
+    align-items: center;
+    gap: 6px;
+    min-height: 24px;
+    padding: 1px 8px;
+    box-sizing: border-box;
+    width: 100%;
+    min-width: 0;
+    overflow: hidden;
+    border-radius: 4px;
+}
+
+.movie-recorder-row:hover {
+    background-color: var(--ui_color_bg_hover_alt);
+}
+
+.movie-recorder-row.most-recent {
+    background-color: var(--ui_color_bg_hover_alt);
+}
+
+.movie-recorder-row.most-recent .movie-recorder-row-name {
+    font-weight: 600;
+}
+
+.movie-recorder-row-name {
+    flex: 1 1 0%;
+    width: 0;
+    min-width: 0;
+    font-size: 12px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.movie-recorder-row-meta {
+    width: 44px;
+    min-width: 44px;
+    max-width: 44px;
+    font-size: 11px;
+    opacity: 0.62;
+    text-align: right;
+    overflow: hidden;
+    white-space: nowrap;
+}
+
+.movie-recorder-row-actions {
+    display: flex;
+    flex: 0 0 78px;
+    flex-direction: row;
+    align-items: center;
+    justify-content: flex-start;
+    gap: 4px;
+    width: 78px;
+    min-width: 78px;
+    max-width: 78px;
+}
+
+.movie-recorder-row-button,
+button.movie-recorder-row-button {
+    flex-shrink: 0;
+    width: 20px;
+    min-width: 20px;
+    max-width: 20px;
+    height: 20px;
+    min-height: 20px;
+    max-height: 20px;
+    padding: 0;
+    box-sizing: border-box;
+    opacity: 0.35;
+    background-color: transparent;
+    border-width: 0;
+    border-style: none;
+    border-color: transparent;
+}
+
+.movie-recorder-row-button:hover,
+button.movie-recorder-row-button:hover,
+.movie-recorder-row-button:active,
+button.movie-recorder-row-button:active,
+.movie-recorder-row-button.pressed,
+button.movie-recorder-row-button.pressed {
+    opacity: 1.0;
+    background-color: transparent;
+}
+
+.movie-recorder-delete-button,
+button.movie-recorder-delete-button,
+.movie-recorder-delete-button.icon-button,
+button.movie-recorder-delete-button.icon-button {
+    background-image: url("editor:Icons/trash.png");
+    background-size: 16px 16px;
+    background-repeat: no-repeat;
+    background-position: center;
+    background-color: transparent;
+    border-width: 0;
+    border-style: none;
+    border-color: transparent;
+    opacity: 0.35;
+}
+
+.movie-recorder-delete-button:hover,
+button.movie-recorder-delete-button:hover,
+.movie-recorder-delete-button:active,
+button.movie-recorder-delete-button:active,
+.movie-recorder-delete-button.pressed,
+button.movie-recorder-delete-button.pressed,
+.movie-recorder-delete-button.icon-button:hover,
+button.movie-recorder-delete-button.icon-button:hover,
+.movie-recorder-delete-button.icon-button:active,
+button.movie-recorder-delete-button.icon-button:active,
+.movie-recorder-delete-button.icon-button.pressed,
+button.movie-recorder-delete-button.icon-button.pressed {
+    opacity: 1.0;
+    background-color: transparent;
+    border-color: transparent;
+}
+
+.movie-recorder-empty {
+    padding: 14px 12px;
+    font-size: 12px;
+    opacity: 0.58;
+}
+
+.settings-recording-panel {
+    display: flex;
+    flex-direction: column;
+    flex: 0 0 auto;
+    width: 100%;
+    min-width: 0;
+    background-color: transparent;
+}
+
+.settings-recording-content.movie-recorder-panel {
+    width: 100%;
+    background-color: transparent;
+}
+
+.settings-recording-content .movie-recorder-settings-section {
+}
+
+.settings-recording-content .movie-recorder-settings.inspector-section-body {
+    padding: 0;
+    max-width: none;
+}
+
+.settings-recording-content .movie-recorder-settings .inspector-label-cell,
+.settings-recording-content .movie-recorder-settings-section.inspector-section:not(.inspector-section-transform) .movie-recorder-settings.inspector-section-body .inspector-row .inspector-label-cell {
+    flex: 0 0 37%;
+    width: 37%;
+    min-width: 0;
+    max-width: 37%;
+    margin-left: 0;
+}
+
+.settings-recording-content .movie-recorder-settings .inspector-field,
+.settings-recording-content .movie-recorder-settings-section.inspector-section:not(.inspector-section-transform) .movie-recorder-settings.inspector-section-body .inspector-row .inspector-field {
+    flex: 1 1 0%;
+    width: auto;
+    min-width: 0;
+    max-width: none;
+}
+
+.settings-recording-content .movie-recorder-settings .inspector-field > .dropdown,
+.settings-recording-content .movie-recorder-settings .inspector-field > .float-field,
+.settings-recording-content .movie-recorder-settings .inspector-field > .int-field {
+    flex: 1 1 0%;
+    width: auto;
+    min-width: 0;
+    max-width: none;
+}
+
+.settings-recording-content .movie-recorder-settings .inspector-field > .float-field TextInput,
+.settings-recording-content .movie-recorder-settings .inspector-field > .int-field TextInput {
+    width: 100%;
+    min-width: 0;
+    max-width: none;
+    box-sizing: border-box;
+}
+
+.settings-content-pane-horizontal .settings-recording-content .movie-recorder-settings .inspector-label-cell,
+.settings-content-pane-horizontal .settings-recording-content .movie-recorder-settings-section.inspector-section:not(.inspector-section-transform) .movie-recorder-settings.inspector-section-body .inspector-row .inspector-label-cell {
+    max-width: 225px;
+}
+
+.settings-recording-content .movie-recorder-output-row .inspector-label-cell {
+    display: flex;
+    flex-direction: row;
+    align-items: center;
+    gap: var(--ui_spacing_sm);
+}
+
+.settings-recording-content .movie-recorder-output-row .inspector-label-cell > .inspector-label {
+    flex: 1 1 0%;
+    min-width: 0;
+}
+
+.settings-recording-content .movie-recorder-settings .movie-recorder-output-field-container,
+.settings-recording-content .movie-recorder-settings-section.inspector-section:not(.inspector-section-transform) .movie-recorder-settings.inspector-section-body .inspector-row .movie-recorder-output-field-container {
+    flex: 1 1 auto;
+    max-width: none;
+}
+
+.settings-recording-content .movie-recorder-status,
+.settings-recording-content .movie-recorder-settings .movie-recorder-status-row .movie-recorder-status-field,
+.settings-recording-content .movie-recorder-settings-section.inspector-section:not(.inspector-section-transform) .movie-recorder-settings.inspector-section-body .movie-recorder-status-row .movie-recorder-status-field {
+    width: auto;
+    max-width: none;
+}
+
+.settings-recording-content .movie-recorder-recent-header {
+    padding-left: var(--ui_spacing_md);
+    padding-right: var(--ui_spacing_md);
+}

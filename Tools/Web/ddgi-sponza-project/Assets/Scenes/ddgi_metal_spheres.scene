@@ -1,0 +1,190 @@
+[scene name="DdgiMetalSpheres" version=1]
+; P4 (dual reflection lobes) gate scene. Same closed 6x4x6 box and lighting as
+; ddgi_cornell_red.scene, but with a STRONGLY COLOURED left (red) and right
+; (blue) wall and three fully-metallic spheres in a row at roughness 0.1 / 0.4 /
+; 0.7 - one either side of, and one inside, the lobe crossfade band
+; (smoothstep(0.22, 0.58, roughness) in Includes/ibl.glsl). So one screenshot
+; shows all three regimes: pure glossy (power-64) lobe, the blend, and pure
+; rough (power-8) lobe.
+;
+; The walls are deliberately saturated and OPPOSITE in hue because that is what
+; makes the roughness difference measurable rather than merely visible: the
+; smooth sphere reflects a sharp, high-contrast red|blue split across its
+; midline, and the rough sphere reflects the same two colours smeared toward a
+; flat average. The metric is therefore the spatial CONTRAST of the R-B
+; difference across each sphere, which is exposure-invariant in the same way
+; ddgi_cornell_red.scene's chromaticity asymmetry is.
+;
+; Two traps this scene is authored around, both learned the hard way on the
+; sibling scenes - do not "simplify" either away:
+;
+; 1. EXPOSURE IS PINNED (exposureControl 0, exposure 1). Auto-exposure absorbed
+;    ~20x of a 60x deliberate light swing while ddgi_cornell_red.scene was being
+;    built and made genuinely different renders look near-identical for several
+;    seconds of adaptation. Any before/after capture needs exposure held.
+;
+; 2. EVERY texture/material reference binds by GUID in the registry, not by path
+;    alone - a { "path": ... } reference with no guid binds NOTHING, silently,
+;    anywhere in the engine (see the plan doc's P3 authoring-trap panel). These
+;    materials carry no textures, so the trap is not armed here, but it is armed
+;    the moment anyone adds one.
+;
+; Known interaction, NOT a defect of this scene: the DDGI software ray-trace
+; lane bakes ONE uber-material per GPU MESH, not per instance, so all three
+; spheres (one Sphere primitive, three instances) collapse to a single material
+; in the SW lane's view of the scene. That affects what the PROBES see when they
+; trace the spheres, not how each sphere is SHADED - the raster path uses each
+; instance's real material, and it is the raster-side roughness that selects the
+; lobe mix. The gate is therefore still valid. Tracked separately.
+
+[entity id="e_cam"]
+Camera.enabled = true
+Camera.fovY = 60
+Camera.nearZ = 0.05
+Camera.farZ = 100
+; Fixed, not Auto - see trap 1 above.
+Camera.exposureControl = 0
+Camera.exposure = 1
+Name.value = "Main Camera"
+Transform.position = (0, 1.6, -2.6)
+Transform.rotation = (0, 0, 0, 1)
+Transform.scale = (1, 1, 1)
+
+[entity id="e_sky"]
+SkyEnvironment.IblIntensity = 0.02
+SkyEnvironment.GradientSkyIntensity = 40
+SkyEnvironment.AutoSunMoon = false
+Name.value = "Sky"
+Transform.position = (0, 0, 0)
+Transform.rotation = (0, 0, 0, 1)
+Transform.scale = (1, 1, 1)
+
+[entity id="e_light"]
+Light.type = 1
+Light.color = (1, 0.98, 0.92)
+Light.intensity = 18
+Light.range = 12
+Light.castsShadows = true
+Name.value = "InteriorPointLight"
+Transform.position = (0, 3.6, 0)
+Transform.rotation = (0, 0, 0, 1)
+Transform.scale = (1, 1, 1)
+
+[entity id="e_wall_left"]
+; Plane rather than Cube, for the same per-mesh material-collapse reason
+; ddgi_cornell_red.scene documents: the coloured walls must keep distinct mesh
+; identities or the SW lane bakes them all as one colour.
+MeshRenderer.meshPrimitive = Plane
+MeshRenderer.material = [path="Materials/CornellRed.material"]
+MeshRenderer.renderLayerMask = 1
+MeshRenderer.receiveShadows = true
+Name.value = "WallLeftRed"
+Transform.position = (-3, 2, 0)
+Transform.rotation = (0, 0, -0.70710678, 0.70710678)
+Transform.scale = (4.4, 1, 6.4)
+
+[entity id="e_wall_right"]
+; PlaneSpriteUv: same XZ quad geometry as Plane but a DISTINCT mesh identity
+; (only its UVs differ), which is exactly what the per-mesh material collapse
+; needs. The engine's primitive set is Cube/Sphere/Capsule/Plane/PlaneSpriteUv
+; — there is no Quad, and naming one silently drops the entity and every field
+; parsed after it. Three identities is precisely enough here: red Plane, blue
+; PlaneSpriteUv, white Cubes.
+MeshRenderer.meshPrimitive = PlaneSpriteUv
+MeshRenderer.material = [path="Materials/CornellBlue.material"]
+MeshRenderer.renderLayerMask = 1
+MeshRenderer.receiveShadows = true
+Name.value = "WallRightBlue"
+Transform.position = (3, 2, 0)
+Transform.rotation = (0, 0, 0.70710678, 0.70710678)
+Transform.scale = (4.4, 1, 6.4)
+
+[entity id="e_wall_floor"]
+MeshRenderer.meshPrimitive = Cube
+MeshRenderer.material = [path="Materials/CornellWhite.material"]
+MeshRenderer.renderLayerMask = 1
+MeshRenderer.receiveShadows = true
+Name.value = "WallFloor"
+Transform.position = (0, -0.1, 0)
+Transform.rotation = (0, 0, 0, 1)
+Transform.scale = (6.4, 0.2, 6.4)
+
+[entity id="e_wall_ceiling"]
+MeshRenderer.meshPrimitive = Cube
+MeshRenderer.material = [path="Materials/CornellWhite.material"]
+MeshRenderer.renderLayerMask = 1
+MeshRenderer.receiveShadows = true
+Name.value = "WallCeiling"
+Transform.position = (0, 4.1, 0)
+Transform.rotation = (0, 0, 0, 1)
+Transform.scale = (6.4, 0.2, 6.4)
+
+[entity id="e_wall_back"]
+MeshRenderer.meshPrimitive = Cube
+MeshRenderer.material = [path="Materials/CornellWhite.material"]
+MeshRenderer.renderLayerMask = 1
+MeshRenderer.receiveShadows = true
+Name.value = "WallBack"
+Transform.position = (0, 2, 3.1)
+Transform.rotation = (0, 0, 0, 1)
+Transform.scale = (6.4, 4.4, 0.2)
+
+[entity id="e_wall_front"]
+MeshRenderer.meshPrimitive = Cube
+MeshRenderer.material = [path="Materials/CornellWhite.material"]
+MeshRenderer.renderLayerMask = 1
+MeshRenderer.receiveShadows = true
+Name.value = "WallFront"
+Transform.position = (0, 2, -3.1)
+Transform.rotation = (0, 0, 0, 1)
+Transform.scale = (6.4, 4.4, 0.2)
+
+; Three spheres, left to right, SMOOTH -> ROUGH. Spaced 1.8 apart at x =
+; -1.8 / 0 / 1.8 so each one's reflection is dominated by the wall it faces and
+; the three do not significantly reflect each other.
+[entity id="e_sphere_smooth"]
+MeshRenderer.meshPrimitive = Sphere
+MeshRenderer.material = [path="Materials/MetalSmooth.material"]
+MeshRenderer.renderLayerMask = 1
+MeshRenderer.receiveShadows = true
+Name.value = "SphereRough010"
+Transform.position = (-1.8, 1.2, 0.4)
+Transform.rotation = (0, 0, 0, 1)
+Transform.scale = (1.1, 1.1, 1.1)
+
+[entity id="e_sphere_mid"]
+MeshRenderer.meshPrimitive = Sphere
+MeshRenderer.material = [path="Materials/MetalMid.material"]
+MeshRenderer.renderLayerMask = 1
+MeshRenderer.receiveShadows = true
+Name.value = "SphereRough040"
+Transform.position = (0, 1.2, 0.4)
+Transform.rotation = (0, 0, 0, 1)
+Transform.scale = (1.1, 1.1, 1.1)
+
+[entity id="e_sphere_rough"]
+MeshRenderer.meshPrimitive = Sphere
+MeshRenderer.material = [path="Materials/MetalRough.material"]
+MeshRenderer.renderLayerMask = 1
+MeshRenderer.receiveShadows = true
+Name.value = "SphereRough070"
+Transform.position = (1.8, 1.2, 0.4)
+Transform.rotation = (0, 0, 0, 1)
+Transform.scale = (1.1, 1.1, 1.1)
+
+[entity id="e_ddgi"]
+DDGIVolume.Enabled = true
+DDGIVolume.ProbePlacement = 0
+DDGIVolume.ProbesLongAxis = 12
+DDGIVolume.RaysPerProbe = 128
+DDGIVolume.Intensity = 1.0
+DDGIVolume.BounceIntensity = 1.0
+DDGIVolume.RadianceClamp = 8.0
+DDGIVolume.Hysteresis = 0.6
+; The gate's subject. Flip EnableGlossy false for the byte-identity arm.
+DDGIVolume.EnableGlossy = true
+DDGIVolume.ReflectionIntensity = 1.0
+Name.value = "DDGIVolume"
+Transform.position = (0, 2, 0)
+Transform.rotation = (0, 0, 0, 1)
+Transform.scale = (5.6, 3.6, 5.6)

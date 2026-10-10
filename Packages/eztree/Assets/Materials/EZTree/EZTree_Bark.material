@@ -1,0 +1,24 @@
+{
+  "schemaVersion": 3,
+  "materialName": "Tree Generator Bark",
+  "lightingModel": "StandardPBR",
+  "alphaMode": "Opaque",
+  "doubleSided": true,
+  "textureFilter": "Trilinear",
+  "surfaceShader": "Surfaces/standard_pbr.glsl",
+  "vertexModifier": "VertexModifiers/ez_tree_wind.glsl",
+  "properties": {
+    "baseColor": [0.43, 0.29, 0.18, 1.0],
+    "roughness": 0.82,
+    "metallic": 0.0,
+    "emissive": [0.0, 0.0, 0.0],
+    "emissionLuminance": 203.0,
+    "ao": 1.0,
+    "opacity": 1.0
+  },
+  "textures": {
+    "albedoMap": "",
+    "normalMap": "",
+    "metallicRoughnessMap": ""
+  }
+}

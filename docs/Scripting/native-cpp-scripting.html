@@ -1,0 +1,438 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Native C++ Scripting — Developer Guide</title>
+<style>
+:root {
+  --bg: #0f1115;
+  --panel: #161a22;
+  --panel-2: #1c2230;
+  --border: #2a3142;
+  --text: #d8dee9;
+  --text-dim: #8a93a6;
+  --accent: #7aa2f7;
+  --accent-2: #9ece6a;
+  --warn: #e0af68;
+  --code-bg: #11141b;
+  --code-fg: #cdd6f4;
+  --keyword: #bb9af7;
+  --string: #9ece6a;
+  --comment: #565f89;
+  --type: #7dcfff;
+  --func: #7aa2f7;
+}
+* { box-sizing: border-box; }
+html { scroll-behavior: smooth; }
+body {
+  margin: 0;
+  background: var(--bg);
+  color: var(--text);
+  font: 15px/1.6 -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+}
+.layout { display: grid; grid-template-columns: 280px 1fr; min-height: 100vh; }
+nav.toc {
+  background: var(--panel);
+  border-right: 1px solid var(--border);
+  padding: 24px 18px;
+  position: sticky;
+  top: 0;
+  height: 100vh;
+  overflow-y: auto;
+}
+nav.toc h2 {
+  font-size: 11px;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--text-dim);
+  margin: 24px 0 6px;
+}
+nav.toc h2:first-child { margin-top: 0; }
+nav.toc a {
+  display: block;
+  padding: 4px 8px;
+  color: var(--text-dim);
+  text-decoration: none;
+  font-size: 13px;
+  border-radius: 4px;
+}
+nav.toc a:hover { background: var(--panel-2); color: var(--text); }
+nav.toc a.indent { padding-left: 20px; font-size: 12px; }
+main { max-width: 900px; margin: 0 auto; padding: 48px 56px; }
+h1 {
+  margin: 0 0 8px;
+  font-size: 32px;
+  color: var(--text);
+  letter-spacing: -0.01em;
+}
+h1 + .subtitle {
+  color: var(--text-dim);
+  font-size: 16px;
+  margin-bottom: 36px;
+}
+h2 {
+  margin: 56px 0 16px;
+  font-size: 24px;
+  color: var(--accent);
+  border-bottom: 1px solid var(--border);
+  padding-bottom: 8px;
+}
+h3 {
+  margin: 32px 0 12px;
+  font-size: 18px;
+  color: var(--accent-2);
+}
+h4 {
+  margin: 24px 0 8px;
+  font-size: 15px;
+  color: var(--text);
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+}
+p { margin: 12px 0; }
+code {
+  background: var(--code-bg);
+  color: var(--code-fg);
+  padding: 2px 6px;
+  border-radius: 4px;
+  font: 13px/1.4 "JetBrains Mono", "Cascadia Code", Menlo, Consolas, monospace;
+}
+pre {
+  background: var(--code-bg);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: 16px 20px;
+  overflow-x: auto;
+  font: 13px/1.55 "JetBrains Mono", "Cascadia Code", Menlo, Consolas, monospace;
+  color: var(--code-fg);
+}
+pre code { background: none; padding: 0; }
+.kw { color: var(--keyword); }
+.str { color: var(--string); }
+.com { color: var(--comment); font-style: italic; }
+.ty { color: var(--type); }
+.fn { color: var(--func); }
+.mac { color: var(--warn); }
+.callout {
+  border-left: 3px solid var(--accent);
+  background: var(--panel);
+  padding: 12px 18px;
+  margin: 16px 0;
+  border-radius: 0 6px 6px 0;
+}
+.callout.warn { border-color: var(--warn); }
+.callout.good { border-color: var(--accent-2); }
+.callout strong { color: var(--text); }
+table { border-collapse: collapse; width: 100%; margin: 16px 0; font-size: 14px; }
+th, td { padding: 10px 14px; text-align: left; border-bottom: 1px solid var(--border); }
+th { background: var(--panel); color: var(--text); font-weight: 600; }
+td.right { text-align: right; }
+ul, ol { margin: 12px 0; padding-left: 24px; }
+li { margin: 4px 0; }
+.phase-card {
+  background: var(--panel);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 20px 24px;
+  margin: 18px 0;
+}
+.phase-card .phase-label {
+  display: inline-block;
+  background: var(--panel-2);
+  color: var(--accent);
+  font-size: 11px;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  padding: 3px 10px;
+  border-radius: 12px;
+  margin-bottom: 8px;
+}
+.phase-card h3 { margin-top: 4px; }
+.step {
+  display: grid;
+  grid-template-columns: 40px 1fr;
+  gap: 16px;
+  margin: 24px 0;
+  align-items: start;
+}
+.step-num {
+  background: var(--panel-2);
+  color: var(--accent);
+  width: 32px;
+  height: 32px;
+  border-radius: 50%;
+  display: grid;
+  place-items: center;
+  font-weight: 600;
+  font-size: 14px;
+}
+.step-body h4 { margin-top: 0; }
+hr { border: none; border-top: 1px solid var(--border); margin: 48px 0; }
+.kbd {
+  font-family: "JetBrains Mono", Menlo, monospace;
+  background: var(--panel-2);
+  border: 1px solid var(--border);
+  border-bottom-width: 2px;
+  padding: 1px 6px;
+  border-radius: 4px;
+  font-size: 12px;
+}
+@media (max-width: 900px) {
+  .layout { grid-template-columns: 1fr; }
+  nav.toc { position: static; height: auto; }
+  main { padding: 24px; }
+}
+
+/* Roadmap */
+.progress-bar {
+  flex: 1;
+  min-width: 200px;
+  height: 8px;
+  background: var(--panel-2);
+  border-radius: 4px;
+  overflow: hidden;
+}
+.progress-bar > div {
+  height: 100%;
+  background: linear-gradient(90deg, var(--accent), var(--accent-2));
+  transition: width 0.3s;
+  width: 0%;
+}
+.progress-badge {
+  background: var(--panel-2);
+  color: var(--text-dim);
+  padding: 3px 10px;
+  border-radius: 12px;
+  font-size: 11px;
+  font-family: "JetBrains Mono", Menlo, monospace;
+}
+.progress-badge.complete { color: var(--accent-2); background: rgba(158, 206, 106, 0.08); }
+.phase-weeks {
+  font-size: 11px;
+  color: var(--text-dim);
+  font-family: "JetBrains Mono", Menlo, monospace;
+}
+details.commit {
+  margin: 6px 0;
+  border-left: 2px solid var(--border);
+  padding: 4px 14px;
+  background: var(--code-bg);
+  border-radius: 0 4px 4px 0;
+}
+details.commit[open] { border-left-color: var(--accent); }
+details.commit > summary {
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  list-style: none;
+  user-select: none;
+  font-size: 13px;
+  padding: 4px 0;
+}
+details.commit > summary::-webkit-details-marker { display: none; }
+details.commit > summary::before {
+  content: "▶";
+  display: inline-block;
+  width: 10px;
+  font-size: 9px;
+  color: var(--text-dim);
+  transition: transform 0.15s;
+}
+details.commit[open] > summary::before { transform: rotate(90deg); }
+.commit-id {
+  font-family: "JetBrains Mono", Menlo, monospace;
+  background: var(--panel-2);
+  padding: 1px 8px;
+  border-radius: 4px;
+  font-size: 11px;
+  color: var(--accent);
+}
+.commit-title { flex: 1; color: var(--text); }
+.commit-progress {
+  font-family: "JetBrains Mono", Menlo, monospace;
+  font-size: 11px;
+  color: var(--text-dim);
+}
+.commit-progress.complete { color: var(--accent-2); }
+ul.task-list {
+  margin: 10px 0 6px 22px;
+  padding: 0;
+  list-style: none;
+}
+ul.task-list li {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  padding: 3px 0;
+  font-size: 13.5px;
+  line-height: 1.5;
+}
+ul.task-list input[type="checkbox"] {
+  appearance: none;
+  -webkit-appearance: none;
+  width: 15px;
+  height: 15px;
+  border: 1.5px solid var(--border);
+  border-radius: 3px;
+  background: var(--bg);
+  margin-top: 3px;
+  flex-shrink: 0;
+  cursor: pointer;
+  position: relative;
+  transition: all 0.1s;
+}
+ul.task-list input[type="checkbox"]:hover { border-color: var(--accent); }
+ul.task-list input[type="checkbox"]:checked {
+  background: var(--accent-2);
+  border-color: var(--accent-2);
+}
+ul.task-list input[type="checkbox"]:checked::after {
+  content: "✓";
+  position: absolute;
+  top: -3px;
+  left: 1.5px;
+  color: var(--bg);
+  font-size: 12px;
+  font-weight: 700;
+}
+ul.task-list label { flex: 1; cursor: pointer; user-select: none; }
+ul.task-list input[type="checkbox"]:checked + label {
+  color: var(--text-dim);
+  text-decoration: line-through;
+  text-decoration-color: var(--border);
+}
+.acceptance {
+  margin: 8px 0 4px 22px;
+  padding: 8px 12px;
+  background: rgba(158, 206, 106, 0.06);
+  border-left: 2px solid var(--accent-2);
+  border-radius: 0 4px 4px 0;
+  font-size: 12.5px;
+  color: var(--text-dim);
+}
+.acceptance strong { color: var(--accent-2); font-size: 11px; text-transform: uppercase; letter-spacing: 0.08em; }
+</style>
+</head>
+<body>
+<div class="layout">
+<nav class="toc">
+<h2>Native C++ scripting</h2>
+<a href="#dx-overview">Overview</a>
+<a href="#dx-project">Project layout</a>
+<a href="#dx-component">Components</a>
+<a href="#dx-system">Systems</a>
+<a href="#dx-hotreload">Reloading</a>
+<a href="#dx-inspector">Editor extensions</a>
+<a href="#dx-player">Shipping</a>
+<a href="#dx-errors">Troubleshooting</a>
+</nav>
+<main>
+<h1>Native C++ Scripting</h1>
+<p class="subtitle">Author components and systems against the engine's C++ API.</p>
+<h2 id="dx-overview">Overview</h2>
+<p>Native project scripts compile into a separate user module against the staged SDK beside the editor. The SDK supplies the module entry points; component and system registration can be generated from headers. Keep the SDK, engine and user modules from the same build and configuration.</p>
+<h2 id="dx-project">Project layout</h2>
+<p>Put project headers and C++ sources under the project's <code>Assets</code> directory. The project module is named <code>UserScripts</code>. The editor generates its CMake project in <code>Assets/CMakeLists.txt</code>, builds under <code>.Cache/NativeScripts/build</code>, and loads versioned copies from <code>.Cache/NativeScripts/active</code>. Generated CMake content is owned by the generator and is overwritten when its inputs change.</p>
+<pre><code>MyGame/
+  Assets/
+    Scripts/
+      EnemyHealth.h
+      DamageSystem.h
+      DamageSystem.cpp
+    CMakeLists.txt                 # generated
+  .Cache/NativeScripts/
+    build/                        # generated build and cache record
+    active/                       # loaded module copies</code></pre>
+<p>Packages declare their own native modules. Each package module has a separate generated project, build directory and active directory in its writable derived cache. An Editor-kind module also links the EditorSDK. See the <a href="../Packages/package-data-model.html">package data model</a> for module declarations and source ownership.</p>
+<h2 id="dx-component">Your first component</h2>
+<p>For automatic registration, define the component in a <code>.h</code> or <code>.hpp</code> file and inherit the component tag:</p>
+<pre><code>#pragma once
+#include &lt;GameSDK/Component.h&gt;
+
+struct EnemyHealth : ECS::ComponentBase
+{
+    float Current = 100.0f;
+    float Maximum = 100.0f;
+};</code></pre>
+<p>The build scanner finds tagged components in headers and generates their registration. A tagged component defined only in a <code>.cpp</code> file is not scanned.</p>
+<h3 id="dx-markers">Marker comments</h3>
+<p>A component the component scanner registers takes marker comments that change how the editor and the build treat it: the engine's own components, and a component a game declares in a header as <code>struct EnemyHealth : ECS::ComponentBase</code> (<code>GameSDK/Component.h</code>). A marker is a <code>//</code> line comment. A struct marker sits on the line of the <code>struct</code> or in the comment lines directly above it; a field marker sits on the field's line or directly above it. Text after the marker is free.</p>
+<pre><code>#include &lt;GameSDK/Component.h&gt;
+
+<span class="com">// Where the designer marked a spawn: drawn by an editor gizmo, never shipped.</span>
+<span class="com">// @ge-no-add        added by the spawn tool, not from the Add Component menu</span>
+<span class="com">// @ge-editor-only</span>
+<span class="kw">struct</span> <span class="ty">SpawnHint</span> : ECS::ComponentBase {
+    <span class="kw">float</span> Radius = 2.0f;      <span class="com">// @ge-range 0.5 50</span>
+    <span class="kw">int</span>   PlacedBy = 0;       <span class="com">// @ge-readonly</span>
+    <span class="kw">float</span> Weight = 1.0f;      <span class="com">// @ge-tooltip "Relative chance against the other hints"</span>
+};</code></pre>
+<table>
+  <tr><th>Marker</th><th>On</th><th>Effect</th></tr>
+  <tr><td><code>@ge-no-add</code></td><td>struct</td><td>The component registers, loads and saves as usual but stays out of the Add Component menu. Use it for a component a tool or a system adds, where a hand-added one would be wrong.</td></tr>
+  <tr><td><code>@ge-editor-only</code></td><td>struct</td><td>The component loads, saves and shows in the editor as usual. A game export removes its lines from every scene and blueprint it ships, so the shipped scene has no trace of it. The entity stays, with its other components and its children. Use it for annotations only the editor reads.</td></tr>
+  <tr><td><code>[DoNotSerialize]</code></td><td>struct or field</td><td>Never saved or loaded: runtime state rebuilt every session. On a field, only that field.</td></tr>
+  <tr><td><code>@ge-readonly</code></td><td>field</td><td>Shown in the inspector, not editable there.</td></tr>
+  <tr><td><code>@ge-hidden</code></td><td>field</td><td>Not shown in the inspector.</td></tr>
+  <tr><td><code>@ge-tooltip Text</code></td><td>field</td><td>The inspector's tooltip for the field; the text may be quoted.</td></tr>
+  <tr><td><code>@ge-range Min [Max]</code></td><td>float field</td><td>The inspector clamps edits to the range; without <code>Max</code> the range is open above.</td></tr>
+</table>
+
+<h3 id="dx-explicit">Explicit registration</h3>
+<p>When explicit registration is needed, include <code>GameSDK/GameSDK.h</code> and list the fields in <code>GE_REGISTER_COMPONENT</code>. This also works in a C++ source file:</p>
+<pre><code>#include &lt;GameSDK/GameSDK.h&gt;
+
+struct EnemyHealth
+{
+    float Current = 100.0f;
+    float Maximum = 100.0f;
+};
+GE_REGISTER_COMPONENT(EnemyHealth, Current, Maximum);</code></pre>
+<p>These are alternative declarations of the same example; use one registration path for a type.</p>
+<h2 id="dx-system">Adding a system</h2>
+<p>Define a native system in a header with <code>GameSDK/System.h</code>. The scanner generates its registration from the <code>ECS::SystemBase</code> base:</p>
+<pre><code>#pragma once
+#include &lt;GameSDK/System.h&gt;
+#include "EnemyHealth.h"
+
+struct DamageSystem : ECS::SystemBase
+{
+    void OnUpdate(ECS::World&amp; world, float dt)
+    {
+        world.Query&lt;ECS::Write&lt;EnemyHealth&gt;&gt;().Each(
+            [dt](ECS::EntityHandle, EnemyHealth&amp; health)
+            {
+                health.Current -= dt;
+                if (health.Current &lt; 0.0f)
+                    health.Current = 0.0f;
+            });
+    }
+};</code></pre>
+<p><code>OnStart</code>, <code>OnUpdate</code>, <code>OnPostSimulation</code> and <code>OnDestroy</code> are optional hooks. Their ordering and permitted world access are defined in <a href="native-user-systems.html">Native User Systems</a>. Use that contract when choosing between gameplay before simulation and presentation after simulation.</p>
+<h2 id="dx-hotreload">Reloading</h2>
+<p>The native script manager watches source changes and rebuilds the affected module. Build output and errors are reported through the editor's log. It validates the candidate module's ABI and toolchain fingerprint before accepting it. A failed build is not a successful reload: read the diagnostic before continuing.</p>
+<p>Build duration depends on the source and toolchain. Component data restoration and module replacement have failure paths; keep authored scenes saved rather than relying on a reload to preserve every live change.</p>
+<h3 id="dx-playmode">Play mode</h3>
+<p>User systems start when Play begins and stop when Play ends. <code>OnUpdate</code> runs before the engine simulation; <code>OnPostSimulation</code> runs later in the scheduled frame. See <a href="native-user-systems.html">the lifecycle guide</a> for delivery, pause and reset behavior.</p>
+<h2 id="dx-inspector">Editor extensions</h2>
+<p id="dx-gizmo">Custom inspectors and gizmos use the editor's registries from an Editor-kind package module. A folder named <code>Editor</code> inside project scripts does not by itself declare a separate EditorSDK module. See <a href="../Packages/package-data-model.html">package module kinds</a> and the <a href="../EDITOR_DEV_GUIDELINES.md">editor development guidelines</a> before adding editor-only dependencies.</p>
+<p id="dx-hud">For game UI, use the engine's UI API and authored UXML/CSS. See <a href="../game-ui-scaling.html">game UI scaling</a> for the canvas and layout contract.</p>
+<h2 id="dx-player">Shipping a Player build</h2>
+<p>Export from the editor's <a href="../GamePublishing.html">game publishing workflow</a>. The export stages compatible prebuilt runtime modules and their load records; the shipped Player loads those modules without a compiler. Editor-kind modules do not ship.</p>
+<p>The native gameplay module and the Player application have distinct source ownership. See <a href="../desktop-player-source-ownership.html">Desktop Player source ownership</a> before adding a custom application entry point.</p>
+<h2 id="dx-ide">IDE integration</h2>
+<p>The generated CMake project carries the SDK include directories, import libraries and compile definitions. Engine-driven configuration passes the current <code>GAMEENGINE_SDK_DIR</code>; the generated file's baked path is a last-known-good IDE default. Let the editor regenerate the project after changing engine installations.</p>
+<h2 id="dx-errors">When things go wrong</h2>
+<ul>
+<li><strong>No native scripting:</strong> check that the staged SDK manifest is present beside the editor and that the build log reports a usable toolchain.</li>
+<li><strong>A component does not register:</strong> put its tagged declaration in a header, or use explicit registration with the field list.</li>
+<li><strong>A module is refused:</strong> rebuild it against the matching engine and configuration. An ABI or fingerprint mismatch is not bypassed.</li>
+<li><strong>A build fails:</strong> inspect the compiler output under <code>.Cache/NativeScripts/build</code> and the editor log.</li>
+</ul>
+<h2>Changelog</h2>
+<p>2026-10-08: use the implemented GameSDK headers, registration paths, lifecycle hooks and generated build layout; link the canonical package and publishing guides.</p>
+</main>
+</div>
+</body>
+</html>

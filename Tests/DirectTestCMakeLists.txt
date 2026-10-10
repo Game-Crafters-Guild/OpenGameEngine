@@ -1,0 +1,30 @@
+cmake_minimum_required(VERSION 3.20)
+
+# Direct Hot-Reload Performance Test
+project(DirectHotReloadTest LANGUAGES CXX)
+
+# Set C++ standard
+set(CMAKE_CXX_STANDARD 20)
+set(CMAKE_CXX_STANDARD_REQUIRED ON)
+
+# Add executable
+add_executable(DirectHotReloadTest
+    DirectHotReloadTest.cpp
+)
+
+# Include directories
+target_include_directories(DirectHotReloadTest PRIVATE
+    ../Engine/Include
+    ../AssetCore/Include
+)
+
+# Link libraries
+target_link_libraries(DirectHotReloadTest PRIVATE
+    Engine
+    AssetCore
+)
+
+# Set output directory
+set_target_properties(DirectHotReloadTest PROPERTIES
+    RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}/bin/${CMAKE_BUILD_TYPE}"
+)

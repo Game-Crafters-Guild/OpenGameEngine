@@ -1,0 +1,53 @@
+#version 450
+
+// Test-only probe for the visible sun disc (SunDiscRadianceTests).
+//
+// The property under test is energy conservation: the drawn profile, scaled by the peak
+// radiance the sky pass gives it, must integrate over the sphere to exactly the sun's
+// irradiance. That is a statement about the shipped GLSL — GE_SunDiscProfile and
+// GE_SunDiscDrawnSolidAngle have to agree with each other, and a CPU re-implementation of
+// the pair would prove its own arithmetic rather than theirs. So the profile is evaluated
+// HERE, on the device, and the CPU only sums what comes back.
+//
+// Dispatched with sampleCount + 1 invocations: invocation i < sampleCount evaluates the
+// profile at the midpoint of the i-th annulus of a uniform theta sweep, and invocation
+// sampleCount reports the scalars (closed-form solid angle, clamped peak, unclamped peak).
+
+#include "Includes/sun_disc.glsl"
+
+layout(local_size_x = 64) in;
+
+layout(set = 0, binding = 0) buffer ProbeOut { vec4 result[]; } uOut;
+
+layout(push_constant) uniform ProbePC
+{
+    // x = sun irradiance, y = drawn angular radius (rad), z = sky exposure scale,
+    // w = profile sample count.
+    vec4 discParams;
+    // x = the theta the sweep runs out to (rad); yzw unused.
+    vec4 sweepParams;
+} pc;
+
+void main()
+{
+    uint i = gl_GlobalInvocationID.x;
+    uint count = uint(pc.discParams.w);
+    if (i > count)
+        return;
+
+    float radius = pc.discParams.y;
+
+    if (i == count)
+    {
+        float solidAngle = GE_SunDiscDrawnSolidAngle(radius);
+        uOut.result[i] = vec4(solidAngle,
+                              GE_SunDiscPeakRadiance(pc.discParams.x, radius, pc.discParams.z),
+                              pc.discParams.x / solidAngle,
+                              GE_SUN_DISC_MAX_STORED_RADIANCE);
+        return;
+    }
+
+    float dTheta = pc.sweepParams.x / float(count);
+    float theta = (float(i) + 0.5) * dTheta;
+    uOut.result[i] = vec4(theta, GE_SunDiscProfile(theta, radius), dTheta, 0.0);
+}

@@ -1,0 +1,26 @@
+{
+  "schemaVersion": 3,
+  "materialName": "Volumetric Six-Axis (dual half-space)",
+  "lightingModel": "Unlit",
+  "alphaMode": "Blend",
+  "doubleSided": true,
+  "textureFilter": "Point",
+  "surfaceShader": "Surfaces/volumetric_six_axis.glsl",
+  "properties": {
+    "baseColor": [1.0, 1.0, 1.0, 1.0],
+    "opacity": 1.0,
+    "sixAxisScatter": 1.0,
+    "sixAxisTeaOcclusionBlend": 1.0,
+    "sixAxisEmissiveScale": 1.0,
+    "sixAxisDensityScale": 0.0,
+    "flipbookColumns": 1.0,
+    "flipbookRows": 1.0,
+    "flipbookFps": 0.0,
+    "flipbookStartFrame": 0.0
+  },
+  "textures": {
+    "albedoMap": "",
+    "normalMap": "",
+    "metallicRoughnessMap": ""
+  }
+}

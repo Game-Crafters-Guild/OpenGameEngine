@@ -1,0 +1,70 @@
+/* Which image each dropdown option icon class means.
+ *
+ * Sole authority for the option artwork: a field declares the class beside the
+ * option's value and label (Dropdown::Option::iconClass, EnumEntry::iconClass)
+ * and the cascade paints it. Nothing in C++ names an image file. No dropdown
+ * host reads these rules back today; one that had to — a platform menu, whose
+ * rows the cascade cannot reach — could, the way the panel launcher already
+ * does, through UIStyleQuery::ResolveClassBackgroundImageUrl.
+ *
+ * One stem per option: the class is `dropdown-icon--<stem>` and the file is
+ * `<stem>.svg`, so the mapping needs no lookup. The slot's size, spacing and
+ * tint live with the control in widgets.css (.dropdown-header-icon,
+ * .dropdown-item-icon) — this file carries only what differs per option, which
+ * is the image.
+ *
+ * DropdownOptionIconsTests asserts every class declared by a shipped field has
+ * a rule here, that every rule names a file that exists, and that the stem on
+ * both sides of a rule is the same. */
+
+.dropdown-icon--light-directional {
+	background-image: url("editor:Icons/Dropdown/light-directional.svg");
+}
+
+.dropdown-icon--light-point {
+	background-image: url("editor:Icons/Dropdown/light-point.svg");
+}
+
+.dropdown-icon--light-spot {
+	background-image: url("editor:Icons/Dropdown/light-spot.svg");
+}
+
+.dropdown-icon--light-ambient {
+	background-image: url("editor:Icons/Dropdown/light-ambient.svg");
+}
+
+.dropdown-icon--light-area {
+	background-image: url("editor:Icons/Dropdown/light-area.svg");
+}
+
+.dropdown-icon--shape-rectangle {
+	background-image: url("editor:Icons/Dropdown/shape-rectangle.svg");
+}
+
+.dropdown-icon--shape-disc {
+	background-image: url("editor:Icons/Dropdown/shape-disc.svg");
+}
+
+.dropdown-icon--shape-sphere {
+	background-image: url("editor:Icons/Dropdown/shape-sphere.svg");
+}
+
+.dropdown-icon--shape-cylinder {
+	background-image: url("editor:Icons/Dropdown/shape-cylinder.svg");
+}
+
+.dropdown-icon--exposure-fixed {
+	background-image: url("editor:Icons/Dropdown/exposure-fixed.svg");
+}
+
+.dropdown-icon--exposure-manual {
+	background-image: url("editor:Icons/Dropdown/exposure-manual.svg");
+}
+
+.dropdown-icon--exposure-physical {
+	background-image: url("editor:Icons/Dropdown/exposure-physical.svg");
+}
+
+.dropdown-icon--exposure-auto {
+	background-image: url("editor:Icons/Dropdown/exposure-auto.svg");
+}

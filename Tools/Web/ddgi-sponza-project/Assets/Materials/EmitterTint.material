@@ -1,0 +1,15 @@
+{
+  "schemaVersion": 3,
+  "materialName": "EmitterTint",
+  "lightingModel": "StandardPBR",
+  "alphaMode": "Opaque",
+  "doubleSided": true,
+  "surfaceShader": "Surfaces/standard_pbr.glsl",
+  "properties": {
+    "baseColor": [0.0, 0.0, 0.0, 1.0],
+    "metallic": 0.0,
+    "roughness": 1.0,
+    "emissive": [1.0, 0.35, 0.1],
+    "emissionLuminance": 600.0
+  }
+}

@@ -1,0 +1,12 @@
+{
+  "name": "smoke_idle",
+  "windowIndex": 0,
+  "minFrames": 60,
+  "probe": {
+    "scrollViewUnderId": "dock"
+  },
+  "events": [
+    { "frame": 0, "type": "mouseMove", "target": { "kind": "elementId", "id": "dock", "relX": 0.5, "relY": 0.5 } }
+  ]
+}
+

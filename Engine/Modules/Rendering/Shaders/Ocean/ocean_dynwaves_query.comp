@@ -1,0 +1,61 @@
+#version 450
+
+#include "Includes/storage_access.glsl"
+// Bake a CPU-readable tile of the dynamic-wave height cascade. The visible
+// surface samples uOceanDynWaves directly; this pass uses the same
+// finest-contained-LOD selection and writes raw height to a host-visible buffer
+// so SampleSurface() can include interactive ripples a few frames late.
+
+#include "Ocean/ocean_cascade_common.glsl"
+
+layout(local_size_x = 8, local_size_y = 8, local_size_z = 1) in;
+
+// std140 — must match OceanDynWavesQueryParamsGPU in OceanDynWavesReadback.cpp.
+layout(std140, set = 0, binding = 0) uniform OceanDynWavesQueryParams
+{
+    uint  uResolution;
+    uint  uDynLodCount;
+    float uOriginX;
+    float uOriginZ;
+
+    float uTexelSize;
+    float uPad0;
+    float uPad1;
+    float uPad2;
+
+    vec4  uCascadeOriginScale[GE_OCEAN_LOD_CASCADES];
+    uvec4 uCascadeMeta;
+};
+
+layout(set = 0, binding = 1) uniform sampler2DArray uDynWaves;
+layout(std430, set = 0, binding = 2) GE_STORAGE_WRITEONLY buffer DynHeights { float uHeights[]; };
+
+float SampleDynWaveHeight(vec2 worldXZ)
+{
+    uint lodCount = min(min(uDynLodCount, uCascadeMeta.x), uint(GE_OCEAN_LOD_CASCADES));
+    if (lodCount == 0u)
+        return 0.0;
+
+    float res = float(textureSize(uDynWaves, 0).x);
+    for (uint lod = 0u; lod < lodCount; ++lod)
+    {
+        vec4 layer = uCascadeOriginScale[lod];
+        vec2 uv = OceanCascadeUV(worldXZ, layer.xy, layer.z, res);
+        if (all(greaterThanEqual(uv, vec2(0.04))) && all(lessThanEqual(uv, vec2(0.96))))
+            return textureLod(uDynWaves, vec3(uv, float(lod)), 0.0).r;
+    }
+
+    vec4 coarse = uCascadeOriginScale[lodCount - 1u];
+    vec2 uv = OceanCascadeUV(worldXZ, coarse.xy, coarse.z, res);
+    return textureLod(uDynWaves, vec3(clamp(uv, 0.0, 1.0), float(lodCount - 1u)), 0.0).r;
+}
+
+void main()
+{
+    const uvec2 id = gl_GlobalInvocationID.xy;
+    if (id.x >= uResolution || id.y >= uResolution)
+        return;
+
+    const vec2 worldXZ = vec2(uOriginX, uOriginZ) + (vec2(id) + 0.5) * uTexelSize;
+    uHeights[id.y * uResolution + id.x] = SampleDynWaveHeight(worldXZ);
+}

@@ -1,0 +1,71 @@
+{
+  "name": "repro_assets_split_drag_grid_scrollbar_drag",
+  "windowIndex": 0,
+  "minFrames": 220,
+  "probe": {
+    "gridViewUnderId": "assets-grid",
+    "scrollViewUnderId": "assets-grid",
+    "scrollbarVUnderId": "assets-grid",
+    "visualPatchElementIds": { "enabled": true, "max": 16 }
+  },
+  "asserts": [
+    {
+      "kind": "gridViewUpdatesDuringCapture",
+      "gridViewUnderId": "assets-grid",
+      "frameStart": 152,
+      "frameEnd": 156
+    },
+    {
+      "kind": "paintOffsetsMatch",
+      "elementId": "assets-grid",
+      "requiredClass": "grid-cell",
+      "frameStart": 152,
+      "frameEnd": 156,
+      "maxMismatchCount": 0
+    },
+    {
+      "kind": "visibleTextNotFullyClipped",
+      "subtreeId": "assets-grid",
+      "scrollViewUnderId": "assets-grid",
+      "requiredClasses": ["grid-title"],
+      "frameStart": 90,
+      "frameEnd": 200,
+      "minVisiblePx": 2.0,
+      "maxChecks": 1500
+    },
+    {
+      "kind": "visibleTextNotFullyClipped",
+      "subtreeId": "assets-grid",
+      "scrollViewUnderId": "assets-grid",
+      "requiredClasses": ["grid-cell"],
+      "frameStart": 90,
+      "frameEnd": 200,
+      "minVisiblePx": 2.0,
+      "maxChecks": 1500
+    }
+  ],
+  "events": [
+    { "frame": 2, "type": "mouseMove", "target": { "kind": "elementId", "id": "tab:Assets", "relX": 0.5, "relY": 0.5 } },
+    { "frame": 3, "type": "mouseDown", "button": 0 },
+    { "frame": 4, "type": "mouseUp", "button": 0 },
+
+    { "frame": 60, "type": "mouseMove", "target": { "kind": "elementId", "id": "assets-splitter", "relX": 0.5, "relY": 0.5 } },
+    { "frame": 61, "type": "mouseDown", "button": 0 },
+    { "frame": 62, "type": "mouseMove", "dx": 250.0, "dy": 0.0 },
+    { "frame": 63, "type": "mouseMove", "dx": -350.0, "dy": 0.0 },
+    { "frame": 64, "type": "mouseUp", "button": 0 },
+
+    { "frame": 90, "type": "mouseMove", "target": { "kind": "elementId", "id": "assets-grid", "relX": 0.5, "relY": 0.5 } },
+    { "frame": 91, "type": "keyDown", "key": 341, "mods": 2 },
+    { "frame": 92, "type": "scroll", "dx": 0.0, "dy": 700.0 },
+    { "frame": 93, "type": "keyUp", "key": 341, "mods": 0 },
+
+    { "frame": 150, "type": "mouseMove", "target": { "kind": "scrollbarVUnderId", "underId": "assets-grid", "relX": 0.5, "relY": 0.8 } },
+    { "frame": 152, "type": "mouseDown", "button": 0 },
+    { "frame": 153, "type": "mouseMove", "dx": 0.0, "dy": 200.0 },
+    { "frame": 154, "type": "mouseMove", "dx": 0.0, "dy": 200.0 },
+    { "frame": 155, "type": "mouseMove", "dx": 0.0, "dy": 200.0 },
+    { "frame": 156, "type": "mouseUp", "button": 0 }
+  ]
+}
+

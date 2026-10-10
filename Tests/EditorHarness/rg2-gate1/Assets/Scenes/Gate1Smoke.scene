@@ -1,0 +1,79 @@
+[scene name="Gate1Smoke" version=1]
+; Minimal RG2 gate-1 smoke scene: camera + sun (shadow caster) + ambient +
+; sky + ground + two cubes. Exercises the cutover path's world render,
+; cascades, sky backdrop, and the post-FX chain stitches.
+
+[entity id="e_1001"]
+Camera.Enabled = true
+Camera.Perspective = true
+Camera.FovY = 60
+Camera.NearZ = 0.1
+Camera.FarZ = 200
+Name.value = "Camera"
+Transform.position = (0, 3, -8)
+Transform.rotation = (0.13, 0, 0, 0.9915)
+Transform.scale = (1, 1, 1)
+
+
+[entity id="e_1002"]
+Light.type = 0
+Light.color = (1, 0.96, 0.9)
+Light.intensity = 2
+Light.castsShadows = true
+Light.cascadeCount = 4
+Name.value = "Sun"
+Transform.position = (0, 10, 0)
+Transform.rotation = (0.354, -0.146, 0.354, 0.854)
+Transform.scale = (1, 1, 1)
+
+
+[entity id="e_1003"]
+Light.type = 3
+Light.color = (0.6, 0.65, 0.75)
+Light.intensity = 0.35
+Name.value = "Ambient"
+Transform.position = (0, 0, 0)
+Transform.rotation = (0, 0, 0, 1)
+Transform.scale = (1, 1, 1)
+
+
+[entity id="e_1004"]
+SkyEnvironment.TimeOfDayHours = 14
+SkyEnvironment.AutoSunMoon = false
+Name.value = "Sky"
+Transform.position = (0, 0, 0)
+Transform.rotation = (0, 0, 0, 1)
+Transform.scale = (1, 1, 1)
+
+
+[entity id="e_1010"]
+MeshRenderer.meshPrimitive = Plane
+MeshRenderer.renderLayerMask = 1
+MeshRenderer.castShadows = false
+MeshRenderer.receiveShadows = true
+Name.value = "Ground"
+Transform.position = (0, 0, 0)
+Transform.rotation = (0, 0, 0, 1)
+Transform.scale = (40, 1, 40)
+
+
+[entity id="e_1011"]
+MeshRenderer.meshPrimitive = Cube
+MeshRenderer.renderLayerMask = 1
+MeshRenderer.castShadows = true
+MeshRenderer.receiveShadows = true
+Name.value = "CubeA"
+Transform.position = (-1.5, 1, 0)
+Transform.rotation = (0, 0.2, 0, 0.98)
+Transform.scale = (1, 2, 1)
+
+
+[entity id="e_1012"]
+MeshRenderer.meshPrimitive = Cube
+MeshRenderer.renderLayerMask = 1
+MeshRenderer.castShadows = true
+MeshRenderer.receiveShadows = true
+Name.value = "CubeB"
+Transform.position = (2, 0.5, 1.5)
+Transform.rotation = (0, 0, 0, 1)
+Transform.scale = (1, 1, 1)

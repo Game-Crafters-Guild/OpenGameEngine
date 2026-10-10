@@ -1,0 +1,11 @@
+set(VCPKG_POLICY_EMPTY_PACKAGE enabled)
+
+set(GE_SANIELX_HEIGHT_FOG_COMMIT "ab6f8278b58d77a6bc9cea4d3c9dcd3f34291fe7")
+
+vcpkg_download_distfile(GE_SANIELX_HEIGHT_FOG_LICENSE
+    URLS "https://raw.githubusercontent.com/SanielX/Height-Fog/${GE_SANIELX_HEIGHT_FOG_COMMIT}/LICENSE.md"
+    FILENAME "sanielx-height-fog-${GE_SANIELX_HEIGHT_FOG_COMMIT}-LICENSE.md"
+    SHA512 bf652840d2329ba50cb9dcc1a65a4379c91c9a760efd61bc3ed59fc7730b8a421dab244a6f53d638bee9f083aa200f3c0e720d9f1c17fb0a909499a274139452
+)
+
+vcpkg_install_copyright(FILE_LIST "${GE_SANIELX_HEIGHT_FOG_LICENSE}")

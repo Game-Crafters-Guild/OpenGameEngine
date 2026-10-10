@@ -1,0 +1,249 @@
+/* Bookmarks Panel Styles */
+
+.bookmarks-panel {
+    display: flex;
+    flex-direction: column;
+    height: 100%;
+    background-color: var(--bg-primary);
+}
+
+.bookmarks-list {
+    flex-grow: 1;
+    min-height: 0;
+    overflow-y: auto;
+    overflow-x: hidden;
+}
+
+.bookmarks-list-container {
+    display: flex;
+    flex-direction: column;
+    padding: 0;
+    margin: 0;
+    align-items: flex-start;
+    justify-content: flex-start;
+    position: relative;
+    width: 100%;
+    min-width: 0;
+    max-width: 100%;
+    box-sizing: border-box;
+}
+
+.bookmark-row {
+    display: flex;
+    flex-direction: row;
+    align-items: center;
+    padding: 4px 8px;
+    background-color: transparent;
+    border-width: 0px;
+    cursor: default;
+    gap: 0;
+    width: 100%;
+    box-sizing: border-box;
+    overflow: hidden;
+}
+
+.bookmark-row:hover,
+.bookmark-row.hover {
+    background-color: var(--ui_color_bg_item_hover);
+}
+
+.bookmark-row.selected {
+    background-color: var(--ui_color_bg_selected);
+}
+
+/* Drag handle: same as Todo – opacity only on direct hover */
+.bookmark-drag-handle {
+    width: 16px;
+    height: 16px;
+    min-width: 16px;
+    min-height: 16px;
+    margin-right: 8px;
+    cursor: move;
+    user-select: none;
+    opacity: 0.35;
+    background-image: url("editor:Icons/reorder-two.png");
+    background-size: contain;
+    background-repeat: no-repeat;
+    background-position: center;
+    flex-shrink: 0;
+    transition: opacity 0.2s ease;
+}
+
+.bookmark-drag-handle:hover {
+    opacity: 1.0;
+}
+
+.bookmark-icon {
+    width: 32px;
+    height: 32px;
+    min-width: 32px;
+    min-height: 32px;
+    flex-shrink: 0;
+    background-size: contain;
+    background-repeat: no-repeat;
+    background-position: center;
+}
+
+.bookmark-icon-asset {
+    background-image: url("editor:Icons/box.png");
+}
+
+.bookmark-icon-scene {
+    background-image: url("editor:Icons/scene.png");
+    /* Use contain (same as .bookmark-icon) so scene icon scales like other bookmark icons */
+    background-size: contain;
+    background-position: center;
+}
+
+.bookmark-icon-entity {
+    background-image: url("editor:Icons/cube.svg");
+}
+
+.bookmark-icon-folder {
+    background-image: url("editor:Icons/Folder@32px.png");
+}
+
+.bookmark-icon-script {
+    background-image: url("editor:Icons/codeicon.png");
+}
+
+/* Default/unknown type: only .bookmark-icon sets layout; type-specific classes
+   (.bookmark-icon-asset, .bookmark-icon-scene, .bookmark-icon-script, etc.) set
+   the image. Do not set a default background-image on .bookmark-icon or it
+   overrides the type-specific icons. */
+
+/* Name extends all the way to the right (before X); ellipsis only when needed.
+   Override .list-item .list-label (flex/max-width 300px) so bookmark text is not cut. */
+.bookmark-row .bookmark-name,
+.list-item.bookmark-row .list-label.bookmark-name {
+    flex: 1 1 0%;
+    min-width: 0;
+    max-width: none;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    font-size: 13px;
+    color: var(--text-secondary, rgba(255, 255, 255, 0.77));
+    box-sizing: border-box;
+}
+
+/* Higher specificity so we beat .list-item .list-label from views.css; also when label has hover */
+.bookmarks-panel .bookmark-row:hover .bookmark-name,
+.bookmarks-panel .bookmark-row.hover .bookmark-name,
+.bookmarks-panel .bookmark-row .bookmark-name:hover,
+.bookmarks-panel .bookmark-row .bookmark-name.hover,
+.bookmarks-panel .bookmark-row.selected .bookmark-name {
+    color: #FFFFFF !important;
+}
+
+.bookmark-content-container {
+    display: flex;
+    flex-direction: row;
+    align-items: center;
+    flex-grow: 1;
+    flex-shrink: 1;
+    min-width: 0;
+    overflow: hidden;
+    gap: 8px;
+}
+
+/* X column: same as Todo (28px, centered); z-index so it receives clicks over long names (e.g. scene) */
+.bookmark-remove-column {
+    display: flex;
+    flex-direction: row;
+    align-items: center;
+    justify-content: center;
+    width: 28px;
+    min-width: 28px;
+    flex-shrink: 0;
+    padding: 0;
+    position: relative;
+    z-index: 1;
+}
+
+/* X button: no background (override global button styles), opacity 0.6, white on hover */
+.bookmark-remove,
+button.bookmark-remove,
+.bookmarks-panel .bookmark-remove {
+    width: 20px;
+    height: 20px;
+    min-width: 20px;
+    min-height: 20px;
+    padding: 0;
+    cursor: pointer;
+    opacity: 0.6;
+    font-size: 16px;
+    line-height: 20px;
+    text-align: center;
+    border: none;
+    border-width: 0;
+    border-style: none;
+    border-color: transparent;
+    background: none !important;
+    background-color: transparent !important;
+    color: var(--text-secondary, rgba(255, 255, 255, 0.84));
+    transition: opacity 0.2s ease, color 0.2s ease;
+}
+
+.bookmark-remove:hover,
+button.bookmark-remove:hover,
+.bookmarks-panel .bookmark-remove:hover {
+    opacity: 1.0;
+    color: #ff5555;
+    background: none !important;
+    background-color: transparent !important;
+}
+
+/* Empty state: info card shown when the list renders no rows */
+.bookmark-empty-state {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    width: 100%;
+    padding: 32px 16px;
+    box-sizing: border-box;
+}
+
+.bookmark-empty-card {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 10px;
+    padding: 20px 24px;
+    max-width: 280px;
+    border: 1px dashed rgba(255, 255, 255, 0.16);
+    border-radius: 6px;
+    background-color: rgba(255, 255, 255, 0.03);
+}
+
+.bookmark-empty-icon {
+    width: 28px;
+    height: 28px;
+    min-width: 28px;
+    min-height: 28px;
+    background-image: url("editor:Icons/book.png");
+    background-size: contain;
+    background-repeat: no-repeat;
+    background-position: center;
+    background-image-tint: rgba(255, 255, 255, 0.35);
+}
+
+.bookmark-empty-text {
+    font-size: 12px;
+    color: var(--text-secondary, rgba(255, 255, 255, 0.6));
+    text-align: center;
+    white-space: normal;
+}
+
+/* Drag feedback: only the insertion line and row drop-hover (drop-allowed / drop-denied).
+   No separate "dragging" class on source row; insertion line and target row styling from
+   SetDropPreview + views.css .list-item.drop-hover. */
+#bookmarks-insertion-indicator {
+    position: absolute;
+    left: 0;
+    width: 100%;
+    height: 2px;
+    z-index: 9999;
+    pointer-events: none;
+    display: none;
+}

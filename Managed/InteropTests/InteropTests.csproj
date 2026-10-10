@@ -1,0 +1,39 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <IsPackable>false</IsPackable>
+    <Nullable>enable</Nullable>
+    <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
+    <GenerateDocumentationFile>true</GenerateDocumentationFile>
+    <TreatWarningsAsErrors>false</TreatWarningsAsErrors>
+    <WarningsAsErrors>CS1591</WarningsAsErrors>
+  </PropertyGroup>
+  <ItemGroup>
+    <PackageReference Include="NUnit" Version="4.1.0" />
+    <PackageReference Include="NUnit3TestAdapter" Version="4.5.0" />
+    <PackageReference Include="Microsoft.NET.Test.Sdk" Version="17.10.0" />
+    <!-- Roslyn for ScriptCompileHelper: tests compile tiny scripts in-memory -->
+    <PackageReference Include="Microsoft.CodeAnalysis.CSharp" Version="4.10.0" />
+  </ItemGroup>
+  <ItemGroup>
+    <ProjectReference Include="..\CoreBridge\GameEngine.CoreBridge.csproj" />
+  </ItemGroup>
+    <ItemGroup>
+      <ProjectReference Include="..\HotReload\GameEngine.HotReload.csproj" />
+    </ItemGroup>
+  <ItemGroup>
+    <ProjectReference Include="..\ECS.ABI\GameEngine.ECS.ABI.csproj" />
+    <ProjectReference Include="..\Input.ABI\GameEngine.Input.ABI.csproj" />
+  </ItemGroup>
+  <ItemGroup>
+    <ProjectReference Include="..\Scripting.ABI\GameEngine.Scripting.ABI.csproj" />
+    <ProjectReference Include="..\Scripting.Runtime\GameEngine.Scripting.Runtime.csproj" />
+    <ProjectReference Include="..\Editor.Managed\GameEngine.Editor.Managed.csproj" />
+  </ItemGroup>
+
+
+
+
+
+</Project>
+

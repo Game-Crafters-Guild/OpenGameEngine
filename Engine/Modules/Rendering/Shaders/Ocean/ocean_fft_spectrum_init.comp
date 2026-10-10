@@ -1,0 +1,94 @@
+#version 450
+// Ocean FFT: initial spectrum H0 per cascade. Faithful port of the reference
+// FFTSpectrum.compute::SpectrumInitalize (MIT). Runs when the spectrum changes.
+// Writes complex (ampPos, ampNeg) into _H0, with each cascade band-limited to a
+// narrow frequency range (the largest cascade keeps all low frequencies).
+
+#include "Ocean/ocean_fft_common.glsl"
+
+layout(local_size_x = 8, local_size_y = 8, local_size_z = 1) in;
+
+layout(set = 0, binding = 1, rgba32f) uniform writeonly image2DArray uH0;
+
+void main()
+{
+    const uint res = uResolution;
+    const ivec3 id = ivec3(gl_GlobalInvocationID);
+    if (uint(id.x) >= res || uint(id.y) >= res || uint(id.z) >= uCascadeCount)
+        return;
+
+    const ivec2 center = ivec2(res / 2u);
+    const ivec2 coord = id.xy - center;
+
+    if (coord.x == 0 && coord.y == 0)
+    {
+        imageStore(uH0, id, vec4(0.0));
+        return;
+    }
+
+    // Per-cascade frequency band split (the reference). Keep maxCoord in [4, 8) for all
+    // but the largest cascade, which keeps every low frequency (maxCoord < 8).
+    const uint maxCoord = uint(max(abs(coord.x), abs(coord.y)));
+    const uint sampleFactor = uint(GE_WAVE_SAMPLE_FACTOR);
+    const bool tooLow = (id.z < int(uCascadeCount) - 1) && (maxCoord < sampleFactor / 2u);
+    const bool tooHigh = maxCoord >= sampleFactor;
+    if (tooLow || tooHigh)
+    {
+        imageStore(uH0, id, vec4(0.0));
+        return;
+    }
+
+    const float worldSize = OceanFFTWorldSize(uint(id.z));
+    const vec2 k = GE_FFT_PI2 * vec2(coord) / worldSize;
+    const float kMag = length(k);
+    if (kMag < 1.0e-6)
+    {
+        imageStore(uH0, id, vec4(0.0));
+        return;
+    }
+
+    uint rngState = OceanWangHash(uint(id.z) * res * res + uint(id.y) * res + uint(id.x));
+
+    // Authored per-octave power LUT, with the Pierson-Moskowitz wind cutoff. The
+    // per-octave gravity scale tunes this band's dispersion; a muted octave gets
+    // zero energy (it still writes 0 below so summing cascades stays correct).
+    const float wavelength = GE_FFT_PI2 / kMag;
+    const float octaveIndex = log2(wavelength) - GE_SPECTRUM_SMALLEST_WL_P2;
+
+    if (OceanOctaveDisabled(octaveIndex))
+    {
+        imageStore(uH0, id, vec4(0.0));
+        return;
+    }
+
+    float w;
+    float dwdk;
+    OceanDeepDispersionG(kMag, uGravity * OceanSampleGravityScale(octaveIndex), w, dwdk);
+
+    const float spectrum = OceanSampleSpectrum(octaveIndex) * OceanPiersonMoskowitzWindTerm(w);
+
+    float deltaSPos = spectrum;
+    float deltaSNeg = spectrum;
+
+    vec2 windDir = vec2(uWindDirX, uWindDirZ);
+    const float windLen = length(windDir);
+    windDir = (windLen > 1.0e-4) ? (windDir / windLen) : vec2(1.0, 0.0);
+    const float cosTheta = dot(k, windDir) / kMag;
+    deltaSPos *= OceanDirectionalSpread(cosTheta);
+    deltaSNeg *= OceanDirectionalSpread(-cosTheta);
+
+    const float dK = GE_FFT_PI2 / worldSize;
+    deltaSPos *= (dK * dK) * dwdk / kMag;
+    deltaSNeg *= (dK * dK) * dwdk / kMag;
+
+    const float ampPos = OceanRandGauss(rngState) * sqrt(abs(deltaSPos) * 2.0);
+    const float ampNeg = OceanRandGauss(rngState) * sqrt(abs(deltaSNeg) * 2.0);
+
+    const float phasePos = OceanRandFloat(rngState) * GE_FFT_PI2;
+    const float phaseNeg = OceanRandFloat(rngState) * GE_FFT_PI2;
+
+    const float spiceyMultiplier = 1.5; // the reference's energy nudge
+    imageStore(uH0, id,
+               vec4(ampPos * vec2(cos(phasePos), -sin(phasePos)),
+                    ampNeg * vec2(cos(phaseNeg), -sin(phaseNeg))) * spiceyMultiplier);
+}

@@ -1,0 +1,491 @@
+#version 460
+// terrain_height_bake.comp — GPU-resident planar terrain HEIGHT (slice 1) + NORMAL (slice 2) +
+// SPLAT (slice 3) bake, one source, three entry variants selected by the KERNEL_NORMAL /
+// KERNEL_SPLAT defines (three runtime compiles → three pipelines with their own descriptor
+// layouts).
+//
+// HEIGHT (default): one thread per dirty tile-local sample. Derive world XZ, evaluate the base
+// value-noise fill then the priority-sorted modifier stack (Noise / Flatten in slice 1), and
+// imageStore the normalized height into the atlas height slot — writing THROUGH the same
+// CBT_AtlasSlotTexel addressing the sampler reads (cbt_atlas.glsl). The 1-texel apron is
+// evaluated at its neighbour-continuation WORLD position (not a duplicated edge), so the normal
+// pass's central-difference at a slot edge is bit-equal across adjacent tiles (seamless).
+//
+// NORMAL (KERNEL_NORMAL): a second pass over the same rect central-differences the just-baked
+// height atlas (interior + apron) at world scale — the exact GenerateNormalmapRegionFromHeightfield
+// derivation — and imageStores the packed RG16F normal (n.x, n.z) into the normal atlas slot.
+// It reads the height image the height pass wrote (an image barrier orders them, not a fence).
+//
+// SPLAT (KERNEL_SPLAT): a third pass over the same rect composites the authored SURFACE RULE rows
+// onto an all-zero base (the GPU mirror of ResetSplatmap) in the same order ApplySplatModifiers
+// walks them, measuring slope and altitude off the baked height — altitude normalized against the
+// committed global height range, passed as SplatMinH/SplatMaxH. The rows are the ONLY thing that
+// places material here. Reads the same height image (shares the post-height memory barrier with the normal
+// pass; the two are independent). Painted splat content (PaintLayer/PaintZone/spline paint) stays
+// CPU: the dispatch is gated OFF for a bake carrying paint, which keeps the last CPU-composited
+// splat until settle.
+//
+// Bit-parity with the CPU is off the table at ULP scale; parity is bounded by epsilon and pinned
+// by GPU-vs-itself hash-stability + boundary-bit-equality oracles (design §5, Risk 1 + §Risk 2).
+//
+// Compiled at runtime via ShaderCompileService; #includes cbt_atlas.glsl as a sibling.
+
+#include "cbt_atlas.glsl"
+
+// The surface-rule types + maths, shared with the CPU bake through a parity test that compiles the
+// marked blocks as C++. Only the SPLAT variant binds the row/condition buffers; the height variant
+// takes the same file for its gradient-noise basis, which is one definition here rather than two
+// mirrors of the same CPU function drifting apart.
+#ifdef KERNEL_SPLAT
+#define GE_SURFACE_RULES_BIND_BUFFERS
+#endif
+#include "terrain_surface_rules.glsl"
+
+layout(local_size_x = 64, local_size_y = 1, local_size_z = 1) in;
+
+layout(push_constant) uniform PushConstants
+{
+    int  RectMinX;   // tile-local interior sample rect (inclusive origin)
+    int  RectMinZ;
+    uint RectW;      // rect width  in samples (maxX - minX + 1)
+    uint RectH;      // rect height in samples
+    float OriginX;   // tile world origin (XZ)
+    float OriginZ;
+    float TileSize;  // tile world size (square)
+    float HeightScale;
+    float BaseFreq;  // base value-noise fill params (kTileNoise*)
+    float BaseAmp;
+    uint  BaseOctaves;
+    uint  BaseSeed;
+    uint  Slot;      // atlas slot for this tile
+    uint  ModifierCount;
+    uint  TileRes;   // interior samples per tile axis
+    uint  SlotStride;
+    uint  SlotsPerRow;
+    float SplatMinH;  // committed global min height — SPLAT kernel only (0 for height/normal)
+    float SplatMaxH;  // committed global max height — SPLAT kernel only
+    uint  SurfaceRuleCount; // authored rule rows to composite — SPLAT kernel only
+    // The TERRAIN entity's world Y, not the tile's (OriginX/OriginZ are the tile's). A sample is
+    // read back as `normalized * HeightScale + TerrainOriginY`, so a world-space flatten target
+    // is measured against it. Mirrors NormalizedHeightForWorldY in TerrainModifierSystem.h.
+    float TerrainOriginY;
+} pc;
+
+// Slot-atlas params from the push (shared by all three kernels; the texel resolve uses only
+// TileRes / SlotStride / SlotsPerRow).
+CBTAtlasParams MakeAtlasParams()
+{
+    CBTAtlasParams ap;
+    ap.TileRes = pc.TileRes;
+    ap.SlotStride = pc.SlotStride;
+    ap.SlotsPerRow = pc.SlotsPerRow;
+    ap.AtlasDim = 0u;
+    ap.TilesPerAxisX = 0u;
+    ap.TilesPerAxisZ = 0u;
+    return ap;
+}
+
+#ifdef KERNEL_NORMAL
+// ============================ NORMAL derive (slice 2) ============================
+layout(r32f,  set = 0, binding = 0) uniform readonly  image2D gAtlasHeightRead;
+layout(rg16f, set = 0, binding = 1) uniform writeonly image2D gAtlasNormalStorage;
+
+float LoadH(CBTAtlasParams ap, int sx, int sz)
+{
+    return imageLoad(gAtlasHeightRead, CBT_AtlasSlotTexel(pc.Slot, ivec2(sx, sz), ap)).r;
+}
+
+void main()
+{
+    uint total = pc.RectW * pc.RectH;
+    uint idx = gl_GlobalInvocationID.x;
+    if (idx >= total)
+        return;
+
+    int sx = pc.RectMinX + int(idx % pc.RectW);
+    int sz = pc.RectMinZ + int(idx / pc.RectW);
+
+    CBTAtlasParams ap = MakeAtlasParams();
+
+    // World-scale spacing (mirror GenerateNormalmapRegionFromHeightfield): divide by
+    // heightScale so the central-difference gradient reflects actual world-space height.
+    float hs = max(pc.HeightScale, 0.001);
+    float denom = float(pc.TileRes > 1u ? int(pc.TileRes) - 1 : 1) * hs;
+    float spacingX = pc.TileSize / denom;
+    float spacingZ = pc.TileSize / denom;
+
+    float hL = LoadH(ap, sx - 1, sz);   // apron at a slot edge = neighbour continuation
+    float hR = LoadH(ap, sx + 1, sz);
+    float hD = LoadH(ap, sx, sz - 1);
+    float hU = LoadH(ap, sx, sz + 1);
+    float dx = (hR - hL) / (spacingX * 2.0);
+    float dz = (hU - hD) / (spacingZ * 2.0);
+    vec3 n = normalize(vec3(-dx, 1.0, -dz));
+
+    ivec2 texel = CBT_AtlasSlotTexel(pc.Slot, ivec2(sx, sz), ap);
+    vec4 pk = vec4(n.x, n.z, 0.0, 0.0);   // RG16F = (normal.x, normal.z); Y reconstructed on read
+    imageStore(gAtlasNormalStorage, texel, pk);
+
+    // Normal apron: duplicate the interior edge into the 1-texel apron (clamp-sample straddle
+    // guard). The shared edge is already seamless, so a duplicate is exact here.
+    int lastX = int(pc.TileRes) - 1;
+    bool eL = (sx == 0), eR = (sx == lastX), eD = (sz == 0), eU = (sz == lastX);
+    if (eL) imageStore(gAtlasNormalStorage, texel + ivec2(-1, 0), pk);
+    if (eR) imageStore(gAtlasNormalStorage, texel + ivec2( 1, 0), pk);
+    if (eD) imageStore(gAtlasNormalStorage, texel + ivec2( 0,-1), pk);
+    if (eU) imageStore(gAtlasNormalStorage, texel + ivec2( 0, 1), pk);
+    if (eL && eD) imageStore(gAtlasNormalStorage, texel + ivec2(-1,-1), pk);
+    if (eR && eD) imageStore(gAtlasNormalStorage, texel + ivec2( 1,-1), pk);
+    if (eL && eU) imageStore(gAtlasNormalStorage, texel + ivec2(-1, 1), pk);
+    if (eR && eU) imageStore(gAtlasNormalStorage, texel + ivec2( 1, 1), pk);
+}
+
+#elif defined(KERNEL_SPLAT)
+// ============================ SPLAT derive (slice 3) ============================
+layout(r32f,  set = 0, binding = 0) uniform readonly  image2D gAtlasHeightRead;
+layout(rgba8, set = 0, binding = 1) uniform writeonly image2D gAtlasSplatStorage;
+
+float LoadH(CBTAtlasParams ap, int sx, int sz)
+{
+    return imageLoad(gAtlasHeightRead, CBT_AtlasSlotTexel(pc.Slot, ivec2(sx, sz), ap)).r;
+}
+
+// HeightfieldData::ComputeNormal: central-difference slope with a TILE-LOCAL edge clamp
+// (max/min into [0, TileRes-1]), at world spacing TileSize/(TileRes-1) — deliberately NOT
+// divided by heightScale (unlike the shading normal), so the surface rules can recover the true
+// surface angle in degrees from all three components. Clamping to the interior (NOT reading the
+// neighbour-continuation apron) is what keeps the splat byte-identical to the per-tile CPU
+// derivation at a slot edge — the inverse of the normal pass's apron-continuation contract (#508).
+vec3 SplatNormal(CBTAtlasParams ap, int sx, int sz, float spacing)
+{
+    int last = int(pc.TileRes) - 1;
+    int xm = max(sx - 1, 0);
+    int xp = min(sx + 1, last);
+    int zm = max(sz - 1, 0);
+    int zp = min(sz + 1, last);
+    float hL = LoadH(ap, xm, sz);
+    float hR = LoadH(ap, xp, sz);
+    float hD = LoadH(ap, sx, zm);
+    float hU = LoadH(ap, sx, zp);
+    float dx = (hR - hL) / (spacing * float(xp - xm));
+    float dz = (hU - hD) / (spacing * float(zp - zm));
+    vec3 n = vec3(-dx, 1.0, -dz);
+    float len = sqrt(n.x * n.x + n.y * n.y + n.z * n.z);
+    if (len > 0.0)
+        n /= len;
+    return n;
+}
+
+void main()
+{
+    uint total = pc.RectW * pc.RectH;
+    uint idx = gl_GlobalInvocationID.x;
+    if (idx >= total)
+        return;
+
+    int sx = pc.RectMinX + int(idx % pc.RectW);
+    int sz = pc.RectMinZ + int(idx / pc.RectW);
+
+    CBTAtlasParams ap = MakeAtlasParams();
+
+    // Altitude normalizes against the committed global range (SplatMinH/SplatMaxH). Mid-stroke
+    // this is the CURRENT committed range — a dab that extends the range makes this a
+    // slightly-stale preview, re-splat CPU-side at settle.
+    float spacing = pc.TileSize / float(pc.TileRes - 1u);
+    vec3 normal = SplatNormal(ap, sx, sz, spacing);
+    float sampleH = LoadH(ap, sx, sz);
+    float heightRange = max(pc.SplatMaxH - pc.SplatMinH, 0.001);
+
+    // The unbaked base, mirroring the CPU's ResetSplatmap: ALL ZERO, in byte units. Zero is not
+    // "no data" — the surface resolves an all-zero texel to channel 0 — and it is the only base
+    // the rows can composite onto faithfully, because GE_CompositeSplatTexel adds then
+    // renormalizes, so a channel-0-full base would cap any row targeting another channel at 50%.
+    vec4 bytes = vec4(0.0);
+
+    // Authored SURFACE RULE rows composite onto that base, in buffer order — which the packer
+    // built as (modifier priority, then effect stack order), the same order ApplySplatModifiers
+    // walks. The CPU composites through BYTES (each row reads back what the previous row wrote),
+    // which is why the rows run before the normalize below.
+    if (pc.SurfaceRuleCount > 0u)
+    {
+        float worldX = pc.OriginX + float(sx) * spacing;
+        float worldZ = pc.OriginZ + float(sz) * spacing;
+        GESurfaceRuleSample rs = GE_MakeSurfaceRuleSample(normal.x, normal.y, normal.z, sampleH,
+                                                          pc.HeightScale, pc.SplatMinH, heightRange,
+                                                          worldX, worldZ);
+        for (uint r = 0u; r < pc.SurfaceRuleCount; ++r)
+            bytes = GE_ApplySurfaceRuleRow(bytes, r, rs);
+    }
+
+    vec4 pk = bytes / 255.0;
+    ivec2 texel = CBT_AtlasSlotTexel(pc.Slot, ivec2(sx, sz), ap);
+    imageStore(gAtlasSplatStorage, texel, pk);
+
+    // Splat apron: duplicate the interior edge into the 1-texel apron (clamp-sample straddle
+    // guard), matching the normal pass. The CPU splat is per-tile edge-clamped, so the tile-edge
+    // weight IS the natural apron fill (no neighbour continuation, unlike the height apron).
+    int lastX = int(pc.TileRes) - 1;
+    bool eL = (sx == 0), eR = (sx == lastX), eD = (sz == 0), eU = (sz == lastX);
+    if (eL) imageStore(gAtlasSplatStorage, texel + ivec2(-1, 0), pk);
+    if (eR) imageStore(gAtlasSplatStorage, texel + ivec2( 1, 0), pk);
+    if (eD) imageStore(gAtlasSplatStorage, texel + ivec2( 0,-1), pk);
+    if (eU) imageStore(gAtlasSplatStorage, texel + ivec2( 0, 1), pk);
+    if (eL && eD) imageStore(gAtlasSplatStorage, texel + ivec2(-1,-1), pk);
+    if (eR && eD) imageStore(gAtlasSplatStorage, texel + ivec2( 1,-1), pk);
+    if (eL && eU) imageStore(gAtlasSplatStorage, texel + ivec2(-1, 1), pk);
+    if (eR && eU) imageStore(gAtlasSplatStorage, texel + ivec2( 1, 1), pk);
+}
+
+#else
+// ============================ HEIGHT bake (slice 1) ============================
+
+// Modifier type ids (mirror TerrainGpuBake.h ModifierGpuType).
+const uint MOD_FLATTEN = 0u;
+const uint MOD_NOISE   = 1u;
+// Shape ids (mirror Components::TerrainModifierShape ordering used by the packer).
+const uint SHAPE_CIRCLE    = 0u;
+const uint SHAPE_RECTANGLE = 1u;
+// Blend ids (mirror Components::TerrainModifierBlend). 3 is a permanent tombstone — the
+// retired Smooth mode, which scenes on disk still carry and the loader migrates to Add.
+//
+// 8 (Average) has no id here and must not gain one: it is POOLING — accumulate across
+// several modifiers, apply once — and this kernel evaluates one record per texel with no
+// scratch to accumulate into. PackModifiersForGpuBake refuses a pooled flatten outright,
+// so the whole bake falls back to the CPU rather than landing on the fall-through arm below.
+const uint BLEND_SET       = 0u;
+const uint BLEND_ADD       = 1u;
+const uint BLEND_SUBTRACT  = 2u;
+const uint BLEND_MIN       = 4u;
+const uint BLEND_MAX       = 5u;
+const uint BLEND_SMOOTHMIN = 6u;
+const uint BLEND_SMOOTHMAX = 7u;
+
+struct ModifierGpu
+{
+    uint Type;
+    uint Shape;
+    uint Blend;
+    uint Octaves;
+    vec4 CenterYaw;      // x=worldX, y=worldZ, z=yawRadians, w=unused
+    vec4 ExtentsFalloff; // x=radius, y=rectHalfX, z=rectHalfZ, w=falloff
+    vec4 NoiseParams;    // noise: x=frequency,y=amplitude,z=lacunarity,w=persistence;
+                         // flatten: x=target height, WORLD Y (pc.TerrainOriginY comes off here)
+    uint  Seed;
+    float BlendSmoothing; // SmoothMin/SmoothMax blend radius, metres of height
+    uint  Pad0;
+    uint  Pad1;
+};
+
+layout(std430, set = 0, binding = 0) readonly buffer ModifierBuffer
+{
+    ModifierGpu Items[];
+} gModifiers;
+
+layout(r32f, set = 0, binding = 1) uniform writeonly image2D gAtlasHeightStorage;
+
+// ---- Base fill: value noise (mirror Heightfield.cpp NoiseHash / SmoothNoise). ----
+float BaseNoiseHash(int x, int z, uint seed)
+{
+    uint h = uint(x) * 374761393u + uint(z) * 668265263u + seed * 1274126177u;
+    h = (h ^ (h >> 13)) * 1274126177u;
+    h = h ^ (h >> 16);
+    return float(h & 0x7FFFFFFFu) / float(0x7FFFFFFF);
+}
+
+float BaseSmoothNoise(float x, float z, uint seed)
+{
+    int ix = int(floor(x));
+    int iz = int(floor(z));
+    float fx = x - float(ix);
+    float fz = z - float(iz);
+    float sx = fx * fx * (3.0 - 2.0 * fx);
+    float sz = fz * fz * (3.0 - 2.0 * fz);
+    float n00 = BaseNoiseHash(ix,     iz,     seed);
+    float n10 = BaseNoiseHash(ix + 1, iz,     seed);
+    float n01 = BaseNoiseHash(ix,     iz + 1, seed);
+    float n11 = BaseNoiseHash(ix + 1, iz + 1, seed);
+    float nx0 = n00 + sx * (n10 - n00);
+    float nx1 = n01 + sx * (n11 - n01);
+    return nx0 + sz * (nx1 - nx0);
+}
+
+float BaseFill(float wx, float wz, float freq0, float amplitude, uint octaves, uint seed)
+{
+    float value = 0.0;
+    float freq = freq0;
+    float amp = 1.0;
+    float totalAmp = 0.0;
+    for (uint o = 0u; o < octaves; ++o)
+    {
+        float nx = wx * freq;
+        float nz = wz * freq;
+        value += BaseSmoothNoise(nx, nz, seed + o) * amp;
+        totalAmp += amp;
+        freq *= 2.0;
+        amp *= 0.5;
+    }
+    return (value / totalAmp) * amplitude;
+}
+
+// ---- Noise modifier: gradient noise (mirror Engine/Modules/Noise) ----
+// The lattice itself is GE_GradientNoise2D, from terrain_surface_rules.glsl: one GLSL copy of
+// the one C++ definition the height bake and the surface rules both sum, so a change to the
+// basis cannot land on one arm only. Only the fBM sum lives here — it is the height modifier's,
+// and the rules deliberately take a single octave.
+float FBMNoise2D(float x, float z, float frequency, float amplitude,
+                 uint octaves, uint seed, float lacunarity, float persistence)
+{
+    float value = 0.0;
+    float freq = frequency;
+    float amp = amplitude;
+    for (uint i = 0u; i < octaves; ++i)
+    {
+        value += GE_GradientNoise2D(x * freq, z * freq, seed + i * 31u) * amp;
+        freq *= lacunarity;
+        amp *= persistence;
+    }
+    return value;
+}
+
+// ---- Blend algebra (mirror BlendHeight / PolynomialSmoothMin in TerrainModifierSystem.cpp). ----
+float PolynomialSmoothMin(float a, float b, float k)
+{
+    float t = clamp(0.5 + 0.5 * (b - a) / k, 0.0, 1.0);
+    return (b + (a - b) * t) - k * t * (1.0 - t);
+}
+
+// `value` is a DISPLACEMENT for Add/Subtract and a candidate HEIGHT for Set and the union
+// operators, all in normalized height; `smoothingNorm` is the blend radius already divided
+// by the height scale. Add is the fall-through, so a blend id outside the enum bakes as Add
+// exactly as the CPU does. Add/Subtract/Set keep their literal shipped expressions.
+float BlendHeight(float current, float value, float weight, uint blend, float smoothingNorm)
+{
+    if (blend == BLEND_SUBTRACT)
+        return current - value * weight;
+    if (blend == BLEND_SET)
+        return current + (value - current) * weight;
+    if (blend == BLEND_MIN)
+        return current + (min(current, value) - current) * weight;
+    if (blend == BLEND_MAX)
+        return current + (max(current, value) - current) * weight;
+    if (blend == BLEND_SMOOTHMIN)
+    {
+        float unioned = smoothingNorm > 0.0 ? PolynomialSmoothMin(current, value, smoothingNorm)
+                                            : min(current, value);
+        return current + (unioned - current) * weight;
+    }
+    if (blend == BLEND_SMOOTHMAX)
+    {
+        // smoothMax(a, b, k) == -smoothMin(-a, -b, k).
+        float unioned = smoothingNorm > 0.0 ? -PolynomialSmoothMin(-current, -value, smoothingNorm)
+                                            : max(current, value);
+        return current + (unioned - current) * weight;
+    }
+    return current + value * weight;
+}
+
+// ---- Shape weight (mirror TerrainModifierSystem::ComputeWeight; circle + rect). ----
+float ComputeWeight(uint shape, vec2 center, float yaw,
+                    float radius, float rectHalfX, float rectHalfZ, float falloff,
+                    float wx, float wz)
+{
+    float dx = wx - center.x;
+    float dz = wz - center.y;
+    float distFromEdge;
+    if (shape == SHAPE_CIRCLE)
+    {
+        float dist = sqrt(dx * dx + dz * dz);
+        distFromEdge = radius - dist;
+    }
+    else // rectangle
+    {
+        float c = cos(-yaw);
+        float s = sin(-yaw);
+        float lx = abs(c * dx - s * dz);
+        float lz = abs(s * dx + c * dz);
+        distFromEdge = min(rectHalfX - lx, rectHalfZ - lz);
+    }
+    if (distFromEdge <= 0.0)
+    {
+        if (falloff <= 0.0)
+            return 0.0;
+        float t = clamp(1.0 + distFromEdge / falloff, 0.0, 1.0);
+        return t * t * (3.0 - 2.0 * t);
+    }
+    return 1.0;
+}
+
+// Evaluate the normalized height at tile-local sample (sx, sz) — the exact base fill + modifier
+// stack the CPU BakeTiledRegion runs. Valid for sx/sz outside [0, TileRes-1] too (the apron):
+// the noise + modifiers are world-space, so an apron sample equals the neighbour's continuation.
+float EvalHeight(int sx, int sz)
+{
+    float spacing = pc.TileSize / float(pc.TileRes - 1u);
+    float wx = pc.OriginX + float(sx) * spacing;
+    float wz = pc.OriginZ + float(sz) * spacing;
+
+    float h = BaseFill(wx, wz, pc.BaseFreq, pc.BaseAmp, pc.BaseOctaves, pc.BaseSeed);
+
+    for (uint m = 0u; m < pc.ModifierCount; ++m)
+    {
+        ModifierGpu mod = gModifiers.Items[m];
+        float w = ComputeWeight(mod.Shape, mod.CenterYaw.xy, mod.CenterYaw.z,
+                                mod.ExtentsFalloff.x, mod.ExtentsFalloff.y,
+                                mod.ExtentsFalloff.z, mod.ExtentsFalloff.w, wx, wz);
+        if (w <= 0.0)
+            continue;
+
+        // BlendSmoothing is metres of height, so it normalizes by the same height scale.
+        float smoothingNorm = mod.BlendSmoothing / pc.HeightScale;
+
+        if (mod.Type == MOD_FLATTEN)
+        {
+            // The row carries the AUTHORED world Y; the terrain's own translation comes off
+            // before the height scale, exactly as NormalizedHeightForWorldY does on the CPU.
+            float targetNorm = (mod.NoiseParams.x - pc.TerrainOriginY) / pc.HeightScale;
+            h = BlendHeight(h, targetNorm, w, mod.Blend, smoothingNorm);
+        }
+        else // MOD_NOISE
+        {
+            uint seed = mod.Seed != 0u ? mod.Seed : 12345u;
+            float noiseVal = FBMNoise2D(wx, wz,
+                mod.NoiseParams.x / pc.TileSize,
+                mod.NoiseParams.y / pc.HeightScale,
+                mod.Octaves, seed, mod.NoiseParams.z, mod.NoiseParams.w);
+            h = BlendHeight(h, noiseVal, w, mod.Blend, smoothingNorm);
+        }
+    }
+    return h;
+}
+
+void main()
+{
+    uint total = pc.RectW * pc.RectH;
+    uint idx = gl_GlobalInvocationID.x;
+    if (idx >= total)
+        return;
+
+    int sx = pc.RectMinX + int(idx % pc.RectW);
+    int sz = pc.RectMinZ + int(idx / pc.RectW);
+
+    CBTAtlasParams ap = MakeAtlasParams();
+    float h = EvalHeight(sx, sz);
+    ivec2 texel = CBT_AtlasSlotTexel(pc.Slot, ivec2(sx, sz), ap);
+    imageStore(gAtlasHeightStorage, texel, vec4(h, 0.0, 0.0, 0.0));
+
+    // World-eval apron (slice-2): the apron holds the height at the neighbour-continuation world
+    // position (deterministic, == the adjacent tile's edge content), so the normal pass's
+    // central-diff at a slot edge is bit-equal across tiles (seamless), not a one-sided clamp.
+    int lastX = int(pc.TileRes) - 1;
+    bool eL = (sx == 0), eR = (sx == lastX), eD = (sz == 0), eU = (sz == lastX);
+    if (eL) imageStore(gAtlasHeightStorage, texel + ivec2(-1, 0), vec4(EvalHeight(sx - 1, sz)));
+    if (eR) imageStore(gAtlasHeightStorage, texel + ivec2( 1, 0), vec4(EvalHeight(sx + 1, sz)));
+    if (eD) imageStore(gAtlasHeightStorage, texel + ivec2( 0,-1), vec4(EvalHeight(sx, sz - 1)));
+    if (eU) imageStore(gAtlasHeightStorage, texel + ivec2( 0, 1), vec4(EvalHeight(sx, sz + 1)));
+    if (eL && eD) imageStore(gAtlasHeightStorage, texel + ivec2(-1,-1), vec4(EvalHeight(sx - 1, sz - 1)));
+    if (eR && eD) imageStore(gAtlasHeightStorage, texel + ivec2( 1,-1), vec4(EvalHeight(sx + 1, sz - 1)));
+    if (eL && eU) imageStore(gAtlasHeightStorage, texel + ivec2(-1, 1), vec4(EvalHeight(sx - 1, sz + 1)));
+    if (eR && eU) imageStore(gAtlasHeightStorage, texel + ivec2( 1, 1), vec4(EvalHeight(sx + 1, sz + 1)));
+}
+
+#endif

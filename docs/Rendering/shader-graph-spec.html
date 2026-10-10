@@ -1,0 +1,1006 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<title>Shader Graph — Authored Format Reference</title>
+<style>
+  :root {
+    --bg:        #0e1116;
+    --panel:     #161b22;
+    --panel-light:#1c232c;
+    --border:    #2a3340;
+    --text:      #e6edf3;
+    --muted:     #8b98a5;
+    --accent:    #58a6ff;
+    --good:      #3fb950;
+    --ok:        #3fb950;
+    --warn:      #d29922;
+    --bad:       #f85149;
+    --danger:    #f85149;
+    --mono:      ui-monospace, "JetBrains Mono", Consolas, "SF Mono", monospace;
+  }
+  * { box-sizing: border-box; }
+  html, body { background: var(--bg); color: var(--text); }
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Inter, system-ui, sans-serif;
+    max-width: 1180px;
+    margin: 0 auto;
+    padding: 32px 28px 80px;
+    line-height: 1.55;
+  }
+  h1 { font-size: 30px; margin: 0 0 4px; letter-spacing: -0.02em; }
+  h2 { font-size: 22px; margin: 40px 0 12px; padding-top: 18px; border-top: 1px solid var(--border); letter-spacing: -0.01em; }
+  h3 { font-size: 17px; margin: 26px 0 10px; color: var(--text); }
+  h4 { font-size: 14px; margin: 18px 0 6px; color: var(--muted); text-transform: uppercase; letter-spacing: 0.06em; }
+  p  { color: var(--text); }
+  .lede { color: var(--muted); font-family: var(--mono); font-size: 12px; letter-spacing: 0.04em; text-transform: uppercase; margin: 0 0 22px; }
+  a { color: var(--accent); text-decoration: none; }
+  a:hover { text-decoration: underline; }
+  code { font-family: var(--mono); background: var(--panel); padding: 1px 6px; border-radius: 4px; font-size: 92%; color: #d2dae4; border: 1px solid var(--border); }
+  pre { background: var(--panel); border: 1px solid var(--border); border-radius: 8px; padding: 14px 16px; overflow-x: auto; font-family: var(--mono); font-size: 12.5px; line-height: 1.55; color: #d2dae4; }
+  pre code { background: transparent; border: 0; padding: 0; color: inherit; font-size: inherit; }
+  .panel { background: var(--panel); border: 1px solid var(--border); border-left-width: 4px; border-radius: 8px; padding: 14px 18px; margin: 16px 0; }
+  .panel h4 { margin-top: 0; color: var(--text); text-transform: none; letter-spacing: 0; font-size: 14px; }
+  .panel.ok      { border-left-color: var(--ok); }
+  .panel.warn    { border-left-color: var(--warn); }
+  .panel.danger  { border-left-color: var(--danger); }
+  .panel.before  { border-left-color: var(--bad); background: #1a1313; }
+  .panel.after   { border-left-color: var(--good); background: #131a14; }
+  .panel.info    { border-left-color: var(--accent); }
+  .panel small  { color: var(--muted); }
+  table { width: 100%; border-collapse: collapse; margin: 14px 0; font-size: 13.5px; }
+  th, td { text-align: left; padding: 8px 12px; border-bottom: 1px solid var(--border); vertical-align: top; }
+  th { background: var(--panel-light); color: var(--text); font-weight: 600; font-size: 12px; text-transform: uppercase; letter-spacing: 0.04em; }
+  tr:hover td { background: #141a22; }
+  td code { font-size: 12px; }
+  .pill {
+    display: inline-block;
+    padding: 2px 8px;
+    font-size: 10.5px;
+    border-radius: 999px;
+    font-family: var(--mono);
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    border: 1px solid var(--border);
+    background: var(--panel);
+    color: var(--muted);
+  }
+  .pill.new  { color: var(--good);   border-color: #1e4d28; background:#0e1c11; }
+  .pill.mod  { color: var(--warn);   border-color: #4d3e1e; background:#1c1810; }
+  .pill.del  { color: var(--bad);    border-color: #4d1e1e; background:#1c1010; }
+  .pill.keep { color: var(--muted);  }
+  .pill.req  { color: var(--bad);    border-color: #4d1e1e; background:#1c1010; }
+  .pill.opt  { color: var(--muted);  }
+  .grid-2 { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+  .grid-3 { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 14px; }
+  ul, ol { padding-left: 22px; }
+  li { margin: 4px 0; }
+  hr { border: 0; border-top: 1px solid var(--border); margin: 30px 0; }
+  .mermaid { background: var(--panel); border: 1px solid var(--border); border-radius: 8px; padding: 16px; margin: 16px 0; text-align: center; }
+  footer { color: var(--muted); font-size: 12px; margin-top: 60px; padding-top: 16px; border-top: 1px solid var(--border); font-family: var(--mono); }
+  .kbd { font-family: var(--mono); border: 1px solid var(--border); padding: 1px 6px; border-radius: 4px; background: var(--panel-light); font-size: 11px; }
+  .tag-list span { margin-right: 6px; }
+</style>
+</head>
+<body>
+
+<h1>Shader Graph — Authored Format Reference</h1>
+<p class="lede">REFERENCE · rendering / shader graph · the authored <code>.glsl</code> graph file and its helper nodes</p>
+
+<p>
+A shader graph is two kinds of file: one self-describing <code>.glsl</code> file per graph,
+plus a library of helper <code>.glsl</code> node files. This page is the reference for both —
+the tags they carry, the type rules, the endpoints, and how the compiler turns them into SPIR-V.
+The runtime UX of the graph editor is out of scope here — this document is about
+the <em>files</em> and the <em>compiler</em>.
+</p>
+
+<div class="panel info">
+  <h4>North star</h4>
+  <p style="margin:0">
+    The graph file <em>is</em> the shader file. A user-authored graph serializes its topology as
+    structured <code>// @sg-*</code> comments at the top of a regular <code>.glsl</code> file. The
+    rest of the file is human-readable GLSL — the compiled body of <code>EvaluateSurface()</code>
+    (and optionally <code>ModifyVertex()</code>) — regenerated by the graph editor every time the
+    graph is saved. shaderc reads the same file as ordinary GLSL and produces SPIR-V; the editor
+    parses the <code>@sg-*</code> tags to reconstruct the node UI. One file, two readers, zero
+    sidecars.
+  </p>
+</div>
+
+<h2>1. Where this fits</h2>
+
+<p>
+The engine already has a material composition pipeline. A surface shader is a <code>.glsl</code> file
+that implements:
+</p>
+
+<pre><code>SurfaceOutput EvaluateSurface(SurfaceInput sIn);</code></pre>
+
+<p>
+<code>ShaderComposer</code> splices that into the engine's forward adapter
+(<a href="../../Engine/Modules/Rendering/Shaders/Adapters/adapter_forward.glsl">adapter_forward.glsl</a>),
+adds lighting, shadows, Forward+ clustered light traversal, and produces SPIR-V via
+<code>MaterialBuildService</code>. The graph plugs in <em>here</em>:
+</p>
+
+<div class="mermaid">
+flowchart LR
+  A["<b>Helper node files</b><br/>Engine/Modules/Rendering/Shaders/Graph/Nodes/<br/>Assets/Shaders/GraphNodes/"] --> B[Node Reflector]
+  B --> C[(Node Library<br/>palette + types)]
+  G["<b>Graph .glsl file</b><br/>@sg-* tags + EvaluateSurface body<br/>Assets/Materials/*.glsl"] --> P[Tag Parser]
+  P --> M["MaterialBindings<br/>(props + textures<br/>from @sg tags)"]
+  G --> H[ShaderComposer]
+  M --> H
+  C --> B
+  H --> I[MaterialBuildService<br/>SPIR-V]
+  I --> J[Render]
+  E[Graph Editor] -. reads tags .-> G
+  E -. writes file .-> G
+</div>
+
+<div class="panel ok">
+  <h4>Renderer-blind</h4>
+  <p style="margin:0">
+    The graph compiler produces a <code>SurfaceOutput</code>-yielding function and a list of
+    properties / textures / variant defines. That contract is renderer-agnostic. Whichever
+    adapter the engine picks up at SPIR-V time (forward+ today, deferred / mobile / whatever
+    tomorrow) consumes it. We do <strong>not</strong> need to invent a new material system, a
+    new texture-binding system, a new descriptor layout, or a new render pass.
+  </p>
+</div>
+
+<h2>2. The graph file</h2>
+
+<p>
+A <strong>graph file</strong> is a plain <code>.glsl</code> file under
+<code>&lt;project&gt;/Assets/Materials/**/*.glsl</code> that contains a graph header (<code>@sg-graph</code>
+tag in its top comment block) followed by a regenerated GLSL body implementing
+<code>EvaluateSurface()</code> and, optionally, <code>ModifyVertex()</code>.
+</p>
+
+<h3>2.1 Discovery</h3>
+
+<p>
+Files are graph files iff their leading comment block contains <code>// @sg-graph &lt;name&gt;</code>.
+No special extension, no sidecar. The asset registry's existing <code>.glsl</code> handler is extended
+to peek at the first ~50 lines on import: if it sees <code>@sg-graph</code>, the file is registered as
+a graph asset (parsed for tags, exposed to the graph editor) <em>and</em> as a shader source (passed
+to <code>ShaderComposer</code> + <code>MaterialBuildService</code>). Both paths read the same file —
+no copy, no cache.
+</p>
+
+<p>
+Plain <code>.glsl</code> files without <code>@sg-graph</code> remain regular hand-authored surface
+shaders, unchanged. There's no v1-style "you have to put it in a special folder to be picked up"
+rule; a graph file can live anywhere under <code>Assets/</code>.
+</p>
+
+<h3>2.2 Anatomy</h3>
+
+<pre><code>// Auto-generated. The @sg-* tag block is authoritative.
+// The body below is regenerated by the graph editor on save.
+//
+// @sg-graph     GroundTriplanar
+// @sg-version   1
+// @sg-stage     surface
+//
+// @sg-property  uTiling     float     default=0.25       range=0,4
+// @sg-texture   BaseTex     "7c1f..." hint=albedo
+//
+// @sg-node      n0   type=EngineInput          pos=(40,80)
+// @sg-node      n1   type=TriplanarWeights     pos=(220,40)   sharpness=4
+// @sg-node      n2   type=TriplanarSample      pos=(440,80)
+// @sg-node      out  type=SurfaceOutput        pos=(700,80)
+//
+// @sg-edge      n0.WorldNormal     -&gt; n1.normalWS
+// @sg-edge      n0.WorldPosition   -&gt; n2.positionWS
+// @sg-edge      n1.weights         -&gt; n2.weights
+// @sg-edge      BaseTex            -&gt; n2.tex
+// @sg-edge      uTiling            -&gt; n2.tiling
+// @sg-edge      n2.rgb             -&gt; out.BaseColor
+
+#include "GraphNodes/mapping/triplanar.glsl"
+
+SurfaceOutput EvaluateSurface(SurfaceInput sIn)
+{
+    SurfaceOutput o = DefaultSurfaceOutput();
+    vec3 _n1_weights = SG_TriplanarWeights(sIn.normalWS, 4.0);
+    vec3 _n2_rgb;
+    SG_TriplanarSample(BaseTex, sIn.positionWS, _n1_weights, Mat.uTiling, _n2_rgb);
+    o.baseColor = _n2_rgb;
+    return o;
+}
+</code></pre>
+
+<div class="panel info">
+  <h4>Why one file, not two</h4>
+  <p style="margin:0">
+    Authored data (tags) and compiled output (GLSL body) live together in one file, version-controlled
+    as one diff. You can open it in any editor and see exactly what the graph compiles to. You can
+    diff it in git and see exactly how the shader changed when the designer tweaked a slider. The
+    SPIR-V emit path is parser-free: shaderc reads <code>.glsl</code> as it always does and ignores
+    comments. Only the editor needs a small comment-tag reader (~50 lines).
+  </p>
+</div>
+
+<div class="panel danger">
+  <h4>The GLSL body is regenerated</h4>
+  <p style="margin:0">
+    Hand-edits to the <code>EvaluateSurface()</code> / <code>ModifyVertex()</code> body get
+    overwritten the next time the graph editor saves the file. The tag block is the source of truth;
+    the body exists for readability and for shaderc. If you want to keep custom GLSL, put it in a
+    helper node file (<code>Assets/Shaders/GraphNodes/...</code>) and add an <code>@sgnode</code>
+    tag so the graph can call it.
+  </p>
+</div>
+
+<h2>3. Graph file tag reference</h2>
+
+<p>
+Every tag is a structured comment line of the form <code>// @sg-&lt;kind&gt; &lt;args&gt;</code>.
+Order within the block does not matter. The block ends at the first non-comment line. All tags
+live before the first <code>#include</code> / function definition.
+</p>
+
+<h3>3.1 Graph-level tags</h3>
+
+<table>
+  <tr><th>Tag</th><th>Args</th><th>Required</th><th>Purpose</th></tr>
+  <tr><td><code>@sg-graph</code></td><td>identifier</td><td><span class="pill req">req</span></td><td>Marks this file as a shader graph. The identifier is the graph's logical name (matches the material name shown in the inspector).</td></tr>
+  <tr><td><code>@sg-version</code></td><td>int</td><td><span class="pill opt">opt</span></td><td>Tag-block schema version. Bump when changing the tag grammar so old files can migrate.</td></tr>
+  <tr><td><code>@sg-stage</code></td><td><code>surface</code> · <code>vertex</code> · <code>both</code></td><td><span class="pill opt">opt</span></td><td>Declared sinks. Defaults to <code>surface</code>. Use <code>both</code> when the Vertex Output sink is wired.</td></tr>
+  <tr><td><code>@sg-variant</code></td><td><code>DEFINE</code></td><td><span class="pill opt">opt</span></td><td>Force a <code>ShaderVariantKey</code> define ON. Usually unnecessary — the compiler auto-adds defines based on which engine inputs and surface fields the graph touches (see §5, §7).</td></tr>
+  <tr><td><code>@sg-lighting</code></td><td><code>StandardPBR</code> · <code>Unlit</code> · ...</td><td><span class="pill opt">opt</span></td><td>Lighting model the adapter should use. Defaults to <code>StandardPBR</code>. Maps to the existing <code>MaterialDocument::lightingModel</code> field.</td></tr>
+</table>
+
+<h3>3.2 Material data tags</h3>
+
+<p>These tags carry the material's properties and textures inline; there is no separate <code>MaterialDocument</code> file. The binder reflects on them at material-build time.</p>
+
+<table>
+  <tr><th>Tag</th><th>Form</th><th>Purpose</th></tr>
+  <tr>
+    <td><code>@sg-property</code></td>
+    <td><code>&lt;name&gt; &lt;type&gt; default=&lt;value&gt; [range=lo,hi] [hint=color|normal]</code></td>
+    <td>Per-material property. Becomes an entry in the material UBO / bindless data SSBO. The graph body references it as <code>Mat.&lt;name&gt;</code>.</td>
+  </tr>
+  <tr>
+    <td><code>@sg-texture</code></td>
+    <td><code>&lt;name&gt; "&lt;guid&gt;" [hint=albedo|normal|orm|height|...]</code></td>
+    <td>Per-material texture binding. The adapter wires <code>&lt;name&gt;</code> to a sampler descriptor (or a bindless texture index) at material build time. The graph body uses <code>&lt;name&gt;</code> as a sampler.</td>
+  </tr>
+</table>
+
+<pre><code>// @sg-property  uTiling      float     default=0.25  range=0,4
+// @sg-property  uTint        vec3      default=(1,0.5,0.2)  hint=color
+// @sg-property  uMetallic    float     default=0     range=0,1
+// @sg-texture   BaseTex      "7c1f-..."  hint=albedo
+// @sg-texture   NormalTex    "8d2e-..."  hint=normal</code></pre>
+
+<div class="panel warn">
+  <h4>Texture binding stays in the adapter</h4>
+  <p style="margin:0">
+    The body never declares <code>layout(set=…, binding=…) uniform sampler2D …;</code> — that lives
+    in the adapter, owned by the binder. The graph file just declares <em>that the material wants
+    a texture called <code>BaseTex</code></em>; the adapter assembles the binding at compose time.
+    This matches how hand-authored materials work today.
+  </p>
+</div>
+
+<h3>3.3 Node tags</h3>
+
+<table>
+  <tr><th>Tag</th><th>Form</th><th>Purpose</th></tr>
+  <tr>
+    <td><code>@sg-node</code></td>
+    <td><code>&lt;id&gt; type=&lt;NodeType&gt; pos=(x,y) [&lt;pin&gt;=&lt;default&gt;...]</code></td>
+    <td>One node instance. <code>id</code> is the in-graph identifier used by edges; <code>type</code> is either a library node (matches an <code>@sgnode</code> in a helper file) or a built-in pseudo-node (see below). <code>pos</code> is editor layout. Trailing key=value pairs are per-pin default overrides for unconnected inputs.</td>
+  </tr>
+</table>
+
+<p>Built-in pseudo-node types (no helper file required):</p>
+
+<table>
+  <tr><th>Type</th><th>Role</th></tr>
+  <tr><td><code>EngineInput</code></td><td>Single source node exposing engine-provided fields (UV0, WorldNormal, Time, etc.). See §5. Stage-aware: shows fragment pins under a Surface stack, vertex pins under a Vertex stack.</td></tr>
+  <tr><td><code>SurfaceOutput</code></td><td>Sink for the surface (fragment) stack. See §7.1.</td></tr>
+  <tr><td><code>VertexOutput</code></td><td>Sink for the vertex stack. See §7.2.</td></tr>
+  <tr><td><code>PropertyRef</code></td><td>Reads a material property by name. Implicit: an edge whose source is a property name resolves to a <code>PropertyRef</code> with no need to author the node explicitly.</td></tr>
+  <tr><td><code>TextureRef</code></td><td>Same, for textures. An edge from <code>BaseTex</code> resolves to a <code>TextureRef</code> with no explicit node tag.</td></tr>
+</table>
+
+<h3>3.4 Edge tags</h3>
+
+<table>
+  <tr><th>Tag</th><th>Form</th><th>Purpose</th></tr>
+  <tr>
+    <td><code>@sg-edge</code></td>
+    <td><code>&lt;src&gt;.&lt;pin&gt; -&gt; &lt;dst&gt;.&lt;pin&gt;</code></td>
+    <td>One directed connection. <code>src</code> / <code>dst</code> can be a node id, a property name (resolves to PropertyRef), or a texture name (resolves to TextureRef).</td>
+  </tr>
+</table>
+
+<p>
+A pin name on a library node matches its function parameter name (for inputs) or
+<code>@out</code> name / <code>result</code> (for outputs). Pin names on built-in pseudo-nodes are
+listed in §5 and §7.
+</p>
+
+<h2>4. Helper node files</h2>
+
+<p>
+Reusable building blocks (math, sampling, lighting helpers) live in <code>.glsl</code> files under
+two roots, exactly as in v1:
+</p>
+
+<table>
+  <tr><th>Root</th><th>Purpose</th></tr>
+  <tr>
+    <td><code>Engine/Modules/Rendering/Shaders/Graph/Nodes/**/*.glsl</code></td>
+    <td>Engine-provided nodes. Ships with the engine.</td>
+  </tr>
+  <tr>
+    <td><code>&lt;project&gt;/Assets/Shaders/GraphNodes/**/*.glsl</code></td>
+    <td>Project-provided nodes. Authored by the team. Hot-reloadable.</td>
+  </tr>
+</table>
+
+<p>
+A helper file contains one or more tagged GLSL functions. There is no per-file opt-in tag — files
+in these roots that contain at least one <code>@sgnode</code> are picked up by the reflector. Files
+without any tagged function are ignored.
+</p>
+
+<h3>4.1 Anatomy</h3>
+
+<pre><code>// math/basic.glsl
+// @category    Math/Basic
+// @version     1
+
+// @sgnode      Add
+// @display     "Add"
+// @tooltip     "Component-wise addition."
+// @keywords    plus sum +
+float SG_Add(float a, float b) { return a + b; }
+vec2  SG_Add(vec2  a, vec2  b) { return a + b; }
+vec3  SG_Add(vec3  a, vec3  b) { return a + b; }
+vec4  SG_Add(vec4  a, vec4  b) { return a + b; }
+// Overloads of a tagged function collapse into one polymorphic node.
+
+// @sgnode      Remap
+// @display     "Remap (0..1 to A..B)"
+// @category    Math/Range
+// @tooltip     "Remaps t in [0,1] to [min,max]."
+// @param       t       "T"     range=0,1   default=0.5
+// @param       minVal  "Min"   default=0.0
+// @param       maxVal  "Max"   default=1.0
+// @out         result  "Result"
+// @pure
+float SG_Remap(float t, float minVal, float maxVal)
+{
+    return mix(minVal, maxVal, clamp(t, 0.0, 1.0));
+}</code></pre>
+
+<h3>4.2 The <code>SG_</code> prefix is required</h3>
+
+<p>
+Every function with an <code>@sgnode</code> tag <strong>must</strong> be named <code>SG_&lt;Identifier&gt;</code>.
+The reflector exposes a node only when its <code>@sgnode</code> identifier has a matching
+<code>SG_&lt;Identifier&gt;</code> function. Untagged helpers and tagged functions without that
+matching name are omitted from the node library; reflection does not report a build-time error. Reasons:
+</p>
+
+<ul>
+  <li>When you read a generated graph body, every call that came from the graph is visually recognizable.</li>
+  <li>Helper files can mix utility functions (used internally) with node functions (exposed to the graph). The prefix is the explicit boundary.</li>
+  <li>The editor strips the prefix when displaying node names; <code>@display</code> overrides it explicitly.</li>
+</ul>
+
+<h3>4.3 Helper-file annotation reference</h3>
+
+<h4>File-level (optional, applies to all nodes in the file unless overridden)</h4>
+
+<table>
+  <tr><th>Tag</th><th>Value</th><th>Purpose</th></tr>
+  <tr><td><code>@category</code></td><td>string path (e.g. <code>Math/Basic</code>)</td><td>Default palette category.</td></tr>
+  <tr><td><code>@version</code></td><td>int</td><td>File schema version for migration.</td></tr>
+  <tr><td><code>@requires</code></td><td>comma-separated define list</td><td>Nodes only available when these <code>ShaderVariantKey</code> defines are active.</td></tr>
+  <tr><td><code>@include</code></td><td>relative path</td><td>If any node in this file is used by a graph, the listed include is added to the graph's preamble. Usually unnecessary — the node file itself is the include.</td></tr>
+</table>
+
+<h4>Node-level</h4>
+
+<table>
+  <tr><th>Tag</th><th>Value</th><th>Required</th><th>Purpose</th></tr>
+  <tr><td><code>@sgnode</code></td><td>identifier (must match <code>SG_&lt;id&gt;</code>)</td><td><span class="pill req">req</span></td><td>Declares the following function is a graph node. Same identifier across multiple overloads = one polymorphic node.</td></tr>
+  <tr><td><code>@display</code></td><td>quoted string</td><td><span class="pill opt">opt</span></td><td>Display name in the editor. Defaults to humanized <code>@sgnode</code> identifier.</td></tr>
+  <tr><td><code>@category</code></td><td>string path</td><td><span class="pill opt">opt</span></td><td>Overrides file-level category.</td></tr>
+  <tr><td><code>@tooltip</code></td><td>quoted string</td><td><span class="pill opt">opt</span></td><td>Hover description.</td></tr>
+  <tr><td><code>@keywords</code></td><td>space-separated tokens</td><td><span class="pill opt">opt</span></td><td>Extra search terms.</td></tr>
+  <tr><td><code>@deprecated</code></td><td>quoted reason</td><td><span class="pill opt">opt</span></td><td>Node still loads but is hidden from the palette and shows a warning.</td></tr>
+  <tr>
+    <td><code>@pure</code></td>
+    <td><em>flag</em></td>
+    <td><span class="pill opt">opt</span></td>
+    <td>Documents the helper author’s intent. The current graph compiler does not use this annotation for CSE or constant folding (§8.2).</td>
+  </tr>
+  <tr>
+    <td><code>@stage</code></td>
+    <td><code>fragment</code> · <code>vertex</code> · <code>any</code></td>
+    <td><span class="pill opt">opt</span></td>
+    <td>Default <code>any</code>. See box below — <code>any</code> nodes used by both stacks emit the body in <strong>both</strong> SPIR-V modules; there is no cross-stage sharing.</td>
+  </tr>
+</table>
+
+<div class="panel warn">
+  <h4>What <code>@stage any</code> actually means</h4>
+  <p style="margin:0">
+    "Any" = "may be used in either stage." If a node is wired into the Surface sink only, it emits
+    once into the fragment SPIR-V. If it's also wired into the Vertex sink, the node body is emitted
+    into the vertex SPIR-V <em>as well</em>. Vertex and fragment are separate SPIR-V modules — there
+    is no cross-stage temporary sharing, no varyings inserted by the graph compiler. Cheap math is
+    fine to evaluate twice; expensive work should be done on one side and passed the long way
+    (write a custom varying via a future feature, or do it on the vertex side and approximate on the
+    fragment side).
+  </p>
+</div>
+
+<h4>Pin-level</h4>
+
+<p>
+Pins are inferred from the function signature: every <code>in</code> / non-qualified parameter is
+an input pin, every <code>out</code> parameter is an output pin, and the return value (if any) is
+an output pin named <code>result</code>. <code>@param</code> and <code>@out</code> attach metadata
+to named pins; both are optional.
+</p>
+
+<pre><code>// @param &lt;name&gt;  "&lt;Display Label&gt;"  [default=...]  [range=lo,hi]  [hidden]  [hint=&lt;hint&gt;]
+// @out   &lt;name&gt;  "&lt;Display Label&gt;"  [hint=&lt;hint&gt;]</code></pre>
+
+<table>
+  <tr><th>Attribute</th><th>Example</th><th>Meaning</th></tr>
+  <tr><td><code>default=</code></td><td><code>default=0.5</code>, <code>default=(1,0.5,0,1)</code></td><td>Value used when the pin is unconnected.</td></tr>
+  <tr><td><code>range=lo,hi</code></td><td><code>range=0,1</code></td><td>UI slider clamp for the default-value editor. Hint only; not enforced at runtime.</td></tr>
+  <tr><td><code>hidden</code></td><td><code>hidden</code></td><td>Pin is not drawn in the editor (auto-wired from engine inputs).</td></tr>
+  <tr><td><code>hint=</code></td><td><code>hint=color</code>, <code>hint=normal</code>, <code>hint=uv</code>, <code>hint=texture2d</code></td><td>Affects pin color, default widget, and auto-connection rules. See §5.</td></tr>
+  <tr><td><code>tooltip="..."</code></td><td><code>tooltip="UV coordinates in 0..1 range"</code></td><td>Per-pin tooltip override.</td></tr>
+</table>
+
+<h2>5. Type system</h2>
+
+<p>
+Pin types are derived from GLSL parameter types. Connection rules are <em>strict</em>: implicit
+conversions are limited to two unambiguous cases.
+</p>
+
+<table>
+  <tr><th>GLSL type</th><th>Pin type</th><th>Notes</th></tr>
+  <tr><td><code>float</code></td><td>Scalar</td><td>Number field. Auto-broadcast to Vector* sinks (see §5.1).</td></tr>
+  <tr><td><code>vec2</code></td><td>Vector2</td><td>UV widget if <code>hint=uv</code>.</td></tr>
+  <tr><td><code>vec3</code></td><td>Vector3</td><td>Color widget if <code>hint=color</code>; Normal widget if <code>hint=normal</code>.</td></tr>
+  <tr><td><code>vec4</code></td><td>Vector4</td><td>RGBA color widget if <code>hint=color</code>.</td></tr>
+  <tr><td><code>int</code> / <code>uint</code></td><td>Integer</td><td>No silent float↔int conversion.</td></tr>
+  <tr><td><code>bool</code></td><td>Boolean</td><td>Toggle widget.</td></tr>
+  <tr><td><code>mat3</code> / <code>mat4</code></td><td>Matrix3 / Matrix4</td><td>Rarely exposed; usually engine-wired.</td></tr>
+  <tr><td><code>sampler2D</code></td><td>Texture2D</td><td>Connected via <code>@sg-texture</code> + an edge from the texture name. Never default-value editable.</td></tr>
+  <tr><td><code>samplerCube</code></td><td>TextureCube</td><td>Same.</td></tr>
+  <tr><td><code>sampler2DArray</code></td><td>Texture2DArray</td><td>Same.</td></tr>
+  <tr><td><em>user struct</em></td><td>Struct&lt;Name&gt;</td><td>Reusable plugs (e.g. <code>BRDFContext</code>). Declared in a helper file, referenced via <code>@include</code>.</td></tr>
+</table>
+
+<h3>5.1 Implicit conversions</h3>
+
+<p>The compiler inserts conversions in two cases only. Everything else requires an explicit node.</p>
+
+<div class="grid-2">
+  <div class="panel ok">
+    <h4>Allowed (auto-inserted)</h4>
+    <ul>
+      <li><code>float → vec2/3/4</code> — broadcast: <code>vec3(x)</code></li>
+      <li><code>int → float</code> — explicit cast</li>
+    </ul>
+  </div>
+  <div class="panel danger">
+    <h4>Requires an explicit node</h4>
+    <ul>
+      <li><code>vec3 → vec4</code> — use <em>Component Combine</em>. (You almost always want alpha=0 for directions, alpha=1 for colors; the compiler should not guess.)</li>
+      <li><code>vec4 → vec3</code> — use <em>Component Mask</em> / <em>Swizzle</em></li>
+      <li><code>vec3 → float</code> — use <em>Component Select</em>, <em>Length</em>, <em>Luminance</em>, ...</li>
+      <li><code>float → int</code> — use <em>Truncate</em>, <em>Round</em>, <em>Floor</em></li>
+    </ul>
+  </div>
+</div>
+
+<h2>6. Engine-provided inputs</h2>
+
+<p>
+A graph almost always needs world position, UV, normal, tangent, time, etc. The engine populates
+these into a <code>SurfaceInput</code> struct (fragment stage) or reads them from vertex attributes
+(vertex stage). The graph editor exposes a single <strong>EngineInput</strong> source node — a
+hard-coded pseudo-node in the compiler, not a <code>.glsl</code> file — with one output pin per
+useful field.
+</p>
+
+<h3>6.1 Fragment-stage pins</h3>
+
+<table>
+  <tr><th>Pin</th><th>GLSL source</th><th>Type</th><th>Hint</th><th>Variant gate</th></tr>
+  <tr><td>UV0</td><td><code>sIn.uv0</code></td><td>vec2</td><td>uv</td><td>—</td></tr>
+  <tr><td>UV1</td><td><code>sIn.uv1</code></td><td>vec2</td><td>uv</td><td><code>HAS_UV1</code></td></tr>
+  <tr><td>WorldPosition</td><td><code>sIn.positionWS</code></td><td>vec3</td><td>position</td><td>—</td></tr>
+  <tr><td>WorldNormal</td><td><code>sIn.normalWS</code></td><td>vec3</td><td>normal</td><td>—</td></tr>
+  <tr><td>WorldTangent</td><td><code>sIn.tangentWS.xyz</code></td><td>vec3</td><td>normal</td><td><code>HAS_TANGENT</code></td></tr>
+  <tr><td>ViewDirection</td><td><code>sIn.viewDirWS</code></td><td>vec3</td><td>normal</td><td>—</td></tr>
+  <tr><td>VertexColor</td><td><code>sIn.vertexColor</code></td><td>vec4</td><td>color</td><td><code>HAS_COLOR</code></td></tr>
+  <tr><td>TBN</td><td><code>sIn.TBN</code></td><td>mat3</td><td>—</td><td><code>HAS_TANGENT</code></td></tr>
+  <tr><td>ScreenUV</td><td><code>sIn.screenUV</code></td><td>vec2</td><td>uv</td><td>—</td></tr>
+  <tr><td>LinearDepth</td><td><code>sIn.linearDepth</code></td><td>float</td><td>—</td><td>—</td></tr>
+  <tr><td>Time</td><td><code>Light.uTimeParams.x</code></td><td>float</td><td>—</td><td>—</td></tr>
+  <tr><td>CameraPosition</td><td><code>Cam.uCameraPos.xyz</code></td><td>vec3</td><td>position</td><td>—</td></tr>
+</table>
+
+<h3>6.2 Vertex-stage pins</h3>
+
+<table>
+  <tr><th>Pin</th><th>GLSL source</th><th>Type</th><th>Variant gate</th></tr>
+  <tr><td>Position</td><td><code>aPosition</code></td><td>vec3</td><td>—</td></tr>
+  <tr><td>Normal</td><td><code>aNormal</code></td><td>vec3</td><td><code>HAS_NORMAL</code></td></tr>
+  <tr><td>UV0 / UV1</td><td><code>aUV0</code> / <code>aUV1</code></td><td>vec2</td><td><code>HAS_UV0</code> / <code>HAS_UV1</code></td></tr>
+  <tr><td>VertexColor</td><td><code>aColor</code></td><td>vec4</td><td><code>HAS_COLOR</code></td></tr>
+  <tr><td>Tangent</td><td><code>aTangent</code></td><td>vec4</td><td><code>HAS_TANGENT</code></td></tr>
+  <tr><td>ModelMatrix</td><td><code>inst.modelMatrix</code></td><td>mat4</td><td>—</td></tr>
+  <tr><td>NormalMatrix</td><td><code>inst.normalMatrix</code></td><td>mat3</td><td>—</td></tr>
+  <tr><td>InstanceIndex</td><td><code>inst.instanceIndex</code></td><td>uint</td><td>—</td></tr>
+  <tr><td>Time</td><td>vertex-stage UBO time</td><td>float</td><td>—</td></tr>
+</table>
+
+<div class="panel info">
+  <h4>Automatic variant key population</h4>
+  <p style="margin:0">
+    Reading any gated pin auto-adds the corresponding <code>HAS_*</code> define to the material's
+    <code>ShaderVariantKey</code>. The graph compiler tracks per-pin reads from the EngineInput
+    node, walks the live-path set after DCE, and emits the union of required defines. Designers
+    almost never write <code>@sg-variant</code> by hand.
+  </p>
+</div>
+
+<div class="panel warn">
+  <h4>EngineInput is a versioned ABI</h4>
+  <p style="margin:0">
+    Adding a new EngineInput pin is an engine-side change: the adapter has to populate the field.
+    Power users who need extra plumbing should write a regular helper node that takes the engine
+    inputs it cares about as parameters, and wire the EngineInput source through that.
+  </p>
+</div>
+
+<h2>7. Graph endpoints</h2>
+
+<p>
+A graph has two sink nodes. Both live in the same graph file — there is no separate vertex-graph
+asset.
+</p>
+
+<h3>7.1 SurfaceOutput (fragment stage)</h3>
+
+<p>
+The compiler fills in a <code>SurfaceOutput</code> struct and returns it from
+<code>EvaluateSurface()</code>. Pins not wired use their default from
+<code>DefaultSurfaceOutput()</code>.
+</p>
+
+<table>
+  <tr><th>Sink pin</th><th>SurfaceOutput field</th><th>Type</th><th>Default</th><th>Hint</th></tr>
+  <tr><td>BaseColor</td><td><code>baseColor</code></td><td>vec3</td><td>(1,1,1)</td><td>color</td></tr>
+  <tr><td>Metallic</td><td><code>metallic</code></td><td>float</td><td>0</td><td>range 0..1</td></tr>
+  <tr><td>Roughness</td><td><code>roughness</code></td><td>float</td><td>0.5</td><td>range 0..1</td></tr>
+  <tr><td>Normal (tangent-space)</td><td><code>normalWS</code> (after TBN apply)</td><td>vec3</td><td>(0,0,1)</td><td>normal</td></tr>
+  <tr><td>Emissive</td><td><code>emissive</code></td><td>vec3</td><td>(0,0,0)</td><td>color</td></tr>
+  <tr><td>Opacity</td><td><code>opacity</code></td><td>float</td><td>1</td><td>range 0..1</td></tr>
+  <tr><td>AmbientOcclusion</td><td><code>ao</code></td><td>float</td><td>1</td><td>range 0..1</td></tr>
+  <tr><td>ClearCoat</td><td><code>clearCoat</code> / <code>clearCoatRoughness</code></td><td>float</td><td>0 / 0</td><td>—</td></tr>
+  <tr><td>Subsurface</td><td><code>subsurfaceColor</code> / <code>thickness</code></td><td>vec3 / float</td><td>(0,0,0) / 0</td><td>color / —</td></tr>
+  <tr><td>Anisotropy</td><td><code>anisotropy</code></td><td>float</td><td>0</td><td>range -1..1</td></tr>
+  <tr><td>Sheen</td><td><code>sheenColor</code> / <code>sheenRoughness</code></td><td>vec3 / float</td><td>(0,0,0) / 0</td><td>color / —</td></tr>
+</table>
+
+<p>
+The Normal pin is special: it accepts a <strong>tangent-space</strong> normal in [-1, +1] (canonical
+normal-map convention). The compiler emits <code>normalize(sIn.TBN * n)</code> to convert it to
+world space, and auto-adds <code>HAS_TANGENT</code> to the variant key whenever the Normal pin is
+wired.
+</p>
+
+<h3>7.2 VertexOutput (vertex stage)</h3>
+
+<p>
+The Vertex Output sink targets the engine's <em>simple</em> vertex modifier form:
+</p>
+
+<pre><code>vec3 ModifyVertex(vec3 position, InstanceData inst);</code></pre>
+
+<p>
+This runs in <strong>local space</strong>, before the world transform: an offset written here is
+in the mesh's own axes and scales with the object. The compiler emits the function body
+into the same graph file, alongside <code>EvaluateSurface()</code>, when the sink is wired. Wiring
+it auto-adds <code>HAS_VERTEX_MODIFIER</code> to the variant key.
+</p>
+
+<table>
+  <tr><th>Sink pin</th><th>Behavior</th><th>Type</th><th>Default</th><th>Hint</th></tr>
+  <tr><td>PositionOffset</td><td>Added to incoming local-space vertex position before world transform.</td><td>vec3</td><td>(0,0,0)</td><td>position</td></tr>
+</table>
+
+<p>
+Leaving the pin unwired emits no <code>ModifyVertex()</code>, no <code>HAS_VERTEX_MODIFIER</code>
+define, no extra cost — the material falls through to the standard adapter path.
+</p>
+
+<div class="panel info">
+  <h4>v1 has only PositionOffset — explicitly</h4>
+  <p style="margin:0">
+    NormalOffset / TangentOffset are intentionally absent from v1. Modifying the normal in the
+    vertex stage requires post-transform recomputation and is rare in practice for the modifier
+    contract we expose. Procedural-geometry workflows (terrain, water) use the extended modifier
+    contract (<code>HAS_VERTEX_OUTPUT_MODIFIER</code>) which is out of scope for v1 graphs — see §11.
+    If a designer hits the wall on PositionOffset-only displacement, we add the missing sink pins
+    rather than reaching for the extended modifier.
+  </p>
+</div>
+
+<h3>7.3 Stage routing</h3>
+
+<p>Each helper node's <code>@stage</code> tag controls which sink it can feed:</p>
+
+<ul>
+  <li><code>@stage any</code> (default) — pure math, mixes, swizzles. Eligible for either stage. If wired into both, the body is emitted in both shaders.</li>
+  <li><code>@stage fragment</code> — anything that uses <code>texture()</code> with auto-LOD, <code>dFdx</code>/<code>dFdy</code>, <code>gl_FragCoord</code>, screen-space data.</li>
+  <li><code>@stage vertex</code> — rare; most vertex work is plain math. Use when a node reads a vertex-stage-only resource.</li>
+</ul>
+
+<p>
+The compiler rejects fragment-only nodes wired into the vertex sink at validation time. The most
+common case this catches is <code>SG_SampleTexture2D</code>, tagged <code>@stage fragment</code>
+because <code>texture()</code> requires implicit derivatives. For vertex-side displacement maps,
+use <code>SG_SampleTexture2DLOD</code> (<code>@stage any</code>, takes an explicit <code>lod</code>
+parameter, emits <code>textureLod()</code>).
+</p>
+
+<h2>8. Compilation pipeline</h2>
+
+<p>From a saved graph file to SPIR-V:</p>
+
+<div class="mermaid">
+flowchart TD
+  G["<b>Graph .glsl file</b><br/>(@sg-* tag block + GLSL body)"] --> Sx{Save event?}
+  Sx -- "saved by editor" --> P1[Parse @sg-* tags]
+  Sx -- "loaded by shaderc" --> H[ShaderComposer]
+  P1 --> P2[Validate graph]
+  P2 --> P3["Walk back from each sink<br/>(Surface + Vertex)<br/>partition nodes by stage"]
+  P3 --> P4["Topo-sort per stage"]
+  P4 --> P5["Type resolution<br/>(pick overloads,<br/>insert widen casts)"]
+  P5 --> P6["SSA lowering<br/>(every node call = one temp)"]
+  P6 --> P8["Resource collection<br/>(props, textures, variant defines)"]
+  P8 --> P9["Emit GLSL body<br/>EvaluateSurface() / ModifyVertex()"]
+  P9 --> W["Rewrite file body<br/>(tag block untouched)"]
+  W --> G
+  H --> M[Read @sg-property / @sg-texture<br/>for material bindings]
+  H --> S[Splice EvaluateSurface<br/>into adapter_forward.glsl]
+  S --> I[shaderc: SPIR-V]
+  M --> I
+  I --> J[Render]
+</div>
+
+<h3>8.1 SSA lowering</h3>
+
+<p>
+Each node invocation becomes a single GLSL statement that defines uniquely-named temporaries for
+each output pin. Edges become reads of those temporaries.
+</p>
+
+<div class="grid-2">
+  <div class="panel before">
+    <h4>Graph (conceptual)</h4>
+    <pre style="margin:0"><code>UV0 ────► SampleTexture2D ──► Multiply ──► BaseColor
+                  ▲              ▲
+              BaseTex      Tint(prop)</code></pre>
+  </div>
+  <div class="panel after">
+    <h4>Emitted GLSL body</h4>
+    <pre style="margin:0"><code>vec4  _n1_rgba; vec3 _n1_rgb;
+float _n1_r,_n1_g,_n1_b,_n1_a;
+SG_SampleTexture2D(BaseTex, sIn.uv0,
+                   _n1_rgba, _n1_rgb,
+                   _n1_r, _n1_g, _n1_b, _n1_a);
+
+vec3 _n2_result = SG_Multiply(_n1_rgb, Mat.uBaseTint);
+
+o.baseColor = _n2_result;</code></pre>
+  </div>
+</div>
+
+<h3>8.2 Shared outputs and live nodes</h3>
+
+<ol>
+  <li><strong>Shared output pins</strong>: consumers of the same output pin of the same node
+    instance read the same generated temporary.</li>
+  <li><strong>Separate node instances</strong>: each live node emits its own call, even when its
+    type and inputs match another node. This also applies to two texture-sampling nodes with
+    the same texture and UV inputs. To share a sample, connect consumers to one node.</li>
+  <li><strong>Constant inputs</strong>: helper calls with literal inputs remain calls in the
+    emitted GLSL. The graph compiler does not evaluate <code>@pure</code> helpers on the host.
+    A later shader compiler may optimize that GLSL.</li>
+  <li><strong>Unconnected nodes</strong>: the compiler walks upstream from each sink and emits
+    only nodes on those live paths. This does not depend on <code>@pure</code>.</li>
+</ol>
+
+<div class="panel info">
+  <h4>The scope of <code>@pure</code></h4>
+  <p style="margin:0">The annotation is not a guarantee of graph-level common-subexpression
+    elimination, constant folding, or texture-sample deduplication. Do not rely on it to merge
+    separate node instances.</p>
+</div>
+
+<h2>9. Hot reload</h2>
+
+<p>
+Because the graph and its compiled body share a single file, hot reload collapses to a single
+<code>AssetReloaded</code> event on that <code>.glsl</code>.
+</p>
+
+<h3>9.1 What triggers a recompile</h3>
+
+<table>
+  <tr><th>Edit</th><th>Effect</th></tr>
+  <tr><td>Designer edits the graph in the editor → editor rewrites the file</td><td><code>AssetReloaded</code> fires; <code>ShaderComposer</code> + <code>MaterialBuildService</code> rebuild the material.</td></tr>
+  <tr><td>Helper node file changes (signature or body)</td><td><code>AssetReloaded</code> fires for the helper file; any graph file whose tag block references that node type is rebuilt.</td></tr>
+  <tr><td>User hand-edits the GLSL body of a graph file</td><td>Compiles and renders. <strong>Will be overwritten next time the graph editor saves the file.</strong> Useful for prototyping; not for production.</td></tr>
+  <tr><td>User hand-edits the tag block of a graph file</td><td>Editor reloads the graph from the new tags. Saving in the editor will regenerate the body from those tags.</td></tr>
+</table>
+
+<h3>9.2 Schema-changing helper edits</h3>
+
+<table>
+  <tr><th>Change</th><th>Effect on graphs using this node</th></tr>
+  <tr><td>Function body edited; signature unchanged</td><td>Recompile only.</td></tr>
+  <tr><td><code>@pure</code> added/removed</td><td>No graph-level optimization change; the compiler does not use this annotation to merge or fold calls.</td></tr>
+  <tr><td>Pin added (new <code>@param</code> at the end of the signature)</td><td>Recompile. New pin appears on existing node instances using its default value.</td></tr>
+  <tr><td>Pin removed</td><td>Existing graph instances lose the pin's edge if it had one. Migration warning logged via the engine's Logger. Graph remains loadable (broken edges drawn red in editor).</td></tr>
+  <tr><td>Pin type changed</td><td>Same as remove + add. If the new type is widening-compatible with the old type's incoming edge (per §5.1), the edge survives; otherwise it's broken and warned.</td></tr>
+  <tr><td>Node removed (<code>@sgnode</code> tag deleted)</td><td>Existing graph instances become "missing node" placeholders (drawn red). Graph still loads.</td></tr>
+</table>
+
+<div class="panel info">
+  <h4>No automatic migration</h4>
+  <p style="margin:0">
+    A naive auto-migrate would silently rebind edges and quietly change rendering. Better to mark
+    broken edges, surface them in the editor's output panel, and let the author decide. The
+    <code>@version</code> helper-file tag exists for cases where the
+    author wants to <em>explicitly</em> declare a breaking change and key migration code off it.
+  </p>
+</div>
+
+<h3>9.3 Caching</h3>
+
+<p>
+The editor reflects the helper files when it first needs the node library and keeps the result
+in memory until it is invalidated or the project node root changes. It writes no node-library
+cache to disk. A graph file carries its generated GLSL body alongside its authoritative tags.
+</p>
+
+<h2>10. Worked example: triplanar ground + wind sway</h2>
+
+<h3>10.1 Helper file: <code>Assets/Shaders/GraphNodes/mapping/triplanar.glsl</code></h3>
+
+<pre><code>// @category Mapping/Triplanar
+
+// @sgnode  TriplanarWeights
+// @display "Triplanar Weights"
+// @tooltip "Computes blend weights from a world-space normal."
+// @param   normalWS   "Normal (WS)"   hint=normal
+// @param   sharpness  "Sharpness"     default=4   range=0,16
+// @out     weights    "Weights (XYZ)"
+// @pure
+vec3 SG_TriplanarWeights(vec3 normalWS, float sharpness)
+{
+    vec3 n = pow(abs(normalWS), vec3(sharpness));
+    return n / max(n.x + n.y + n.z, 1e-5);
+}
+
+// @sgnode  TriplanarSample
+// @display "Triplanar Sample"
+// @tooltip "Samples a 2D texture three times along world axes and blends."
+// @param   tex        "Texture"        hint=texture2d
+// @param   positionWS "Position (WS)"  hint=position
+// @param   weights    "Weights"
+// @param   tiling     "Tiling"         default=1
+// @out     rgb        "RGB"            hint=color
+// @stage   fragment
+void SG_TriplanarSample(sampler2D tex, vec3 positionWS, vec3 weights, float tiling,
+                        out vec3 rgb)
+{
+    vec2 uvX = positionWS.zy * tiling;
+    vec2 uvY = positionWS.xz * tiling;
+    vec2 uvZ = positionWS.xy * tiling;
+    vec3 cX = texture(tex, uvX).rgb;
+    vec3 cY = texture(tex, uvY).rgb;
+    vec3 cZ = texture(tex, uvZ).rgb;
+    rgb = cX * weights.x + cY * weights.y + cZ * weights.z;
+}</code></pre>
+
+<h3>10.2 Helper file: <code>Assets/Shaders/GraphNodes/motion/wind.glsl</code></h3>
+
+<pre><code>// @category Motion
+
+// @sgnode  WindSway
+// @display "Wind Sway"
+// @tooltip "Local-space horizontal displacement scaled by vertex height."
+// @param   localPos   "Position (local)"  hint=position
+// @param   time       "Time"
+// @param   direction  "Direction"         default=(1,0,0)
+// @param   amplitude  "Amplitude"         default=0.1  range=0,2
+// @param   frequency  "Frequency"         default=2.0  range=0,16
+// @out     offset     "Position Offset"   hint=position
+// @stage   any
+// @pure
+void SG_WindSway(vec3 localPos, float time, vec3 direction,
+                 float amplitude, float frequency, out vec3 offset)
+{
+    float h = max(localPos.y, 0.0);
+    float s = sin(time * frequency + localPos.x * 0.5 + localPos.z * 0.5);
+    offset = direction * (s * amplitude * h);
+}</code></pre>
+
+<h3>10.3 Graph file: <code>Assets/Materials/GroundTriplanar.glsl</code></h3>
+
+<pre><code>// Auto-generated. The @sg-* tag block is authoritative.
+// The body below is regenerated by the graph editor on save.
+//
+// @sg-graph     GroundTriplanar
+// @sg-version   1
+// @sg-stage     both
+// @sg-lighting  StandardPBR
+//
+// @sg-property  uTiling     float   default=0.25   range=0,4
+// @sg-property  uWindDir    vec3    default=(1,0,0)
+// @sg-property  uWindAmp    float   default=0.15   range=0,2
+// @sg-property  uWindFreq   float   default=2.5    range=0,16
+// @sg-texture   BaseTex     "7c1f-..."   hint=albedo
+//
+// --- Surface stack ---
+// @sg-node      ein  type=EngineInput          pos=(40,80)
+// @sg-node      n1   type=TriplanarWeights     pos=(220,40)   sharpness=4
+// @sg-node      n2   type=TriplanarSample      pos=(440,80)
+// @sg-node      sout type=SurfaceOutput        pos=(700,80)
+//
+// @sg-edge      ein.WorldNormal     -&gt; n1.normalWS
+// @sg-edge      ein.WorldPosition   -&gt; n2.positionWS
+// @sg-edge      n1.weights          -&gt; n2.weights
+// @sg-edge      BaseTex             -&gt; n2.tex
+// @sg-edge      uTiling             -&gt; n2.tiling
+// @sg-edge      n2.rgb              -&gt; sout.BaseColor
+//
+// --- Vertex stack ---
+// @sg-node      einV type=EngineInput          pos=(40,240)
+// @sg-node      n3   type=WindSway             pos=(280,240)
+// @sg-node      vout type=VertexOutput         pos=(540,240)
+//
+// @sg-edge      einV.Position       -&gt; n3.localPos
+// @sg-edge      einV.Time           -&gt; n3.time
+// @sg-edge      uWindDir            -&gt; n3.direction
+// @sg-edge      uWindAmp            -&gt; n3.amplitude
+// @sg-edge      uWindFreq           -&gt; n3.frequency
+// @sg-edge      n3.offset           -&gt; vout.PositionOffset
+
+#include "GraphNodes/mapping/triplanar.glsl"
+#include "GraphNodes/motion/wind.glsl"
+
+SurfaceOutput EvaluateSurface(SurfaceInput sIn)
+{
+    SurfaceOutput o = DefaultSurfaceOutput();
+    vec3 _n1_weights = SG_TriplanarWeights(sIn.normalWS, 4.0);
+    vec3 _n2_rgb;
+    SG_TriplanarSample(BaseTex, sIn.positionWS, _n1_weights, Mat.uTiling, _n2_rgb);
+    o.baseColor = _n2_rgb;
+    return o;
+}
+
+vec3 ModifyVertex(vec3 position, InstanceData inst)
+{
+    vec3 _n3_offset;
+    SG_WindSway(position, Light.uTimeParams.x,
+                Mat.uWindDir, Mat.uWindAmp, Mat.uWindFreq,
+                _n3_offset);
+    return position + _n3_offset;
+}</code></pre>
+
+<p>
+Notice what's <em>not</em> there: no <code>MaterialDocument</code> sidecar, no cached
+<code>.surface.glsl</code> in <code>.cache/</code>, no sampler declarations (the adapter owns
+those), no varyings, no UBO definitions. The graph compiler emits only the bodies of
+<code>EvaluateSurface()</code> / <code>ModifyVertex()</code>, and the binder picks up properties
+and textures by reading the <code>@sg-*</code> tag block on the same file.
+</p>
+
+<p>
+The variant key gets <code>HAS_TANGENT</code> set because the surface stack reads
+<code>WorldNormal</code> and writes <code>BaseColor</code> through a normal-map–free path
+(no Normal pin wired here, so actually <code>HAS_TANGENT</code> is <em>not</em> added in this case;
+the compiler tracks per-pin reads, not just per-sink presence). It does get
+<code>HAS_VERTEX_MODIFIER</code> because PositionOffset is wired.
+</p>
+
+<h2>11. What the format does not support</h2>
+
+<table>
+  <tr><th>Question</th><th>Status</th><th>Notes</th></tr>
+  <tr><td>HLSL nodes</td><td><span class="pill keep">deferred</span></td><td>Engine is GLSL-first via shaderc. Adding HLSL means adding DXC, a second dialect of helper files, and a parallel compile path. Revisit only when there's a concrete backend that can't consume SPIR-V from GLSL.</td></tr>
+  <tr><td>Procedural-geometry vertex graph (extended modifier)</td><td><span class="pill keep">deferred</span></td><td>The simple PositionOffset modifier covers wind, sway, displacement, vertex animation. The extended <code>HAS_VERTEX_OUTPUT_MODIFIER</code> form (terrain, water) needs a different sink layout and a different graph asset type. Revisit when a designer hits the wall.</td></tr>
+  <tr><td>Subgraphs (graph-as-node)</td><td><span class="pill keep">deferred</span></td><td>Mechanically straightforward (a subgraph compiles to a synthesized helper file at use-site) but adds type-resolution complexity. Defer until a real duplication justifies it.</td></tr>
+  <tr><td>Per-graph custom GLSL injection</td><td><span class="pill del">rejected</span></td><td>The escape hatch for "I'll just hand-write this part" is the existing surface-shader path (a <code>.glsl</code> without <code>@sg-graph</code>). Don't muddy the graph with a per-graph text-edit pane.</td></tr>
+  <tr><td>NormalOffset / TangentOffset on the vertex sink</td><td><span class="pill opt">future</span></td><td>v1 has only PositionOffset (§7.2). Add the missing sinks if displacement-driven normal recomputation becomes a recurring need.</td></tr>
+  <tr><td>Procedural texture nodes (no asset)</td><td><span class="pill opt">future</span></td><td>Currently all texture samples require an <code>@sg-texture</code> binding. Pure procedural nodes (noise generators with no texture pin) work today.</td></tr>
+  <tr><td>Custom struct pins across files</td><td><span class="pill opt">supported</span></td><td>Already in §5. Author the struct in a helper file; <code>@include</code> from any file that uses it.</td></tr>
+  <tr><td>Complete raw-shader mode (full vertex+fragment, no adapter)</td><td><span class="pill keep">deferred</span></td><td>Separate product, not an extension. Different sink set (raw FragmentOutput / VertexOutput), no adapter splice, opt-in engine-resource source nodes for cameras / lights / shadows. Plausibly a <code>.shaderasset</code> with the same <code>@sg-*</code> tag idea but a different sink table. Ship the material graph first; design the raw-shader mode against a concrete second use case (post-process effect, custom shadow shader, compute filter).</td></tr>
+</table>
+
+<h2>12. The format in one page</h2>
+
+<div class="panel ok">
+  <ul style="margin:0">
+    <li><strong>One graph = one <code>.glsl</code> file.</strong> Tags at the top, regenerated GLSL body below. shaderc reads the file as GLSL; the editor reads the tags. No JSON, no sidecar, no cache as source-of-truth.</li>
+    <li>The tag block is authoritative. The body is rewritten on every graph editor save. Hand-edits to the body are prototyping aids, not production code.</li>
+    <li>Material properties and textures are declared inline via <code>@sg-property</code> / <code>@sg-texture</code> tags. The binder reflects on them the same way it reflects on a hand-authored <code>MaterialDocument</code>.</li>
+    <li>Helper nodes live in separate <code>.glsl</code> files under <code>Engine/.../Graph/Nodes/</code> (engine) or <code>Assets/Shaders/GraphNodes/</code> (project). The <code>SG_</code> function prefix is required.</li>
+    <li>Two sinks: <strong>SurfaceOutput</strong> → <code>EvaluateSurface()</code>, <strong>VertexOutput</strong> → <code>ModifyVertex()</code>. Both live in the same file. PositionOffset is the only v1 vertex pin; explicit choice.</li>
+    <li>Strict type rules: only <code>float→vecN</code> broadcast and <code>int→float</code> cast are implicit. No <code>vec3→vec4</code> guessing. Everything else requires an explicit conversion node.</li>
+    <li>Consumers share one node’s output temporary. Separate node instances, including identical texture samples, emit separate calls; <code>@pure</code> does not enable CSE or host constant folding.</li>
+    <li>Hot reload is one file per graph; no cache to keep coherent. Broken edges from helper changes are surfaced visually, never auto-migrated.</li>
+    <li>The graph is renderer-blind: it emits a <code>SurfaceOutput</code>-yielding function and lets the engine's adapter (forward+ today, deferred tomorrow) consume it.</li>
+    <li>Raw-shader mode and the extended vertex modifier are explicit future-products, not v1 features.</li>
+  </ul>
+</div>
+
+<hr/>
+
+<h2>Changelog</h2>
+
+<p>
+2026-05-21 &mdash; The format collapsed from four artifacts per graph (a <code>.shadergraph</code>
+JSON, a helper <code>.glsl</code>, a generated <code>.surface.glsl</code> and a generated
+<code>MaterialDocument</code>) to one self-describing <code>.glsl</code> file plus the same helper
+library. The <code>@sg-*</code> tag block became authoritative and the GLSL body became regenerated
+output; material properties and textures moved inline as <code>@sg-property</code> /
+<code>@sg-texture</code> tags; <code>@sgfile</code> was dropped from helper files, location plus
+<code>@sgnode</code> being enough; and implicit <code>vec3 &rarr; vec4</code> widening was removed
+in favor of an explicit Component Combine node.
+</p>
+
+<hr/>
+
+<footer>
+Shader graph authored-format reference · one <code>.glsl</code> file per graph
+</footer>
+
+<script src="https://cdn.jsdelivr.net/npm/mermaid@10/dist/mermaid.min.js"></script>
+<script>
+  mermaid.initialize({
+    startOnLoad: true,
+    theme: 'dark',
+    themeVariables: {
+      darkMode: true,
+      background: '#161b22',
+      primaryColor: '#1c232c',
+      primaryBorderColor: '#2a3340',
+      primaryTextColor: '#e6edf3',
+      lineColor: '#8b98a5',
+      tertiaryColor: '#0e1116',
+      clusterBkg: '#161b22',
+      clusterBorder: '#2a3340'
+    },
+    flowchart: { curve: 'basis', useMaxWidth: true }
+  });
+</script>
+
+</body>
+</html>

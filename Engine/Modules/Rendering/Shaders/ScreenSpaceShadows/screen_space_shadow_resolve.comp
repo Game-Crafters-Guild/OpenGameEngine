@@ -1,0 +1,128 @@
+#version 460
+
+// Filter radial sampling noise without crossing receiver silhouettes, then pack
+// visibility and receiver depth into a sampled R32_UINT mask. All filtering
+// stays in compute and reuses the depth input; no normals or history required.
+// The float depth keeps its exponent and upper 15 mantissa bits (relative
+// truncation error <= 3.052e-5); the low byte stores UNORM8 visibility.
+layout(local_size_x = 8, local_size_y = 8, local_size_z = 1) in;
+layout(set = 0, binding = 0) uniform sampler2D uDepth;
+layout(set = 0, binding = 1, r32ui) uniform writeonly uimage2D uMask;
+layout(set = 0, binding = 2, std430) readonly buffer Visibility { uint visibility[]; };
+shared float tileDepth[196];
+shared float tileVisibility[196];
+
+float ReceiverSlope(float before, float center, float after)
+{
+    // Prefer the side continuous with this receiver at a depth discontinuity.
+    float backward = before > 0.0 ? center - before : 1e10;
+    float forward = after > 0.0 ? after - center : 1e10;
+    if (before <= 0.0 && after <= 0.0)
+        return 0.0;
+    return abs(backward) < abs(forward) ? backward : forward;
+}
+
+void main()
+{
+    ivec2 pixel = ivec2(gl_GlobalInvocationID.xy);
+    ivec2 size = imageSize(uMask);
+    // One 14x14 shared tile includes the three-pixel apron of an 8x8 group.
+    // Every lane loads and reaches the barrier, including partial edge groups.
+    ivec2 origin = ivec2(gl_WorkGroupID.xy) * 8 - 3;
+    for (uint i = gl_LocalInvocationIndex; i < 196u; i += 64u)
+    {
+        ivec2 p = origin + ivec2(int(i % 14u), int(i / 14u));
+        bool valid = all(greaterThanEqual(p, ivec2(0))) && all(lessThan(p, size));
+        tileDepth[i] = valid ? texelFetch(uDepth, p, 0).r : 0.0;
+        tileVisibility[i] = valid ? float(min(visibility[p.y * size.x + p.x], 255u)) : 255.0;
+    }
+    barrier();
+    if (any(greaterThanEqual(pixel, size)))
+        return;
+    int center = (int(gl_LocalInvocationID.y) + 3) * 14 + int(gl_LocalInvocationID.x) + 3;
+    float depth = tileDepth[center];
+    float filtered = 255.0;
+    // Every tap the filter can read lies in the 5x5 window around the receiver
+    // (the tensor's gradients reach two pixels; with no gradient the footprint
+    // is the 5x5 kernel). When that window holds one visibility, the gradients
+    // are zero and the result is that value whatever the depths: return it
+    // without filtering. Fully lit or fully shadowed ground is most pixels.
+    bool uniformWindow = true;
+    float windowVisibility = tileVisibility[center];
+    for (int y = -2; y <= 2; ++y)
+        for (int x = -2; x <= 2; ++x)
+            uniformWindow = uniformWindow && tileVisibility[center + y * 14 + x] == windowVisibility;
+    if (depth > 0.0 && uniformWindow)
+        filtered = windowVisibility;
+    else if (depth > 0.0)
+    {
+        vec2 slope = vec2(
+            ReceiverSlope(tileDepth[center - 1], depth, tileDepth[center + 1]),
+            ReceiverSlope(tileDepth[center - 14], depth, tileDepth[center + 14]));
+        float tolerance = max(depth * 0.001, 1e-7);
+        const float kernel[5] = float[5](1.0, 4.0, 6.0, 4.0, 1.0);
+        // Estimate an edge normal from a structure tensor rather than one
+        // pixel's staircase gradient. Only this receiver contributes; a depth
+        // silhouette must not steer the shadow filter onto another surface.
+        vec3 tensor = vec3(0.0);
+        for (int y = -1; y <= 1; ++y)
+            for (int x = -1; x <= 1; ++x)
+            {
+                int i = center + y * 14 + x;
+                vec2 gradient = vec2(0.0);
+                for (int axis = 0; axis < 2; ++axis)
+                {
+                    ivec2 step = axis == 0 ? ivec2(1, 0) : ivec2(0, 1);
+                    int offset = step.y * 14 + step.x;
+                    float expectedA = depth + dot(slope, vec2(ivec2(x,y) - step));
+                    float expectedB = depth + dot(slope, vec2(ivec2(x,y) + step));
+                    if (tileDepth[i - offset] > 0.0 && tileDepth[i + offset] > 0.0 &&
+                        abs(tileDepth[i - offset] - expectedA) < tolerance &&
+                        abs(tileDepth[i + offset] - expectedB) < tolerance)
+                        gradient[axis] = (tileVisibility[i + offset] - tileVisibility[i - offset]) / 255.0;
+                }
+                tensor += vec3(gradient.x * gradient.x, gradient.x * gradient.y,
+                               gradient.y * gradient.y);
+            }
+        float anisotropy = length(vec2(tensor.x - tensor.z, 2.0 * tensor.y));
+        float coherence = anisotropy / max(tensor.x + tensor.z, 1e-5);
+        vec2 normal = vec2(tensor.x - tensor.z + anisotropy, 2.0 * tensor.y);
+        normal = dot(normal, normal) > 1e-8 ? normalize(normal) : vec2(0.0, 1.0);
+        bool directional = coherence > 0.65;
+        float sum = 0.0;
+        float weightSum = 0.0;
+        for (int y = -3; y <= 3; ++y)
+            for (int x = -3; x <= 3; ++x)
+            {
+                // Follow coherent edges to average their pixel steps, while
+                // keeping the footprint narrow across thin contact shadows.
+                float spatialWeight;
+                if (directional)
+                {
+                    float across = dot(normal, vec2(x, y));
+                    float along = dot(vec2(-normal.y, normal.x), vec2(x, y));
+                    spatialWeight = exp(-0.5 * (across * across / 0.49 + along * along / 3.24));
+                }
+                else
+                {
+                    if (abs(x) > 2 || abs(y) > 2) continue;
+                    spatialWeight = kernel[x + 2] * kernel[y + 2];
+                }
+                int index = center + y * 14 + x;
+                float neighborDepth = tileDepth[index];
+                // Reverse-Z depth is affine on a planar screen-space receiver.
+                // Comparing to that plane smooths sloping ground too, while
+                // rejecting another surface or the far border.
+                float expected = depth + dot(slope, vec2(x, y));
+                float agreement = 1.0 - smoothstep(tolerance, tolerance * 2.0,
+                                                   abs(neighborDepth - expected));
+                float weight = neighborDepth > 0.0 ? spatialWeight * agreement : 0.0;
+                sum += tileVisibility[index] * weight;
+                weightSum += weight;
+            }
+        filtered = sum / max(weightSum, 1.0);
+    }
+    uint packed = (floatBitsToUint(depth) & 0xffffff00u) |
+                  uint(round(clamp(filtered, 0.0, 255.0)));
+    imageStore(uMask, pixel, uvec4(packed));
+}

@@ -1,0 +1,197 @@
+#version 450
+
+// 3x3 tent blur over the DDGI glossy-resolve targets (ddgi_glossy_resolve.comp),
+// at resolve resolution, before the forward pass samples them. A reduced-
+// resolution resolve magnified by a plain bilinear tap shows square-pixel
+// blocks on fast-varying reflection directions (curved reflectors); this
+// smooths the source so the consume-side tent tap (Includes/ibl.glsl) has no
+// hard texel steps left to magnify. Runs at resolve resolution — at Quarter
+// scale this is 1/16th-res work.
+//
+// The irradiance (diffuse) target additionally accumulates over time. The DDGI
+// solve refreshes only a budget-limited window of probes per frame, so a batch
+// of probes in view steps at once and the resolved irradiance jumps in bursts;
+// on a sparse field (Manual fit, large volume) each burst is big enough to read
+// as jitter on bright surfaces. Blending each texel with the previous frame's
+// value averages the bursts out. History is reprojected through the previous
+// view-projection (ge_prevViewProj) and depth-tested, so it stays put while the
+// camera moves and rejects on disocclusion instead of smearing. The two
+// reflection lobes are NOT accumulated — a reflection moves with the camera and
+// a screen-space history would ghost it; they take the spatial blur only.
+
+layout(local_size_x = 8, local_size_y = 8, local_size_z = 1) in;
+
+#include "Includes/view_params.glsl"  // ViewParams UBO, set 0 binding 7
+#include "Includes/hdr_sanitize.glsl"  // IsFiniteHDR
+
+layout(set = 0, binding = 0) uniform sampler2D uRoughIn;
+layout(set = 0, binding = 1) uniform sampler2D uGlossyIn;
+layout(set = 0, binding = 2, rgba16f) uniform writeonly image2D uRoughOut;
+layout(set = 0, binding = 3, rgba16f) uniform writeonly image2D uGlossyOut;
+// 1-sample view depth at render extent, reverse-Z (near = 1, far/cleared = 0).
+layout(set = 0, binding = 4) uniform sampler2D uViewDepth;
+layout(set = 0, binding = 5) uniform sampler2D uIrradianceIn;
+layout(set = 0, binding = 6, rgba16f) uniform writeonly image2D uIrradianceOut;
+// Previous frame's accumulated irradiance (rgb) + the raw depth it was written
+// at (a). A DIFFERENT texture from uIrradianceOut (ping-ponged by the host), so
+// the reprojected read never touches a texel another thread wrote this frame.
+layout(set = 0, binding = 8) uniform sampler2D uHistoryIrr;
+
+layout(push_constant) uniform BlurParams
+{
+    // 0 while the volume's specular composite is off: the resolve then wrote
+    // no lobes, so the lobe taps and stores are skipped rather than blurring
+    // and re-storing stale content.
+    uint lobesActive;
+    // History retention in [0,1) for the irradiance temporal blend. 0 disables
+    // it (byte-identical to the pure spatial blur). GE_DDGI_RESOLVE_TEMPORAL
+    // overrides the host default.
+    float temporalAlpha;
+};
+
+const float kBlurRadiusTexels = 1.5;
+// Reverse-Z is non-linear, so the tolerance is RELATIVE to the centre depth:
+// one constant then behaves the same near and far.
+const float kBlurDepthTolerance = 0.02;
+
+float DepthWeight(float centreDepth, float tapDepth)
+{
+    // A cleared/sky texel (reverse-Z 0) carries no probe data — never let it in.
+    if (tapDepth <= 0.0 || centreDepth <= 0.0)
+        return 0.0;
+    float rel = abs(tapDepth - centreDepth) / max(centreDepth, 1.0e-6);
+    return rel <= kBlurDepthTolerance ? 1.0 : 0.0;
+}
+
+// RGBA16F is filterable on every backend, including core WebGPU. Both
+// the 1.5-texel blur taps and reprojected history need linear interpolation.
+#define GE_BlurFetch(s, uv) textureLod(s, uv, 0.0)
+
+// The depth guide uses a point sampler on native. WGSL uses textureLoad
+// so an R32F guide does not require the optional float32-filterable feature.
+#if defined(GE_COMPAT_PROFILE)
+float GE_BlurDepth(vec2 uv)
+{
+    ivec2 sz = textureSize(uViewDepth, 0);
+    ivec2 c = clamp(ivec2(uv * vec2(sz)), ivec2(0), sz - ivec2(1));
+    return texelFetch(uViewDepth, c, 0).r;
+}
+#else
+#define GE_BlurDepth(uv) GE_BlurFetch(uViewDepth, uv).r
+#endif
+
+vec2 UvToNdc(vec2 uv)
+{
+    return vec2(uv.x * 2.0 - 1.0, 1.0 - uv.y * 2.0);
+}
+
+vec3 WorldPositionAt(vec2 uv, float rawDepth)
+{
+    vec4 p = ge_invProj * vec4(UvToNdc(uv), rawDepth, 1.0);
+    return (ge_invView * vec4(p.xyz / max(abs(p.w), 1e-7), 1.0)).xyz;
+}
+
+void BlurTaps(sampler2D rough, sampler2D glossy, sampler2D irradiance, vec2 uv, vec2 texel,
+              float centreDepth, bool lobes, out vec4 roughOut, out vec4 glossyOut,
+              out vec4 irradianceOut)
+{
+    vec4 rAcc = vec4(0.0);
+    vec4 gAcc = vec4(0.0);
+    vec4 iAcc = vec4(0.0);
+    float wsum = 0.0;
+    for (int i = 0; i < 9; ++i)
+    {
+        vec2 tapUV = uv + (vec2(float(i % 3) - 1.0, float(i / 3) - 1.0) * kBlurRadiusTexels) * texel;
+        float w = DepthWeight(centreDepth, GE_BlurDepth(tapUV));
+        if (w <= 0.0)
+            continue;
+        if (lobes)
+        {
+            rAcc += GE_BlurFetch(rough, tapUV) * w;
+            gAcc += GE_BlurFetch(glossy, tapUV) * w;
+        }
+        iAcc += GE_BlurFetch(irradiance, tapUV) * w;
+        wsum += w;
+    }
+    if (wsum <= 0.0)
+    {
+        roughOut = lobes ? GE_BlurFetch(rough, uv) : vec4(0.0);
+        glossyOut = lobes ? GE_BlurFetch(glossy, uv) : vec4(0.0);
+        irradianceOut = GE_BlurFetch(irradiance, uv);
+        return;
+    }
+    roughOut = rAcc / wsum;
+    glossyOut = gAcc / wsum;
+    irradianceOut = iAcc / wsum;
+}
+
+void main()
+{
+    ivec2 pixel = ivec2(gl_GlobalInvocationID.xy);
+    ivec2 outSize = imageSize(uIrradianceOut);
+    if (pixel.x >= outSize.x || pixel.y >= outSize.y)
+        return;
+    vec2 texel = 1.0 / vec2(outSize);
+    vec2 uv = (vec2(pixel) + 0.5) * texel;
+    float centreDepth = GE_BlurDepth(uv);
+    bool lobes = lobesActive != 0u;
+    vec4 roughOut;
+    vec4 glossyOut;
+    vec4 irradianceOut;
+    BlurTaps(uRoughIn, uGlossyIn, uIrradianceIn, uv, texel, centreDepth, lobes, roughOut, glossyOut,
+             irradianceOut);
+    // Lobes: spatial only. A reflection is not fixed to the surface, so a
+    // screen-space history would smear it under camera motion.
+    if (lobes)
+    {
+        imageStore(uRoughOut, pixel, roughOut);
+        imageStore(uGlossyOut, pixel, glossyOut);
+    }
+
+    // Irradiance: temporal accumulation with camera reprojection. Take this
+    // pixel's surface into the previous frame through the unjittered
+    // ge_prevViewProj; the history at that texel is the same surface only if
+    // its stored depth matches the reprojected depth, which rejects
+    // disocclusions. A first or reallocated history buffer holds undefined
+    // contents, so the host passes temporalAlpha 0 for that frame and the
+    // history is never read.
+    //
+    // A non-finite value is never accumulated: mix() keeps a NaN even at weight
+    // 0, and the history would carry it for good. A bad history leaves the
+    // current blur, a bad current blur takes the matching history, and when
+    // neither is usable the texel falls back to the unblurred resolve (or 0).
+    // A defence only: the passes feeding this one must not produce them.
+    vec3 current = irradianceOut.rgb;
+    bool currentFinite = IsFiniteHDR(current);
+    vec3 accumulated = current;
+    if (temporalAlpha > 0.0 && centreDepth > 0.0)
+    {
+        vec3 worldWS = WorldPositionAt(uv, centreDepth);
+        vec4 prevClip = ge_prevViewProj * vec4(worldWS, 1.0);
+        if (prevClip.w > 1.0e-6)
+        {
+            vec3 prevNdc = prevClip.xyz / prevClip.w;
+            vec2 prevUv = vec2(prevNdc.x * 0.5 + 0.5, 0.5 - prevNdc.y * 0.5);
+            if (all(greaterThan(prevUv, vec2(0.0))) && all(lessThan(prevUv, vec2(1.0))))
+            {
+                vec4 hist = GE_BlurFetch(uHistoryIrr, prevUv);
+                // hist.a is the raw reverse-Z depth the history was written at;
+                // prevNdc.z is the reverse-Z depth this surface reprojects to.
+                float depthMatch = DepthWeight(prevNdc.z, hist.a);
+                bool historyFinite = IsFiniteHDR(hist.rgb);
+                if (currentFinite && historyFinite)
+                    accumulated = mix(current, hist.rgb, depthMatch * temporalAlpha);
+                else if (historyFinite && depthMatch > 0.0)
+                    accumulated = hist.rgb;
+            }
+        }
+    }
+    if (!IsFiniteHDR(accumulated))
+    {
+        vec3 unblurred = GE_BlurFetch(uIrradianceIn, uv).rgb;
+        accumulated = IsFiniteHDR(unblurred) ? unblurred : vec3(0.0);
+    }
+    // rgb is filtered + temporally accumulated; alpha stays the raw depth guide
+    // the consume rejects against AND next frame's reprojection depth test reads.
+    imageStore(uIrradianceOut, pixel, vec4(accumulated, centreDepth));
+}

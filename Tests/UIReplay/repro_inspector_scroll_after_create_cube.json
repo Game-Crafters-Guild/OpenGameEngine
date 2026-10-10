@@ -1,0 +1,64 @@
+{
+  "name": "repro_inspector_scroll_after_create_cube",
+  "windowIndex": 0,
+  "minFrames": 320,
+  "probe": {
+    "scrollViewUnderId": "mount:Inspector",
+    "treeViewUnderId": "mount:Hierarchy",
+    "elementId": "mount:Inspector",
+    "visualPatchElementIds": { "enabled": true, "max": 12 },
+    "pixelHash": {
+      "enabled": true,
+      "frameStart": 200,
+      "frameEnd": 260,
+      "everyNFrames": 4,
+      "maxPending": 1,
+      "readbackDelayFrames": 4,
+      "failOnAllBlack": true,
+      "dumpPpm": true,
+      "normalizedRegion": { "x": 0.8503, "y": 0.0507, "w": 0.1497, "h": 0.9194 }
+    }
+  },
+  "assert": {
+    "kind": "layoutConverged",
+    "elementId": "mount:Inspector",
+    "frameStart": 200,
+    "frameEnd": 260,
+    "includeStyleDirty": false
+  },
+  "asserts": [
+    {
+      "kind": "visibleTextNotFullyClipped",
+      "subtreeId": "mount:Inspector",
+      "scrollViewUnderId": "mount:Inspector",
+      "requiredClasses": ["inspector-text", "inspector-label", "inspector-field-label", "inspector-section-header"],
+      "frameStart": 200,
+      "frameEnd": 260,
+      "minVisiblePx": 2.0,
+      "maxChecks": 1800
+    }
+  ],
+  "events": [
+    { "frame": 2, "type": "mouseMove", "target": { "kind": "elementId", "id": "tab:Hierarchy", "relX": 0.5, "relY": 0.5 } },
+    { "frame": 3, "type": "mouseDown", "button": 0 },
+    { "frame": 4, "type": "mouseUp", "button": 0 },
+
+    { "frame": 20, "type": "invokeCommand", "commandId": 16656 },
+
+    { "frame": 40, "type": "mouseMove", "target": { "kind": "elementId", "id": "tab:Inspector", "relX": 0.5, "relY": 0.5 } },
+    { "frame": 41, "type": "mouseDown", "button": 0 },
+    { "frame": 42, "type": "mouseUp", "button": 0 },
+
+    { "frame": 70, "type": "mouseMove", "target": { "kind": "scrollViewUnderId", "underId": "mount:Inspector", "relX": 0.7, "relY": 0.4 } },
+    { "frame": 72, "type": "scroll", "dx": 0.0, "dy": -8.0 },
+    { "frame": 76, "type": "scroll", "dx": 0.0, "dy": -8.0 },
+    { "frame": 80, "type": "scroll", "dx": 0.0, "dy": -8.0 },
+    { "frame": 84, "type": "scroll", "dx": 0.0, "dy": -8.0 },
+    { "frame": 88, "type": "scroll", "dx": 0.0, "dy": -8.0 },
+
+    { "frame": 120, "type": "scroll", "dx": 0.0, "dy": 10.0 },
+    { "frame": 124, "type": "scroll", "dx": 0.0, "dy": 10.0 },
+    { "frame": 128, "type": "scroll", "dx": 0.0, "dy": 10.0 }
+  ]
+}
+

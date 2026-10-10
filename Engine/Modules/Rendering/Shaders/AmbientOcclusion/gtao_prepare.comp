@@ -1,0 +1,37 @@
+#version 450
+
+// Preserve the nearest real pixel in each AO footprint, and prepare linear
+// depth mip zero. Both outputs retain sky as zero (reverse-Z clear value).
+layout(local_size_x = 8, local_size_y = 8) in;
+layout(set = 0, binding = 0) uniform sampler2D uDepth;
+layout(set = 0, binding = 1, rg32f) uniform writeonly image2D uGuide;
+layout(set = 0, binding = 2, r32f) uniform writeonly image2D uDepthOut;
+#include "AmbientOcclusion/gtao_geometry.glsl"
+
+void main()
+{
+    ivec2 pix = ivec2(gl_GlobalInvocationID.xy);
+    ivec2 fullSize = textureSize(uDepth, 0);
+    if (any(greaterThanEqual(pix, fullSize))) return;
+    float raw = texelFetch(uDepth, pix, 0).r;
+    imageStore(uDepthOut, pix, vec4(raw > 0.0 ? GE_LinearizeDepth(raw) : 0.0));
+
+    ivec2 size = imageSize(uGuide);
+    if (any(greaterThanEqual(pix, size))) return;
+    int scale = all(equal(size, fullSize)) ? 1 : 2;
+    float nearest = 0.0;
+    int selected = 0;
+    for (int y = 0; y < scale; ++y)
+    for (int x = 0; x < scale; ++x)
+    {
+        ivec2 src = pix * scale + ivec2(x, y);
+        if (any(greaterThanEqual(src, fullSize))) continue;
+        float d = texelFetch(uDepth, src, 0).r;
+        if (d > nearest)
+        {
+            nearest = d;
+            selected = y * 2 + x;
+        }
+    }
+    imageStore(uGuide, pix, vec4(nearest, float(selected), 0.0, 0.0));
+}

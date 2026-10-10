@@ -1,0 +1,167 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Ocean surface detail, rivers and spray</title>
+<style>
+  :root {
+    --bg: #0f1115; --panel: #171a21; --panel-light: #1f232c; --border: #2a2f3a;
+    --text: #d7dae0; --muted: #8b93a3; --accent: #6aa9ff; --danger: #ff6b6b; --bad: #ff6b6b;
+    --ok: #5fd38d; --good: #5fd38d; --warn: #ffc857;
+  }
+  body { margin: 0; background: var(--bg); color: var(--text); font: 15px/1.55 -apple-system, Segoe UI, Roboto, sans-serif; }
+  .wrap { max-width: 1040px; margin: 0 auto; padding: 40px 28px 64px; }
+  h1 { font-size: 30px; margin: 0 0 4px; }
+  h2 { font-size: 21px; margin: 40px 0 14px; padding: 8px 0; border-bottom: 2px solid var(--border); }
+  h3 { font-size: 16px; margin: 22px 0 8px; color: var(--accent); }
+  .lede { color: var(--muted); margin: 0 0 24px; letter-spacing: .04em; text-transform: uppercase; font-size: 12px; }
+  code, pre { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 13px; }
+  code { background: var(--panel-light); padding: 1px 5px; border-radius: 4px; }
+  pre { background: var(--panel); border: 1px solid var(--border); border-radius: 8px; padding: 14px 16px; overflow-x: auto; }
+  pre code { background: none; padding: 0; }
+  table { width: 100%; border-collapse: collapse; margin: 12px 0 18px; background: var(--panel); border: 1px solid var(--border); border-radius: 8px; overflow: hidden; }
+  th { text-align: left; background: var(--panel-light); color: var(--muted); font-weight: 600; font-size: 12px; text-transform: uppercase; letter-spacing: .04em; }
+  th, td { padding: 8px 12px; border-bottom: 1px solid var(--border); }
+  tr:last-child td { border-bottom: none; }
+  tr:hover td { background: rgba(255,255,255,.02); }
+  td.num, th.num { text-align: right; font-variant-numeric: tabular-nums; }
+  .panel { background: var(--panel); border: 1px solid var(--border); border-left: 4px solid var(--accent); border-radius: 8px; padding: 12px 16px; margin: 14px 0; }
+  .panel.warn { border-left-color: var(--warn); }
+  .panel.ok { border-left-color: var(--ok); }
+  .panel.danger { border-left-color: var(--danger); }
+  .pill { display: inline-block; padding: 1px 8px; border-radius: 999px; font-size: 11px; font-weight: 600; letter-spacing: .04em; text-transform: uppercase; vertical-align: middle; }
+  .pill.keep { background: rgba(106,169,255,.15); color: var(--accent); }
+  .pill.del { background: rgba(255,107,107,.15); color: var(--danger); }
+  .pill.mod { background: rgba(255,200,87,.15); color: var(--warn); }
+  .two-col { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+  .muted { color: var(--muted); }
+  hr { border: 0; border-top: 1px solid var(--border); margin: 36px 0; }
+  .footer { color: var(--muted); font-size: 13px; margin-top: 48px; padding-top: 16px; border-top: 1px solid var(--border); }
+</style>
+</head>
+<body>
+<div class="wrap">
+
+<h1>Ocean surface detail, rivers and spray</h1>
+<p class="lede">Guide · rendering · Ocean module · living document</p>
+
+<p>The ocean renders an analytic surface by default. This guide covers the features that
+add to it: a detailed surface driven by a normal texture, materials on individual water
+bodies, continuous spline rivers, accumulated water shadows and crest spray. Each one is
+off until you use it, so an ocean that uses none of them renders and costs what it did
+without them. The one exception is the shallow clarity window below, which is on by default
+and reproduces the look the ocean always had.</p>
+
+<h2>Example scenes</h2>
+<table>
+<tr><th>Scene</th><th>Shows</th></tr>
+<tr><td><code>Examples/Scenes/OceanSurfaceLookdev.scene</code></td><td>The detailed surface: foam and normal textures, a sloping seabed, a waterline rock and a local current.</td></tr>
+<tr><td><code>Examples/Scenes/OceanParityLookdev.scene</code></td><td>Two water-body materials, a pier shadowing the water, a curved current ribbon and crest spray.</td></tr>
+<tr><td><code>Examples/Scenes/OceanRibbonLookdev.scene</code></td><td>A bounded river with flow and its own water color, in a channel its spline carves through the terrain and out to the sea.</td></tr>
+<tr><td><code>Examples/Scenes/OceanUnderwaterLookdev.scene</code></td><td>The camera below the surface above a shallow seabed.</td></tr>
+</table>
+<p>The textures in <code>Examples/Materials/Ocean</code> (<code>crest_foam.png</code>,
+<code>crest_wave_normals.png</code>) come from Crest 4.23.0 under the MIT license next to them.</p>
+
+<h2>Detailed surface</h2>
+<p>Assign a tangent-space normal map to <code>OceanSurface.NormalTexture</code> (X/Y slopes in
+red/green; RGB or BC5). With it, the surface filters its ripples by the pixel footprint,
+reflects with the rippled normal, gives foam relief and roughness, adds a submerged bubble
+layer and widens the sun glint where ripples are unresolved. Without it every one of those
+terms is the analytic surface's.</p>
+<table>
+<tr><th>Field</th><th>Effect</th></tr>
+<tr><td><code>NormalsStrength</code>, <code>NormalsScale</code></td><td>Ripple strength and frequency. At scale 1 the nearest texture tile is 8 m, blending to larger tiles with distance.</td></tr>
+<tr><td><code>FoamTexture</code>, <code>FoamScale</code></td><td>Foam dissolve pattern and its tile size in meters. Also used by the analytic surface.</td></tr>
+<tr><td><code>FoamNormalStrength</code></td><td>Relief taken from the foam pattern; 0 keeps foam flat.</td></tr>
+<tr><td><code>FoamRoughness</code></td><td>Roughness of white foam, independent of the water.</td></tr>
+<tr><td><code>FoamBubbleCoverage</code>, <code>FoamBubbleParallax</code></td><td>Visibility and apparent depth of the submerged bubbles.</td></tr>
+</table>
+<p>A current advects the texture detail in two overlapping phases, so the pattern never
+stretches however long the current runs.</p>
+
+<h2>Materials on water bodies</h2>
+<p>Assign an <code>.oceanpreset</code> to <code>OceanWaterBody.MaterialOverride</code> or
+<code>OceanPolygonWaterBody.MaterialOverride</code>. A preset is sparse: values it omits are
+the ocean's. It can set the water, scatter, shallow and foam colors, fog density, refraction,
+reflection, index of refraction, Fresnel power, roughness, specular, ripple and foam detail,
+and its own <code>Surface.FoamTexture</code> / <code>Surface.NormalTexture</code> (an asset GUID; an
+empty string selects the procedural fallback). Where footprints overlap, the higher
+<code>MaterialPriority</code> wins. Waves, simulations and feature toggles stay shared. Edited
+preset files reload.</p>
+
+<h2>Rivers from splines</h2>
+<p>Add <code>OceanSplineInput</code> next to a <code>SplineComponent</code>. The curve becomes a
+continuous triangle ribbon <code>Width</code> meters either side of the spline, sampled at least every
+<code>MaxSegmentLength</code> meters of arc. The ribbon writes into the ocean's existing fields:</p>
+<table>
+<tr><th>Output</th><th>Effect</th><th>Needs</th></tr>
+<tr><td><code>Flow</code>, <code>FlowSpeed</code>, <code>ReverseFlow</code></td><td>A current along the curve; foam and surface detail drift downstream.</td><td>Ocean Flow on</td></tr>
+<tr><td><code>Depth</code>, <code>DepthMeters</code>, <code>DepthFeather</code></td><td>A shallow band: shallow tint, shoreline foam, calmer waves and CPU depth queries.</td><td>Seabed depth available</td></tr>
+<tr><td><code>Clip</code>, <code>ClipFeather</code></td><td>Cuts the surface along the curve.</td><td>Ocean ClipSurface on</td></tr>
+<tr><td><code>ConfineSurface</code></td><td>Water only inside the ribbon: a river, canal or pool boundary. CPU surface queries follow it.</td><td></td></tr>
+<tr><td><code>UnderwaterVolume</code>, <code>UnderwaterDepth</code></td><td>Extrudes a confined ribbon downward so the camera can dive into the river.</td><td><code>ConfineSurface</code></td></tr>
+<tr><td><code>Albedo</code>, <code>Color</code>, <code>AlbedoCoverage</code></td><td>Paints the surface along the curve.</td><td>Ocean Albedo on</td></tr>
+</table>
+<p>The ribbon does not use the analytic source budgets, and its fields are rebuilt only when
+the spline, the ribbon settings or the ocean origin change. Very sharp reversals fold a
+wide ribbon; smooth the curve or narrow the ribbon there.</p>
+<p>To run a river through terrain, give the same spline entity a <code>TerrainModifierVolume</code>
+with shape SplinePath and a <code>TerrainHeightOffsetEffect</code> that lowers the ground: one curve
+then carves the channel and carries the water. Set the spline height to the water level and make
+<code>Width</code> reach past the point where the banks rise above it, so the edge of a confined
+surface ends inside the bank instead of standing in the open as a cut edge.</p>
+
+<h2>Accumulated water shadows</h2>
+<p>Assign an <code>.oceansettings</code> asset of kind Shadows (the example is
+<code>temporal_shadows.oceansettings</code>) to <code>OceanRenderer.ShadowSettings</code> and set
+<code>Shadows.Enabled</code>. The ocean then accumulates the sun's shadow in world space over
+time, with a hard channel for the sun glint and a soft, jittered channel for the water's
+scattered light. <code>JitterDiameter</code> and <code>HardJitterDiameter</code> are in meters;
+<code>TemporalWeight</code> and <code>SimulationFrequency</code> set how much history each update keeps.
+Camera cuts, paused time and a moving sun discard the history. <code>OceanShadowInput</code>
+rectangles add authored shadow.</p>
+
+<h2>Crest spray</h2>
+<p><code>OceanSurface.Spray</code> tears fine droplets from raised, breaking crests once the wind
+exceeds <code>SprayWindThreshold</code>. Droplets are born within <code>SpraySpawnRadius</code> meters of
+the camera, fly with the wind under gravity and are lit like the water: sun through the
+shadow map plus the sky and environment light. Raise <code>SprayEmissionThreshold</code> to keep
+only the strongest crests.</p>
+<table>
+<tr><th>Field</th><th>Effect</th></tr>
+<tr><td><code>SpraySpawnRate</code></td><td>Crest points tested per second on each square meter of the spawn disk.</td></tr>
+<tr><td><code>SprayMaxParticles</code></td><td>Droplets alive at once per view (256 to 262 144).</td></tr>
+<tr><td><code>SprayLifetime</code>, <code>SprayStartSize</code>, <code>SprayEndSize</code>, <code>SprayOpacity</code></td><td>Droplet life and look.</td></tr>
+<tr><td><code>SprayUpVelocity</code>, <code>SprayWindVelocityScale</code></td><td>Launch speed and how strongly the wind carries droplets.</td></tr>
+<tr><td><code>SprayGeometryIntersections</code>, <code>SprayIntersectionSpawnRate</code>, <code>SprayIntersectionBand</code></td><td>Extra splashes where opaque geometry cuts the waterline.</td></tr>
+</table>
+<p>A calm ocean schedules no spray work once the last droplets have landed.</p>
+
+<h2>Reflected caustics</h2>
+<p><code>OceanSurface.ReflectedCausticsStrength</code> lights geometry just above the water with the
+caustics the surface reflects (piers, hulls, banks); <code>ReflectedCausticsHeight</code> and
+<code>ReflectedCausticsFalloff</code> set how far up they reach. They are off by default: a strength of
+0 draws nothing, and a scene turns them on by raising it.</p>
+
+<h2>Shallow clarity window</h2>
+<p>Seen from above, the surface eases its depth fog in over the first meters of the view ray's
+path through the water, so the seabed and its caustics stay readable in the shallows however
+dense the fog is. <code>OceanSurface.ShallowClarityDistance</code> is that path length in
+meters (default 8, range 0.01 to 50): shorter brings the deep color in sooner.
+<code>OceanSurface.ShallowClarityFloor</code> is the fraction of the depth fog applied where the
+path starts at the surface (default 0.22, range 0 to 1); the fog ramps smoothly from it up to
+full strength over the distance and is unscaled beyond. Unlike the features above, the window
+is on by default; a floor of 1 turns it off. It does not apply to the water seen from below
+the surface.</p>
+
+<div class="footer">
+<b>Changelog</b><br>
+2026-09-24 · v1 — created with the detailed surface, water-body materials, spline rivers,
+accumulated shadows and GPU crest spray.
+<br>2026-10-02 · v2 — reflected caustics: the setting and its off default.
+<br>2026-10-05 · v3 — the shallow clarity window: its two settings, their defaults and how to turn it off.
+</div>
+</div>
+</body>
+</html>

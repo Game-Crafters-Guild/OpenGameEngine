@@ -1,0 +1,50 @@
+<!doctype html>
+<html lang="en">
+<head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Bloom, scattering and cinematic halation</title>
+<style>body{font:16px/1.6 system-ui;max-width:850px;margin:3rem auto;padding:0 1rem;color:#26313b}code{background:#eef1f4;padding:.15em .3em}table{border-collapse:collapse;width:100%}td,th{text-align:left;padding:.6rem;border-bottom:1px solid #ccd3da}</style></head>
+<body>
+<h1>Bloom, scattering and cinematic halation</h1>
+<p>Bloom has one additive intensity and a separate Diffusion amount. Cinematic
+halation belongs to Film Simulation and has an independent highlight source,
+radius, tint and intensity. None of these controls changes another's meaning.</p>
+<table><tr><th>Control</th><th>Meaning</th></tr>
+<tr><td>Intensity</td><td>Gain of thresholded highlights, added after filtering. Zero adds no highlight bloom.</td></tr>
+<tr><td>Diffusion</td><td>A soft, threshold-free haze of the frame mixed over the whole image, as a fraction (0–1). It is energy-conserving: it moves light rather than adding it. Zero turns it off and skips its passes.</td></tr>
+<tr><td>Spread</td><td>How far highlight bloom reaches, from a tight glow to a wide halo. It shapes the Diffusion haze the same way and changes neither amount.</td></tr>
+<tr><td>Film Simulation → Halation</td><td>Highlight halo with its own amount, full-resolution-pixel radius and HDR tint. Works with Bloom Effect absent or disabled.</td></tr></table>
+<h2>Composition</h2>
+<p><code>mix(scene, blurredScene, scatteringAmount) + intensity × tint × blurredHighlights + depthVeil</code></p>
+<p>Scattering preserves constant fields and approximately preserves integrated
+scene light away from screen boundaries. Additive highlights, depth veil, lens
+dirt and film halation are artistic additions and can increase energy.
+Finite HDR range and edge clamping limit this screen-space approximation.</p>
+<h2>Cinematic halation</h2>
+<p>Halation extracts highlights above one exposed display white from the original
+HDR scene, before downsampling, using a soft knee and a bounded HDR contribution.
+It does not read the scattering pyramid, bloom tint, intensity, threshold or
+depth veil. Ordinary midtones therefore do not acquire full-screen red haze.
+A normalized separable Gaussian spreads the source; radius changes spread,
+not total halo energy. Its three passes are skipped when halation is off.</p>
+<h2>Filtering and cost</h2>
+<p>Bloom thresholds in exposed units before the wide prefilter. Anti Flicker adds
+a shared-RGB, neighbor-relative soft shoulder for isolated hot samples, preserving
+hue. Diffusion bypasses this nonlinear suppression to retain its energy contract.
+Both pyramids use normalized Gaussian downsampling and positive cubic B-spline
+reconstruction. Eight independently weighted octaves use weights
+<code>k^(5 × Spread − 2.5)</code>, normalized after the last-octave fade.</p>
+<p>Radius selects active depth up to Octaves. The next octave is allocated only
+above a 0.001 fractional fade, remapped continuously from zero. Lens dirt can
+request the full highlight pyramid. Diffusion uses a separate pyramid; the
+highlight pyramid is skipped when additive highlights and depth veil are off.
+Halation adds independent extraction and two blur/composite passes. Shader
+fetch counts are not a GPU timing claim; Release timings must be measured on
+the target scene and hardware.</p>
+<h2>Verification</h2>
+<p>Production GPU tests cover constant-field Diffusion, additive gain,
+distinct-octave numerical reconstruction, radius continuity, small colored
+highlights, hot samples, halation-only rendering, exposure-relative extraction,
+midtones and halo spread/energy. Structural graph tests complement pixel
+tests. These do not substitute for visual review and Release
+timings on shipped content or a Steam Deck hardware run.</p>
+</body></html>

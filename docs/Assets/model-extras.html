@@ -1,0 +1,173 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Model extras</title>
+<style>
+  :root {
+    --bg: #0f1115; --panel: #171a21; --panel-light: #1f232c; --border: #2a2f3a;
+    --text: #d7dae0; --muted: #8b919c; --accent: #6ea8fe; --danger: #ff6b6b;
+    --bad: #ff6b6b; --ok: #4cd18a; --good: #4cd18a; --warn: #f2c94c;
+  }
+  body { margin: 0; padding: 2rem 3rem; background: var(--bg); color: var(--text);
+         font: 15px/1.55 system-ui, -apple-system, "Segoe UI", sans-serif; max-width: 1100px; }
+  h1 { margin: 0 0 .25rem; font-size: 1.9rem; }
+  h2 { margin-top: 2.2rem; padding: .35rem .6rem; border: 1px solid var(--border);
+       border-left: 4px solid var(--accent); background: var(--panel); font-size: 1.25rem; }
+  h3 { margin: 1.4rem 0 .4rem; color: var(--accent); font-size: 1.05rem; }
+  .lede { color: var(--muted); margin: 0 0 1.5rem; letter-spacing: .04em; text-transform: uppercase; font-size: .8rem; }
+  hr { border: 0; border-top: 1px solid var(--border); margin: 2rem 0; }
+  code, pre { font: 13px/1.5 ui-monospace, "Cascadia Mono", Consolas, monospace;
+              background: var(--panel-light); border-radius: 4px; }
+  code { padding: .05rem .35rem; }
+  pre { padding: .8rem 1rem; overflow-x: auto; border: 1px solid var(--border); }
+  .panel { border: 1px solid var(--border); background: var(--panel); border-radius: 6px; padding: .9rem 1.1rem; margin: 1rem 0; }
+  .panel.ok { border-left: 4px solid var(--ok); }
+  .panel.warn { border-left: 4px solid var(--warn); }
+  table { border-collapse: collapse; width: 100%; margin: 1rem 0; }
+  th, td { border: 1px solid var(--border); padding: .45rem .7rem; text-align: left; vertical-align: top; }
+  th { background: var(--panel-light); color: var(--muted); font-weight: 600; font-size: .85rem; }
+  tr:hover td { background: var(--panel); }
+  footer { margin-top: 3rem; color: var(--muted); font-size: .85rem; }
+</style>
+</head>
+<body>
+
+<h1>Model extras</h1>
+<p class="lede">GUIDE · assets / scripting · reading the custom data a glTF file attaches to its objects</p>
+<p>
+  A glTF file can attach custom JSON to any of its objects through the object's <code>extras</code> property;
+  most exporters write an object's custom properties there. When a <code>.gltf</code> or <code>.glb</code>
+  model is imported, the engine keeps that text for the file's scenes, nodes, meshes, materials and
+  animations, and a script reads it back by object name with <code>ModelApi.GetExtras</code>. The engine
+  itself reads one key there, <code>clip</code> on an animation (see the
+  <a href="../Animation/gltf-clip-schema.html">glTF clip schema</a>); what every other key means is up to the game.
+</p>
+
+<div class="panel ok">
+  <strong>Typical use.</strong> An artist tags a node <code>Hand_R</code> with
+  <code>{"socket": "weapon"}</code> and a material with <code>{"team_tint": true}</code>. A game system reads both
+  when it spawns the unit and acts on them, with no engine change and no extra file beside the model.
+</div>
+
+<h2>What a model keeps</h2>
+<table>
+  <tr><th>Object</th><th>Read with</th><th>Keyed by</th></tr>
+  <tr><td>Scene</td><td><code>ModelObjectKind.Scene</code></td><td rowspan="5">The object's <code>name</code> as the file
+      writes it. An unnamed object is named by the empty string. Names are per kind: a node and a mesh may share
+      one.</td></tr>
+  <tr><td>Node</td><td><code>ModelObjectKind.Node</code></td></tr>
+  <tr><td>Mesh</td><td><code>ModelObjectKind.Mesh</code></td></tr>
+  <tr><td>Material</td><td><code>ModelObjectKind.Material</code></td></tr>
+  <tr><td>Animation</td><td><code>ModelObjectKind.Animation</code></td></tr>
+</table>
+<ul>
+  <li><strong>The text is the file's own.</strong> An object, array, number or literal reads back exactly as written,
+      with its spacing, key order and escapes. A JSON string value reads back without its quotes; the glTF
+      specification recommends an object. The text is decoded as UTF-8, so an invalid byte sequence in the file
+      reads as U+FFFD.</li>
+  <li><strong>One block per kind and name.</strong> When two objects of one kind share a name (two unnamed nodes
+      included), the first in the file is read, and the import warns once, naming the first object that could
+      not be read. Give objects whose extras you read unique names.</li>
+  <li><strong>Only those five kinds.</strong> The extras of the file's root, primitives, accessors, textures, images,
+      cameras, lights and skins are not kept.</li>
+  <li><strong>glTF and GLB only.</strong> FBX, OBJ and Blend models keep no extras; <code>GetExtras</code> returns
+      an empty string for them.</li>
+  <li><strong>Re-import replaces it.</strong> When the source file changes and the model reloads, the next read
+      returns the new text.</li>
+</ul>
+
+<h2>Reading it from a script</h2>
+<pre>using System;
+using System.Text.Json;
+using GameEngine.Scripting;
+
+// The model asset's GUID, in the text form scene files write it.
+Guid knight = new Guid("6f1c2d3e-4b5a-6978-8a9b-0c1d2e3f4a5b");
+
+string text = ModelApi.GetExtras(knight, ModelObjectKind.Node, "Hand_R");
+if (text.Length &gt; 0)
+{
+    using JsonDocument extras = JsonDocument.Parse(text);
+    if (extras.RootElement.TryGetProperty("socket", out JsonElement socket))
+        AttachWeapon(socket.GetString());
+}</pre>
+<table>
+  <tr><th>Case</th><th>Result</th></tr>
+  <tr><td>The object has extras the model kept</td><td>The text</td></tr>
+  <tr><td>The object has no extras, no object of that kind has the name, or the import did not keep them (see
+      the bounds below)</td><td>An empty string</td></tr>
+  <tr><td>No loaded model has the GUID</td><td><code>InvalidOperationException</code>: a model's extras are readable
+      while the model is loaded</td></tr>
+  <tr><td>Called from a thread other than the main thread</td><td><code>InvalidOperationException</code>, and one
+      error in the log</td></tr>
+  <tr><td><code>kind</code> is not a <code>ModelObjectKind</code></td><td><code>ArgumentOutOfRangeException</code></td></tr>
+</table>
+<p>Call <code>GetExtras</code> from the main thread, as a system's update does: a hot reload replaces a model's
+  extras there. Each call copies the text into a new string, so read once (at spawn, say) and keep what you parsed
+  rather than reading every frame.</p>
+
+<h2>Bounds</h2>
+<p>
+  A model file can come from anywhere, so the import keeps a bounded amount of it. A block that does not fit is
+  dropped with a warning that names the object; the model itself always loads.
+</p>
+<table>
+  <tr><th>Bound</th><th>Rule</th><th>Warning</th></tr>
+  <tr><td>256 KiB per object</td>
+      <td>An object whose extras hold more than 262 144 bytes keeps none.</td>
+      <td>One line per such object:
+        <code>glTF 'knight.glb': the extras of node 3 ('Regions') are not kept: they hold 300000 bytes, and an
+        object keeps at most 262144 bytes (256 KiB) of extras; the model loads without them.</code></td></tr>
+  <tr><td>1 MiB per model</td>
+      <td>A model keeps at most 1 048 576 bytes of extras in all, each block counted with its object's name, taken
+        in the order scenes, nodes, meshes, materials, animations, each in file order. The first block that does
+        not fit, and every block after it in that order, is not kept.</td>
+      <td>One line per model, naming the first block not kept and counting the rest:
+        <code>glTF 'knight.glb': the extras of mesh 2 ('Body') (40004 bytes with its name) and of 6 later objects
+        are not kept: a model keeps at most 1048576 bytes (1024 KiB) of extras and their objects' names, taken from
+        its scenes, nodes, meshes, materials and animations in that order; the model loads without them.</code></td></tr>
+</table>
+<p>
+  A block over the per-object bound does not count toward the per-model bound. Large per-vertex data (region
+  masks, corrective tables) fits well inside both; data that does not belongs in a file of its own that the game
+  loads.
+</p>
+
+<h2>For bindings: the native export</h2>
+<p>
+  <code>ModelApi.GetExtras</code> calls <code>GE_Model_GetExtras</code> in <code>GameEngine.Native</code>
+  (<code>Scripting/ModelABI.h</code>, scripting ABI 3.1):
+</p>
+<pre>GE_Result GE_Model_GetExtras(const uint8_t modelGuidBytes[16], uint32_t kind,
+                             const char* nameUtf8, uint32_t nameLength,
+                             char* buffer, int32_t bufferLen, int32_t* outLen);</pre>
+<ul>
+  <li><code>modelGuidBytes</code> are the GUID's bytes in the order its text form writes them (in C#,
+      <code>Guid.ToByteArray(bigEndian: true)</code>).</li>
+  <li><code>kind</code> is a <code>GE_ModelObjectKind</code>: scene 0, node 1, mesh 2, material 3, animation 4.</li>
+  <li>The buffer contract is the one the element text exports use: it copies what fits, with no NUL terminator,
+      and always reports the text's full length in <code>*outLen</code>, so a call with a null buffer and a zero
+      length asks the length. <code>*outLen</code> is 0 when the model kept nothing for the object.</li>
+  <li>Main thread only: a call from another thread returns <code>GE_Result_Fail</code> and logs one error. A host
+      that never marked a main thread (a standalone test host) accepts every thread.</li>
+  <li><code>GE_Result_NotFound</code> when no loaded model has the GUID. <code>GE_Result_InvalidArg</code>, checked
+      before the model is looked up, for a kind past animation, a null GUID or <code>outLen</code>, a null name
+      with a nonzero length, a negative <code>bufferLen</code>, or a null buffer with a nonzero
+      <code>bufferLen</code>.</li>
+</ul>
+
+<hr>
+<h2>Changelog</h2>
+<ul>
+  <li>2026-09-30: the engine reads the <code>clip</code> key of an animation's extras (the glTF clip schema);
+      a model keeps that block like any other.</li>
+  <li>2026-09-30: first version. Scene, node, mesh, material and animation extras of glTF and GLB models, read
+      with <code>ModelApi.GetExtras</code> on the main thread; 256 KiB per object and 1 MiB per model, names
+      included.</li>
+</ul>
+
+<footer>Model extras · version 1 · 2026-09-30</footer>
+
+</body>
+</html>

@@ -1,0 +1,17 @@
+/* ScrollView Control Styles (Editor app asset)
+ *
+ * Keep control styles in `Apps/Editor/Assets/UI/controls/` so they can be
+ * loaded locally by the control (ScrollView.cpp -> RequestSubtreeStyleAssetPath).
+ *
+ * Only `display` lives here. It is the one ScrollView default an application
+ * stylesheet legitimately wants to change (a state class that hides the whole
+ * scroller), so it has to reach the element through the cascade rather than as
+ * an inline override, which no rule can outrank. The type selector keeps it at
+ * the lowest specificity so any class-bearing rule wins. The rest of the
+ * scroller's layout structure stays in ScrollView.cpp, where it cannot be
+ * broken by a missing or reordered stylesheet.
+ */
+
+scrollview {
+	display: flex;
+}

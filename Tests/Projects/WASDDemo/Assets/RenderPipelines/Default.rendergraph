@@ -1,0 +1,12 @@
+{
+  "schemaVersion": 2,
+  "pipelineName": "Default",
+  "passes": [
+    { "id": "World", "type": "WorldRender", "enabled": true, "keywords": ["Instanced"] }
+  ],
+  "outputs": {
+    "FinalColor": "View.Resolve"
+  }
+}
+
+

@@ -1,0 +1,74 @@
+[scene name="ShadowCutRepro" version=1]
+; Repro for the "cascade shadow cut": a high caster whose shadow shows a
+; straight-edged discontinuity where a curved penumbra should be.
+;
+; Reported configuration: sphere ~26.6 units up, directional light at 2 deg
+; angular diameter, MaxShadowDistance 200, SplitLambda 0.75.
+;
+; A high caster is the load-bearing part. Its shadow lands far from it along the
+; light ray, so the caster and its receiver can fall in DIFFERENT cascades — and
+; the caster sits far outside the cascade its shadow lands in. That is precisely
+; the case the near plane must not gate, and a straight-edged cut is what it
+; looks like when something does gate it: the box edge, not the geometry.
+
+[entity id="e_cam"]
+Camera.enabled = true
+Camera.perspective = true
+Camera.fovY = 60
+Camera.nearZ = 0.1
+Camera.farZ = 500
+Camera.cullingMask = 4294967295
+Camera.postProcessMask = 4294967295
+Name.value = "Main Camera"
+; Looking straight down at the shadow, so the cut reads as a straight line in
+; screen space rather than being foreshortened.
+Transform.position = (0, 40, 14)
+Transform.rotation = (0.70711, 0, 0, 0.70711)
+Transform.scale = (1, 1, 1)
+
+[entity id="e_sun"]
+Light.enabled = true
+Light.type = 0
+Light.color = (1, 1, 1)
+Light.intensity = 3
+Light.castsLight = true
+Light.castsShadows = true
+Light.cascadeCount = 4
+Light.shadowAngularDiameter = 2
+Name.value = "Directional Light"
+; Rx(62 deg) -> direction (0, -0.88295, 0.46947).
+Transform.position = (0, 30, 0)
+Transform.rotation = (0.51504, 0, 0, 0.85717)
+Transform.scale = (1, 1, 1)
+
+[entity id="e_amb"]
+Light.enabled = true
+Light.type = 3
+Light.color = (0.5, 0.55, 0.65)
+Light.intensity = 0.3
+Name.value = "Ambient"
+Transform.position = (0, 0, 0)
+Transform.rotation = (0, 0, 0, 1)
+Transform.scale = (1, 1, 1)
+
+[entity id="e_ground"]
+MeshRenderer.meshPrimitive = Cube
+MeshRenderer.renderLayerMask = 1
+MeshRenderer.castShadows = false
+MeshRenderer.receiveShadows = true
+Name.value = "Ground"
+Transform.position = (0, -0.5, 0)
+Transform.rotation = (0, 0, 0, 1)
+Transform.scale = (400, 1, 400)
+
+[entity id="e_caster"]
+MeshRenderer.meshPrimitive = Sphere
+MeshRenderer.renderLayerMask = 1
+MeshRenderer.castShadows = true
+MeshRenderer.receiveShadows = false
+Name.value = "HighSphere"
+; 26.6 up, as reported. Its shadow lands ~14 units along +Z from directly
+; below it, which is where the camera is centred.
+Transform.position = (0, 26.6, 0)
+Transform.rotation = (0, 0, 0, 1)
+Transform.scale = (6, 6, 6)

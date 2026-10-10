@@ -1,0 +1,31 @@
+#version 450
+// Runs the production probe relocation policy (GE_DDGIStableRelocation,
+// GE_DDGIConstrainRelocation, GE_DDGIResetRelocationHistory), one case per invocation.
+#include "Includes/ddgi_common.glsl"
+layout(local_size_x = 1) in;
+struct RelocationCase
+{
+    vec4 PreviousOffset;
+    vec4 ProposedOffset;
+    vec4 Cell;     // x = minimum cell size
+    uvec4 Flags;   // x = was active, y = buried, z = crossed geometry
+};
+layout(std430, set = 0, binding = 0) readonly buffer RelocationCases
+{
+    RelocationCase cases[];
+};
+layout(std430, set = 0, binding = 1) writeonly buffer RelocationResults
+{
+    vec4 results[];  // xyz = resulting offset, w = 1 when history resets
+};
+void main()
+{
+    RelocationCase c = cases[gl_GlobalInvocationID.x];
+    bool wasActive = c.Flags.x != 0u;
+    bool buried = c.Flags.y != 0u;
+    bool crossed = c.Flags.z != 0u;
+    vec3 stable = GE_DDGIStableRelocation(c.PreviousOffset.xyz, c.ProposedOffset.xyz, c.Cell.x);
+    stable = GE_DDGIConstrainRelocation(c.PreviousOffset.xyz, stable, buried, crossed);
+    bool reset = GE_DDGIResetRelocationHistory(wasActive, buried, crossed);
+    results[gl_GlobalInvocationID.x] = vec4(stable, reset ? 1.0 : 0.0);
+}

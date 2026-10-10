@@ -1,0 +1,24 @@
+#version 450
+
+// Resolves a multisampled depth texture to a single-sample R32F image.
+// Writes sample 0, which is what every consumer already used when the depth
+// was bound directly as sampler2DMS.
+//
+// This pass runs at phase ~110, after DepthPrepass and before cluster/fog
+// consumers. When MSAA is off (sampleCount == 1) the node aliases
+// View.DepthResolved to View.Depth and this shader never dispatches.
+
+layout(local_size_x = 8, local_size_y = 8, local_size_z = 1) in;
+
+layout(set = 0, binding = 0) uniform sampler2DMS uDepthMS;
+layout(set = 0, binding = 1, r32f) uniform writeonly image2D uDepthResolved;
+
+void main()
+{
+    ivec2 size = textureSize(uDepthMS);
+    ivec2 pix  = ivec2(gl_GlobalInvocationID.xy);
+    if (pix.x >= size.x || pix.y >= size.y)
+        return;
+    float d = texelFetch(uDepthMS, pix, 0).r;
+    imageStore(uDepthResolved, pix, vec4(d, 0.0, 0.0, 0.0));
+}

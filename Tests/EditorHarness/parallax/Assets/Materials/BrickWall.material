@@ -1,0 +1,44 @@
+{
+  "schemaVersion": 3,
+  "materialName": "BrickWall",
+  "lightingModel": "StandardPBR",
+  "alphaMode": "Opaque",
+  "doubleSided": false,
+  "surfaceShader": "Surfaces/standard_pbr.glsl",
+  "properties": {
+    "baseColor": [
+      1.0,
+      1.0,
+      1.0,
+      1.0
+    ],
+    "metallic": 0.0,
+    "roughness": 0.85
+  },
+  "textures": {
+    "albedoMap": {
+      "guid": "67efd182-bd48-4044-b27d-d615fe19346d",
+      "path": "Textures/bricks_albedo.png",
+      "tiling": [
+        16.0,
+        4.0
+      ]
+    },
+    "normalMap": {
+      "guid": "895f09e7-5803-4d39-ac0a-9a25f5a86a1e",
+      "path": "Textures/bricks_normal.png",
+      "tiling": [
+        16.0,
+        4.0
+      ]
+    },
+    "heightMap": {
+      "guid": "69a5e97a-f000-40f6-924c-c14f53956ed3",
+      "path": "Textures/bricks_height.png",
+      "tiling": [
+        16.0,
+        4.0
+      ]
+    }
+  }
+}

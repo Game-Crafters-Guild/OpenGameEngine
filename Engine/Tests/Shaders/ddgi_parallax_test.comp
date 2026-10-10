@@ -1,0 +1,29 @@
+#version 450
+// Runs the production reflection parallax correction (GE_DDGIParallaxCorrect)
+// on authored depth moments, one case per invocation.
+#include "Includes/ddgi_probes.glsl"
+layout(local_size_x = 1) in;
+struct ParallaxCase
+{
+    vec4 Moments;        // xy = depth moments
+    vec4 ReceiverWS;
+    vec4 ProbeWS;
+    vec4 ReflectDir;
+};
+layout(std430, set = 0, binding = 0) readonly buffer ParallaxCases
+{
+    ParallaxCase cases[];
+};
+layout(std430, set = 0, binding = 1) writeonly buffer ParallaxResults
+{
+    vec4 results[];  // xyz = sample direction, w = parallax weight
+};
+void main()
+{
+    ParallaxCase c = cases[gl_GlobalInvocationID.x];
+    vec3 sampleDir;
+    float weight;
+    GE_DDGIParallaxCorrect(c.Moments.xy, c.ReceiverWS.xyz, c.ProbeWS.xyz, c.ReflectDir.xyz, sampleDir,
+                           weight);
+    results[gl_GlobalInvocationID.x] = vec4(sampleDir, weight);
+}

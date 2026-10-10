@@ -1,0 +1,3199 @@
+/* Default vertical gap between inspector property rows; Settings → UI → Inspector Row Gap updates --inspector-row-gap via stylesheet injection. */
+.inspector-panel {
+	--inspector-row-gap: 4px;
+}
+
+/* Inspector scrollview content margins; min-width: 0 so flex children (e.g. Vector3) can shrink without clipping */
+.inspector-scrollview .scroll-content {
+	padding: 8px;
+	min-width: 0;
+}
+
+/* Fixed top strip (header + quick actions) lives outside ScrollView. */
+.inspector-top {
+	display: flex;
+	flex-direction: column;
+	flex-shrink: 0;
+	padding: 8px 8px 4px 8px;
+	gap: 4px;
+	overflow: hidden;
+	z-index: 200;
+	min-width: 0;
+}
+
+/* Fixed bottom bar (Add Component). */
+.inspector-bottom {
+	display: flex;
+	flex-direction: column;
+	flex-shrink: 0;
+	align-self: stretch;
+	width: 100%;
+	box-sizing: border-box;
+	padding: 8px;
+	padding-top: 6px;
+	gap: 6px;
+	overflow: visible;
+	z-index: 200;
+}
+
+.inspector-add-component-row {
+	display: flex;
+	flex-direction: row;
+	align-items: center;
+	justify-content: center;
+	gap: 8px;
+	width: 100%;
+	overflow: visible;
+}
+
+/* In the Inspector, let the dropdown size to content (centered layout). */
+.inspector-add-component-row .dropdown,
+.dropdown.inspector-add-component-dropdown {
+	flex: 0 1 auto;
+	min-width: 220px;
+	max-width: none;
+}
+
+/* Property rows (Light type, Material lighting model, etc.): header hugged tight
+   text metrics so the label and chevron sit on the midline next to 27px-tall fields.
+   Full-width header + default flex:1 label keeps the chevron a constant inset from the
+   right edge (padding-right on .dropdown-header); shrinking the label broke that. */
+.inspector-field .dropdown.inspector-dropdown {
+	width: 100%;
+	align-self: stretch;
+	min-width: 0;
+}
+
+.inspector-field .dropdown.inspector-dropdown > .dropdown-header {
+	min-height: 27px;
+	box-sizing: border-box;
+	width: 100%;
+	padding: 4px 6px 4px 10px;
+}
+
+/* Optical inset: 8×8 glyph reads a few px right of where the header padding centers it. */
+.inspector-field .dropdown.inspector-dropdown > .dropdown-header > .dropdown-chevron {
+	margin-right: 4px;
+}
+
+/* A read-only value with the one action that makes it editable, on one line (the sky's
+   unlinked Sun illuminance and its Link). */
+.inspector-field-inline-action {
+	flex-direction: row;
+	align-items: center;
+	gap: 8px;
+}
+
+/* One-line texture swizzle: four compact [channel-letter + dropdown] cells in a row. */
+.inspector-swizzle-strip {
+	flex-direction: row;
+	align-items: center;
+	gap: 6px;
+	width: 100%;
+	min-width: 0;
+	height: 27px;
+}
+.inspector-swizzle-cell {
+	flex-direction: row;
+	align-items: center;
+	gap: 3px;
+	flex: 1 1 0;
+	min-width: 0;
+	height: 27px;
+}
+.inspector-swizzle-channel {
+	color: var(--ui_color_text_dim);
+	font-size: 12px;
+}
+/* The EnumField wrapper has no intrinsic height; give it a definite one and a
+   compact floor so the label and chevron do not overlap as the row shrinks. */
+.inspector-swizzle-cell .inspector-swizzle-enum {
+	flex: 1 1 32px;
+	height: 27px;
+	min-width: 32px;
+}
+.inspector-field .inspector-swizzle-strip .dropdown.inspector-dropdown > .dropdown-header {
+	padding: 4px 4px 4px 6px;
+}
+
+/* Inline reference guide: a grounded, subtly-tinted box of small reference text + visuals
+   placed under a control (Kelvin reference, intensity-unit reference / Unitless explainer). */
+.inspector-guide-box {
+	flex-direction: column;
+	gap: 4px;
+}
+.inspector-guide-row .inspector-label {
+	padding-top: 8px;
+}
+.inspector-guide-row .inspector-guide-box {
+	margin-top: 0;
+}
+.inspector-guide-title {
+	color: var(--ui_color_text);
+	font-size: 11px;
+	font-weight: 600;
+}
+/* Interactive color-temperature picker (KelvinSlider): a chunky gradient track so the painted
+   Kelvin gradient + thumb caret read clearly. */
+.inspector-kelvin-slider {
+	flex: 1 1 auto;
+	min-width: 80px;
+	height: 24px;
+}
+/* The Kelvin slider draws its own downward-triangle indicator, so hide the inherited ring thumb. */
+.inspector-kelvin-slider .slider-thumb {
+	display: none;
+}
+/* Align the inspector checkbox box with the other fields' left edge (drop the control's 2px inset). */
+.inspector-panel .inspector-field > .checkbox {
+	padding-left: 0;
+}
+
+/* Open popup rows: base .dropdown-item is 3px vertical padding vs 27px-tall asset/float fields. */
+.inspector-panel .dropdown .dropdown-item {
+	min-height: 27px;
+	box-sizing: border-box;
+	padding: 4px 10px 4px 24px;
+	background-position: 7px 9px;
+	display: flex;
+	align-items: center;
+}
+
+.dropdown.inspector-add-component-dropdown .dropdown-header {
+	min-height: 32px;
+	padding: 8px 8px 8px 12px;
+}
+
+.inspector-add-component-button {
+	min-height: 32px;
+	padding: 8px 14px;
+	flex-shrink: 0;
+}
+
+/* When the dropdown lives in the bottom bar, open the popup upward so it stays on-screen. */
+.inspector-add-component-row .dropdown-items {
+	top: auto;
+	bottom: 100%;
+	margin-top: 0px;
+	margin-bottom: 2px;
+}
+
+/* Inspector numeric fields (FloatField/Vector3Field); min-width: 0 so X/Y/Z are not clipped when narrow */
+.vector3-field {
+	display: flex;
+	flex-direction: row;
+	align-items: center;
+	gap: 4px;
+	width: 100%;
+	min-width: 0;
+}
+
+.vector3-label {
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	margin-right: 1px;
+	margin-left: 0px;
+	text-align: center;
+	width: 14px;
+	height: 27px;
+	min-width: 14px;
+	min-height: 27px;
+	flex-shrink: 0;
+	font-size: 13px;
+	line-height: normal;
+	cursor: col-resize;
+}
+
+.vector3-component-x,
+.vector3-component-y,
+.vector3-component-z {
+	flex: 1;
+	min-width: 0;
+	width: 100%;
+}
+
+.float-field-input,
+.int-field-input {
+	padding: 6px 12px;
+	border-width: 1px;
+	border-radius: 6px;
+	border-color: transparent;
+	background-color: #202020;
+	width: 100%;
+	/* Global value-box height (User Settings > UI > Appearance). Set on the UI root
+	   as --value_box_height by SettingsPanel::ApplySavedValueBoxHeightStyle. */
+	height: var(--value_box_height, 26px);
+}
+
+.float-field-input:focus,
+.int-field-input:focus,
+.float-field.focused .float-field-input,
+.int-field.focused .int-field-input {
+	border-color: var(--ui_color_accent);
+}
+
+/* Color-grade trackball column (ColorGradeEffectInspector): three hue/sat wheels
+   sit side by side, so the Lightness slider and the YRGB + hex fields beneath each
+   wheel run compact. Mirrors the Vector3 component treatment (tight padding, no
+   min-width floor) and trims the shared value-box height/font so three columns
+   fit a normal-width inspector before flex-wrap drops them to fewer per row. */
+.color-grade-band .float-field-input,
+.color-grade-band .field-editor {
+	min-width: 0;
+	height: 20px;
+	padding: 3px 2px;
+	border-radius: 4px;
+	font-size: 12px;
+}
+
+.color-grade-band .float-field-input {
+	padding-left: 4px;
+}
+
+.color-grade-band .property-slider {
+	min-width: 44px;
+	height: 18px;
+}
+
+/* Color-grade captions use the shared inspector drag-label helper without the
+   full-width .inspector-label layout class. Honor the helper's draggable marker
+   here as well so Y/R/G/B and Lightness show the standard scrub cursor. */
+.color-grade-band .inspector-label-draggable {
+	cursor: col-resize;
+}
+
+/* Give the single-letter scrub handles a forgiving pointer target without
+   changing the spacing of the fields beneath them. */
+.color-grade-band .color-grade-channel-caption {
+	padding: 1px 5px;
+}
+
+/* Inspector header container (lock + entity name + toggle) */
+.inspector-header-container {
+	display: flex;
+	flex-direction: row;
+	align-items: center;
+	justify-content: flex-start;
+	/* Slightly more top than bottom padding so icon, title, and entity toggle optically center in the strip. */
+	padding: 7px 8px 1px 8px;
+	gap: 8px;
+	margin-bottom: 2px;
+	min-height: 40px;
+	min-width: 0;
+	overflow: hidden;
+}
+
+/* Entity icon before the name: same artwork as Hierarchy (see views.css comma selectors).
+   All icons use a fixed 32×32 slot so inspector header rows never change height
+   when switching between sprite-icon entities and model-thumbnail entities. */
+.inspector-header-container .inspector-hierarchy-entity-icon {
+	flex-shrink: 0;
+	width: 32px;
+	min-width: 32px;
+	max-width: 32px;
+	height: 32px;
+	min-height: 32px;
+	max-height: 32px;
+	align-self: center;
+	background-size: var(--ui_tree_icon_size, 16px) var(--ui_tree_icon_size, 16px);
+	background-position: center center;
+	background-repeat: no-repeat;
+	background-image-tint: rgba(210, 210, 210, 1.0);
+}
+
+/* Model thumbnails: fill the 32×32 slot with full-resolution artwork. */
+.inspector-header-container .inspector-hierarchy-entity-icon.hierarchy-entity-model-thumb {
+	background-image-tint: rgba(255, 255, 255, 1.0);
+}
+
+/* Script editor inspector: `.scroll-content` already has 8px top padding — drop duplicate padding/margin so the filename sits ~8px below the scroll area. */
+.inspector-header-container.inspector-script-variables-header {
+	padding-top: 0;
+}
+
+.inspector-header-container.inspector-script-variables-header .inspector-header {
+	margin-top: 0;
+}
+
+/* Inspector header (entity name – label or editable text field).
+   Clips to a single line with ellipsis when the panel narrows so the
+   lock/toggle/history controls stay visible. */
+.inspector-header {
+	flex: 1 1 0;
+	font-size: var(--ui_font_size_header);
+	font-weight: 500;
+	line-height: normal;
+	white-space: nowrap;
+	overflow: hidden;
+	text-overflow: ellipsis;
+	max-width: 100%;
+	min-width: 0;
+	margin-top: 0;
+	margin-left: 6px;
+	align-self: center;
+	color: #B3B3B3;
+}
+
+/* Editable entity name field: match label look (no box) */
+.inspector-header-container input.inspector-header,
+.inspector-header-container .inspector-header input {
+	background: transparent;
+	border: none;
+	outline: none;
+	padding: 0;
+}
+.inspector-header-container input.inspector-header:focus,
+.inspector-header-container .inspector-header input:focus {
+	background: rgba(255, 255, 255, 0.2);
+	border-radius: 4px;
+}
+
+/* Entity selection history: 24×24 glyph in 36×36 hit area, no fill. */
+.inspector-header-history {
+	flex-shrink: 0;
+	align-self: center;
+	gap: 0;
+	margin-right: 20px;
+}
+
+.inspector-header-history .icon-button.inspector-header-history-icon,
+.inspector-header-history button.icon-button.inspector-header-history-icon {
+	width: 36px;
+	height: 36px;
+	min-width: 36px;
+	min-height: 36px;
+	max-width: 36px;
+	max-height: 36px;
+	padding: 0;
+	border-width: 0;
+	border-style: none;
+	border-radius: 0;
+	border-color: transparent;
+	background-color: transparent;
+	box-shadow: none;
+	background-size: 24px 24px;
+	background-repeat: no-repeat;
+	background-position: center;
+	background-image-tint: var(--ui_icon_tint_default);
+	opacity: 1;
+	outline: none;
+	outline-offset: 0;
+}
+
+.inspector-header-history .inspector-history-forward-btn {
+	background-image: url("editor:Icons/right-arrow.png");
+}
+
+.inspector-header-history .inspector-history-back-btn {
+	background-image: url("editor:Icons/left-arrow.png");
+}
+
+.inspector-header-history .icon-button.inspector-header-history-icon:hover,
+.inspector-header-history button.icon-button.inspector-header-history-icon:hover {
+	background-image-tint: var(--ui_icon_tint_hover);
+	opacity: 1;
+	background-color: transparent;
+	border-color: transparent;
+	box-shadow: none;
+}
+
+.inspector-header-history .icon-button.inspector-header-history-icon:active,
+.inspector-header-history button.icon-button.inspector-header-history-icon:active,
+.inspector-header-history .icon-button.inspector-header-history-icon.pressed,
+.inspector-header-history button.icon-button.inspector-header-history-icon.pressed {
+	background-image-tint: var(--ui_icon_tint_hover);
+	opacity: 1;
+	background-color: transparent;
+	border-color: transparent;
+	box-shadow: none;
+}
+
+.inspector-header-history .icon-button.inspector-header-history-icon:focus,
+.inspector-header-history button.icon-button.inspector-header-history-icon:focus,
+.inspector-header-history .icon-button.inspector-header-history-icon:focus-visible,
+.inspector-header-history button.icon-button.inspector-header-history-icon:focus-visible {
+	outline: none;
+	outline-offset: 0;
+	background-color: transparent;
+	border-color: transparent;
+	box-shadow: none;
+}
+
+/* Disabled arrow (no navigation in that direction): hide entirely. */
+.inspector-header-history button.icon-button:disabled,
+.inspector-header-history .button.icon-button:disabled {
+	background-color: transparent;
+	border-color: transparent;
+	color: transparent;
+	opacity: 0;
+	cursor: default;
+	pointer-events: none;
+	box-shadow: none;
+}
+
+.inspector-header-history .icon-button.inspector-header-history-icon:disabled:hover,
+.inspector-header-history button.icon-button.inspector-header-history-icon:disabled:hover,
+.inspector-header-history .icon-button.inspector-header-history-icon:disabled:active,
+.inspector-header-history button.icon-button.inspector-header-history-icon:disabled:active {
+	opacity: 0;
+	pointer-events: none;
+}
+
+/* Toggle control for entity enable/disable */
+.inspector-entity-toggle {
+	flex-shrink: 0;
+}
+
+/* Placeholder matching the entity toggle footprint (29×16, the toggle.css
+   default) so history arrows keep a fixed horizontal position across
+   inspector modes that have no toggle. */
+.inspector-header-toggle-placeholder {
+	flex-shrink: 0;
+	width: 29px;
+	min-width: 29px;
+	max-width: 29px;
+	height: 16px;
+	min-height: 16px;
+	max-height: 16px;
+}
+
+/* Kind-specific header icon slot for non-entity inspector states. Matches the
+   32×32 slot used by the entity icon so header row height stays constant. */
+.inspector-header-container .inspector-header-kind-icon {
+	flex-shrink: 0;
+	width: 32px;
+	min-width: 32px;
+	max-width: 32px;
+	height: 32px;
+	min-height: 32px;
+	max-height: 32px;
+	align-self: center;
+	background-size: 20px 20px;
+	background-position: center center;
+	background-repeat: no-repeat;
+	background-image-tint: rgba(255, 255, 255, 1.0);
+}
+
+.inspector-header-container .inspector-header-kind-icon.inspector-header-kind-empty {
+	background-image: url("editor:Icons/info.png");
+	background-image-tint: var(--ui_icon_tint_standard);
+}
+
+.inspector-header-container .inspector-header-kind-icon.inspector-header-kind-asset {
+	background-image: url("editor:Icons/box.png");
+}
+
+.inspector-header-container .inspector-header-kind-icon.inspector-header-kind-folder {
+	background-image: url("editor:Icons/Folder@32px.png");
+}
+
+.inspector-header-container .inspector-header-kind-icon.inspector-header-kind-script {
+	background-image: url("editor:Icons/codeicon.png");
+}
+
+.inspector-header-container .inspector-header-kind-icon.inspector-header-kind-node {
+	background-image: url("editor:Icons/node.png");
+}
+
+/* When a real asset thumbnail (texture/model/scene) is applied, fill the slot
+   at full resolution and disable the gray icon tint so the preview isn't dimmed. */
+.inspector-header-container .inspector-header-kind-icon.has-thumbnail {
+	background-size: 32px 32px;
+	background-image-tint: rgba(255, 255, 255, 1.0);
+}
+
+/* Inspector layout */
+.inspector-section {
+	display: flex;
+	flex-direction: column;
+	margin-bottom: 2px;
+}
+
+.inspector-section:not(.inspector-section-collapsed) {
+	margin-bottom: 10px;
+}
+
+/* Less empty space below Transform before the next component section. */
+.inspector-section.inspector-section-transform:not(.inspector-section-collapsed) {
+	margin-bottom: 4px;
+}
+
+.inspector-section.inspector-section-transform .inspector-section-body {
+	padding-top: 8px;
+	padding-bottom: 4px;
+}
+
+/* Transform TRS rows: stacked by default; label beside X/Y/Z when .inspector-transform-wide is set from code (width >= threshold). */
+.inspector-transform-trs-row {
+	display: flex;
+	flex-direction: column;
+	align-items: stretch;
+	width: 100%;
+	min-width: 0;
+	gap: 6px;
+	margin-bottom: var(--inspector-row-gap);
+	box-sizing: border-box;
+}
+
+.inspector-transform-trs-row > .inspector-field-label {
+	margin-top: 4px;
+	margin-bottom: 0;
+}
+
+/* Transform Vector3: no extra block margin below the strip (row spacing uses --inspector-row-gap on the row). */
+.inspector-section.inspector-section-transform .inspector-transform-trs-row > .inspector-vector3 {
+	margin-bottom: 0;
+}
+
+/* Extra space before each axis letter so the three value cells do not run up to X/Y/Z; keep a tight label→field gap. */
+.inspector-section.inspector-section-transform .inspector-transform-trs-row .inspector-vector3.vector3-field {
+	gap: 4px;
+	padding-left: 8px;
+}
+
+.inspector-section.inspector-section-transform .inspector-transform-trs-row .inspector-vector3.vector3-field > .vector3-label-y,
+.inspector-section.inspector-section-transform .inspector-transform-trs-row .inspector-vector3.vector3-field > .vector3-label-z {
+	margin-left: 12px;
+}
+
+/* Earth-scale authoring: read-only Sector + composed-world rows appended to the
+   Transform section for entities tagged with WorldSectorCoord. Self-contained
+   label+value row (auto-width label so long labels like "World (sector-composed)"
+   never overlap the value); value muted so it reads as display, not an editable
+   field. Independent of the trs-row's narrow/wide field layout. */
+.inspector-transform-info-row {
+	display: flex;
+	flex-direction: row;
+	align-items: baseline;
+	width: 100%;
+	min-width: 0;
+	gap: 8px;
+	margin-bottom: var(--inspector-row-gap);
+}
+
+.inspector-transform-info-row > .inspector-transform-info-label {
+	flex: 0 0 auto;
+	font-size: 13px;
+	white-space: nowrap;
+	cursor: default;
+}
+
+.inspector-transform-info-row > .inspector-transform-readonly-value {
+	flex: 1 1 auto;
+	min-width: 0;
+	opacity: 0.7;
+	white-space: nowrap;
+	overflow: hidden;
+}
+
+/* X/Y/Z inputs: match .inspector-field TextInput elsewhere in this file (Transform rows omit the .inspector-field wrapper). */
+.inspector-section.inspector-section-transform .inspector-transform-trs-row .inspector-vector3.vector3-field .float-field .float-field-input {
+	min-width: 56px;
+	padding: 4px 8px;
+	border-radius: 4px;
+	background-color: #202020;
+	border-width: 1px;
+	border-color: transparent;
+	border-style: solid;
+}
+
+.inspector-section.inspector-section-transform .inspector-transform-trs-row .inspector-vector3.vector3-field .float-field {
+	min-width: 56px;
+}
+
+/* Same specificity as the block above so hover/focus win over border-color: transparent; mirrors
+   widgets.css rules for .inspector-field / .inspector-vector3 float fields. */
+.inspector-section.inspector-section-transform .inspector-transform-trs-row .inspector-vector3.vector3-field .float-field:hover .float-field-input,
+.inspector-section.inspector-section-transform .inspector-transform-trs-row .inspector-vector3.vector3-field .float-field .float-field-input:focus,
+.inspector-section.inspector-section-transform .inspector-transform-trs-row .inspector-vector3.vector3-field .float-field.focused .float-field-input {
+	border-color: var(--ui_color_accent);
+	color: #FFFFFF;
+}
+
+.inspector-section.inspector-section-transform.inspector-transform-wide .inspector-transform-trs-row {
+	flex-direction: row;
+	align-items: center;
+	gap: 6px;
+	/* Vertical row gap comes from the base .inspector-transform-trs-row margin-bottom; do not
+	   restate it here with calc(var(...)): length parsing does not support calc(). */
+}
+
+.inspector-section.inspector-section-transform.inspector-transform-wide .inspector-transform-trs-row > .inspector-field-label {
+	display: flex;
+	align-items: center;
+	flex: 0 1 108px;
+	width: 108px;
+	height: 27px;
+	min-width: 72px;
+	min-height: 27px;
+	max-width: 140px;
+	margin-top: 0;
+	margin-bottom: 0;
+	align-self: center;
+}
+
+.inspector-section.inspector-section-transform.inspector-transform-wide .inspector-transform-trs-row > .inspector-vector3 {
+	flex: 1 1 0;
+	min-width: 0;
+}
+
+.inspector-section-header-row {
+	display: flex;
+	flex-direction: row;
+	align-items: center;
+	padding: 4px 16px 4px 20px;
+	margin: 0 -8px;
+	cursor: pointer;
+	gap: 0;
+	justify-content: space-between;
+	border-radius: 0;
+	background-color: rgba(0, 0, 0, 0.13);
+	height: var(--inspector-header-height);
+	min-height: var(--inspector-header-height);
+	max-height: var(--inspector-header-height);
+}
+
+.inspector-section.inspector-section-selected .inspector-section-header-row {
+	background-color: var(--ui_color_bg_selected);
+}
+
+.inspector-section.inspector-section-selected .inspector-section-header {
+	color: #FFFFFF;
+}
+
+/* Remove background when section is expanded */
+.inspector-section-header-row.expanded {
+	background-color: transparent;
+}
+
+.inspector-section-header-row:hover .inspector-section-header {
+	color: var(--inspector-section-title-hover, #FFFFFF);
+}
+
+/* With the pointer on the enable dot a click switches the component rather
+   than collapsing the section, so the title keeps its rest colours instead of
+   the hover brightening (InspectorSection sets the class on its row). */
+.inspector-section-header-row-dot-hovered {
+	--inspector-section-title-hover: #DDDDDD;
+	--inspector-section-title-hover-off: #999999;
+}
+
+.inspector-section-header-row.pressed .inspector-section-header {
+	color: rgba(255, 255, 255, 0.89);
+}
+
+/* The section's enable dot (EnableDot draws it): its place in the header. The
+   24 px hit area straddles the header's left padding, so the mark's centre and
+   the title sit where a 16 px dot put them. The filled-sections style moves it
+   through the two variables. */
+.inspector-section-dot {
+	margin-left: var(--inspector-section-dot-margin-left, -14px);
+	margin-right: var(--inspector-section-dot-margin-right, 6px);
+}
+
+/* Keeps the dot's footprint for a component with no on/off state, invisibly.
+   It takes no pointer, so a click there reaches the header and collapses the
+   section; the section also takes it out of focus handling
+   (InspectorSection::SetEnabledTogglePlaceholder). */
+.inspector-section-dot-placeholder {
+	opacity: 0;
+	pointer-events: none;
+}
+
+/* A switched-off component's settings stay editable and read as off. The body
+   re-points the colours its controls read rather than fading as a layer, so no
+   control shows through another: labels, values, switches and slider fills
+   step down, knobs and field plates keep theirs. */
+.inspector-section-body-disabled {
+	--inspector-section-body-text: var(--ui_color_switched_off_value);
+	--ui_color_text_bright: var(--ui_color_switched_off_value);
+	--ui_color_text_dim: var(--ui_color_switched_off_label);
+	--ui_color_accent_blue: var(--ui_color_accent_blue_inactive);
+	--ui_color_slider_track_fill: var(--ui_color_accent_blue_inactive);
+}
+
+/* Why an entity that is switched on does not run: an ancestor is off
+   (InspectorEntityActivityPresenter). One line under the header, shown only
+   then. */
+.inspector-entity-activity-reason {
+	font-size: 12px;
+	color: var(--ui_color_text_dim);
+	padding-left: 4px;
+}
+
+/* Compact enable/visibility dots that remain available in foldout headers
+   without opening the nested settings. */
+.flare-element-visibility-dot,
+.inspector-foldout-enable-dot {
+	width: 16px;
+	height: 16px;
+	min-width: 16px;
+	min-height: 16px;
+	flex-shrink: 0;
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	cursor: pointer;
+}
+
+.flare-element-visibility-dot-visual,
+.inspector-foldout-enable-dot-visual {
+	width: 8px;
+	height: 8px;
+	min-width: 8px;
+	min-height: 8px;
+	border-radius: 4px;
+	background-color: #555555;
+	pointer-events: none;
+}
+
+.flare-element-visibility-dot.checked .flare-element-visibility-dot-visual,
+.inspector-foldout-enable-dot.checked .inspector-foldout-enable-dot-visual {
+	background-color: var(--ui_color_accent_blue);
+}
+
+/* Hover preserves the actual enabled state instead of previewing its inverse. */
+.flare-element-visibility-dot:hover .flare-element-visibility-dot-visual,
+.inspector-foldout-enable-dot:hover .inspector-foldout-enable-dot-visual {
+    background-color: #555555;
+}
+
+.flare-element-visibility-dot.checked:hover .flare-element-visibility-dot-visual,
+.inspector-foldout-enable-dot.checked:hover .inspector-foldout-enable-dot-visual {
+    background-color: var(--ui_color_accent_blue);
+}
+
+/* After click/drag paints a value, show that committed value until hover exits. */
+.flare-element-visibility-dot.inspector-toggle-hover-preview-suppressed:hover .flare-element-visibility-dot-visual,
+.inspector-foldout-enable-dot.inspector-toggle-hover-preview-suppressed:hover .inspector-foldout-enable-dot-visual {
+	background-color: #555555;
+}
+
+.flare-element-visibility-dot.checked.inspector-toggle-hover-preview-suppressed:hover .flare-element-visibility-dot-visual,
+.inspector-foldout-enable-dot.checked.inspector-toggle-hover-preview-suppressed:hover .inspector-foldout-enable-dot-visual {
+	background-color: var(--ui_color_accent_blue);
+}
+
+/* Compact per-element action menu at the far right of each flare foldout. */
+button.flare-element-header-menu,
+.button.flare-element-header-menu,
+.flare-element-header-menu {
+	width: 22px;
+	height: 22px;
+	min-width: 22px;
+	min-height: 22px;
+	max-width: 22px;
+	max-height: 22px;
+	flex-shrink: 0;
+	margin-left: 0;
+	margin-right: 0;
+	padding: 0;
+	border-width: 0;
+	border-style: none;
+	border-color: transparent;
+	border-radius: 4px;
+	background-image: url("editor:Icons/options.png");
+	background-size: 16px 16px;
+	background-repeat: no-repeat;
+	background-position: center;
+	background-image-tint: rgba(255, 255, 255, 0.66);
+	background-color: transparent;
+	color: transparent;
+	outline: none;
+	outline-offset: 0;
+}
+
+button.flare-element-header-menu:hover,
+.button.flare-element-header-menu:hover,
+.flare-element-header-menu:hover {
+	background-image-tint: rgba(255, 255, 255, 1.0);
+	border-color: transparent;
+}
+
+button.flare-element-header-menu:active,
+button.flare-element-header-menu.pressed,
+.button.flare-element-header-menu:active,
+.button.flare-element-header-menu.pressed,
+.flare-element-header-menu:active,
+.flare-element-header-menu.pressed {
+	background-image-tint: rgba(255, 255, 255, 0.87);
+	background-color: rgba(255, 255, 255, 0.31);
+	border-color: transparent;
+}
+
+button.flare-element-header-menu:focus,
+.button.flare-element-header-menu:focus,
+.flare-element-header-menu:focus {
+	outline: none;
+	outline-offset: 0;
+}
+
+/* Hide dot for script variables section */
+.script-variables-section .inspector-section-dot {
+	display: none;
+}
+
+.script-variables-section .inspector-section-header {
+	margin-left: 0;
+}
+
+
+.inspector-section.disabled .inspector-section-header {
+	color: rgba(255, 255, 255, 0.7);
+}
+
+.inspector-section-icon {
+	width: 16px;
+	height: 16px;
+	min-width: 16px;
+	min-height: 16px;
+	flex-shrink: 0;
+	margin-right: 6px;
+	background-size: 16px 16px;
+	background-repeat: no-repeat;
+	background-position: center;
+	background-image-tint: rgba(200, 200, 200, 1.0) !important;
+	background-image-saturation: 1.0;
+	opacity: 1.0;
+}
+
+.inspector-section-icon.hidden {
+	display: none;
+}
+
+.inspector-section.disabled .inspector-section-icon {
+	opacity: 0.5;
+}
+
+.inspector-section-icon.inspector-section-icon-transform {
+	background-image: url("editor:Icons/vector.png");
+}
+.inspector-section-icon.inspector-section-icon-mesh-renderer {
+	background-image: url("editor:Icons/Sphere.png");
+}
+.inspector-section-icon.inspector-section-icon-skinned-mesh {
+	background-image: url("editor:Icons/person.png");
+}
+.inspector-section-icon.inspector-section-icon-material {
+	background-image: url("editor:Icons/material.png");
+}
+.inspector-section-icon.inspector-section-icon-camera {
+	background-image: url("editor:Icons/videocam.png");
+}
+.inspector-section-icon.inspector-section-icon-light-ambient {
+	background-image: url("editor:Icons/AmbientLight.png");
+}
+.inspector-section-icon.inspector-section-icon-light-directional {
+	background-image: url("editor:Icons/DirectionalLight.png");
+}
+.inspector-section-icon.inspector-section-icon-light-spot {
+	background-image: url("editor:Icons/SpotLight.png");
+}
+.inspector-section-icon.inspector-section-icon-light-point {
+	background-image: url("editor:Icons/PointLight.png");
+}
+.inspector-section-icon.inspector-section-icon-light-area {
+	background-image: url("editor:Icons/arealight.png");
+}
+.inspector-section-icon.inspector-section-icon-light-volume {
+	background-image: url("editor:Icons/PointLight.png");
+}
+.inspector-section-icon.inspector-section-icon-sky {
+	background-image: url("editor:Icons/skyenvironment.png");
+}
+.inspector-section-icon.inspector-section-icon-reflection-probe {
+	background-image: url("editor:Icons/probe.png");
+}
+.inspector-section-icon.inspector-section-icon-post-process {
+	background-image: url("editor:Icons/postfx.png");
+}
+.inspector-section-icon.inspector-section-icon-post-process-volume {
+	background-image: url("editor:Icons/color-filter.svg");
+}
+.inspector-section-icon.inspector-section-icon-ddgi-volume {
+	background-image: url("editor:Icons/ddgivolume.svg");
+}
+.inspector-section-icon.inspector-section-icon-wind-volume {
+	background-image: url("editor:Icons/wind.svg");
+}
+.inspector-section-icon.inspector-section-icon-terrain {
+	background-image: url("editor:Icons/terrain.png");
+}
+.inspector-section-icon.inspector-section-icon-grass {
+	background-image: url("editor:Icons/grass.png");
+}
+.inspector-section-icon.inspector-section-icon-terrain-surface-rules {
+	background-image: url("editor:Icons/terrain-surface-rules.svg");
+}
+.inspector-section-icon.inspector-section-icon-ocean {
+	background-image: url("editor:Icons/ocean.svg");
+}
+.inspector-section-icon.inspector-section-icon-particles {
+	background-image: url("editor:Icons/sparkles.png");
+}
+.inspector-section-icon.inspector-section-icon-video-texture {
+	background-image: url("editor:Icons/film.png");
+}
+.inspector-section-icon.inspector-section-icon-lens-flare {
+	background-image: url("editor:Icons/flame.png");
+}
+.inspector-section-icon.inspector-section-icon-spline {
+	background-image: url("editor:Icons/GizmoSpline.png");
+}
+.inspector-section-icon.inspector-section-icon-measure {
+	background-image: url("editor:Icons/Ruler.png");
+}
+.inspector-section-icon.inspector-section-icon-physics,
+.inspector-section-icon.inspector-section-icon-physics-settings {
+	background-image: url("editor:Icons/PhysicsSettings.png");
+}
+.inspector-section-icon.inspector-section-icon-shape-cube {
+	background-image: url("editor:Icons/Cube.png");
+}
+.inspector-section-icon.inspector-section-icon-shape-sphere {
+	background-image: url("editor:Icons/Sphere.png");
+}
+.inspector-section-icon.inspector-section-icon-shape-capsule {
+	background-image: url("editor:Icons/Capsule.png");
+}
+.inspector-section-icon.inspector-section-icon-shape-plane {
+	background-image: url("editor:Icons/Plane.png");
+}
+.inspector-section-icon.inspector-section-icon-audio-emitter,
+.inspector-section-icon.inspector-section-icon-audio-listener {
+	background-image: url("editor:Icons/music-note-icon@32px.png");
+}
+.inspector-section-icon.inspector-section-icon-animator,
+.inspector-section-icon.inspector-section-icon-animated-node {
+	background-image: url("editor:Icons/film.png");
+}
+.inspector-section-icon.inspector-section-icon-lod-group {
+	background-image: url("editor:Icons/layout3split.png");
+}
+.inspector-section-icon.inspector-section-icon-render-layer {
+	background-image: url("editor:Icons/list.png");
+}
+.inspector-section-icon.inspector-section-icon-default {
+	background-image: url("editor:Icons/node.png");
+}
+
+/* The component title inside .inspector-section-header-row. It fills its row by shrinking the
+   width below against the row's fixed-width siblings, and carries no flex basis: a basis of 0
+   fills a row and collapses the same label to no height at all in a column. */
+.inspector-section-header {
+	margin-bottom: 0px;
+	font-weight: normal;
+	font-size: 13px;
+	overflow-wrap: break-word;
+	word-wrap: break-word;
+	word-break: break-word;
+	max-width: 100%;
+	min-width: 0;
+	text-align: left;
+	display: block;
+	width: 100%;
+}
+
+/* A heading over a group of rows inside a section body, not a section bar of its own. The weight
+   and the gap above it are what separate it from the field labels underneath; the tone is the one
+   every inspector heading takes. The wrap guards are not optional: a heading is a whole phrase
+   often enough ("Ambient gradient tint (diffuse only)"), and the inspector docks narrow. */
+.inspector-section-subheader {
+	font-size: 13px;
+	font-weight: 600;
+	margin-top: 10px;
+	margin-bottom: 2px;
+	color: var(--ui_color_text_soft);
+	overflow-wrap: break-word;
+	word-wrap: break-word;
+	word-break: break-word;
+	max-width: 100%;
+	min-width: 0;
+}
+
+.inspector-section-header-options {
+	width: 22px;
+	height: 22px;
+	min-width: 22px;
+	min-height: 22px;
+	max-width: 22px;
+	max-height: 22px;
+	flex-shrink: 0;
+	margin-left: 6px;
+	margin-right: 2px;
+	padding: 0;
+	background-size: 16px 16px;
+	background-repeat: no-repeat;
+	background-position: center;
+	background-image: url("editor:Icons/options.png");
+	background-image-tint: rgba(255, 255, 255, 0.66);
+	background-color: transparent;
+	border-radius: 4px;
+	opacity: 1.0;
+}
+
+.inspector-section-header-options:hover,
+.inspector-section-header-options.hover {
+	background-image-tint: rgba(255, 255, 255, 1.0);
+	opacity: 1.0;
+}
+
+.inspector-section-header-options.pressed {
+	background-image-tint: rgba(255, 255, 255, 0.87);
+	background-color: rgba(255, 255, 255, 0.31);
+	opacity: 1.0;
+}
+
+/* Header chevron (right side) - shows expand/collapse state */
+.inspector-section-header-chevron {
+	width: 15px;
+	height: 13px;
+	min-width: 15px;
+	min-height: 13px;
+	flex-shrink: 0;
+	background-size: contain;
+	background-repeat: no-repeat;
+	background-position: center;
+	opacity: 0.5;
+	background-color: transparent;
+	align-self: flex-end;
+	margin-left: auto;
+}
+
+.inspector-section-header-chevron:hover {
+	opacity: 1.0;
+}
+
+.inspector-section-header-chevron.arrow-down {
+	background-image: url("editor:Icons/ArrowDown.png");
+}
+
+.inspector-section-header-chevron.arrow-up {
+	background-image: url("editor:Icons/ArrowUp.png");
+	opacity: 0.125;
+}
+
+.inspector-section-header-chevron.arrow-up:hover {
+	opacity: 1.0;
+}
+
+.inspector-section-header-chevron.hidden {
+	display: none;
+}
+
+/* Collapse arrow (bottom right of content) - only visible when expanded */
+.inspector-section-collapse-arrow {
+	width: 15px;
+	height: 13px;
+	min-width: 15px;
+	min-height: 13px;
+	background-size: contain;
+	background-repeat: no-repeat;
+	background-position: center;
+	opacity: 0.5;
+	background-color: transparent;
+	cursor: pointer;
+	position: absolute;
+	right: 8px;
+	bottom: -6px;
+}
+
+.inspector-section-collapse-arrow:hover {
+	opacity: 1.0;
+}
+
+.inspector-section-collapse-arrow.arrow-up {
+	background-image: url("editor:Icons/ArrowUp.png");
+	opacity: 0.125;
+}
+
+.inspector-section-collapse-arrow.arrow-up:hover {
+	opacity: 1.0;
+}
+
+.inspector-section-collapse-arrow.hidden {
+	display: none;
+}
+
+/* When panel has this class (Settings > UI: "Show Inspector Chevrons" off), hide up/down arrows */
+.inspector-hide-collapse-arrow .inspector-section-collapse-arrow,
+.inspector-hide-collapse-arrow .inspector-section-header-chevron {
+	display: none;
+}
+
+/* When panel has this class (Settings > UI: "Show Component Icons" off), hide component icons */
+.inspector-hide-component-icons .inspector-section-icon {
+	display: none;
+}
+
+.inspector-section-body {
+	display: flex;
+	flex-direction: column;
+	/* Row spacing uses margin-bottom on .inspector-panel .inspector-row (--inspector-row-gap) so wrapped inspectors match direct rows. */
+	gap: 0px;
+	padding: 4px 8px 8px 28px;
+	position: relative;
+	padding-right: 8px;
+	color: var(--inspector-section-body-text, #BDBDBD);
+}
+
+.inspector-section-body-collapsed {
+	display: none;
+}
+
+.inspector-section-empty {
+	color: var(--ui_color_text_dim);
+	font-style: italic;
+}
+
+.inspector-body-subheader {
+	color: var(--ui_color_text);
+	font-size: 12px;
+	font-weight: 600;
+	height: 20px;
+	min-height: 20px;
+	margin-top: 8px;
+	margin-bottom: 4px;
+	padding-top: 4px;
+}
+
+.inspector-section-body > .inspector-body-subheader:first-child {
+	margin-top: 0px;
+}
+
+/* A component's own sections, in the language the material inspector already speaks: a full-width
+   bar over its rows (.rp-foldout, below), worn together with it. The section body indents its
+   children past the component's disclosure column, but the bar is a heading OVER that column rather
+   than a row inside it, so it pulls back out to the panel edges — and hands its rows the body's
+   indent back, so a section costs the rows under it no width. */
+.inspector-component-section {
+	margin-top: 8px;
+}
+
+/* Out to the panel edges, the way top-level foldouts reach them (.rp-foldout-top below). Two boxes
+   stand between a section body's content and the scrollview: the body's own 28px/8px padding and
+   the scroll-content's 8px, so the pull-out is their sum on each side. The matching padding puts
+   the title back where the rows beneath it start. */
+.rp-foldout.inspector-component-section > .foldout-header {
+	margin: 0px -16px var(--inspector-row-gap) -36px;
+	padding-left: 36px;
+	padding-right: 16px;
+	align-items: center;
+	height: var(--inspector-header-height);
+	min-height: var(--inspector-header-height);
+	max-height: var(--inspector-header-height);
+}
+
+.rp-foldout.inspector-component-section > .foldout-content {
+	padding-left: 0px;
+	padding-right: 0px;
+}
+
+/* A section nested inside a section indents instead of pulling out, the way the material inspector
+   nests its blocks: the child's bar starts where its parent's title does, so the two levels read as
+   parent and child while both still run out to the right edge. Rounded where it starts and square
+   where it runs off the edge — the corners follow the shape, so only the left pair is turned. */
+.inspector-component-section .rp-foldout.inspector-component-section > .foldout-header {
+	margin-left: 0px;
+	padding-left: 22px;
+	border-radius: 6px 0px 0px 6px;
+}
+
+/* A texture slot's thumbnail, under the field that names it and pinned to the right of the value
+   column — the material inspector's slot layout. Empty reads as a dashed outline
+   (.texture-preview-empty), so an unassigned slot looks like a slot rather than like nothing. */
+.inspector-texture-preview-row {
+	display: flex;
+	flex-direction: row;
+	justify-content: flex-end;
+	align-self: stretch;
+	min-width: 0;
+	margin-bottom: var(--inspector-row-gap);
+}
+
+/* A one-off action, not a field: sized to its words instead of stretching the value column. */
+#terrain-create-material-library {
+	align-self: flex-start;
+	min-height: var(--inspector-row-height, 27px);
+	height: var(--inspector-row-height, 27px);
+}
+
+.inspector-filled-sections .inspector-section {
+	background-color: #222222;
+	border-radius: 6px;
+	margin-bottom: 8px;
+	overflow: hidden;
+	border-width: 0;
+	border-color: transparent;
+	border-style: solid;
+}
+
+.inspector-filled-sections .inspector-section.inspector-section-transform {
+	border-width: 0;
+	border-color: transparent;
+}
+
+/* Hosted sections begin at the host's indented content edge. */
+.inspector-hosted-section {
+	border-radius: var(--ui_radius_sm);
+}
+
+.inspector-filled-sections .inspector-section:not(.inspector-section-collapsed),
+.inspector-filled-sections .inspector-section.inspector-section-transform:not(.inspector-section-collapsed) {
+	margin-bottom: 8px;
+}
+
+.inspector-filled-sections .inspector-section-header-row {
+	margin: 0;
+	padding: 5px 12px 5px 12px;
+	background-color: #222222;
+	border-radius: 0;
+}
+
+.inspector-filled-sections .inspector-section-header-row.expanded {
+	background-color: #222222;
+}
+
+.inspector-filled-sections .inspector-section-header-row:hover {
+	background-color: #222222;
+}
+
+/* Hosted section headers keep their indented, rounded leading edge but cross
+   the host body's trailing padding so they finish at the host's header. */
+.inspector-hosted-section > .inspector-section-header-row {
+	margin-right: -16px;
+	border-radius: var(--ui_radius_sm) 0 0 var(--ui_radius_sm);
+}
+
+.inspector-filled-sections .inspector-hosted-section > .inspector-section-header-row {
+	margin-right: -12px;
+}
+
+.inspector-filled-sections .inspector-section.inspector-section-selected .inspector-section-header-row {
+	background-color: rgba(0, 122, 204, 0.22);
+}
+
+.inspector-filled-sections .inspector-section-body,
+.inspector-filled-sections .inspector-section.inspector-section-transform .inspector-section-body {
+	background-color: #222222;
+	padding: 8px 12px 10px 12px;
+}
+
+/* Nested post-effect controls begin at the effect header's enabled-dot edge,
+   reclaiming the otherwise unused component-icon indent. Keep terrain modifier
+   effects on their existing stack alignment. */
+.inspector-post-process-effect-body {
+	padding-left: 4px;
+}
+
+.inspector-filled-sections .inspector-section .float-field-input,
+.inspector-filled-sections .inspector-section .int-field-input,
+.inspector-filled-sections .inspector-section .inspector-field TextInput,
+.inspector-filled-sections .inspector-section .dropdown.inspector-dropdown > .dropdown-header {
+	background-color: #1A1A1A;
+}
+
+.inspector-filled-sections {
+	--inspector-section-dot-margin-left: -4px;
+	--inspector-section-dot-margin-right: 4px;
+}
+
+.inspector-filled-sections .inspector-section-icon {
+	margin-right: 8px;
+}
+
+.inspector-filled-sections .inspector-section-collapse-arrow {
+	right: 10px;
+	bottom: 2px;
+}
+
+/* Script variable row layout; wrap so long text and buttons don't overlap on narrow panels */
+.inspector-row {
+	display: flex;
+	flex-direction: row;
+	flex-wrap: wrap;
+	align-items: center;
+	justify-content: flex-start;
+	gap: 8px;
+}
+
+/* Single source for vertical spacing between rows (component inspectors + embedded Material UI). */
+.inspector-panel .inspector-row {
+	margin-bottom: var(--inspector-row-gap);
+}
+
+/* Buttons in inspector rows must not shrink so their text stays visible */
+.inspector-row > button,
+.inspector-row .button {
+	flex-shrink: 0;
+}
+
+/* Ping/link buttons sit between label and field; pull them snug against the label
+   so the adjacent asset picker keeps maximum width. */
+.inspector-row > .icon-button.link-icon {
+	margin-left: -4px;
+	margin-right: -4px;
+}
+
+/* Force a row to take full width (e.g. material drop zone) without extra vertical space.
+   Do not use flex-basis: 100% here: in a column layout that would make the row take 100% height. */
+.inspector-row-block {
+	width: 100%;
+	flex-shrink: 0;
+}
+
+.inspector-label-cell {
+	display: flex;
+	flex: 0 0 auto;
+	min-width: 100px;
+	max-width: 200px;
+}
+
+/* One line, ellipsized: a long property name never wraps a row taller or
+   spills under the value column. A truncated label offers its full text as
+   its hover tooltip (TooltipOverlay), so nothing is lost. */
+.inspector-label {
+	flex: 0 1 auto;
+	min-width: 0;
+	max-width: 100%;
+	font-size: 13px;
+	color: var(--ui_color_text_dim);
+	text-align: left;
+	cursor: default;
+	padding: 4px 0;
+	white-space: nowrap;
+	overflow: hidden;
+	text-overflow: ellipsis;
+}
+
+.inspector-label.inspector-label-draggable {
+	cursor: col-resize;
+}
+
+.inspector-label.inspector-label-no-drag {
+	cursor: default;
+}
+
+/* Non-Transform sections: align toggles and value fields from horizontal center, vertically aligned */
+.inspector-section:not(.inspector-section-transform) .inspector-section-body .inspector-row {
+	flex-wrap: nowrap;
+	align-items: center;
+}
+.inspector-section:not(.inspector-section-transform) .inspector-section-body .inspector-row.inspector-guide-row {
+	align-items: flex-start;
+}
+.inspector-section:not(.inspector-section-transform) .inspector-section-body .inspector-row .inspector-label-cell {
+	flex: 0 0 37%;
+	width: 37%;
+	min-width: 0;
+	max-width: 37%;
+}
+/* Bare labels (no cell wrapper) still get 37% for backward compatibility */
+.inspector-section:not(.inspector-section-transform) .inspector-section-body .inspector-row > .inspector-label {
+	flex: 0 0 37%;
+	width: 37%;
+	min-width: 0;
+	max-width: 37%;
+}
+/* Value column: field and (when present) direct toggle fill remaining space after the label. */
+.inspector-section:not(.inspector-section-transform) .inspector-section-body .inspector-row .inspector-field,
+.inspector-section:not(.inspector-section-transform) .inspector-section-body .inspector-row > toggle,
+.inspector-section:not(.inspector-section-transform) .inspector-section-body .inspector-row > .toggle {
+	flex: 1 1 0%;
+	min-width: 0;
+	align-self: center;
+}
+.inspector-section:not(.inspector-section-transform) .inspector-section-body .inspector-row .inspector-field {
+	margin-right: 0;
+	width: auto;
+	max-width: none;
+}
+/* Toggle-only value column: flex container for optional left/center/right alignment. */
+.inspector-section:not(.inspector-section-transform) .inspector-section-body .inspector-row .inspector-field.inspector-field-toggle {
+	display: flex;
+	justify-content: flex-start;
+	align-items: center;
+}
+/* Toggle nudge by panel class: middle = 19px, right = 38px (left = no class). */
+.inspector-panel.inspector-toggle-offset .inspector-section:not(.inspector-section-transform) .inspector-section-body .inspector-row > toggle,
+.inspector-panel.inspector-toggle-offset .inspector-section:not(.inspector-section-transform) .inspector-section-body .inspector-row > .toggle {
+	margin-left: 19px;
+	margin-right: 0;
+}
+.inspector-panel.inspector-toggle-align-right .inspector-section:not(.inspector-section-transform) .inspector-section-body .inspector-row > toggle,
+.inspector-panel.inspector-toggle-align-right .inspector-section:not(.inspector-section-transform) .inspector-section-body .inspector-row > .toggle {
+	margin-left: 38px;
+	margin-right: 0;
+}
+
+/* Vector3 X/Y/Z axis colors on hover and drag */
+.vector3-label-x:hover,
+.vector3-label-x.dragging {
+	color: var(--ui_color_axis_x);
+}
+
+.vector3-label-y:hover,
+.vector3-label-y.dragging {
+	color: var(--ui_color_axis_y);
+}
+
+.vector3-label-z:hover,
+.vector3-label-z.dragging {
+	color: var(--ui_color_axis_z);
+}
+
+.inspector-field {
+	flex: 0 1 auto;
+	min-width: 75px;
+	max-width: 180px;
+	width: 180px;
+	text-align: left;
+	margin-right: 32px;
+}
+
+.inspector-field.inspector-slider-with-value {
+	display: flex;
+	flex-direction: row;
+	align-items: center;
+	gap: 4px;
+	overflow: hidden;
+}
+
+.inspector-field.inspector-slider-with-value > .property-slider {
+	flex: 1 1 0;
+	min-width: 80px;
+}
+
+.inspector-field.inspector-slider-with-value > .inspector-slider-value-field {
+	/* Width is an inline override (kInspectorSliderValueFieldWidthPx); this
+	   flex basis only needs to agree with it. */
+	flex: 0 0 60px;
+	width: 60px;
+	min-width: 60px;
+	max-width: 60px;
+}
+
+.inspector-field.inspector-slider-with-value > .inspector-slider-unit {
+	flex: 0 0 auto;
+	color: var(--ui_color_text_secondary);
+}
+
+.inspector-field.inspector-slider-with-value > .inspector-slider-value-field .float-field-input,
+.inspector-field.inspector-slider-with-value > .inspector-slider-value-field .int-field-input {
+	box-sizing: border-box;
+	width: 100%;
+	min-width: 0;
+	max-width: 100%;
+	padding-left: 5px;
+	padding-right: 5px;
+}
+
+.inspector-field TextInput {
+	padding: 6px 12px;
+	border-radius: 6px;
+	background-color: #202020;
+	border: 1px solid transparent;
+	height: var(--value_box_height, 26px);
+}
+
+/* Script variables: one row per field (name | value | type), same as early script inspector */
+.script-variables-section.inspector-section .inspector-section-body .inspector-row {
+	flex-wrap: nowrap;
+	align-items: center;
+}
+
+.script-variables-section.inspector-section .inspector-section-body .inspector-row .inspector-label-cell {
+	flex: 0 0 auto;
+	width: auto;
+	min-width: 100px;
+	max-width: 200px;
+}
+.script-variables-section.inspector-section .inspector-section-body .inspector-row > .inspector-label {
+	flex: 0 0 auto;
+	width: auto;
+	min-width: 100px;
+	max-width: 200px;
+	padding-top: 0;
+	padding-bottom: 0;
+	margin-top: 0;
+	margin-bottom: 0;
+}
+
+.script-variables-section.inspector-section .inspector-section-body .inspector-row > .inspector-field {
+	flex: 1 1 auto;
+	width: auto;
+	max-width: none;
+	min-width: 75px;
+	margin-right: 0;
+	align-self: center;
+}
+
+.script-variables-section.inspector-section .inspector-section-body .inspector-row .inspector-type-hint {
+	flex: 0 0 auto;
+	font-size: 12px;
+	padding-left: 4px;
+	margin-top: 0;
+	margin-bottom: 0;
+}
+
+/* The value at each end of a two-thumb range slider row (grass Root Fade). */
+.inspector-range-value {
+	flex: 0 0 36px;
+	min-width: 36px;
+	font-size: 12px;
+	color: var(--ui_color_text_dim);
+	text-align: center;
+}
+
+/* Same value-box background and chrome as float/int inspector fields (.float-field-input / .int-field-input) */
+.script-variables-section.inspector-section .inspector-section-body .inspector-row > .inspector-field TextInput {
+	padding: 4px 8px;
+	border-width: 1px;
+	border-radius: 4px;
+	border-color: transparent;
+	background-color: #202020;
+	height: var(--script_inspector_row_height, 27px);
+	min-height: var(--script_inspector_row_height, 27px);
+	max-height: var(--script_inspector_row_height, 27px);
+	margin-top: 0;
+	margin-bottom: 0;
+	width: 100%;
+	box-sizing: border-box;
+	white-space: nowrap;
+	overflow: hidden;
+}
+
+.script-variables-section.inspector-section .inspector-section-body .inspector-row > .inspector-field TextInput:focus {
+	border-color: var(--ui_color_accent);
+	color: #FFFFFF;
+}
+
+/* Highlighted field when caret is on value in script editor */
+.inspector-field-highlighted TextInput {
+	background-color: var(--ui_color_accent_translucent);
+	border: 1px solid var(--ui_color_accent_blue);
+	border-radius: 4px;
+	color: #FFFFFF; /* Full white text when active - matches script editor */
+}
+
+/* Ensure highlighted state overrides focus state (more specific selector) */
+.inspector-field-highlighted TextInput:focus {
+	border-color: var(--ui_color_accent_blue);
+	background-color: var(--ui_color_accent_translucent);
+	color: #FFFFFF; /* Full white text when focused - matches script editor */
+}
+
+/* Same specificity as script variable value box above so sync-highlight still wins over focus styling */
+.script-variables-section.inspector-section .inspector-section-body .inspector-row > .inspector-field.inspector-field-highlighted TextInput {
+	background-color: var(--ui_color_accent_translucent);
+	border: 1px solid var(--ui_color_accent_blue);
+	border-radius: 4px;
+	color: #FFFFFF;
+}
+
+.script-variables-section.inspector-section .inspector-section-body .inspector-row > .inspector-field.inspector-field-highlighted TextInput:focus {
+	border-color: var(--ui_color_accent_blue);
+	background-color: var(--ui_color_accent_translucent);
+	color: #FFFFFF;
+}
+
+.inspector-type-hint {
+	flex: 0 0 auto;
+	font-size: 13px;
+	color: var(--ui_color_text_dim);
+	font-style: italic;
+	padding-left: 4px;
+	margin-top: 8px;
+	margin-bottom: 8px;
+}
+
+.inspector-field-label {
+	margin-top: 4px;
+	margin-bottom: 8px;
+	text-align: start;
+	font-size: 13px;
+	cursor: default;
+	align-self: flex-start;
+	/* Don't wrap the label text. When the column narrows (e.g. hover adds a
+	   field border that shrinks the label column by 1-2 logical px), wrapping
+	   mid-word produced "Local Position" collapsing to "Local"/"Posi". At
+	   HiDPI the 1-2px change crosses layout thresholds more readily; nowrap
+	   keeps labels stable. */
+	white-space: nowrap;
+}
+
+.inspector-field-label.inspector-label-draggable {
+	cursor: col-resize;
+}
+
+.inspector-vector3 {
+	margin-bottom: 8px;
+	display: flex;
+	flex-direction: row;
+	gap: 4px;
+	min-width: 0;
+}
+
+/* Inspector text - wrap long text and prevent overflow */
+.inspector-text {
+	color: var(--ui_color_text_primary);
+	overflow-wrap: break-word;
+	word-wrap: break-word;
+	word-break: break-word;
+	min-width: 0;
+}
+
+.sky-day-key-label {
+	color: inherit;
+	opacity: 1.0;
+}
+
+.sky-scalar-curve-readout {
+	display: flex;
+	flex-direction: column;
+	align-items: stretch;
+	gap: 0;
+	width: 100%;
+}
+
+/* A sky day curve row (Inspectors/SkyDayCurveRow.cpp): the label stays at the top of the tall field,
+   the field stacks the graph, its readout and its presets, and the graph keeps a compact height until
+   the row is expanded, when it fills the row's width at a fixed aspect. */
+.inspector-section:not(.inspector-section-transform) .inspector-section-body .inspector-row.sky-day-curve-row {
+	align-items: flex-start;
+}
+
+.sky-day-curve-field {
+	display: flex;
+	flex-direction: column;
+	align-items: stretch;
+	gap: 4px;
+}
+
+.sky-day-curve-graph {
+	flex-grow: 1;
+	height: 110px;
+	min-height: 110px;
+	max-height: 110px;
+	min-width: 160px;
+}
+
+/* The sun illuminance curve spans five decades on a log axis: it gets the height to read them. */
+.sky-day-curve-graph-tall {
+	max-height: none;
+	--curve-field-plot-height: 200px;
+}
+
+.sky-day-curve-graph-expanded {
+	width: 100%;
+	height: auto;
+	max-height: none;
+	aspect-ratio: 2.45;
+}
+
+.inspector-section:not(.inspector-section-transform) .inspector-section-body .inspector-row.sky-scalar-curve-expanded {
+	flex-direction: column;
+	align-items: stretch;
+}
+
+.inspector-section:not(.inspector-section-transform) .inspector-section-body .inspector-row.sky-scalar-curve-expanded > .inspector-label-cell {
+	flex: 0 0 auto;
+	width: 100%;
+	max-width: none;
+}
+
+.inspector-section:not(.inspector-section-transform) .inspector-section-body .inspector-row.sky-scalar-curve-expanded > .inspector-field {
+	flex: 0 0 auto;
+	align-self: stretch;
+	width: 100%;
+	max-width: none;
+	margin-right: 0;
+}
+
+.inspector-field:hover .sky-scalar-curve-readout TextInput {
+	border-color: transparent;
+	color: inherit;
+}
+
+.sky-scalar-curve-readout .inspector-field TextInput:hover,
+.sky-scalar-curve-readout .inspector-field TextInput:focus,
+.sky-scalar-curve-readout .inspector-field.focused TextInput,
+.sky-scalar-curve-readout .inspector-field .float-field:hover .float-field-input,
+.sky-scalar-curve-readout .inspector-field .float-field .float-field-input:focus,
+.sky-scalar-curve-readout .inspector-field .float-field.focused .float-field-input {
+	border-color: var(--ui_color_accent);
+	color: #FFFFFF;
+}
+
+.clickable-text {
+	cursor: pointer;
+	color: var(--ui_color_accent_blue);
+}
+
+.clickable-text:hover {
+	text-decoration: underline;
+}
+
+/* Inside foldout content, standalone text labels need stretch so Yoga
+   constrains their width and wraps multi-line text correctly. */
+.foldout-content > .inspector-text {
+	align-self: stretch;
+}
+
+/* --- Per-submesh LOD results (Model inspector, Phase C3a) --- */
+/* One collapsible foldout per submesh; the header packs a count summary, a live
+   preview-level indicator, and a provenance pill to the right of the name. */
+.lod-submesh-foldout {
+	margin-top: 2px;
+}
+
+.lod-submesh-foldout > .foldout-header {
+	gap: 6px;
+	padding: 4px 8px;
+	background-color: rgba(0, 0, 0, 0.13);
+}
+
+.lod-submesh-foldout > .foldout-header:hover {
+	background-color: rgba(0, 0, 0, 0.13);
+}
+
+.lod-submesh-foldout > .foldout-header.pressed {
+	background-color: rgba(0, 0, 0, 0.23);
+}
+
+/* Let a long submesh name shrink and ellipsize instead of overrunning the
+   fixed-width count/indicator/badge to its right. */
+.lod-submesh-foldout > .foldout-header > .foldout-title {
+	flex: 1 1 auto;
+	min-width: 0;
+	white-space: nowrap;
+	overflow: hidden;
+	text-overflow: ellipsis;
+}
+
+.lod-submesh-counts {
+	flex: 0 0 auto;
+	font-size: 11px;
+	color: var(--ui_color_text_dim);
+}
+
+.lod-submesh-active {
+	flex: 0 0 auto;
+	font-size: 11px;
+	color: var(--ui_color_accent_blue);
+}
+
+.lod-submesh-active.clamped {
+	color: #D9A039;
+}
+
+/* Provenance pill: modeled on .render-graph-validation-pill severity colors.
+   Shared by anything naming where a value came from — an LOD chain's origin,
+   the package a read-only asset belongs to. */
+.inspector-provenance-badge {
+	flex: 0 0 auto;
+	font-size: 12px;
+	padding: 0 7px;
+	border-radius: 8px;
+}
+
+.inspector-provenance-badge.generated {
+	color: #D0E4FF;
+	background-color: #2A4360;
+}
+
+.inspector-provenance-badge.authored {
+	color: #D6F5DD;
+	background-color: #2E5A38;
+}
+
+.inspector-provenance-badge.lod0only {
+	color: #C9C9C9;
+	background-color: #3A3A3A;
+}
+
+.inspector-provenance-badge.warn {
+	color: #2A2200;
+	background-color: #D9A039;
+}
+
+/* Names the package an asset belongs to, beside its type line. Neutral: which
+   package it is, not a verdict — the notice below says whether it is editable. */
+.inspector-provenance-badge.package {
+	color: var(--ui_color_text_dim);
+	background-color: var(--ui_color_bg_selected);
+}
+
+/* Terrain material library cards: a .rp-foldout section per material, with the slot ID the
+   painted terrain stores as a header note and a pill for a retired one. A retired material keeps
+   shading ground already painted with it, so its card stays readable and editable — dimmed enough
+   to read as withdrawn beside a live one, not disabled. */
+.terrain-material-card > .foldout-header > .foldout-title {
+	white-space: nowrap;
+	overflow: hidden;
+	text-overflow: ellipsis;
+}
+
+.terrain-material-card.retired {
+	opacity: 0.55;
+}
+
+.terrain-material-slot-note {
+	flex: 0 0 auto;
+	font-size: 12px;
+	color: var(--ui_color_text_dim);
+}
+
+.terrain-material-retired-badge {
+	flex: 0 0 auto;
+	font-size: 12px;
+	padding: 0 7px;
+	border-radius: 8px;
+	color: #F2D98A;
+	background-color: #5A4A12;
+}
+
+/* Model asset inspector: Model / LOD / Rig segmented tabs. */
+.inspector-subtab-row {
+	flex-direction: row;
+	align-items: stretch;
+	gap: 2px;
+	width: 100%;
+	min-width: 0;
+	margin: 2px 0 8px 0;
+	padding: 3px;
+	background-color: rgba(0, 0, 0, 0.28);
+	border-radius: 6px;
+}
+
+.inspector-asset-content button.inspector-subtab,
+.inspector-asset-content .button.inspector-subtab {
+	flex: 1 1 0;
+	min-width: 0;
+	min-height: 26px;
+	height: 26px;
+	margin: 0;
+	padding: 3px 8px;
+	border-width: 0;
+	border-style: none;
+	border-radius: 4px;
+	background-color: transparent;
+	background-image: none;
+	color: rgba(255, 255, 255, 0.68);
+	font-size: 12px;
+	font-weight: 500;
+}
+
+.inspector-asset-content button.inspector-subtab:hover,
+.inspector-asset-content .button.inspector-subtab:hover {
+	background-color: rgba(255, 255, 255, 0.08);
+	color: rgba(255, 255, 255, 0.9);
+}
+
+.inspector-asset-content button.inspector-subtab.active,
+.inspector-asset-content .button.inspector-subtab.active,
+.inspector-asset-content button.inspector-subtab.active:hover,
+.inspector-asset-content .button.inspector-subtab.active:hover {
+	background-color: rgba(255, 255, 255, 0.16);
+	color: var(--ui_color_text);
+}
+
+.inspector-asset-content button.inspector-subtab.pressed,
+.inspector-asset-content .button.inspector-subtab.pressed {
+	background-color: rgba(255, 255, 255, 0.12);
+}
+
+.inspector-bake-axis-field {
+	flex-direction: row;
+	align-items: center;
+	gap: 8px;
+}
+
+.inspector-bake-axis-field > .toggle,
+.inspector-bake-axis-field > toggle {
+	flex: 0 0 auto;
+}
+
+.inspector-bake-axis-field > .float-field {
+	flex: 1 1 auto;
+	min-width: 0;
+}
+
+/* A row carrying a strength and the colour it tints (the grass backlight): the swatch belongs
+   beside the value, not wrapped onto a line of its own — the two are one control. Without this the
+   float field takes the whole field container and pushes anything after it onto a second line. */
+.inspector-grass-value-and-swatch {
+	flex-direction: row;
+	align-items: center;
+	gap: 8px;
+}
+
+.inspector-grass-value-and-swatch > .float-field {
+	flex: 1 1 auto;
+	min-width: 0;
+}
+
+.inspector-asset-content > .inspector-guide-box {
+	margin-top: 2px;
+	margin-bottom: 8px;
+}
+
+/* The mesh clears the 6px corner radius because the thumbnail's own projection
+   frames the bounding sphere with padding (kPreviewFramingPadding in
+   ModelThumbnailHandler). Insetting the image from CSS is not available here:
+   background-origin and background-clip are unregistered, so the background
+   image always measures against the padding box and paints to the border box. */
+.inspector-model-orientation-preview {
+	width: 100%;
+	height: 256px;
+	min-height: 256px;
+	margin: 4px 0 6px 0;
+	padding: 12px;
+	box-sizing: border-box;
+	border-radius: 6px;
+	background-color: rgba(0, 0, 0, 0.45);
+	background-repeat: no-repeat;
+	background-size: contain;
+	background-position: 50% 50%;
+	overflow: hidden;
+}
+
+.inspector-model-axis-legend {
+	flex-direction: row;
+	align-items: center;
+	justify-content: center;
+	gap: 12px;
+	margin: 0 0 8px 0;
+}
+
+.inspector-model-axis-chip {
+	flex-direction: row;
+	align-items: center;
+	gap: 4px;
+}
+
+.inspector-model-axis-name {
+	font-size: 13px;
+	font-weight: 600;
+}
+
+.inspector-model-axis-direction {
+	font-size: 13px;
+	color: var(--ui_color_text_dim);
+}
+
+.inspector-model-axis-x { color: var(--ui_color_axis_x); }
+.inspector-model-axis-y { color: var(--ui_color_axis_y); }
+.inspector-model-axis-z { color: var(--ui_color_axis_z); }
+
+/* Asset inspector: file extension line, with the full asset path kept as tooltip. */
+.inspector-asset-path-clip {
+	align-self: stretch;
+	min-width: 0;
+	margin-right: 16px;
+	overflow: hidden;
+}
+
+.inspector-asset-path {
+	white-space: nowrap;
+	overflow: hidden;
+	text-overflow: ellipsis;
+	max-width: 100%;
+	min-width: 0;
+	margin-right: 16px;
+}
+
+.inspector-asset-path-clip > .inspector-asset-path {
+	width: 100%;
+	max-width: 100%;
+	margin-right: 0;
+	text-align: left;
+}
+
+/* Asset inspector: "Type: …" on its own label so vertical margins apply (path is a separate block). */
+.inspector-asset-type-line {
+	overflow-wrap: break-word;
+	word-wrap: break-word;
+	word-break: break-word;
+	max-width: 100%;
+	min-width: 0;
+	margin-right: 16px;
+	margin-top: 8px;
+	margin-bottom: 8px;
+}
+
+.inspector-asset-content {
+	min-width: 0;
+	overflow: hidden;
+	gap: var(--inspector-row-gap);
+}
+
+.inspector-asset-content > .inspector-row {
+	flex-wrap: nowrap;
+	align-items: center;
+	margin-bottom: 0;
+}
+
+.inspector-asset-content > .inspector-row .inspector-label-cell {
+	flex: 0 0 37%;
+	width: 37%;
+	min-width: 0;
+	max-width: 37%;
+}
+
+.inspector-asset-content > .inspector-row > .inspector-label {
+	flex: 0 0 37%;
+	width: 37%;
+	min-width: 0;
+	max-width: 37%;
+}
+
+.inspector-asset-content > .inspector-row .inspector-field,
+.inspector-asset-content > .inspector-row > toggle,
+.inspector-asset-content > .inspector-row > .toggle {
+	flex: 1 1 0%;
+	min-width: 0;
+	align-self: center;
+}
+
+.inspector-asset-content > .inspector-row .inspector-field {
+	margin-right: 0;
+	width: auto;
+	max-width: none;
+}
+
+.inspector-asset-content .inspector-foldout > .foldout-header {
+	padding: 4px 16px 4px 20px;
+	margin: 0 -8px;
+	gap: 0;
+	border-radius: 0;
+	background-color: rgba(0, 0, 0, 0.13);
+	height: 28px;
+	min-height: 28px;
+	max-height: 28px;
+}
+
+.inspector-asset-content .inspector-foldout > .foldout-header:hover {
+	background-color: rgba(0, 0, 0, 0.13);
+}
+
+.inspector-asset-content .inspector-foldout > .foldout-header.pressed {
+	background-color: rgba(0, 0, 0, 0.23);
+}
+
+.inspector-asset-content .inspector-foldout > .foldout-header > .foldout-chevron {
+	margin-right: 8px;
+}
+
+.inspector-asset-content .inspector-foldout > .foldout-header > .nine-slice-header-menu {
+	flex: 0 0 auto;
+	margin-left: 6px;
+}
+
+.inspector-asset-content .inspector-foldout > .foldout-header > button.nine-slice-header-menu,
+.inspector-asset-content .inspector-foldout > .foldout-header > .button.nine-slice-header-menu {
+	width: 22px;
+	height: 22px;
+	min-width: 22px;
+	min-height: 22px;
+	max-width: 22px;
+	max-height: 22px;
+	padding: 0;
+	border-width: 0;
+	border-style: none;
+	border-color: transparent;
+	border-radius: 4px;
+	background-image: url("editor:Icons/options.png");
+	background-size: 16px 16px;
+	background-repeat: no-repeat;
+	background-position: center;
+	background-image-tint: rgba(255, 255, 255, 0.66);
+	background-color: transparent;
+	color: transparent;
+	outline: none;
+	outline-offset: 0;
+}
+
+.inspector-asset-content .inspector-foldout > .foldout-header > button.nine-slice-header-menu:hover,
+.inspector-asset-content .inspector-foldout > .foldout-header > .button.nine-slice-header-menu:hover {
+	background-image-tint: rgba(255, 255, 255, 1.0);
+}
+
+/* The nine-slice controls while "Sliced" is off: the wrapper is disabled (it takes no input) and dims. */
+.nine-slice-gated:disabled {
+	opacity: 0.45;
+}
+
+.inspector-asset-content .inspector-foldout > .foldout-header > button.nine-slice-header-menu.pressed,
+.inspector-asset-content .inspector-foldout > .foldout-header > .button.nine-slice-header-menu.pressed {
+	background-image-tint: rgba(255, 255, 255, 0.87);
+	background-color: rgba(255, 255, 255, 0.31);
+}
+
+.inspector-asset-content .inspector-foldout > .foldout-header > button.nine-slice-header-menu .button-text,
+.inspector-asset-content .inspector-foldout > .foldout-header > .button.nine-slice-header-menu .button-text {
+	display: none;
+}
+
+.inspector-asset-content .inspector-foldout > .foldout-content,
+.inspector-asset-content .inspector-foldout .nine-slice-gated,
+.inspector-asset-content .inspector-foldout .nine-slice-inner {
+	gap: var(--inspector-row-gap);
+}
+
+.inspector-asset-content .inspector-foldout .inspector-row {
+	flex-wrap: nowrap;
+	align-items: center;
+	margin-bottom: 0;
+}
+
+.inspector-asset-content .inspector-foldout .inspector-row .inspector-label-cell {
+	flex: 0 0 37%;
+	width: 37%;
+	min-width: 0;
+	max-width: 37%;
+}
+
+.inspector-asset-content .inspector-foldout .inspector-row > .inspector-label {
+	flex: 0 0 37%;
+	width: 37%;
+	min-width: 0;
+	max-width: 37%;
+}
+
+.inspector-asset-content .inspector-foldout .inspector-row .inspector-field,
+.inspector-asset-content .inspector-foldout .inspector-row > toggle,
+.inspector-asset-content .inspector-foldout .inspector-row > .toggle {
+	flex: 1 1 0%;
+	min-width: 0;
+	align-self: center;
+}
+
+.inspector-asset-content .inspector-foldout .inspector-row .inspector-field {
+	margin-right: 0;
+	width: auto;
+	max-width: none;
+}
+
+.inspector-asset-content .inspector-foldout .inspector-row .inspector-field.inspector-field-toggle {
+	display: flex;
+	justify-content: flex-start;
+	align-items: center;
+}
+
+/* Asset browser / asset inspectors: copy reads softer than the full-white entity inspector. */
+.inspector-asset-content .inspector-text {
+	color: var(--ui_color_text_soft);
+}
+
+.inspector-asset-content .inspector-asset-path {
+	color: var(--ui_color_text_soft);
+}
+
+.inspector-asset-content .inspector-asset-type-line {
+	color: var(--ui_color_text_soft);
+}
+
+.inspector-asset-content .inspector-header {
+	color: var(--ui_color_text_soft);
+}
+
+.inspector-asset-content .inspector-section-header {
+	color: var(--ui_color_text_soft);
+}
+
+.inspector-asset-content .clickable-text,
+.inspector-asset-content .inspector-text.clickable-text {
+	color: var(--ui_color_accent_blue);
+}
+
+/* Script/shader/native asset: where the source lives. Wraps rather than ellipsising so a long path
+ * stays readable in a narrow column; monospace because it is a path. */
+.inspector-source-path {
+	font-family: var(--ui_font_script);
+	font-size: var(--ui_font_size_small);
+	white-space: pre-wrap;
+	overflow-wrap: break-word;
+	width: 100%;
+	min-width: 0;
+}
+
+/* UI Demo panel layout */
+.ui-demo-panel {
+	display: flex;
+	flex-direction: column;
+	gap: 6px;
+	padding: 8px;
+}
+
+.ui-demo-header {
+	font-size: var(--ui_font_size_header);
+	font-weight: 500;
+	margin-bottom: 4px;
+}
+
+.ui-demo-row {
+	display: flex;
+	flex-direction: row;
+	align-items: center;
+	gap: 6px;
+}
+
+.ui-demo-label {
+	min-width: 120px;
+	text-align: right;
+	margin-right: 6px;
+}
+
+.ui-demo-checkbox,
+.ui-demo-toggle {
+	margin-top: 2px;
+}
+
+/* Note: Smart Folder styles moved to smartfolders.css */
+
+.inspector-button {
+	padding: 6px 12px;
+	margin-top: 8px;
+	background-color: rgba(255, 255, 255, 0.28);
+	border: 1px solid rgba(255, 255, 255, 0.42);
+	border-radius: 4px;
+	color: var(--ui_color_text);
+}
+
+.inspector-transition-hint {
+	font-size: 12px;
+	color: var(--ui_color_text_muted, rgba(255, 255, 255, 0.58));
+	padding: 4px 8px 10px 8px;
+	line-height: 1.35;
+}
+
+.inspector-button:hover {
+	background-color: rgba(255, 255, 255, 0.36);
+}
+
+.inspector-field.spline-point-nav-field {
+	display: flex;
+	flex-direction: row;
+	align-items: center;
+	gap: 4px;
+}
+
+.spline-point-nav-button.inspector-button {
+	margin-top: 0;
+	padding: 0;
+	width: 22px;
+	height: 22px;
+	min-width: 22px;
+	min-height: 22px;
+	border-width: 0;
+	border-style: none;
+	border-color: transparent;
+	background-color: transparent;
+	opacity: 0.35;
+}
+
+.spline-point-nav-button.inspector-button:hover {
+	background-color: transparent;
+	border-color: transparent;
+	opacity: 1.0;
+}
+
+.spline-point-nav-label {
+	margin-left: 6px;
+}
+
+/* Sits inline in a field row like the value fields above it; the shared
+   .inspector-button margin-top is for stacked buttons, not row buttons. */
+.spline-point-delete-button.inspector-button {
+	margin-top: 0;
+}
+
+button.inspector-button.inspector-new-material-button,
+.button.inspector-button.inspector-new-material-button,
+.inspector-row .button.inspector-new-material-button,
+.inspector-row button.inspector-new-material-button,
+.inspector-field .button.inspector-new-material-button,
+.inspector-field button.inspector-new-material-button {
+	padding: 0 8px !important;
+	margin: 0 !important;
+	margin-top: 0 !important;
+	font-size: 12px !important;
+	min-height: 16px !important;
+	max-height: 16px !important;
+	height: 16px !important;
+	/* The field container is a flex COLUMN (Yoga default), so align-self is the horizontal
+	   (cross) axis: flex-start pins the button to the value column's left edge, lining it up
+	   with the asset-field picker below. */
+	align-self: flex-start !important;
+	flex-grow: 0 !important;
+	flex-shrink: 0 !important;
+}
+
+.inspector-new-material-button .button-text {
+	font-size: 12px !important;
+	line-height: 16px !important;
+	padding: 0 !important;
+	margin: 0 !important;
+}
+
+/* Search match highlighting */
+.search-match {
+	background-color: var(--ui_color_accent_highlight);
+	border-radius: 2px;
+}
+
+.rp-inspector-header {
+	margin-bottom: var(--inspector-row-gap);
+}
+
+/* Fix row label width so labels never wrap and rows stay single-line height. */
+.rp-foldout .settings-row-label {
+	flex: 0 0 37%;
+	width: 37%;
+	min-width: 0;
+}
+
+.rp-foldout .inspector-row {
+	flex-wrap: nowrap;
+	align-items: center;
+	min-height: var(--inspector-row-height, 27px);
+	margin-bottom: var(--inspector-row-gap);
+	gap: 8px;
+}
+
+.rp-foldout .inspector-row .inspector-label-cell {
+	flex: 0 0 37%;
+	width: 37%;
+	min-width: 0;
+	max-width: 37%;
+}
+
+.rp-foldout .inspector-row > .inspector-label {
+	flex: 0 0 37%;
+	width: 37%;
+	min-width: 0;
+	max-width: 37%;
+	white-space: nowrap;
+}
+
+.rp-foldout .inspector-row .inspector-field {
+	flex: 1 1 0%;
+	min-width: 0;
+	width: auto;
+	max-width: none;
+	margin-right: 0;
+	align-self: center;
+}
+
+.rp-foldout .inspector-row .inspector-field.inspector-field-toggle {
+	display: flex;
+	justify-content: flex-start;
+	align-items: center;
+}
+
+.rp-foldout .rp-single-line-button {
+	width: 100%;
+	min-height: var(--inspector-row-height, 27px);
+	height: var(--inspector-row-height, 27px);
+	padding: 0 10px;
+}
+
+.rp-foldout .rp-single-line-button .button-text {
+	white-space: nowrap;
+}
+
+.rp-foldout-top {
+	margin-bottom: var(--inspector-row-gap);
+}
+
+.rp-foldout-top .rp-foldout {
+	margin-bottom: var(--inspector-row-gap);
+}
+
+/* X remove button and matching spacer for aligned entry rows */
+.rp-entry-remove {
+	width: 20px;
+	min-width: 20px;
+	flex-shrink: 0;
+	margin-left: 4px;
+}
+
+.rp-entry-remove-spacer {
+	width: 20px;
+	min-width: 20px;
+	flex-shrink: 0;
+	margin-left: 4px;
+}
+
+/* Usage / metadata rows: .settings-row already inserts flex gap between the dropdown
+   and the next control; margin-left on the X stacked extra space and read as a sideways
+   offset. Icon buttons default to 24x24 + padding while .settings-row-field is 22px tall,
+   so the close glyph sat off the dropdown’s vertical center. */
+.rp-foldout .settings-row > .rp-entry-remove,
+.rp-foldout .settings-row > .rp-entry-remove-spacer {
+	margin-left: 0;
+}
+
+.rp-foldout .settings-row > button.icon-button.rp-entry-remove,
+.rp-foldout .settings-row > .button.icon-button.rp-entry-remove {
+	width: 22px;
+	min-width: 22px;
+	max-width: 22px;
+	height: 22px;
+	min-height: 22px;
+	max-height: 22px;
+	padding: 0;
+	align-self: center;
+}
+
+.rp-foldout .settings-row > .rp-entry-remove-spacer {
+	width: 22px;
+	min-width: 22px;
+	max-width: 22px;
+	height: 22px;
+	min-height: 22px;
+}
+
+/* All fields in RP rows stretch to fill so values, dropdowns, and X buttons align vertically.
+   Exclude toggles — they should stay intrinsic size. */
+.rp-foldout .settings-row > .settings-row-field:not(.toggle):not(toggle) {
+	flex-grow: 1;
+}
+
+.rp-foldout .settings-row > .settings-row-field TextInput {
+	min-height: var(--inspector-row-height, 27px);
+	height: var(--inspector-row-height, 27px);
+	padding: 4px 8px;
+	border-radius: 4px;
+	background-color: #202020;
+	border: 1px solid transparent;
+}
+
+.rp-foldout .settings-row > .settings-row-field TextInput:hover,
+.rp-foldout .settings-row > .settings-row-field:hover TextInput,
+.rp-foldout .settings-row > .settings-row-field TextInput:focus,
+.rp-foldout .settings-row > .settings-row-field.focused TextInput,
+.rp-foldout .inspector-field TextInput:hover,
+.rp-foldout .inspector-field TextInput:focus {
+	border-color: var(--ui_color_accent);
+	color: #FFFFFF;
+}
+
+.rp-foldout .inspector-field .float-field:hover .float-field-input,
+.rp-foldout .inspector-field .int-field:hover .int-field-input,
+.rp-foldout .inspector-field .float-field .float-field-input:focus,
+.rp-foldout .inspector-field .int-field .int-field-input:focus,
+.rp-foldout .inspector-field .float-field.focused .float-field-input,
+.rp-foldout .inspector-field .int-field.focused .int-field-input {
+	border-color: var(--ui_color_accent);
+	color: #FFFFFF;
+}
+
+.rp-foldout .settings-row .inspector-label-cell.dragging ~ .settings-row-field .float-field-input,
+.rp-foldout .settings-row .inspector-label-cell.dragging ~ .settings-row-field .int-field-input {
+	color: #FFFFFF;
+	border-color: var(--ui_color_accent_blue);
+}
+
+/* Dropdowns inside render pipeline rows: remove the double background from settings-row-field */
+.rp-foldout .dropdown.settings-row-field {
+	background-color: transparent;
+	border: none;
+	padding-left: 0;
+}
+
+/* Render Pipeline inspector foldouts - shared header style */
+.rp-foldout > .foldout-header {
+	background-color: rgba(0, 0, 0, 0.13);
+	border-radius: 0;
+	padding: 4px 16px 4px 20px;
+}
+
+/* Top-level foldouts sit directly inside the scroll-content (padding: 8px),
+   so negative margins pull their headers flush to the scrollview edges.
+   Nested foldouts must NOT use this or their headers escape their parent. */
+.rp-foldout-top > .foldout-header {
+	margin: 0 -8px;
+}
+
+.rp-foldout > .foldout-header:hover {
+	background-color: rgba(0, 0, 0, 0.13);
+}
+
+.rp-foldout > .foldout-header.pressed {
+	background-color: rgba(0, 0, 0, 0.23);
+}
+
+/* Render pipeline foldout content - use dim text like inspector */
+.rp-foldout .foldout-content {
+	color: var(--ui_color_text_dim);
+	padding: 0 8px 0 22px;
+	gap: 0px;
+}
+
+.rp-foldout.curve-preset-foldout > .foldout-content {
+	padding-left: 0;
+	padding-right: 0;
+}
+
+.rp-foldout.curve-preset-foldout > .foldout-header {
+	padding-left: 12px;
+}
+
+/* Apply the configured Inspector Row Gap exactly once between spline point
+   subheaders and value rows. */
+.spline-control-points-foldout {
+	margin-bottom: var(--inspector-row-gap);
+}
+
+.spline-control-points-foldout > .foldout-header,
+.spline-control-point-foldout > .foldout-header {
+	border-radius: var(--ui_radius_sm) 0 0 var(--ui_radius_sm);
+}
+
+.spline-control-point-foldout > .foldout-header {
+	margin-right: -8px;
+}
+
+.spline-control-points-foldout > .foldout-content {
+	padding-top: var(--inspector-row-gap);
+	gap: 0;
+}
+
+/* Spline control point value rows are already .inspector-row items, so their
+   inner vertical rhythm should come only from row margin-bottom. Outdent the
+   row box through both foldout paddings so its 37% label/value split matches
+   the component rows above, then indent only the label text. */
+.spline-control-point-foldout > .foldout-content {
+	margin-left: -22px;
+	margin-right: -8px;
+	padding-top: var(--inspector-row-gap);
+	padding-left: 0;
+	padding-right: 0;
+	gap: 0px;
+}
+
+.spline-control-point-foldout > .foldout-content > .inspector-row {
+	margin-bottom: var(--inspector-row-gap);
+}
+
+/* The outer Control Points foldout supplies the gap before Default Radius. */
+.spline-control-points-foldout > .foldout-content > .spline-control-point-foldout:last-child > .foldout-content > .inspector-row:last-child {
+	margin-bottom: 0;
+}
+
+.spline-control-point-foldout .inspector-vector3 {
+	margin-bottom: 0;
+}
+
+.spline-control-point-foldout > .foldout-content > .inspector-row > .inspector-label-cell {
+	box-sizing: border-box;
+	padding-left: 44px;
+}
+
+/* Nested point controls finish at the outer Control Points header edge. */
+.spline-control-point-foldout > .foldout-content > .inspector-row > .inspector-field {
+	margin-right: -16px;
+}
+
+/* Keep only the X axis marker in the label/value gutter. The Vector3 control
+   itself remains full-width, so its first and last input boxes align with the
+   scalar fields on both edges. */
+.spline-control-point-foldout .inspector-vector3 > .vector3-label-x {
+	margin-left: -19px;
+}
+
+/* Material Properties foldout: its content adds no indent, so the material's rows line up with
+   the component rows around it. These rules, and the material section rules below, also name the
+   foldout part's own class: with one class they lose to Foldout.css, and with two they tie the
+   .rp-foldout rules above, so they must stay below them. */
+.foldout-content.material-properties-content {
+	padding-left: 0;
+	padding-right: 0;
+}
+
+.foldout-header.material-properties-header {
+	padding-left: 2px;
+	/* Match component headers at the Inspector's trailing edge while keeping
+	   the Material Properties title aligned with its inline content. */
+	margin-right: -16px;
+	/* One row gap to the first section bar, as under every section bar. */
+	margin-bottom: var(--inspector-row-gap);
+}
+
+/* Render pipeline foldout chevron - match assets panel brightness */
+.rp-foldout .foldout-chevron {
+	opacity: 0.5;
+}
+
+.rp-foldout .foldout-chevron.expanded {
+	opacity: 0.5;
+}
+
+.rp-foldout .foldout-header:hover .foldout-chevron {
+	opacity: 1.0;
+}
+
+/* Inspector dock-tab lock: use icon-button (not generic button fill); scoped to beat `.icon-button:hover` resets in widgets.css */
+.tab .inspector-lock-button.icon-button {
+	flex-shrink: 0;
+	align-self: center;
+	width: 16px;
+	min-width: 16px;
+	max-width: 16px;
+	height: 16px;
+	min-height: 16px;
+	max-height: 16px;
+	cursor: pointer;
+	background-image: url("editor:Icons/LockOpen.png");
+	background-size: 16px 16px;
+	background-repeat: no-repeat;
+	background-position: center;
+	border-radius: 3px;
+	border-style: none;
+	border-color: transparent;
+	opacity: 0.25;
+	padding: 0;
+	margin: 0;
+	border-width: 0;
+	background-color: transparent;
+}
+
+.tab .inspector-lock-button.icon-button:hover,
+.tab .inspector-lock-button.icon-button:active,
+.tab .inspector-lock-button.icon-button.pressed {
+	opacity: 1.0;
+	background-color: transparent;
+	border-color: transparent;
+	border-width: 0;
+}
+
+.tab .inspector-lock-button.icon-button.locked {
+	background-image: url("editor:Icons/LockClosed.png");
+	background-image-tint: #FF5456;
+	opacity: 1.0;
+	background-color: transparent;
+}
+
+.tab .inspector-lock-button.icon-button.locked:hover,
+.tab .inspector-lock-button.icon-button.locked:active,
+.tab .inspector-lock-button.icon-button.locked.pressed {
+	opacity: 1.0;
+	background-color: transparent;
+	border-color: transparent;
+	border-width: 0;
+}
+
+/* Inspector section drag-reorder */
+.inspector-section-dragging {
+	opacity: 0.4;
+}
+
+.inspector-section-drag-ghost {
+	position: absolute;
+	background-color: rgba(20, 20, 20, 0.88);
+	border-radius: 4px;
+	padding-top: 4px;
+	padding-bottom: 4px;
+	padding-left: 10px;
+	padding-right: 10px;
+	color: rgba(255, 255, 255, 0.95);
+	font-size: 12px;
+	pointer-events: none;
+}
+
+.inspector-section-drag-indicator-above {
+	border-top-width: 2px;
+	border-top-color: #4a9eff;
+}
+
+.inspector-section-drag-indicator-below {
+	border-bottom-width: 2px;
+	border-bottom-color: #4a9eff;
+}
+
+/* Mesh Renderer material: each slot is a nested InspectorSection; drag the header to reorder */
+.inspector-mesh-material-slots-container {
+	flex-direction: column;
+	align-self: stretch;
+	width: 100%;
+}
+
+.inspector-mesh-material-slot {
+	margin-top: 4px;
+}
+
+.texture-preview {
+	width: 80px;
+	height: 80px;
+	min-width: 80px;
+	min-height: 80px;
+	border-radius: 4px;
+	border-width: 1px;
+	border-color: var(--ui_color_dropdown_outline);
+	background-size: contain;
+	background-repeat: no-repeat;
+	background-position: center;
+	align-self: flex-end;
+	margin-left: auto;
+}
+
+/* Texture preview placed alongside the tiling/offset grid. 80×80 gives the
+   thumbnail enough detail to be useful at a glance while still leaving
+   room for the 2x2 grid on the left. align-self:flex-end aligns the bottom
+   edge of the preview with the bottom value row so the preview's baseline
+   matches the last row of values. */
+.texture-preview.texture-preview-side {
+	width: 80px;
+	height: 80px;
+	min-width: 80px;
+	min-height: 80px;
+	align-self: flex-end;
+	margin-left: 6px;
+	margin-right: 0;
+	flex-shrink: 0;
+}
+
+.texture-preview.texture-preview-side.ui-bg-point-filter {
+	width: 64px;
+	height: 64px;
+	min-width: 64px;
+	min-height: 64px;
+}
+
+.texture-preview.texture-preview-side.texture-preview-empty {
+	/* Match inspector value boxes instead of reading as a light placeholder tile. */
+	background-color: #202020;
+	border-style: dashed;
+	border-color: #545454;
+}
+
+.texture-preview.drop-valid {
+	border-color: #50C878;
+	background-color: rgba(80, 200, 120, 0.1);
+}
+
+.texture-preview.drop-invalid {
+	border-color: #DC5050;
+	background-color: rgba(220, 80, 80, 0.1);
+}
+
+/* Wrapper that places the [Tiling/Offset grid] next to the texture preview.
+   The preview is pinned to the right and the grid shrinks to fill the
+   remaining width. align-self:stretch (not width:100%) — Foldout.css notes
+   that % widths are not reliably supported by our CSS parser. */
+.material-tiling-preview-row {
+	display: flex;
+	flex-direction: row;
+	flex-wrap: nowrap;
+	align-items: center;
+	align-self: stretch;
+	min-width: 0;
+	gap: 0;
+}
+
+/* 2x2 numeric grid:
+       (corner)   Tiling   Offset
+        x        [..]     [..]
+        y        [..]     [..]
+   The 80px texture preview is flex-end aligned to the value rows; grid row
+   height is fixed (see .material-tiling-grid-row). Inter-row gap defaults to
+   8px; .material-inspector tightens to --inspector-row-gap for inspector rhythm. */
+.material-tiling-grid {
+	display: flex;
+	flex-direction: column;
+	flex: 1 1 0px;
+	min-width: 0;
+	align-self: stretch;
+	gap: 8px;
+}
+
+.material-tiling-grid-row {
+	display: flex;
+	flex-direction: row;
+	align-items: center;
+	align-self: stretch;
+	height: 28px;
+	gap: 4px;
+}
+
+/* Header row is shorter — it just holds the Tiling/Offset column titles. */
+.material-tiling-grid-row.material-tiling-header-row {
+	height: 14px;
+}
+
+.material-tiling-corner {
+	flex: 0 0 14px;
+	width: 14px;
+	height: 1px;
+}
+
+.material-tiling-row-header {
+	flex: 0 0 14px;
+	width: 14px;
+	min-width: 14px;
+	max-width: 14px;
+	text-align: center;
+	cursor: col-resize;
+	color: var(--ui_color_text_dim);
+	font-size: 13px;
+	padding: 0;
+}
+
+.material-tiling-col-header {
+	flex: 1 1 0px;
+	min-width: 0;
+	text-align: left;
+	cursor: col-resize;
+	color: var(--ui_color_text_dim);
+	font-size: 13px;
+	padding: 2px 0;
+}
+
+.material-tiling-col-header.dragging,
+.material-tiling-row-header.dragging {
+	color: #FFFFFF;
+}
+
+/* FloatField cells inside the grid: shrink-to-fit equally, no min-width so
+   narrow inspectors still fit two columns alongside the preview. */
+.material-tiling-cell {
+	flex: 1 1 0px;
+	min-width: 0;
+	max-width: none;
+	width: auto;
+	margin: 0;
+}
+
+/* Override the default .inspector-field constraints for grid cells in
+   non-transform sections (the rule at line ~814 forces width: auto and
+   max-width: none, but inspector-field's base min-width: 75px would still
+   push the grid wider than its share if FloatField inherits it). */
+.material-inspector .material-tiling-grid .material-tiling-cell {
+	min-width: 0;
+	max-width: none;
+}
+
+/* Same glyph clip issue as Vector3 FloatFields: parent clips before child text emission. */
+.material-inspector .material-tiling-grid .float-field {
+	overflow: hidden;
+}
+
+/* Small visual gap between the Tiling and Offset columns so the two value
+   stacks read as separate groups instead of one continuous strip. Applied
+   to the Offset header label and both Offset value cells (the X row and
+   Y row offset cells). */
+.material-tiling-offset-col {
+	margin-left: 12px;
+}
+
+/* Material inspector texture slot labels: brighter than the dim default
+   so the map name stands out as a section heading above its Tiling/Offset rows. */
+.material-texture-name,
+.inspector-label.material-texture-name {
+	color: var(--ui_color_text_bright);
+}
+
+/* Horizontal divider drawn between consecutive texture slot blocks to
+   visually separate each map (Albedo / Normal / Metallic Roughness / ...).
+   Uses border-top (the proven pattern from inspector-section-drag-indicator)
+   because a stand-alone background-color stripe does not always render
+   without an explicit width in our flex layout. */
+.material-texture-divider {
+	height: 1px;
+	min-height: 1px;
+	align-self: stretch;
+	width: 100%;
+	border-top-width: 1px;
+	border-top-color: var(--ui_color_border_subtle);
+	margin-top: 6px;
+	margin-bottom: 4px;
+}
+
+/* Material inspector: slightly tighter dividers vs generic inspector rows.
+   Row vertical spacing follows Settings → UI → Inspector Row Gap (--inspector-row-gap)
+   so inline MeshRenderer materials match other inspector sections (no fixed 2px override). */
+/* Tiling header + x/y rows: same vertical rhythm as scalar property rows (default 8px was loose). */
+.material-inspector .material-tiling-grid {
+	gap: var(--inspector-row-gap);
+}
+
+/* Foldout.css gives .foldout-content gap:6px between every child. Shader/Properties/Textures
+   sections already space rows with margin-bottom; gap stacks on top and reads as extra air,
+   especially between the texture asset row and the tiling grid (two siblings per slot). */
+.material-inspector > .foldout > .foldout-content {
+	gap: 0px;
+}
+
+/* A material section bar starts where its rows do, chevron indented, and crosses the 16px
+   trailing inset around the material so it finishes with the component header in an entity
+   inspector; only its leading corners are rounded, as on nested Post Process effects. It carries
+   one row gap below it, as a row does: rows keep their gap below them and hide when the section
+   closes, so without it the first row sits on an open bar and closed bars stack flush. */
+.foldout-header.material-section-header {
+	padding-left: 12px;
+	margin-right: -16px;
+	margin-bottom: var(--inspector-row-gap);
+	border-radius: var(--ui_radius_sm) 0 0 var(--ui_radius_sm);
+}
+
+/* Rows run the full width inside a section, as they do in the component body around it. */
+.foldout-content.material-section-content {
+	padding-left: 0;
+	padding-right: 0;
+}
+
+/* A material inspector line that is not a row (a note, a sub-heading, a diagnostics block, a lone
+   button) carries the same gap, so nothing sits on the row, button or bar beneath it. */
+.material-line {
+	margin-bottom: var(--inspector-row-gap);
+}
+
+/* Space after the tiling+preview block before the next divider / texture slot. */
+.material-inspector .material-tiling-preview-row {
+	margin-bottom: var(--inspector-row-gap);
+}
+
+/* Extra air around the rule so slots do not read as cramped (tiling row still
+   contributes its own margin-bottom above the first divider in a slot).
+   Use plain px: length parsing does not support calc() (see transform-wide row comment). */
+.material-inspector .material-texture-divider {
+	margin-top: 12px;
+	margin-bottom: 12px;
+}
+
+.material-inspector .material-texture-row {
+	margin-bottom: var(--inspector-row-gap);
+}
+
+/* Rows size to their content, as the component rows around the material do. The .rp-foldout row
+   minimum follows the Script Editor line height, which would make each row 1px taller than theirs. */
+.material-inspector .inspector-row {
+	margin-bottom: var(--inspector-row-gap);
+	min-height: 0;
+}
+
+.material-inspector .inspector-vector3 {
+	margin-bottom: var(--inspector-row-gap);
+}
+
+/* MeshRenderer "Material Properties" foldout: BuildMaterialInspectorUI roots in foldout-content,
+   not under .inspector-section-body, so the non-Transform row rules above never applied — rows
+   kept flex-wrap:wrap and lost the label/value column flex, which reads as uneven row height vs
+   other inspector properties. */
+.material-properties-foldout .material-inspector .inspector-row {
+	flex-wrap: nowrap;
+	align-items: center;
+}
+.material-properties-foldout .material-inspector .inspector-row .inspector-label-cell {
+	flex: 0 0 37%;
+	width: 37%;
+	min-width: 0;
+	max-width: 37%;
+}
+.material-properties-foldout .material-inspector .inspector-row > .inspector-label {
+	flex: 0 0 37%;
+	width: 37%;
+	min-width: 0;
+	max-width: 37%;
+}
+.material-properties-foldout .material-inspector .inspector-row .inspector-field,
+.material-properties-foldout .material-inspector .inspector-row > toggle,
+.material-properties-foldout .material-inspector .inspector-row > .toggle {
+	flex: 1 1 0%;
+	min-width: 0;
+	align-self: center;
+}
+.material-properties-foldout .material-inspector .inspector-row .inspector-field {
+	margin-right: 0;
+	width: auto;
+	max-width: none;
+}
+.material-properties-foldout .material-inspector .inspector-row .inspector-field.inspector-field-toggle {
+	display: flex;
+	justify-content: flex-start;
+	align-items: center;
+}
+
+.inspector-panel.inspector-toggle-offset .material-properties-foldout .material-inspector .inspector-row > toggle,
+.inspector-panel.inspector-toggle-offset .material-properties-foldout .material-inspector .inspector-row > .toggle {
+	margin-left: 19px;
+	margin-right: 0;
+}
+.inspector-panel.inspector-toggle-align-right .material-properties-foldout .material-inspector .inspector-row > toggle,
+.inspector-panel.inspector-toggle-align-right .material-properties-foldout .material-inspector .inspector-row > .toggle {
+	margin-left: 38px;
+	margin-right: 0;
+}
+
+.error-dot {
+	width: 8px;
+	height: 8px;
+	min-width: 8px;
+	min-height: 8px;
+	border-radius: 4px;
+	background-color: rgba(220, 60, 60, 1.0);
+	align-self: center;
+	margin-top: 1px;
+}
+
+/* Warning icon in the section title for a component whose native module isn't loaded. */
+.inspector-section-icon.inspector-section-icon-unloaded {
+	background-image: url("editor:Icons/alert-circle.png");
+}
+
+/* Right-aligned status tag in the section title for an unloaded component.
+   white-space:nowrap is required — a label in a flex row without it wraps
+   mid-word and collapses to min-content (same trap as .inspector-field-label). */
+.inspector-section-header-badge {
+	margin-left: auto;
+	margin-right: 6px;
+	padding: 1px 7px;
+	border-radius: 9px;
+	font-size: 12px;
+	font-weight: 600;
+	color: #1e1e1e;
+	background-color: #d7a13b;
+	flex-shrink: 0;
+	white-space: nowrap;
+	text-align: left;
+}
+
+/* Start status badges at the same 37% label/value split used by the rows below.
+   The extra offset accounts for the section body's left inset and row gap. */
+.inspector-section-header-row.has-header-badge {
+	position: relative;
+}
+
+.inspector-section-header-row.has-header-badge .inspector-section-header-badge {
+	position: absolute;
+	left: 37%;
+	margin-left: 25px;
+}
+
+/* Inline notice for an inspector state the user should know about — e.g. a modifier type that
+   isn't baked on the current terrain domain (Paint / Spline on a planet). Amber, full-width,
+   wraps. Shared with SkyEnvironmentInspector's "no SkyRender pass" notice. */
+.inspector-warning {
+	/* A warning must never be squeezed by a crowded flex column: inside a rule's
+	   foldout the condition-cap notice shrank to a 12px sliver showing glyph tops
+	   only, while the same component in a roomier parent wrapped to full height. */
+	flex-shrink: 0;
+	color: var(--ui_color_warning_text);
+	background-color: var(--ui_color_warning_background);
+	border-radius: 4px;
+	padding: 6px 8px;
+	margin: 4px 0;
+	white-space: normal;
+}
+
+/* An inactive inspector row (its value unused in the object's current state) reads as one: its
+   disabled label greys as a disabled button greys its text, and the row hands its numeric field the
+   same colour for the value it still shows (FloatField.css reads --float-field-disabled-text). */
+.inspector-label:disabled {
+	color: var(--ui_color_text_disabled);
+}
+
+/* A value a row shows as text (a driven Intensity, a driven colour) greys with its disabled row; the
+   caption beside it that says who sets it stays enabled, at full contrast. */
+.inspector-text:disabled {
+	color: var(--ui_color_text_disabled);
+}
+
+.inspector-row:disabled {
+	--float-field-disabled-text: var(--ui_color_text_disabled);
+}
+
+/* A row's text field greys its value with its disabled row and loses the edit accent;
+   (0,2,1) outranks .inspector-field TextInput and the TextInput hover rules. */
+.inspector-text-field:disabled > TextInput {
+	color: var(--ui_color_text_disabled);
+	border-color: transparent;
+}
+
+/* A material inspector warning keeps the material's row rhythm: the row above it already carries
+   the gap, so the warning adds none above itself and one below. After .inspector-warning, whose
+   margin it replaces at equal specificity. */
+.material-warning {
+	margin-top: 0;
+	margin-bottom: var(--inspector-row-gap);
+}
+
+/* The asset's import-settings rows as one block. On a source that refuses
+   metadata writes the CONTROLS carry the read-only state (each one disabled,
+   styled by its own control stylesheet) — dimming the block instead hid the
+   labels and took the row tooltips and the Nine-Slice disclosure with it. */
+.inspector-asset-settings {
+	display: flex;
+	flex-direction: column;
+}
+
+.inspector-leading-disclosure > .inspector-section-header-row > .inspector-section-header-chevron,
+.inspector-leading-disclosure > .inspector-section-body > .inspector-section-collapse-arrow {
+    display: none;
+}
+.inspector-leading-disclosure > .inspector-section-header-row > .foldout-chevron {
+    opacity: 0.5;
+}
+.inspector-leading-disclosure > .inspector-section-header-row > .foldout-chevron {
+    width: 12px;
+    height: 12px;
+    min-width: 12px;
+    min-height: 12px;
+    margin-left: -2px;
+    margin-right: 8px;
+    flex-shrink: 0;
+    background-size: 12px 12px;
+    background-repeat: no-repeat;
+    background-position: center;
+    background-image: url("editor:Icons/arrow-right.png");
+    background-image-tint: rgba(200, 200, 200, 1.0);
+}
+.inspector-leading-disclosure > .inspector-section-header-row > .foldout-chevron.expanded {
+    background-image: url("editor:Icons/arrow-down.png");
+}
+
+/* One global preference covers component arrows and every inspector foldout. */
+.inspector-hide-collapse-arrow .foldout-header > .foldout-chevron,
+.inspector-hide-collapse-arrow .inspector-section-header-row > .foldout-chevron {
+    display: none;
+}
+
+/* Header labels and chevrons respond across the row without changing its background. */
+.inspector-section > .inspector-section-header-row.pressed {
+    background-color: rgba(0, 0, 0, 0.23);
+}
+.inspector-section > .inspector-section-header-row:hover > .inspector-section-header {
+    color: var(--inspector-section-title-hover, #FFFFFF);
+}
+.inspector-section > .inspector-section-header-row:hover > .foldout-chevron,
+.inspector-panel .foldout-header:hover > .foldout-chevron,
+.settings-panel .foldout-header:hover > .foldout-chevron {
+    opacity: 1.0;
+}
+
+/* Preserve the enabled-state contrast while keeping whole-row hover feedback. */
+.inspector-section > .inspector-section-header-row > .inspector-section-header {
+    color: #DDDDDD;
+}
+.inspector-section > .inspector-section-header-row:hover > .inspector-section-header {
+    color: var(--inspector-section-title-hover, #FFFFFF);
+}
+.inspector-section.disabled > .inspector-section-header-row > .inspector-section-header {
+    color: #999999;
+}
+.inspector-section.disabled > .inspector-section-header-row:hover > .inspector-section-header {
+    color: var(--inspector-section-title-hover-off, #BBBBBB);
+}
+
+/* Foldout labels use the same whole-row hover feedback as component titles. */
+.inspector-panel .foldout-header > .foldout-title,
+.settings-panel .foldout-header > .foldout-title {
+    color: #DDDDDD;
+}
+.inspector-panel .foldout-header:hover > .foldout-title,
+.settings-panel .foldout-header:hover > .foldout-title {
+    color: #FFFFFF;
+}

@@ -1,0 +1,140 @@
+#version 450
+
+#include "Includes/compat_profile.glsl"
+
+// Full-resolution FidelityFX-style layer composition with a fixed 3x3 bridge
+// blur for sub-half-resolution CoCs and the engine's focus visualizer.
+layout(local_size_x = 8, local_size_y = 8, local_size_z = 1) in;
+
+layout(set = 0, binding = 0) uniform sampler2D uSceneColor;
+layout(set = 0, binding = 1) uniform sampler2D uDepth;
+layout(set = 0, binding = 2) uniform sampler2D uNearField;
+layout(set = 0, binding = 3) uniform sampler2D uFarField;
+layout(set = 0, binding = 4, rgba16f) uniform writeonly image2D uOutput;
+layout(set = 0, binding = 5, std140) uniform ViewParamsBlock
+{
+    mat4 ge_invProj;
+    mat4 ge_view;
+    vec4 ge_nearFar;
+    vec4 ge_cameraPosWS;
+} ViewParams;
+layout(set = 0, binding = 6, std430) readonly buffer ExposureHistory
+{
+    float exposureScale;
+    uint valid;
+} uExposure;
+
+layout(push_constant) uniform DofPC
+{
+    float dofIntensity;
+    float dofMaxRadius;
+    float dofFocusDistance;
+    float dofFocalLengthMm;
+    float dofAperture;
+    float dofSensorHeightMm;
+    int dofApertureBladeCount;
+    float dofApertureRoundness;
+    float dofApertureRotation;
+    float dofAnamorphicSqueeze;
+    int dofDebugMode;
+    float dofDebugAlpha;
+    float exposure;
+    int useAutoExposure;
+} pc;
+
+float LinearizeReverseZ(float depth)
+{
+    float n = max(ViewParams.ge_nearFar.x, 1e-5);
+    float f = max(ViewParams.ge_nearFar.y, n + 1.0);
+    return (n * f) / max(depth * (f - n) + n, 1e-6);
+}
+
+float PhysicalCocMeters(float rawDepth)
+{
+    float focal = max(pc.dofFocalLengthMm, 1.0) * 0.001;
+    float focus = max(pc.dofFocusDistance, focal + 0.001);
+    float apertureDiameter = focal / max(pc.dofAperture, 0.95);
+    // A reverse-Z clear value is the sky at infinity. Evaluate the physical
+    // thin-lens limit rather than assigning a focus-independent maximum blur.
+    if (rawDepth <= 0.0)
+        return -apertureDiameter * focal / max(focus - focal, 1e-6);
+    float d = LinearizeReverseZ(rawDepth);
+    return apertureDiameter * focal * (focus - d) /
+           max(d * (focus - focal), 1e-6);
+}
+
+// Full-resolution physical circle of confusion in pixels, FidelityFX sign
+// convention (near +, far -). Kept unclamped for focus-range visualization.
+float PhysicalCocPx(float rawDepth, float height)
+{
+    float cocMeters = PhysicalCocMeters(rawDepth);
+    float sensorHeight = max(pc.dofSensorHeightMm, 1.0) * 0.001;
+    return 0.5 * cocMeters * (height / sensorHeight);
+}
+
+float SignedCocPx(float rawDepth, float height, float intensity)
+{
+    return clamp(PhysicalCocPx(rawDepth, height) * intensity,
+                 -pc.dofMaxRadius, pc.dofMaxRadius);
+}
+
+vec3 Blur3x3(ivec2 p, ivec2 size)
+{
+    const float corner = 0.5453;
+    const float side = 0.9717;
+    vec3 sum = texelFetch(uSceneColor, p, 0).rgb;
+    float w = 1.0;
+    for (int y = -1; y <= 1; ++y)
+    for (int x = -1; x <= 1; ++x)
+    {
+        if (x == 0 && y == 0) continue;
+        float k = (x != 0 && y != 0) ? corner : side;
+        sum += texelFetch(uSceneColor, clamp(p + ivec2(x, y), ivec2(0), size - ivec2(1)), 0).rgb * k;
+        w += k;
+    }
+    return sum / w;
+}
+
+float Cubic(float x) { return x * x * (3.0 - 2.0 * x); }
+
+void main()
+{
+    ivec2 size = imageSize(uOutput);
+    ivec2 p = ivec2(gl_GlobalInvocationID.xy);
+    if (any(greaterThanEqual(p, size)))
+        return;
+    vec2 uv = (vec2(p) + 0.5) / vec2(size);
+    vec4 source = texelFetch(uSceneColor, p, 0);
+    float rawDepth = texelFetch(uDepth, p, 0).r;
+    float coc = SignedCocPx(rawDepth, float(size.y), clamp(pc.dofIntensity, 0.0, 1.0));
+
+    vec4 nearLayer = texture(uNearField, uv);
+    vec4 farLayer = texture(uFarField, uv);
+    float smallW = clamp(abs(coc) - 0.5, 0.0, 1.0);
+    float fieldW = clamp(abs(coc) * 0.5 - 0.5, 0.0, 1.0);
+    vec3 rgb = mix(source.rgb, Blur3x3(p, size), smallW);
+    if (coc < 0.0 && farLayer.a > 1e-5)
+        rgb = mix(rgb, farLayer.rgb, fieldW * clamp(farLayer.a, 0.0, 1.0));
+    rgb = mix(rgb, nearLayer.rgb, Cubic(clamp(nearLayer.a, 0.0, 1.0)));
+
+    if (pc.dofDebugMode != 0)
+    {
+        // Use the unclamped physical CoC so the overlay shows actual depth of
+        // field: lowering the f-number increases CoC and narrows the green
+        // focus range. A fixed one-pixel visualization scale stays readable
+        // and does not get washed out by a large artistic max-radius clamp.
+        float debugCoc = PhysicalCocPx(rawDepth, float(size.y));
+        float t = smoothstep(0.1, 1.0, abs(debugCoc));
+        vec3 sharp = vec3(0.05, 0.75, 0.15);
+        vec3 blur = debugCoc < 0.0 ? vec3(0.85, 0.12, 0.1) : vec3(0.15, 0.3, 0.9);
+        float autoExposure = uExposure.exposureScale;
+        float effectiveExposure = (pc.useAutoExposure != 0 && uExposure.valid != 0u &&
+                                   autoExposure > 0.0 && autoExposure < 1e9)
+                                  ? autoExposure : pc.exposure;
+        vec3 debugColor = mix(sharp, blur, t) / max(effectiveExposure, 1e-6);
+        rgb = mix(rgb, debugColor, clamp(pc.dofDebugAlpha, 0.0, 1.0));
+    }
+
+    rgb = mix(rgb, vec3(0.0), vec3(GE_IS_NAN(rgb)));
+    imageStore(uOutput, p, vec4(clamp(rgb, vec3(0.0), vec3(65504.0)), source.a));
+}

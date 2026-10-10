@@ -1,0 +1,165 @@
+{
+  "schemaVersion": 2,
+  "pipelineName": "ForwardPlus_DebugOverlay",
+  "resources": {
+    "ClusterParams": {
+      "kind": "Buffer",
+      "scope": "PerView",
+      "usage": ["ConstantBuffer"],
+      "memoryUsage": "Upload",
+      "flags": ["PersistentlyMapped"]
+    },
+    "ClusterBuffer": {
+      "kind": "Buffer",
+      "scope": "PerView",
+      "usage": ["Storage", "ShaderResource", "CopyDestination"],
+      "memoryUsage": "DeviceLocal",
+      "size": {
+        "expression": "16 + clustersX * clustersY * depthSlices * clusterDataBytes",
+        "variables": {
+          "depthSlices": 24,
+          "clustersX": "ceil(renderWidth / 32)",
+          "clustersY": "ceil(renderHeight / 32)",
+          "clusterDataBytes": 8
+        }
+      }
+    },
+    "LightIndexBuffer": {
+      "kind": "Buffer",
+      "scope": "PerView",
+      "usage": ["Storage", "ShaderResource", "CopyDestination"],
+      "memoryUsage": "DeviceLocal",
+      "size": {
+        "expression": "clustersX * clustersY * depthSlices * maxLightsPerCluster * indexBytes",
+        "variables": {
+          "depthSlices": 24,
+          "clustersX": "ceil(renderWidth / 32)",
+          "clustersY": "ceil(renderHeight / 32)",
+          "maxLightsPerCluster": 32,
+          "indexBytes": 4
+        }
+      }
+    },
+    "DepthMinMaxBuffer": {
+      "kind": "Buffer",
+      "scope": "PerView",
+      "usage": ["Storage", "ShaderResource", "CopyDestination"],
+      "memoryUsage": "DeviceLocal",
+      "size": {
+        "expression": "tilesX * tilesY * tileMinMaxBytes",
+        "variables": {
+          "tileMinMaxBytes": 8,
+          "tilesX": "ceil(renderWidth / 32)",
+          "tilesY": "ceil(renderHeight / 32)"
+        }
+      }
+    },
+    "LightBuffer": {
+      "kind": "Buffer",
+      "scope": "PerView",
+      "usage": ["Storage", "ShaderResource", "CopyDestination"],
+      "memoryUsage": "Upload",
+      "flags": ["PersistentlyMapped"]
+    },
+    "ViewParams": {
+      "kind": "Buffer",
+      "scope": "PerView",
+      "usage": ["ConstantBuffer", "CopyDestination"],
+      "memoryUsage": "Upload",
+      "flags": ["PersistentlyMapped"]
+    }
+  },
+  "passes": [
+    { "id": "ViewParamsUpload", "type": "ViewParamsUpload", "enabled": true, "buffer": "ViewParams" },
+    { "id": "DepthPrepass", "type": "DepthPrepass", "enabled": true },
+    { "id": "DepthResolve", "type": "DepthResolve", "enabled": true },
+    { "id": "LightUpload", "type": "LightUpload", "enabled": true, "buffer": "LightBuffer" },
+    {
+      "id": "DepthMinMax",
+      "type": "ComputeShader",
+      "enabled": true,
+      "shaderPkg": "Shaders/cluster_depth_minmax.shaderpkg",
+      "inputs": { "DepthTex": "View.DepthResolved" },
+      "inputUsages": { "DepthTex": "Sampled" },
+      "buffers": { "DepthMinMaxBuffer": "DepthMinMaxBuffer" },
+      "bufferUsages": { "DepthMinMaxBuffer": "StorageWrite" },
+      "dispatch": { "x": "ceil(renderWidth / 32)", "y": "ceil(renderHeight / 32)", "z": 1 },
+      "targetBuffer": "DepthMinMaxBuffer"
+    },
+    {
+      "id": "ClusteredLightCull",
+      "type": "ComputeShader",
+      "enabled": true,
+      "requiresLights": true,
+      "shaderPkg": "Shaders/clustered_light_cull.shaderpkg",
+      "buffers": {
+        "ViewParams": "ViewParams",
+        "LightBuffer": "LightBuffer",
+        "LightIndexBuffer": "LightIndexBuffer",
+        "ClusterBuffer": "ClusterBuffer",
+        "ClusterParams": "ClusterParams",
+        "DepthMinMaxBuffer": "DepthMinMaxBuffer"
+      },
+      "bufferUsages": {
+        "ViewParams": "ConstantBuffer",
+        "LightBuffer": "StorageRead",
+        "LightIndexBuffer": "StorageWrite",
+        "ClusterBuffer": "StorageWrite",
+        "ClusterParams": "Sampled",
+        "DepthMinMaxBuffer": "StorageRead"
+      },
+      "uniformWrites": { "ClusterParams": { "u32x4": [32, 32, 24, 32] } },
+      "dispatch": { "x": "ceil(renderWidth / 32)", "y": "ceil(renderHeight / 32)", "z": 24 },
+      "targetBuffer": "LightIndexBuffer"
+    },
+    { "id": "World", "type": "WorldRender", "enabled": true, "keywords": ["ForwardPlus"] },
+    { "id": "HZBBuild", "type": "HZBBuild", "enabled": true },
+    { "id": "OcclusionCullP2", "type": "OcclusionCullP2", "enabled": true },
+    { "id": "ScatterB", "type": "ScatterB", "enabled": true },
+    { "id": "SortedTransparent", "type": "SortedTransparent", "enabled": true, "keywords": ["ForwardPlus"] },
+    {
+      "id": "ClusterDebugOverlay",
+      "type": "FullscreenShader",
+      "enabled": true,
+      "alphaBlend": true,
+      "output": "View.Color",
+      "shaderPkg": "Shaders/cluster_debug_overlay.shaderpkg",
+      "buffers": {
+        "ClusterBuffer": "ClusterBuffer",
+        "LightIndexBuffer": "LightIndexBuffer",
+        "ClusterParams": "ClusterParams"
+      },
+      "bufferUsages": {
+        "ClusterBuffer": "StorageRead",
+        "LightIndexBuffer": "StorageRead",
+        "ClusterParams": "Sampled"
+      }
+    }
+    ,
+    {
+      "id": "ForwardPlusLighting",
+      "type": "FullscreenShader",
+      "enabled": false,
+      "blendMode": "Additive",
+      "output": "View.Color",
+      "shaderPkg": "Shaders/forwardplus_lighting.shaderpkg",
+      "inputs": { "DepthTex": "View.DepthResolved" },
+      "inputUsages": { "DepthTex": "Sampled" },
+      "buffers": {
+        "ClusterBuffer": "ClusterBuffer",
+        "LightIndexBuffer": "LightIndexBuffer",
+        "LightBuffer": "LightBuffer",
+        "ClusterParams": "ClusterParams",
+        "ViewParams": "ViewParams"
+      },
+      "bufferUsages": {
+        "ClusterBuffer": "StorageRead",
+        "LightIndexBuffer": "StorageRead",
+        "LightBuffer": "StorageRead",
+        "ClusterParams": "Sampled",
+        "ViewParams": "ConstantBuffer"
+      }
+    }
+  ],
+  "outputs": { "FinalColor": "View.Resolve" }
+}

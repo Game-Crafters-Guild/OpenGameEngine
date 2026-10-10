@@ -1,0 +1,176 @@
+#version 450
+
+// Per-cell classification for grass placement: which cells of the window this view can see, which
+// terrain each stands on, and how far away it is.
+//
+// ONE INVOCATION PER CELL. This is the embarrassingly parallel half of the placement plan — six
+// frustum plane tests and a terrain footprint walk per cell, with nothing to carry between cells —
+// so it runs as a grid while terrain_grass_plan.comp keeps only the part that genuinely has to be
+// serial: the prefix sum that turns these counts into slot ranges.
+
+layout(local_size_x = 64, local_size_y = 1, local_size_z = 1) in;
+
+#include "grass_placement.glsl"
+
+struct TerrainParamsEntry
+{
+    float WorldOriginX;
+    float WorldOriginZ;
+    float WorldSizeX;
+    float WorldSizeZ;
+    float HeightScale;
+    float InvHeightmapWidth;
+    float InvHeightmapHeight;
+    float TexelSize;
+    float WorldOriginY;
+    uint SplatmapBindless;
+    float MaterialTiling;
+    uint LayerCount;
+    uint LayerRole[4];
+    float GridDimHalf;
+    uint Flags;
+    uint NormalmapBindless;
+    uint HeightmapBindless;
+    uint GrassEnabled;
+    float GrassDensity;
+    float GrassBladeHeight;
+    float GrassBladeWidth;
+    float GrassMaskThreshold;
+    float GrassDensityFalloff;
+    float GrassRange;
+    float GrassWindStrength;
+    uint GrassLayerIndex;
+    float GrassBrightness;
+    float GrassGroundingStrength;
+    float GrassRandomScale;
+    float GrassRandomBrightness;
+    float GrassTranslucency;
+    uint GrassRootColor;
+    uint GrassTipColor;
+    uint GrassBacklightColor;
+    float GrassWindDirection;
+    float GrassWindGustSpeed;
+    float GrassWindGustScale;
+    float GrassWindRestingLean;
+    float GrassWindFlutterAmount;
+    float GrassWindFlutterSpeed;
+    float GrassWindSeed;
+    uint GrassBladeSegments;
+    uint GrassAlbedoBindless;
+    uint GrassAlphaBindless;
+    uint GrassNormalBindless;
+    uint GrassAtlasColumns;
+    uint GrassAtlasRows;
+    uint GrassAtlasTileCount;
+    float GrassAlphaCutoff;
+    float GrassNormalStrength;
+    float GrassTextureCardsPerSquareMeter;
+    float GrassTextureSize;
+    float GrassPlacementSeed;
+    float GrassMaxWidthRatio;
+    float GrassClumpSize;
+    float GrassClumpHeightVariance;
+    float GrassClumpAlignment;
+    float GrassClumpGather;
+    float GrassHueVariation;
+    float GrassRootShade;
+    float GrassBladeNormalForm;
+    float GrassBladeScatterGain;
+    float GrassRootFadeStart;
+    float GrassRootFadeEnd;
+    uint GrassControlBindless;
+};
+
+layout(std430, set = 0, binding = 0) readonly buffer TerrainParamsBuffer
+{
+    TerrainParamsEntry terrains[];
+};
+
+layout(std430, set = 0, binding = 1) buffer TerrainGrassCellPlanBuffer
+{
+    uint RingCells[kGrassRingHistogramWords];
+    GrassCellPlan Cells[kGrassMaxCells];
+} CellPlan;
+
+// Binding 3 (the indirect args block) is in the shared descriptor set layout but not declared here:
+// this kernel writes no counter and no draw record. The plan kernel owns every word of that block.
+
+layout(std140, set = 0, binding = 6) uniform GrassPlaceParamsBuffer
+{
+    vec4 FrustumPlanes[6];
+    vec4 CameraPos;
+    ivec4 CellWindow;
+    vec4 Bounds;
+    vec4 ViewRotCol0;
+    vec4 ViewRotCol1;
+    vec4 ViewRotCol2;
+    vec4 Summary;
+} Place;
+
+bool cellOutsideFrustum(vec2 cellMin, vec2 cellMax)
+{
+    vec3 mn = vec3(cellMin.x, Place.Bounds.x, cellMin.y);
+    vec3 mx = vec3(cellMax.x, Place.Bounds.y, cellMax.y);
+    for (int i = 0; i < 6; ++i)
+    {
+        vec3 n = Place.FrustumPlanes[i].xyz;
+        // Positive vertex: the AABB corner furthest along the plane normal. If even that is behind
+        // the plane the whole box is outside.
+        vec3 p = mix(mn, mx, greaterThan(n, vec3(0.0)));
+        if (dot(n, p) + Place.FrustumPlanes[i].w < 0.0)
+            return true;
+    }
+    return false;
+}
+
+// First terrain row whose XZ footprint OVERLAPS the cell. This only picks whose DENSITY curve the
+// cell spawns at; where each blade actually stands is resolved per candidate by the emit kernel.
+int resolveTerrainForCell(vec2 cellMin, vec2 cellMax)
+{
+    int count = Place.CellWindow.w;
+    for (int i = 0; i < count; ++i)
+    {
+        TerrainParamsEntry tp = terrains[i];
+        if ((tp.GrassEnabled & 1u) == 0u)
+            continue;
+        float minX = tp.WorldOriginX;
+        float minZ = tp.WorldOriginZ;
+        float maxX = minX + tp.WorldSizeX;
+        float maxZ = minZ + tp.WorldSizeZ;
+        if (cellMax.x >= minX && cellMin.x <= maxX && cellMax.y >= minZ && cellMin.y <= maxZ)
+            return i;
+    }
+    return -1;
+}
+
+void main()
+{
+    uint cell = gl_GlobalInvocationID.x;
+    int span = Place.CellWindow.z;
+    if (span <= 0 || cell >= uint(span) * uint(span) || cell >= kGrassMaxCells)
+        return;
+
+    int ix = int(cell % uint(span));
+    int iz = int(cell / uint(span));
+    int halfSpan = (span - 1) / 2;
+    vec2 cellMin = vec2(float(Place.CellWindow.x - halfSpan + ix),
+                        float(Place.CellWindow.y - halfSpan + iz)) * kGrassCellSize;
+    vec2 cellMax = cellMin + vec2(kGrassCellSize);
+    float distanceToCamera = distance(cellMin + vec2(kGrassCellSize * 0.5), Place.CameraPos.xz);
+
+    uint packed = 0u;
+    if (distanceToCamera <= Place.Bounds.w && !cellOutsideFrustum(cellMin, cellMax))
+    {
+        int terrainIdx = resolveTerrainForCell(cellMin, cellMax);
+        if (terrainIdx >= 0)
+        {
+            packed = kGrassCellValidBit | uint(terrainIdx);
+            // Clamped rather than trusted: the cull above bounds the distance, and a clamp keeps a
+            // surprising one inside the histogram instead of corrupting a neighbouring ring.
+            uint ring = uint(clamp(floor(distanceToCamera / kGrassCellSize), 0.0,
+                                   float(kGrassMaxRings - 1u)));
+            atomicAdd(CellPlan.RingCells[ring], 1u);
+        }
+    }
+    CellPlan.Cells[cell].LodAndTerrain = packed;
+}

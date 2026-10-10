@@ -1,0 +1,130 @@
+#version 450
+
+#define GE_VOLUMETRIC_FOG_BIND_JITTER_ATLAS 1
+#include "volumetric_fog_common.glsl"
+
+layout(local_size_x = 8, local_size_y = 8, local_size_z = 8) in;
+layout(rgba16f, set = 0, binding = 0) uniform writeonly image3D uOutHistory;
+layout(set = 0, binding = 1) uniform sampler3D uCurrentIntegrated;
+layout(set = 0, binding = 3) uniform sampler3D uPreviousHistory;
+
+vec4 FogSampleCurrentClamped(vec3 coord)
+{
+    return texture(uCurrentIntegrated, clamp(coord, vec3(0.0), vec3(1.0)));
+}
+
+float FogTemporalLuminance(vec3 rgb)
+{
+    return dot(rgb, vec3(0.2126, 0.7152, 0.0722));
+}
+
+void main()
+{
+    ivec3 gid = ivec3(gl_GlobalInvocationID.xyz);
+    ivec3 grid = ivec3(fog.uGridParams.xyz);
+    if (any(greaterThanEqual(gid, grid)))
+        return;
+
+    vec3 coord = (vec3(gid) + vec3(0.5)) / max(fog.uGridParams.xyz, vec3(1.0));
+    vec4 current = texture(uCurrentIntegrated, coord);
+
+    bool historyValid = fog.uJitterParams.y > 0.5;
+    if (!historyValid || fog.uVolumeParams.z <= 0.0)
+    {
+        imageStore(uOutHistory, gid, current);
+        return;
+    }
+
+    vec2 uv = coord.xy;
+    float distanceToCamera = FogSliceDistance(coord.z);
+    vec3 worldPos = FogWorldFromUvDistance(uv, distanceToCamera);
+
+    vec4 prevClip = fog.uPrevViewProj * vec4(worldPos, 1.0);
+    if (prevClip.w <= 1.0e-6)
+    {
+        imageStore(uOutHistory, gid, current);
+        return;
+    }
+
+    vec3 prevNdc = prevClip.xyz / prevClip.w;
+    vec2 prevUv = FogNdcToUv(prevNdc.xy);
+    float prevDistance = fog.uDensityParams.z > 0.5
+        ? FogViewDistanceFromWorld(prevUv, worldPos)
+        : length(worldPos - fog.uPrevCameraPos.xyz);
+    float prevSlice = FogDistanceToSlice01(prevDistance);
+
+    bool inside = prevUv.x >= 0.0 && prevUv.x <= 1.0 &&
+                  prevUv.y >= 0.0 && prevUv.y <= 1.0 &&
+                  prevSlice >= 0.0 && prevSlice <= 1.0 &&
+                  prevNdc.z >= 0.0 && prevNdc.z <= 1.0;
+
+    if (!inside)
+    {
+        imageStore(uOutHistory, gid, current);
+        return;
+    }
+
+    vec4 previous = texture(uPreviousHistory, vec3(prevUv, prevSlice));
+    vec3 texelSize = 1.0 / max(fog.uGridParams.xyz, vec3(1.0));
+    vec4 minCurrent = current;
+    vec4 maxCurrent = current;
+    float lumSum = FogTemporalLuminance(current.rgb);
+    float lumSqSum = lumSum * lumSum;
+    float lumCount = 1.0;
+    for (int y = -1; y <= 1; ++y)
+    {
+        for (int x = -1; x <= 1; ++x)
+        {
+            vec4 neighbor = FogSampleCurrentClamped(coord + vec3(vec2(x, y) * texelSize.xy, 0.0));
+            minCurrent = min(minCurrent, neighbor);
+            maxCurrent = max(maxCurrent, neighbor);
+            if (x != 0 || y != 0)
+            {
+                float l = FogTemporalLuminance(neighbor.rgb);
+                lumSum += l;
+                lumSqSum += l * l;
+                lumCount += 1.0;
+            }
+        }
+    }
+    vec4 nearSlice = FogSampleCurrentClamped(coord - vec3(0.0, 0.0, texelSize.z));
+    vec4 farSlice = FogSampleCurrentClamped(coord + vec3(0.0, 0.0, texelSize.z));
+    minCurrent = min(minCurrent, min(nearSlice, farSlice));
+    maxCurrent = max(maxCurrent, max(nearSlice, farSlice));
+    float nearLum = FogTemporalLuminance(nearSlice.rgb);
+    float farLum = FogTemporalLuminance(farSlice.rgb);
+    lumSum += nearLum + farLum;
+    lumSqSum += nearLum * nearLum + farLum * farLum;
+    lumCount += 2.0;
+
+    vec4 currentRange = maxCurrent - minCurrent;
+    vec4 clampPadding = max(currentRange * 0.35, vec4(0.015, 0.015, 0.015, 0.01));
+    previous = clamp(previous, minCurrent - clampPadding, maxCurrent + clampPadding);
+
+    float blend = clamp(fog.uVolumeParams.z, 0.0, 0.99);
+    float cameraMotion = length(fog.uCameraPos.xyz - fog.uPrevCameraPos.xyz);
+    float froxelMotion = length((prevUv - uv) * fog.uGridParams.xy);
+    float sliceMotion = abs(prevSlice - coord.z) * fog.uGridParams.z;
+    float reprojectionStress = max(smoothstep(0.75, 5.0, froxelMotion),
+                                   smoothstep(0.75, 6.0, sliceMotion));
+    float meanLum = lumSum / max(lumCount, 1.0);
+    float variance = max(lumSqSum / max(lumCount, 1.0) - meanLum * meanLum, 0.0);
+    float localContrast = sqrt(variance) / max(meanLum, 0.02);
+    float previousLum = FogTemporalLuminance(previous.rgb);
+    float currentLum = FogTemporalLuminance(current.rgb);
+    float historyDelta = abs(previousLum - currentLum) / max(max(previousLum, currentLum), 0.02);
+    float variancePressure = smoothstep(0.12, 0.75, localContrast);
+    float lightingPressure = smoothstep(0.12, 0.65, historyDelta);
+    float localLightPressure = clamp(fog.uHeightParams.z, 0.0, 1.0);
+    blend *= exp(-cameraMotion * 0.15);
+    blend *= mix(1.0, 0.08, reprojectionStress);
+    blend *= mix(1.0, 0.28, variancePressure);
+    blend *= mix(1.0, 0.12, lightingPressure);
+    blend *= mix(1.0, 0.35, localLightPressure * max(lightingPressure, reprojectionStress));
+    vec4 accumulated = mix(current, previous, blend);
+
+    // Never let history increase opacity beyond the fresh integration result.
+    // Alpha stores transmittance: a larger value means less opacity.
+    accumulated.a = clamp(max(accumulated.a, current.a), 0.0, 1.0);
+    imageStore(uOutHistory, gid, accumulated);
+}

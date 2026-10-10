@@ -1,0 +1,118 @@
+/* Interactive HUD — HEALTH bar + TAKE DAMAGE. damage-btn is a real <button>, so
+   its click is the armed-and-inside one (press must start on it): that is what the
+   scripting ABI subscribes to. Button builds its own .button-text label child, and
+   that label is pointer-events:none so the button itself is the hover/click target. */
+
+.hud-root {
+    position: absolute;
+    left: 0;
+    top: 0;
+    width: 100%;
+    height: 100%;
+    pointer-events: none;
+}
+
+/* The root is pointer-events:none so the scene behind the HUD stays clickable;
+   the parts the pointer is meant to reach carry this one shared class. */
+.hud-hit {
+    pointer-events: auto;
+}
+
+.hp-panel {
+    position: absolute;
+    left: 32px;
+    top: 32px;
+    width: 300px;
+    display: flex;
+    flex-direction: column;
+    padding: 14px 18px;
+    gap: 8px;
+    background-color: rgba(18, 22, 34, 0.82);
+    border: 2px solid rgba(92, 152, 232, 0.85);
+    border-radius: 10px;
+    box-shadow: 0 6px 20px rgba(0, 0, 0, 0.45);
+}
+
+.hp-title {
+    color: rgba(150, 190, 255, 0.95);
+    font-size: 14px;
+    letter-spacing: 2px;
+}
+
+.hp-track {
+    width: 100%;
+    height: 18px;
+    background-color: rgba(0, 0, 0, 0.5);
+    border: 1px solid rgba(120, 170, 240, 0.6);
+    border-radius: 8px;
+}
+
+.hp-fill {
+    width: 100%;
+    height: 100%;
+    background-color: rgba(80, 220, 130, 0.95);
+    border-radius: 8px;
+}
+
+/* Driven from script by toggling a class, never by writing a colour across the ABI:
+   the look stays in CSS where it can be restyled without touching code. */
+.hp-fill.low-health {
+    background-color: rgba(235, 80, 70, 0.95);
+}
+
+.hp-label {
+    color: #ffffff;
+    font-size: 15px;
+}
+
+.damage-btn {
+    position: absolute;
+    left: 32px;
+    top: 150px;
+    width: 200px;
+    height: 48px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background-color: rgba(40, 52, 80, 0.92);
+    border: 2px solid rgba(120, 170, 240, 0.7);
+    border-radius: 10px;
+    box-shadow: 0 4px 14px rgba(0, 0, 0, 0.4);
+}
+
+.button-text {
+    color: #ffffff;
+    font-size: 18px;
+    letter-spacing: 1px;
+    pointer-events: none;
+}
+
+.damage-btn:hover {
+    background-color: rgba(70, 110, 180, 0.95);
+    border: 2px solid rgba(190, 225, 255, 1.0);
+}
+
+.damage-btn:active {
+    background-color: rgba(120, 170, 230, 1.0);
+}
+
+/* A HUD text field: what makes typing over a running game observable. Clicking it
+   takes game-text focus, so the keystrokes that would otherwise walk the
+   character land here instead. */
+.chat-input {
+    position: absolute;
+    left: 32px;
+    top: 220px;
+    width: 300px;
+    height: 40px;
+    padding: 6px 10px;
+    color: #ffffff;
+    font-size: 16px;
+    background-color: rgba(18, 22, 34, 0.9);
+    border: 2px solid rgba(120, 170, 240, 0.7);
+    border-radius: 8px;
+}
+
+.chat-input:focus {
+    border: 2px solid rgba(190, 225, 255, 1.0);
+}

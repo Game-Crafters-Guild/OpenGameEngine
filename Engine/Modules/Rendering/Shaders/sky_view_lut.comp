@@ -1,0 +1,168 @@
+#version 450
+
+#include "Includes/sky_composite.glsl"
+
+layout(local_size_x = 8, local_size_y = 8, local_size_z = 1) in;
+
+layout(set = 0, binding = 0, rgba16f) uniform writeonly image2D oSkyViewLUT;
+
+layout(set = 0, binding = 1) uniform sampler2D uTransmittanceLUT;
+
+#include "Includes/sky_atmosphere_ubo.glsl"
+
+layout(set = 0, binding = 4) uniform sampler2D uMultiscatterLUT;
+
+layout(set = 0, binding = 3) uniform SkyUBO
+{
+    vec3  cameraPositionWS;   float exposureEV;
+    vec3  cameraRightWS;      float pad0;
+    vec3  cameraUpWS;         float pad1;
+    vec3  cameraForwardWS;    float pad2;
+    vec3  sunDirectionWS;     float sunAngularRadius;
+    vec3  moonDirectionWS;    float moonIntensity;
+    float moonAngularRadius;
+    float skyRotateAroundZenithRadians;
+    float moonUboPad1;
+    float moonUboPad2;
+    vec3  sunColor;           float sunIntensity;
+    float timeOfDayHours;     float skyPad0;
+    float viewportAspect;     float tanHalfFovY;
+    vec2  viewportResolution; float nightSkyBlend; float skyTimeSeconds;
+    vec4  starSizeShape;
+    vec4  starTwinkleParams;
+    vec4  starTwinkleAmp;
+    vec4  starDensityHorizon;
+    vec4  starSizeRange;
+} uSky;
+
+const float PI = 3.14159265359;
+
+vec3 GetTransmittance(float height, float zenithCos)
+{
+    float u_mu = 0.5 + 0.5 * zenithCos;
+    float rNorm = clamp((height - uAtmos.planetRadius) / (uAtmos.atmosphereRadius - uAtmos.planetRadius), 0.0, 1.0);
+    float u_r = sqrt(rNorm);
+    return texture(uTransmittanceLUT, vec2(u_mu, u_r)).rgb;
+}
+
+void main()
+{
+    ivec2 pixel = ivec2(gl_GlobalInvocationID.xy);
+    ivec2 size = imageSize(oSkyViewLUT);
+    if (pixel.x >= size.x || pixel.y >= size.y) return;
+    vec2 uv = (vec2(pixel) + 0.5) / vec2(size);
+
+    vec3 sunDir = normalize(uSky.sunDirectionWS);
+    vec3 planetCenter = vec3(0.0, -uAtmos.planetRadius, 0.0);
+    vec3 camPos = uSky.cameraPositionWS;
+    float camHeight = length(camPos - planetCenter);
+    vec3 up = (camPos - planetCenter) / camHeight;
+
+    // Azimuth/elevation directions in the camera/planet-local horizon frame
+    // (same mapping the render + capture passes encode with). No polar
+    // singularity in the horizon band where it matters.
+    vec3 northRef = vec3(0.0, 0.0, 1.0);
+    if (abs(dot(northRef, up)) > 0.98)
+        northRef = vec3(1.0, 0.0, 0.0);
+    vec3 east = normalize(cross(up, northRef));
+    vec3 north = normalize(cross(east, up));
+
+    vec3 local = GE_SkyViewLutUvToDir(uv);
+
+    // Below-horizon mode (0 = ContinueHorizon, 1 = PlanetGround, 2 = StylizedGround).
+    // ContinueHorizon folds below-horizon texels up to the grazing horizon so they
+    // store the horizon atmosphere color — the gradient continues down with no black
+    // band and no seam. Renormalize after raising y so rayDir stays a unit direction.
+    const uint kBelowHorizonContinue = 0u;
+    const uint kBelowHorizonPlanetGround = 1u;
+    // Fold a thin band on BOTH sides of the horizon up to the same grazing direction,
+    // not just the decoded-below-horizon texels. The rows just above the horizon would
+    // otherwise march the full grazing path, whose transmittance collapses to a dark
+    // navy notch; clamping them to the grazing floor keeps the horizon monotonic and
+    // seamless (the notch was widened into a visible band by the elevation warp).
+    // PlanetGround folds the same way: the LUT stores pure aerial-perspective haze
+    // below the horizon, and the lit floor is composited per-pixel in the render pass.
+    if ((uAtmos.belowHorizonMode == kBelowHorizonContinue ||
+         uAtmos.belowHorizonMode == kBelowHorizonPlanetGround) && local.y < 0.002)
+    {
+        local.y = 0.002;
+        local = normalize(local);
+    }
+
+    vec3 rayDir = normalize(local.x * east + local.y * up + local.z * north);
+
+    float t0, t1;
+    if (!GE_RaySphereIntersect(camPos, rayDir, planetCenter, uAtmos.atmosphereRadius, t0, t1))
+    {
+        imageStore(oSkyViewLUT, pixel, vec4(0.0));
+        return;
+    }
+
+    float tStart = max(0.0, t0);
+    float tEnd = t1;
+
+    // Terminate the march at the planet surface for grazing rays that clip the sphere.
+    float tg0, tg1;
+    if (GE_RaySphereIntersect(camPos, rayDir, planetCenter, uAtmos.planetRadius, tg0, tg1) && tg0 > 0.0)
+    {
+        tEnd = min(tEnd, tg0);
+    }
+
+    const int kNumSteps = 64;
+    float dt = (tEnd - tStart) / float(kNumSteps);
+    float t = tStart + 0.5 * dt;
+    
+    vec3 accumScattering = vec3(0.0);
+    vec3 accumTransmittance = vec3(1.0);
+    
+    for (int i = 0; i < kNumSteps; i++)
+    {
+        vec3 p = camPos + rayDir * t;
+        float r = length(p - planetCenter);
+        float h = r - uAtmos.planetRadius;
+        
+        if (h < 0.0) break;
+        
+        // Density
+        float rhoRay = exp(-h / uAtmos.rayleighScaleHeight);
+        float rhoMie = exp(-h / uAtmos.mieScaleHeight);
+        
+        vec3 sigmaS_Ray = uAtmos.betaRayleigh * rhoRay;
+        vec3 sigmaS_Mie = uAtmos.betaMie * rhoMie;
+        vec3 sigmaE = sigmaS_Ray + sigmaS_Mie * 1.1;
+        
+        // Step Transmittance
+        vec3 stepTrans = exp(-sigmaE * dt);
+        accumTransmittance *= stepTrans;
+        
+        // Sun Transmittance (Shadow)
+        // Use uTransmittanceLUT here!
+        vec3 upP = (p - planetCenter) / r;
+        float sunZenith = dot(upP, sunDir);
+        vec3 transToSun = GetTransmittance(r, sunZenith);
+        
+        // Phase Functions
+        float mu = dot(rayDir, sunDir);
+        float phaseRay = 3.0 / (16.0 * PI) * (1.0 + mu * mu);
+        float g = uAtmos.mieG;
+        float phaseMie = 3.0 / (8.0 * PI) * ((1.0 - g*g) * (1.0 + mu*mu)) / ((2.0 + g*g) * pow(1.0 + g*g - 2.0*g*mu, 1.5));
+        
+        vec3 S = (sigmaS_Ray * phaseRay + sigmaS_Mie * phaseMie) * transToSun * uSky.sunColor * uSky.sunIntensity;
+
+        // Multiple scattering (Hillaire 2020): the Psi_ms LUT stores the
+        // infinite-bounce in-scatter per unit scattering coefficient for the
+        // sun illuminance normalized to white. The scattering coefficient at
+        // this altitude (Rayleigh + Mie) modulates it; the real sun color /
+        // intensity is applied here (the LUT used white). Isotropic — no phase.
+        vec3 msSample = texture(uMultiscatterLUT,
+            vec2(sunZenith * 0.5 + 0.5,
+                 clamp(h / (uAtmos.atmosphereRadius - uAtmos.planetRadius), 0.0, 1.0))).rgb;
+        vec3 multiScatter = (sigmaS_Ray + sigmaS_Mie) * msSample * uSky.sunColor * uSky.sunIntensity;
+
+        accumScattering += (S + multiScatter) * accumTransmittance * dt; // Integrate
+
+        t += dt;
+    }
+
+    imageStore(oSkyViewLUT, pixel, vec4(accumScattering, 1.0));
+}

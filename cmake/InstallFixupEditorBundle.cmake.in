@@ -1,0 +1,107 @@
+# InstallFixupEditorBundle.cmake.in
+#
+# Install-time bundle fixup for macOS Editor.app using CMake's BundleUtilities.
+#
+# This is the "best practice" flow recommended by CMake: run BundleUtilities from
+# install(CODE)/install(SCRIPT), not at configure time. See:
+# - https://cmake.org/cmake/help/latest/module/BundleUtilities.html
+#
+# This script is configured at generate-time via configure_file(@ONLY).
+#
+
+if(NOT APPLE)
+  message(STATUS "InstallFixupEditorBundle: non-Apple platform; skipping")
+  return()
+endif()
+
+include(BundleUtilities)
+
+set(_build_dir "@CMAKE_BINARY_DIR@")
+set(_source_dir "@CMAKE_SOURCE_DIR@")
+
+# If vcpkg is in use, these will be configured to concrete values; otherwise empty.
+set(_vcpkg_installed_dir "@VCPKG_INSTALLED_DIR@")
+set(_vcpkg_triplet "@VCPKG_TARGET_TRIPLET@")
+
+# If CoreCLR hosting is enabled, this may be set to a concrete libnethost.dylib path.
+set(_nethost_library "@NETHOST_LIBRARY@")
+
+# Bundle name: by default CMake uses the target name for the *.app directory name.
+# If you ever change the Editor target OUTPUT_NAME, update this accordingly.
+set(_bundle_name "Editor.app")
+
+set(_destdir "$ENV{DESTDIR}")
+if(_destdir STREQUAL "")
+  set(_bundle "${CMAKE_INSTALL_PREFIX}/${_bundle_name}")
+else()
+  set(_bundle "${_destdir}${CMAKE_INSTALL_PREFIX}/${_bundle_name}")
+endif()
+
+message(STATUS "InstallFixupEditorBundle: fixing bundle '${_bundle}' (config='${CMAKE_INSTALL_CONFIG_NAME}')")
+
+if(NOT EXISTS "${_bundle}")
+  message(FATAL_ERROR "InstallFixupEditorBundle: bundle not found at install location: ${_bundle}")
+endif()
+
+# Make bundle items writable before applying install_name_tool changes.
+set(BU_CHMOD_BUNDLE_ITEMS TRUE)
+
+# Where to search for prerequisites that are not already referenced by absolute paths.
+set(_dirs
+  # Build outputs
+  "${_build_dir}/lib/${CMAKE_INSTALL_CONFIG_NAME}"
+  "${_build_dir}/bin/${CMAKE_INSTALL_CONFIG_NAME}"
+  "${_build_dir}/lib"
+  "${_build_dir}/bin"
+)
+
+if(_vcpkg_installed_dir AND _vcpkg_triplet)
+  list(APPEND _dirs
+    "${_vcpkg_installed_dir}/${_vcpkg_triplet}/lib"
+    "${_vcpkg_installed_dir}/${_vcpkg_triplet}/debug/lib"
+    "${_vcpkg_installed_dir}/${_vcpkg_triplet}/bin"
+    "${_vcpkg_installed_dir}/${_vcpkg_triplet}/debug/bin"
+  )
+endif()
+
+if(_nethost_library AND EXISTS "${_nethost_library}")
+  get_filename_component(_nethost_dir "${_nethost_library}" DIRECTORY)
+  if(_nethost_dir)
+    list(APPEND _dirs "${_nethost_dir}")
+  endif()
+endif()
+
+# Vulkan SDK hint (optional): helps locate libMoltenVK/libvulkan when building from source.
+if(DEFINED ENV{VULKAN_SDK} AND NOT "$ENV{VULKAN_SDK}" STREQUAL "")
+  list(APPEND _dirs
+    "$ENV{VULKAN_SDK}/lib"
+    "$ENV{VULKAN_SDK}/MoltenVK/dylib/macOS"
+  )
+endif()
+
+# Treat MoltenVK (ICD) as a plugin: it is typically loaded via JSON at runtime,
+# not linked directly, so BundleUtilities will not discover it automatically.
+set(_plugins "")
+set(_moltenvk_in_bundle "${_bundle}/Contents/Resources/vulkan/icd.d/libMoltenVK.dylib")
+if(EXISTS "${_moltenvk_in_bundle}")
+  list(APPEND _plugins "${_moltenvk_in_bundle}")
+endif()
+
+# Fix up in-place. This also runs verify_app() internally.
+fixup_bundle("${_bundle}" "${_plugins}" "${_dirs}")
+
+# Optional: run our extra structural validation (Resources layout, rpaths) after BundleUtilities.
+set(_bundle_exe "${_bundle}/Contents/MacOS/Editor")
+execute_process(
+  COMMAND "${CMAKE_COMMAND}"
+          -DGE_APP_EXE=${_bundle_exe}
+          -DGE_VALIDATE_VERBOSE=OFF
+          -P "${_source_dir}/cmake/ValidateMacAppBundle.cmake"
+  RESULT_VARIABLE _validate_rc
+)
+if(NOT _validate_rc EQUAL 0)
+  message(FATAL_ERROR "InstallFixupEditorBundle: ValidateMacAppBundle failed for ${_bundle}")
+endif()
+
+message(STATUS "InstallFixupEditorBundle: OK (${_bundle})")
+

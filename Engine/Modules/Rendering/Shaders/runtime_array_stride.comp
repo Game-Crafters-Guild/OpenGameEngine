@@ -1,0 +1,41 @@
+#version 450
+// Reflection fixture: array members whose stride differs from their element
+// size, so a reflected stride cannot be mistaken for one rounded up from Size.
+layout(local_size_x = 1) in;
+
+// 20 bytes; std430 aligns the struct to its vec4, so the array stride is 32.
+struct Row
+{
+    vec4 a;
+    float b;
+};
+
+layout(std430, set = 0, binding = 0) buffer RowsBlock
+{
+    uint count;
+    Row rows[];
+} Rows;
+
+// std430 keeps a scalar array at its 4-byte element stride.
+layout(std430, set = 0, binding = 1) buffer WeightsBlock
+{
+    float weights[];
+} Weights;
+
+layout(std430, set = 0, binding = 2) buffer FixedBlock
+{
+    Row fixedRows[3];
+    uint tail;
+} Fixed;
+
+// std140 rounds a scalar array stride up to 16.
+layout(std140, set = 0, binding = 3) uniform Std140Block
+{
+    float weights140[4];
+} Std140;
+
+void main()
+{
+    Rows.rows[0].b = Fixed.fixedRows[1].b + Weights.weights[2] + Std140.weights140[1]
+                   + float(Rows.count) + float(Fixed.tail);
+}

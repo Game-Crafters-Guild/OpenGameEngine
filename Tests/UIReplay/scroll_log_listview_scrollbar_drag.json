@@ -1,0 +1,68 @@
+{
+  "name": "scroll_log_listview_scrollbar_drag",
+  "windowIndex": 0,
+  "minFrames": 360,
+  "probe": {
+    "listViewUnderId": "mount:Log",
+    "scrollViewUnderId": "LogListView",
+    "scrollbarVUnderId": "LogListView"
+  },
+  "asserts": [
+    {
+      "kind": "listViewUpdatesDuringCapture",
+      "listViewUnderId": "mount:Log",
+      "frameStart": 282,
+      "frameEnd": 286
+    },
+    {
+      "kind": "visibleTextNotFullyClipped",
+      "subtreeId": "LogListView",
+      "scrollViewUnderId": "LogListView",
+      "requiredClasses": ["log-trace", "log-debug", "log-info", "log-warning", "log-error", "log-critical"],
+      "frameStart": 220,
+      "frameEnd": 330,
+      "minVisiblePx": 2.0,
+      "maxChecks": 1500
+    }
+  ],
+  "events": [
+    { "frame": 2, "type": "mouseMove", "target": { "kind": "elementId", "id": "tab:Hierarchy", "relX": 0.5, "relY": 0.5 } },
+    { "frame": 3, "type": "mouseDown", "button": 0 },
+    { "frame": 4, "type": "mouseUp", "button": 0 },
+
+    { "frame": 20, "type": "invokeCommand", "commandId": 16656 },
+    { "frame": 22, "type": "invokeCommand", "commandId": 16656 },
+    { "frame": 24, "type": "invokeCommand", "commandId": 16656 },
+    { "frame": 26, "type": "invokeCommand", "commandId": 16656 },
+    { "frame": 28, "type": "invokeCommand", "commandId": 16656 },
+    { "frame": 30, "type": "invokeCommand", "commandId": 16656 },
+    { "frame": 32, "type": "invokeCommand", "commandId": 16656 },
+    { "frame": 34, "type": "invokeCommand", "commandId": 16656 },
+    { "frame": 36, "type": "invokeCommand", "commandId": 16656 },
+    { "frame": 38, "type": "invokeCommand", "commandId": 16656 },
+    { "frame": 40, "type": "invokeCommand", "commandId": 16656 },
+    { "frame": 42, "type": "invokeCommand", "commandId": 16656 },
+    { "frame": 44, "type": "invokeCommand", "commandId": 16656 },
+    { "frame": 46, "type": "invokeCommand", "commandId": 16656 },
+    { "frame": 48, "type": "invokeCommand", "commandId": 16656 },
+    { "frame": 50, "type": "invokeCommand", "commandId": 16656 },
+    { "frame": 52, "type": "invokeCommand", "commandId": 16656 },
+    { "frame": 54, "type": "invokeCommand", "commandId": 16656 },
+    { "frame": 56, "type": "invokeCommand", "commandId": 16656 },
+    { "frame": 58, "type": "invokeCommand", "commandId": 16656 },
+
+    { "frame": 140, "type": "mouseMove", "target": { "kind": "elementId", "id": "tab:Log", "relX": 0.5, "relY": 0.5 } },
+    { "frame": 141, "type": "mouseDown", "button": 0 },
+    { "frame": 142, "type": "mouseUp", "button": 0 },
+
+    { "frame": 150, "type": "emitLogLines", "count": 400, "level": "error", "prefix": "[UIReplay]" },
+
+    { "frame": 280, "type": "mouseMove", "target": { "kind": "scrollbarVUnderId", "underId": "LogListView", "relX": 0.5, "relY": 0.1 } },
+    { "frame": 282, "type": "mouseDown", "button": 0 },
+    { "frame": 283, "type": "mouseMove", "dx": 0.0, "dy": 220.0 },
+    { "frame": 284, "type": "mouseMove", "dx": 0.0, "dy": 220.0 },
+    { "frame": 285, "type": "mouseMove", "dx": 0.0, "dy": 220.0 },
+    { "frame": 286, "type": "mouseUp", "button": 0 }
+  ]
+}
+

@@ -1,0 +1,125 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Native User Systems: Lifecycle and the Post-Simulation Hook</title>
+<script src="https://cdn.jsdelivr.net/npm/mermaid@10/dist/mermaid.min.js"></script>
+<style>
+  :root {
+    --bg: #1a1d23; --panel: #232831; --panel-light: #2c323d; --border: #3a414d;
+    --text: #d8dde6; --muted: #8a93a3; --accent: #6db4ff; --danger: #ff8a6e; --bad: #ff8a6e;
+    --ok: #7bd88f; --good: #7bd88f; --warn: #f6c177;
+  }
+  * { box-sizing: border-box; }
+  html, body { background: var(--bg); color: var(--text); font-family: -apple-system, "Segoe UI", system-ui, sans-serif; line-height: 1.55; margin: 0; padding: 0; }
+  .container { max-width: 1180px; margin: 0 auto; padding: 48px 32px 96px; }
+  h1 { font-size: 28px; margin: 0 0 8px; letter-spacing: -0.01em; }
+  h2 { font-size: 20px; margin: 48px 0 16px; padding-top: 12px; border-top: 1px solid var(--border); }
+  h3 { font-size: 16px; margin: 24px 0 8px; color: var(--accent); }
+  p { margin: 8px 0 14px; }
+  code, .mono { font-family: "JetBrains Mono", Consolas, monospace; font-size: 0.85em; background: var(--panel-light); padding: 1px 6px; border-radius: 3px; }
+  pre { background: var(--panel-light); border: 1px solid var(--border); border-radius: 6px; padding: 14px 16px; overflow-x: auto; }
+  pre code { background: none; padding: 0; }
+  .lede { color: var(--muted); margin-bottom: 4px; font-size: 14px; }
+  .panel { background: var(--panel); border: 1px solid var(--border); border-radius: 8px; padding: 20px 24px; margin: 16px 0; }
+  .panel.danger { border-color: var(--danger); } .panel.ok { border-color: var(--ok); } .panel.warn { border-color: var(--warn); }
+  .panel-title { font-weight: 600; font-size: 14px; margin: 0 0 8px; text-transform: uppercase; letter-spacing: 0.06em; color: var(--muted); }
+  .panel.danger .panel-title { color: var(--danger); } .panel.ok .panel-title { color: var(--ok); } .panel.warn .panel-title { color: var(--warn); }
+  table { border-collapse: collapse; width: 100%; margin: 12px 0 20px; font-size: 13.5px; }
+  th { text-align: left; background: var(--panel-light); padding: 8px 10px; border-bottom: 1px solid var(--border); color: var(--muted); font-weight: 600; }
+  td { padding: 8px 10px; border-bottom: 1px solid var(--border); vertical-align: top; }
+  tr:hover td { background: rgba(255,255,255,0.02); }
+  .pill { display: inline-block; padding: 1px 8px; border-radius: 999px; font-size: 12px; font-weight: 600; }
+  .pill.keep { background: rgba(109,180,255,0.15); color: var(--accent); }
+  .pill.new { background: rgba(123,216,143,0.15); color: var(--ok); }
+  hr { border: 0; border-top: 1px solid var(--border); margin: 32px 0; }
+  footer { color: var(--muted); font-size: 13px; margin-top: 48px; }
+</style>
+</head>
+<body>
+<div class="container">
+<p class="lede">GUIDE · scripting · native user systems (GameSDK/System.h, UserSystemRegistry)</p>
+<h1>Native User Systems: Lifecycle and the Post-Simulation Hook</h1>
+<p>A native user system is a C++ struct deriving <code>ECS::SystemBase</code> in a project or package module. The build-time scanner generates its registration; <code>UserSystemAdapter&lt;T&gt;</code> forwards the hooks the struct declares to the engine-owned <code>UserSystemRegistry</code>. This page states where each hook runs in the frame, what it may touch, and how the late presentation hook <code>OnPostSimulation</code> is delivered.</p>
+
+<h2>Authoring</h2>
+<pre><code>#include &lt;GameSDK/System.h&gt;
+
+struct VisibilitySystem : ECS::SystemBase
+{
+    void OnStart(ECS::World&amp; world);                     // play enters
+    void OnUpdate(ECS::World&amp; world, float dt);          // game logic, before the engine simulates
+    void OnPostSimulation(ECS::World&amp; world, float dt);  // presentation, after movement, before extraction
+    void OnDestroy(ECS::World&amp; world);                   // play exits
+};</code></pre>
+<p>Every hook is optional; the adapter detects each one with a <code>requires</code> expression and forwards only what the struct declares. <code>EntitySystem&lt;Self&gt;</code> supplies <code>OnUpdate</code> from a <code>ForEach</code>; the other hooks may be added to it as usual.</p>
+
+<h2>Where each hook runs</h2>
+<table>
+  <tr><th>Hook</th><th>Caller</th><th>Position in the frame</th><th>Thread</th></tr>
+  <tr><td><code>OnStart</code></td><td><code>StartUserSystems</code> from the play-mode entry (editor) or player start</td><td>Once, after the play snapshot. In the Player, before the startup scene's meshes, bounds, <code>SkeletonRef</code> and <code>AnimatorRef</code> are bound: they arrive on later frames. In editor play mode they are already bound at <code>OnStart</code></td><td>Main</td></tr>
+  <tr><td><code>OnUpdate</code></td><td><code>TickUserSystems</code> from the application update (<code>PlayModeManager::Tick</code>, <code>PlayerApplication::Update</code>)</td><td>Before <code>EngineCore::Update</code>: before the deferred-command flush and before every scheduled ECS system, so navigation, physics and the transform hierarchy have not moved anything yet this frame</td><td>Main</td></tr>
+  <tr><td><code>OnPostSimulation</code></td><td><code>NativePostSimulationSystem</code>, an engine-owned scheduled system</td><td>Inside the ECS schedule, after the transform hierarchy, morph targets, HLOD selection and the movement writers (navigation movement, physics write-back, character-controller write-back, ocean buoyancy when those modules exist); before mesh extraction, the scene TLAS refit and the render-graph build</td><td>Main, exclusive: no other scheduled system runs concurrently</td></tr>
+  <tr><td><code>OnDestroy</code></td><td><code>StopUserSystems</code> on play exit</td><td>Before the play snapshot is restored</td><td>Main</td></tr>
+</table>
+<pre class="mermaid">
+sequenceDiagram
+    participant App as Application update
+    participant Eng as EngineCore::Update
+    participant Sched as ECS schedule (RenderingLoop::Update)
+    App->>App: OnUpdate on every user system
+    App->>Eng: Update
+    Eng->>Eng: ProcessCommands (deferred commands from OnUpdate land here)
+    Eng->>Sched: early CPU texture drain, mesh binding, waves
+    Sched->>Sched: hierarchy, physics, navigation, other writers
+    Sched->>Sched: NativePostSimulation: OnPostSimulation, then the late CPU texture drain
+    Sched->>Sched: RenderExtraction, then RenderGraphBuild last
+</pre>
+
+<div class="panel warn">
+  <p class="panel-title">Why a second hook exists</p>
+  <p>Game logic belongs before the simulation: <code>OnUpdate</code> sets destinations, desired velocities and inputs that navigation and physics consume in the same frame. A presentation publisher (a visibility mask, a renderer-membership decision) that reads positions in <code>OnUpdate</code> therefore sees last frame's movement while the renderer shows this frame's. <code>OnPostSimulation</code> is the point after the writers have finished and before extraction reads the world.</p>
+</div>
+
+<h2>What the late hook may do</h2>
+<table>
+  <tr><th>Rule</th><th>Detail</th></tr>
+  <tr><td>Derive, do not simulate</td><td>Read the completed simulation and write presentation inputs: renderer membership (<code>MeshRenderer::renderLayerMask</code>), CPU texture publications, parameter blocks. Do not advance gameplay state, replace the scene or rewrite camera, terrain or hierarchy inputs already consumed earlier in the schedule.</td></tr>
+  <tr><td>Direct writes reach extraction</td><td>Component writes through <code>GetComponentForWrite</code> / <code>GetForWrite</code> land before extraction runs. Deferred commands (<code>Entity::Set</code>, <code>AddComponent</code>) stay deferred and are played back at the next frame's flush; the hook is not a command flush.</td></tr>
+  <tr><td>Mesh binding is next frame</td><td>A <code>MeshRenderer</code> whose asset changes in the hook is bound on the main thread before the next frame's waves, so its new geometry appears one frame later. Membership changes appear in the same frame.</td></tr>
+  <tr><td>CPU textures</td><td>A lease created or published inside the hook drains in the same frame: the bridge observes the world scope and runs the CPU texture drain after the hook, before graph declaration. Sources unchanged since the early drain do not upload again.</td></tr>
+  <tr><td>Exclusive execution</td><td>The bridge system declares <code>RequiresExclusiveUpdate</code>: it runs on the thread calling <code>SystemManager::Update</code> with every other system of its wave joined before and after it. Arbitrary user world access needs no further locking.</td></tr>
+  <tr><td>Faults</td><td>The same guarded invocation as <code>OnUpdate</code>: a thrown exception is logged and the remaining systems still run; a hard fault disables the faulting system for the session.</td></tr>
+</table>
+
+<h2>Delivery</h2>
+<table>
+  <tr><th>Event</th><th>Behavior</th></tr>
+  <tr><td>One tick, one delivery</td><td><code>TickUserSystems</code> records the world id, its lifecycle reset generation and the native delta. The next <code>NativePostSimulationSystem</code> update for that exact world and reset generation delivers the hook once, with that delta, and clears the record before any user code runs. A redraw without a native tick, another view of the world, an unrelated world, or a reentrant call delivers nothing.</td></tr>
+  <tr><td>Stop</td><td><code>StopUserSystems</code> revokes the pending delivery before <code>OnDestroy</code>.</td></tr>
+  <tr><td>Module replacement</td><td>Clearing a module's registrations revokes the pending delivery; the replacement module receives the next tick's delivery. Registrations of other modules are untouched.</td></tr>
+  <tr><td>World reset</td><td>A reset before the tick completes, or inside <code>OnUpdate</code>, changes the lifecycle reset generation and revokes the delivery. A fresh tick publishes the current state.</td></tr>
+  <tr><td>Pause and edit mode</td><td>No native tick means no delivery. Existing publications stay valid.</td></tr>
+</table>
+
+<h2>Schedule effect</h2>
+<p>Mesh extraction declares the movement writers as optional dependencies and the bridge as a required one, so extraction runs after navigation movement, physics write-back, character-controller write-back and ocean buoyancy whenever those systems exist. Objects those writers move are extracted from this frame's positions. The wave solver orders by declared edges only; <code>SystemPhase</code> and <code>Order</code> sort within a wave.</p>
+
+<h2>ABI</h2>
+<p><code>IUserSystem</code> carries <code>OnPostSimulation</code> and <code>HasPostSimulation</code>, and <code>ECS::ISystem</code> carries <code>RequiresExclusiveUpdate</code>, so the native module ABI version is <strong>2</strong>. A module built against an earlier version is refused at load with <code>ABI version mismatch: module=1 host=2 — rebuild user scripts against this engine</code>, before any of its registrations replay. Engine, Editor, Player, the SDK and every native module are rebuilt together.</p>
+
+<h2>Verification</h2>
+<p><code>NativePostSimulationTests</code> covers adapter detection, once-per-tick delivery with the native delta, revocation on Stop, module replacement and reset, guarded faults, deferred-command semantics, exclusive execution in mixed and legacy parallel waves, and the assembled rendering, physics and navigation schedule placing the bridge after the writers and before extraction. <code>CpuTextureSourceTests</code> drives navigation movement followed by a hook that creates and publishes a lease and reads the pixels back in the same frame. <code>NativeModuleRejectionTests</code> loads an ABI-1 probe and checks it is refused before registration.</p>
+
+<h2>Changelog</h2>
+<table>
+  <tr><th>Date</th><th>Change</th></tr>
+  <tr><td>2026-09-28</td><td>The rendering loop uses the shared dependency-aware schedule; remove the unsupported flat-scheduling mode.</td></tr>
+  <tr><td>2026-09-17</td><td>Initial canonical: hook placement, late-hook contract, delivery rules, ABI 2.</td></tr>
+</table>
+
+<footer>Native user systems · v2 · 2026-09-28</footer>
+</div>
+<script>mermaid.initialize({ startOnLoad: true, theme: 'dark' });</script>
+</body>
+</html>

@@ -1,0 +1,27 @@
+{
+  "name": "smoke_present_not_black",
+  "windowIndex": 0,
+  "minFrames": 260,
+  "probe": {
+    "elementId": "dock",
+    "pixelHash": {
+      "enabled": true,
+      "frameStart": 90,
+      "frameEnd": 220,
+      "everyNFrames": 1,
+      "maxPending": 1,
+      "readbackDelayFrames": 4,
+      "failOnAllBlack": true,
+      "failIfMeanByteBelow": 5.0,
+      "failIfNonZeroBytesBelow": 256,
+      "dumpPpm": false,
+      "center": true,
+      "sampleWidth": 64,
+      "sampleHeight": 64
+    }
+  },
+  "events": [
+    { "frame": 0, "type": "mouseMove", "target": { "kind": "elementId", "id": "dock", "relX": 0.5, "relY": 0.5 } }
+  ]
+}
+

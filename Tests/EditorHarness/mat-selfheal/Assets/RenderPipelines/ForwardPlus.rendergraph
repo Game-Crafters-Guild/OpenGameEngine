@@ -1,0 +1,751 @@
+{
+  "outputs": {
+    "FinalColor": "View.Resolve"
+  },
+  "passes": [
+    {
+      "buffer": "ViewParams",
+      "enabled": true,
+      "id": "ViewParamsUpload",
+      "type": "ViewParamsUpload"
+    },
+    {
+      "enabled": true,
+      "id": "Terrain",
+      "type": "TerrainUpload"
+    },
+    {
+      "enabled": true,
+      "id": "TerrainGrass",
+      "type": "TerrainGrass"
+    },
+    {
+      "enabled": true,
+      "id": "DepthPrepass",
+      "type": "DepthPrepass"
+    },
+    {
+      "enabled": true,
+      "id": "DepthResolve",
+      "type": "DepthResolve"
+    },
+    {
+      "buffer": "HeightFogParams",
+      "enabled": true,
+      "id": "HeightFogParamsUpload",
+      "type": "HeightFogParamsUpload"
+    },
+    {
+      "buffer": "LightBuffer",
+      "enabled": true,
+      "id": "LightUpload",
+      "type": "LightUpload"
+    },
+    {
+      "bufferUsages": {
+        "DepthMinMaxBuffer": "StorageWrite"
+      },
+      "buffers": {
+        "DepthMinMaxBuffer": "DepthMinMaxBuffer"
+      },
+      "dispatch": {
+        "x": "ceil(renderWidth / 32)",
+        "y": "ceil(renderHeight / 32)",
+        "z": 1
+      },
+      "enabled": true,
+      "id": "DepthMinMax",
+      "inputUsages": {
+        "DepthTex": "Sampled"
+      },
+      "inputs": {
+        "DepthTex": "View.DepthResolved"
+      },
+      "shaderPkg": "Shaders/cluster_depth_minmax.shaderpkg",
+      "targetBuffer": "DepthMinMaxBuffer",
+      "type": "ComputeShader"
+    },
+    {
+      "buffer": "ShadowData",
+      "cascades": 4,
+      "depthBias": 0.0001,
+      "enabled": true,
+      "id": "CascadedShadowMap",
+      "maxShadowDistance": 200.0,
+      "normalBias": 0.5,
+      "resolution": 2048,
+      "splitLambda": 0.75,
+      "type": "ShadowMap"
+    },
+    {
+      "bufferUsages": {
+        "ClusterBuffer": "StorageWrite",
+        "ClusterParams": "Sampled",
+        "DepthMinMaxBuffer": "StorageRead",
+        "LightBuffer": "StorageRead",
+        "LightIndexBuffer": "StorageWrite",
+        "ViewParams": "ConstantBuffer"
+      },
+      "buffers": {
+        "ClusterBuffer": "ClusterBuffer",
+        "ClusterParams": "ClusterParams",
+        "DepthMinMaxBuffer": "DepthMinMaxBuffer",
+        "LightBuffer": "LightBuffer",
+        "LightIndexBuffer": "LightIndexBuffer",
+        "ViewParams": "ViewParams"
+      },
+      "dispatch": {
+        "x": "ceil(renderWidth / 32)",
+        "y": "ceil(renderHeight / 32)",
+        "z": 24
+      },
+      "enabled": true,
+      "id": "ClusteredLightCull",
+      "requiresLights": true,
+      "shaderPkg": "Shaders/clustered_light_cull.shaderpkg",
+      "targetBuffer": "LightIndexBuffer",
+      "type": "ComputeShader",
+      "uniformWrites": {
+        "ClusterParams": {
+          "u32x4": [
+            32,
+            32,
+            24,
+            32
+          ]
+        }
+      }
+    },
+    {
+      "enabled": true,
+      "id": "Sky",
+      "output": "View.Color",
+      "type": "SkyRender"
+    },
+    {
+      "colorResolveTarget": "SceneColor",
+      "enabled": true,
+      "id": "World",
+      "keywords": [
+        "ForwardPlus",
+        "Instanced",
+        "Shadows"
+      ],
+      "type": "WorldRender"
+    },
+    {
+      "alphaBlend": true,
+      "bufferUsages": {
+        "ClusterBuffer": "StorageRead",
+        "ClusterParams": "Sampled",
+        "LightIndexBuffer": "StorageRead"
+      },
+      "buffers": {
+        "ClusterBuffer": "ClusterBuffer",
+        "ClusterParams": "ClusterParams",
+        "LightIndexBuffer": "LightIndexBuffer"
+      },
+      "enabled": false,
+      "id": "ClusterDebugOverlay",
+      "output": "View.Color",
+      "shaderPkg": "Shaders/cluster_debug_overlay.shaderpkg",
+      "type": "FullscreenShader"
+    },
+    {
+      "enabled": true,
+      "id": "VolumetricFog",
+      "output": "SceneColor",
+      "type": "VolumetricFog"
+    },
+    {
+      "enabled": true,
+      "id": "HeightFog",
+      "inputs": {
+        "uSceneColor": "SceneColor",
+        "uDepth": "View.DepthResolved"
+      },
+      "inputUsages": {
+        "uDepth": "Sampled"
+      },
+      "buffers": {
+        "ViewParams": "ViewParams",
+        "HeightFogParams": "HeightFogParams"
+      },
+      "bufferUsages": {
+        "ViewParams": "ConstantBuffer",
+        "HeightFogParams": "ConstantBuffer"
+      },
+      "output": "HDRHeightFog",
+      "passthroughInput": "uSceneColor",
+      "samplers": {
+        "uDepth": "LinearClamp",
+        "uSceneColor": "LinearClamp"
+      },
+      "shaderPkg": "Shaders/height_fog.shaderpkg",
+      "skipWhen": {
+        "heightFogActive": 0.0
+      },
+      "type": "FullscreenShader"
+    },
+    {
+      "bufferUsages": {
+        "uExposure": "Storage",
+        "ViewParams": "ConstantBuffer"
+      },
+      "buffers": {
+        "uExposure": "ExposureHistory",
+        "ViewParams": "ViewParams"
+      },
+      "enabled": true,
+      "id": "BloomThreshold",
+      "inputs": {
+        "uHDR": "HDRHeightFog",
+        "uDepth": "View.DepthResolved"
+      },
+      "output": "BloomA",
+      "ppOverrides": true,
+      "pushConstants": {
+        "exposure": 1.0,
+        "knee": 0.1,
+        "threshold": 1.0,
+        "useAutoExposure": 0,
+        "thresholdFree": 0
+      },
+      "samplers": {
+        "uHDR": "LinearClamp",
+        "uDepth": "LinearClamp"
+      },
+      "shaderPkg": "Shaders/bloom_threshold.shaderpkg",
+      "skipWhen": {
+        "bloomActive": 0.0
+      },
+      "type": "FullscreenShader",
+      "inputUsages": {
+        "uDepth": "Sampled"
+      }
+    },
+    {
+      "enabled": true,
+      "id": "BloomBlurH",
+      "inputs": {
+        "uSrc": "BloomA"
+      },
+      "output": "BloomB",
+      "samplers": {
+        "uSrc": "LinearClamp"
+      },
+      "shaderPkg": "Shaders/bloom_blur_h.shaderpkg",
+      "skipWhen": {
+        "bloomActive": 0.0
+      },
+      "type": "FullscreenShader"
+    },
+    {
+      "enabled": true,
+      "id": "BloomBlurV",
+      "inputs": {
+        "uSrc": "BloomB"
+      },
+      "output": "BloomA",
+      "samplers": {
+        "uSrc": "LinearClamp"
+      },
+      "shaderPkg": "Shaders/bloom_blur_v.shaderpkg",
+      "skipWhen": {
+        "bloomActive": 0.0
+      },
+      "type": "FullscreenShader"
+    },
+    {
+      "enabled": true,
+      "id": "BloomCombine",
+      "inputs": {
+        "uBloom": "BloomA",
+        "uHDR": "HDRHeightFog",
+        "uScattering": "HDRHeightFog"
+      },
+      "output": "HDRCombined",
+      "passthroughInput": "uHDR",
+      "ppOverrides": true,
+      "pushConstants": {
+        "intensity": 1.0,
+        "bloomScatteringAmount": 0.0,
+        "bloomTintR": 1.0,
+        "bloomTintG": 1.0,
+        "bloomTintB": 1.0
+      },
+      "samplers": {
+        "uBloom": "LinearClamp",
+        "uHDR": "LinearClamp",
+        "uScattering": "LinearClamp"
+      },
+      "shaderPkg": "Shaders/bloom_combine.shaderpkg",
+      "skipWhen": {
+        "bloomActive": 0.0
+      },
+      "type": "FullscreenShader"
+    },
+    {
+      "enabled": true,
+      "id": "HDRColorFx",
+      "inputs": {
+        "uSceneColor": "HDRCombined"
+      },
+      "output": "HDRFiltered",
+      "ppOverrides": true,
+      "pushConstants": {
+        "colorFilterB": 1.0,
+        "colorFilterBlendMode": 0,
+        "colorFilterG": 1.0,
+        "colorFilterIntensity": 0.0,
+        "colorFilterR": 1.0,
+        "colorGradeBrightness": 0.0,
+        "colorGradeContrast": 1.0,
+        "colorGradeGamma": 1.0,
+        "colorGradeHue": 0.0,
+        "colorGradeSaturation": 1.0
+      },
+      "samplers": {
+        "uSceneColor": "LinearClamp"
+      },
+      "shaderPkg": "Shaders/hdr_color_fx.shaderpkg",
+      "skipWhen": {
+        "hdrColorFxActive": 0.0
+      },
+      "type": "FullscreenShader"
+    },
+    {
+      "enabled": true,
+      "id": "Tonemap",
+      "inputs": {
+        "uHDRColor": "HDRFiltered"
+      },
+      "output": "LDRBeforeFilter",
+      "ppOverrides": true,
+      "pushConstants": {
+        "ditherMode": 0,
+        "exposure": 1.0,
+        "paperWhiteNits": 350.0,
+        "tonemapMode": 0
+      },
+      "samplers": {
+        "uHDRColor": "LinearClamp"
+      },
+      "shaderPkg": "Shaders/tonemap.shaderpkg",
+      "skipWhen": {
+        "tonemapMode": 5.0,
+        "exposure": 1.0,
+        "ditherMode": 0.0
+      },
+      "type": "FullscreenShader"
+    },
+    {
+      "enabled": true,
+      "id": "FastBlurDoF",
+      "inputs": {
+        "uSceneColor": "LDRBeforeFilter",
+        "uDepth": "View.DepthResolved"
+      },
+      "inputUsages": {
+        "uDepth": "Sampled"
+      },
+      "buffers": {
+        "ViewParams": "ViewParams"
+      },
+      "bufferUsages": {
+        "ViewParams": "ConstantBuffer"
+      },
+      "output": "LDRBeforeFastBlur",
+      "passthroughInput": "uSceneColor",
+      "ppOverrides": true,
+      "pushConstants": {
+        "fastBlurFocusDistance": 12.0,
+        "fastBlurFocusRange": 6.0,
+        "fastBlurIntensity": 0.0,
+        "fastBlurMaxRadius": 6.0,
+        "fastBlurNearBlur": 1
+      },
+      "samplers": {
+        "uDepth": "LinearClamp",
+        "uSceneColor": "LinearClamp"
+      },
+      "shaderPkg": "Shaders/fast_blur_dof.shaderpkg",
+      "skipWhen": {
+        "fastBlurActive": 0.0
+      },
+      "type": "FullscreenShader"
+    },
+    {
+      "enabled": true,
+      "id": "LdrFxStack",
+      "inputs": {
+        "uSceneColor": "LDRBeforeFastBlur"
+      },
+      "output": "LDRBeforeCRT",
+      "ppOverrides": true,
+      "pushConstants": {
+        "casStackOrder": 1,
+        "casStrength": 0.0,
+        "lut1dInMax": 1.0,
+        "lut1dInMin": 0.0,
+        "lut3dInMax": 1.0,
+        "lut3dInMin": 0.0,
+        "lutFlags": 0,
+        "lutInputEncoding": 0,
+        "lutIntensity": 0.0,
+        "lutSize1d": 0,
+        "lutSize3d": 0,
+        "lutStackOrder": 0
+      },
+      "samplers": {
+        "uLut1d": "LinearClamp",
+        "uLut3d": "LinearClamp",
+        "uSceneColor": "LinearClamp"
+      },
+      "passthroughInput": "uSceneColor",
+      "serviceTextures": [
+        "uLut3d",
+        "uLut1d"
+      ],
+      "shaderPkg": "Shaders/post_fx_ldr_stack.shaderpkg",
+      "skipWhen": {
+        "ldrStackActive": 0.0
+      },
+      "type": "FullscreenShader"
+    },
+    {
+      "enabled": true,
+      "id": "Crt",
+      "inputs": {
+        "uSceneColor": "LDRBeforeCRT"
+      },
+      "output": "LDRFinal",
+      "ppOverrides": true,
+      "pushConstants": {
+        "crtAberration": 0.0025,
+        "crtCurvature": 0.12,
+        "crtEmulatedResolutionDiv": 6.0,
+        "crtIntensity": 0.0,
+        "crtScanlines": 0.12,
+        "crtVignette": 0.25
+      },
+      "samplers": {
+        "uSceneColor": "LinearClamp"
+      },
+      "passthroughInput": "uSceneColor",
+      "shaderPkg": "Shaders/crt.shaderpkg",
+      "skipWhen": {
+        "crtActive": 0.0
+      },
+      "type": "FullscreenShader"
+    },
+    {
+      "elideWhenIdentity": true,
+      "enabled": true,
+      "id": "FinalCopy",
+      "inputs": {
+        "uTex": "LDRFinal"
+      },
+      "output": "View.Resolve",
+      "samplers": {
+        "uTex": "LinearClamp"
+      },
+      "shaderPkg": "Shaders/copy.shaderpkg",
+      "type": "FullscreenShader"
+    },
+    {
+      "blendMode": "Additive",
+      "bufferUsages": {
+        "ClusterBuffer": "StorageRead",
+        "ClusterParams": "Sampled",
+        "LightBuffer": "StorageRead",
+        "LightIndexBuffer": "StorageRead",
+        "ViewParams": "ConstantBuffer"
+      },
+      "buffers": {
+        "ClusterBuffer": "ClusterBuffer",
+        "ClusterParams": "ClusterParams",
+        "LightBuffer": "LightBuffer",
+        "LightIndexBuffer": "LightIndexBuffer",
+        "ViewParams": "ViewParams"
+      },
+      "enabled": false,
+      "id": "ForwardPlusLighting",
+      "inputUsages": {
+        "DepthTex": "Sampled"
+      },
+      "inputs": {
+        "DepthTex": "View.DepthResolved"
+      },
+      "output": "View.Color",
+      "shaderPkg": "Shaders/forwardplus_lighting.shaderpkg",
+      "type": "FullscreenShader"
+    }
+  ],
+  "pipelineName": "ForwardPlus",
+  "resources": {
+    "ExposureHistory": {
+      "kind": "Buffer",
+      "memoryUsage": "DeviceLocal",
+      "scope": "PerView",
+      "size": {
+        "bytes": 16,
+        "variables": {}
+      },
+      "usage": [
+        "Storage"
+      ],
+      "zeroOnCreate": true
+    },
+    "BloomA": {
+      "extent": {
+        "scale": [
+          0.5,
+          0.5
+        ]
+      },
+      "format": "R16G16B16A16_FLOAT",
+      "kind": "Texture",
+      "scope": "PerView",
+      "size": {
+        "variables": {}
+      },
+      "usage": [
+        "RenderTarget",
+        "ShaderResource"
+      ]
+    },
+    "BloomB": {
+      "extent": {
+        "scale": [
+          0.5,
+          0.5
+        ]
+      },
+      "format": "R16G16B16A16_FLOAT",
+      "kind": "Texture",
+      "scope": "PerView",
+      "size": {
+        "variables": {}
+      },
+      "usage": [
+        "RenderTarget",
+        "ShaderResource"
+      ]
+    },
+    "ClusterBuffer": {
+      "kind": "Buffer",
+      "memoryUsage": "DeviceLocal",
+      "scope": "PerView",
+      "size": {
+        "expression": "16 + clustersX * clustersY * depthSlices * clusterDataBytes",
+        "variables": {
+          "clusterDataBytes": 8,
+          "clustersX": "ceil(renderWidth / 32)",
+          "clustersY": "ceil(renderHeight / 32)",
+          "depthSlices": 24
+        }
+      },
+      "usage": [
+        "Storage",
+        "ShaderResource",
+        "CopyDestination"
+      ]
+    },
+    "ClusterParams": {
+      "flags": [
+        "PersistentlyMapped"
+      ],
+      "kind": "Buffer",
+      "memoryUsage": "Upload",
+      "scope": "PerView",
+      "usage": [
+        "ConstantBuffer"
+      ]
+    },
+    "DepthMinMaxBuffer": {
+      "kind": "Buffer",
+      "memoryUsage": "DeviceLocal",
+      "scope": "PerView",
+      "size": {
+        "expression": "tilesX * tilesY * tileMinMaxBytes",
+        "variables": {
+          "tileMinMaxBytes": 8,
+          "tilesX": "ceil(renderWidth / 32)",
+          "tilesY": "ceil(renderHeight / 32)"
+        }
+      },
+      "usage": [
+        "Storage",
+        "ShaderResource",
+        "CopyDestination"
+      ]
+    },
+    "HDRCombined": {
+      "format": "R16G16B16A16_FLOAT",
+      "kind": "Texture",
+      "scope": "PerView",
+      "size": {
+        "variables": {}
+      },
+      "usage": [
+        "RenderTarget",
+        "ShaderResource"
+      ]
+    },
+    "HDRFiltered": {
+      "format": "R16G16B16A16_FLOAT",
+      "kind": "Texture",
+      "scope": "PerView",
+      "size": {
+        "variables": {}
+      },
+      "usage": [
+        "RenderTarget",
+        "ShaderResource"
+      ]
+    },
+    "HDRHeightFog": {
+      "format": "R16G16B16A16_FLOAT",
+      "kind": "Texture",
+      "scope": "PerView",
+      "size": {
+        "variables": {}
+      },
+      "usage": [
+        "RenderTarget",
+        "ShaderResource"
+      ]
+    },
+    "LDRBeforeFilter": {
+      "format": "R16G16B16A16_FLOAT",
+      "kind": "Texture",
+      "scope": "PerView",
+      "size": {
+        "variables": {}
+      },
+      "usage": [
+        "RenderTarget",
+        "ShaderResource"
+      ]
+    },
+    "LDRBeforeFastBlur": {
+      "format": "R16G16B16A16_FLOAT",
+      "kind": "Texture",
+      "scope": "PerView",
+      "size": {
+        "variables": {}
+      },
+      "usage": [
+        "RenderTarget",
+        "ShaderResource"
+      ]
+    },
+    "LDRBeforeCRT": {
+      "format": "R16G16B16A16_FLOAT",
+      "kind": "Texture",
+      "scope": "PerView",
+      "size": {
+        "variables": {}
+      },
+      "usage": [
+        "RenderTarget",
+        "ShaderResource"
+      ]
+    },
+    "LDRFinal": {
+      "format": "R16G16B16A16_FLOAT",
+      "kind": "Texture",
+      "scope": "PerView",
+      "size": {
+        "variables": {}
+      },
+      "usage": [
+        "RenderTarget",
+        "ShaderResource"
+      ]
+    },
+    "LightBuffer": {
+      "flags": [
+        "PersistentlyMapped"
+      ],
+      "kind": "Buffer",
+      "memoryUsage": "Upload",
+      "scope": "PerView",
+      "usage": [
+        "Storage",
+        "ShaderResource",
+        "CopyDestination"
+      ]
+    },
+    "LightIndexBuffer": {
+      "kind": "Buffer",
+      "memoryUsage": "DeviceLocal",
+      "scope": "PerView",
+      "size": {
+        "expression": "clustersX * clustersY * depthSlices * maxLightsPerCluster * indexBytes",
+        "variables": {
+          "clustersX": "ceil(renderWidth / 32)",
+          "clustersY": "ceil(renderHeight / 32)",
+          "depthSlices": 24,
+          "indexBytes": 4,
+          "maxLightsPerCluster": 32
+        }
+      },
+      "usage": [
+        "Storage",
+        "ShaderResource",
+        "CopyDestination"
+      ]
+    },
+    "SceneColor": {
+      "format": "R16G16B16A16_FLOAT",
+      "kind": "Texture",
+      "scope": "PerView",
+      "size": {
+        "variables": {}
+      },
+      "usage": [
+        "RenderTarget",
+        "ShaderResource"
+      ]
+    },
+    "ShadowData": {
+      "flags": [
+        "PersistentlyMapped"
+      ],
+      "kind": "Buffer",
+      "memoryUsage": "Upload",
+      "scope": "PerView",
+      "usage": [
+        "ConstantBuffer",
+        "CopyDestination"
+      ]
+    },
+    "ViewParams": {
+      "flags": [
+        "PersistentlyMapped"
+      ],
+      "kind": "Buffer",
+      "memoryUsage": "Upload",
+      "scope": "PerView",
+      "usage": [
+        "ConstantBuffer",
+        "CopyDestination"
+      ]
+    },
+    "HeightFogParams": {
+      "flags": [
+        "PersistentlyMapped"
+      ],
+      "kind": "Buffer",
+      "memoryUsage": "Upload",
+      "scope": "PerView",
+      "usage": [
+        "ConstantBuffer",
+        "CopyDestination"
+      ]
+    }
+  },
+  "schemaVersion": 2
+}

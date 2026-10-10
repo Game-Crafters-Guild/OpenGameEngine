@@ -1,0 +1,7 @@
+/* Editor-chrome contributions from the git-vcs package: the Settings tree
+   row icon for the Git provider tab. Attached at the UI root via the
+   EditorPanelRegistry stylesheet contribution, after the editor theme. */
+
+.settings-tree-pane .git-row .tree-title {
+    background-image: url("git-vcs:Icons/SettingsGit.png");
+}

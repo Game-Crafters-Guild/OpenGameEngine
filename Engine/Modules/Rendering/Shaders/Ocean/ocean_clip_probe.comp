@@ -1,0 +1,19 @@
+#version 450
+#extension GL_GOOGLE_include_directive : require
+
+#include "Ocean/ocean_common.glsl"
+
+layout(local_size_x = 1) in;
+layout(std430, set = 0, binding = 0) buffer ClipProbe
+{
+    vec4 pointsXZ[2]; // four world XZ points, two per vec4
+    vec4 result;      // OceanSampleClip at each point
+};
+
+void main()
+{
+    // The shipped clip sample with every cascade layout bound, so the result
+    // shows which layout the clip is placed with.
+    result = vec4(OceanSampleClip(pointsXZ[0].xy), OceanSampleClip(pointsXZ[0].zw),
+                  OceanSampleClip(pointsXZ[1].xy), OceanSampleClip(pointsXZ[1].zw));
+}

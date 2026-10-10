@@ -1,0 +1,79 @@
+/* Which image each dockable panel's icon is.
+ *
+ * Sole authority for the panel icons: the dock tab reads these classes through
+ * the cascade, and the top toolbar's panel launcher — whose rows are platform
+ * menu items the cascade cannot reach — reads the same declarations back out of
+ * the loaded stylesheets. Nothing in C++ names an image file.
+ *
+ * The shared tab slot, tint and spacing live in core.css. The normalization
+ * table below compensates for transparent padding inside individual source
+ * images so every tab's painted artwork reaches the same visual size.
+ *
+ * A panel names its class in C++ via DockPanel::DeclaredTabIconClass()
+ * (a dock config may override per instance with icon="dock-foo-icon").
+ * Panels whose icon is shared with a top-toolbar button (settings-icon,
+ * film-icon, box-icon, …) point at those classes in core.css instead of
+ * restating the URL here. */
+
+.dock-assets-icon {
+	background-image: url("editor:Icons/folder.png");
+}
+
+.dock-asset-view-icon {
+	background-image: url("editor:Icons/eye.png");
+}
+
+.dock-hierarchy-icon {
+	background-image: url("editor:Icons/list.png");
+}
+
+.dock-inspector-icon {
+	background-image: url("editor:Icons/options.png");
+}
+
+.dock-scene-view-icon {
+	background-image: url("editor:Icons/sceneicon.png");
+}
+
+.dock-game-view-icon {
+	background-image: url("editor:Icons/game-controller.png");
+}
+
+.dock-ui-demo-icon {
+	background-image: url("editor:Icons/desktop.png");
+}
+
+.dock-diff-icon {
+	background-image: url("editor:Icons/codeicon.png");
+}
+
+.dock-web-icon {
+	background-image: url("editor:Icons/computer.png");
+}
+
+.dock-log-icon {
+	background-image: url("editor:Icons/DockLog.svg");
+}
+
+.dock-script-errors-icon {
+	background-image: url("editor:Icons/DockScriptErrors.svg");
+}
+
+.dock-shader-errors-icon {
+	background-image: url("editor:Icons/DockShaderErrors.svg");
+}
+
+.dock-clip-editor-icon {
+	background-image: url("editor:Icons/DockClipEditor.svg");
+}
+
+/* Primary workspace tabs read clearly from their labels alone. Keep these
+   icon mappings available to the Panels launcher, but hide the icon element
+   when the same class is mounted inside a dock tab. */
+.dock-assets-icon,
+.dock-asset-view-icon,
+.dock-hierarchy-icon,
+.dock-inspector-icon,
+.dock-scene-view-icon {
+	display: none;
+}

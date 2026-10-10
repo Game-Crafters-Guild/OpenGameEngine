@@ -1,0 +1,15 @@
+{
+  "name": "ai-assistant",
+  "version": "1.0.0",
+  "displayName": "AI Assistant",
+  "assets": "Assets/",
+  "modules": [
+    {
+      "name": "ai-assistant-editor",
+      "kind": "Editor",
+      "lang": "Cpp",
+      "root": "Editor/",
+      "prebuilt": "Binaries/Editor/"
+    }
+  ]
+}

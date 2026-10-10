@@ -1,0 +1,29 @@
+Scope the exported include root to <prefix>/include, not <prefix>/include/yoga.
+
+Yoga's install interface publishes the yoga/ header directory ITSELF as a
+public include root, so every consumer that links yoga::yogacore silently gains
+algorithm/, config/, debug/, enums/, event/, node/, numeric/ and style/ as
+top-level include prefixes. On a case-insensitive filesystem an engine module's
+own "Event/Event.h" then resolves to yoga/event/event.h whenever the module's
+include directory is searched after yoga's - and it is: the Editor's generated
+include list carries yoga at position 32 with most module include directories
+after it.
+
+Deleting the entry rather than rewriting it, because the root it was meant to
+provide is already exported and the two produced literal duplicates in
+yogaTargets.cmake: the top-level CMakeLists installs yogacore with
+INCLUDES DESTINATION ${CMAKE_INSTALL_INCLUDEDIR}, and every Yoga header includes
+its siblings as <yoga/...>, so <prefix>/include is the only root Yoga needs.
+(It was also absolute - ${CMAKE_INSTALL_PREFIX} bakes the packaging prefix into
+the exported target, which is why vcpkg's config fixup has to rewrite it.)
+
+diff --git a/yoga/CMakeLists.txt b/yoga/CMakeLists.txt
+--- a/yoga/CMakeLists.txt
++++ b/yoga/CMakeLists.txt
+@@ -37,5 +37,4 @@ endif()
+ 
+ target_include_directories(yogacore
+     PUBLIC
+-    $<BUILD_INTERFACE:${YOGA_ROOT}>
+-    $<INSTALL_INTERFACE:${CMAKE_INSTALL_PREFIX}/include/yoga>)
++    $<BUILD_INTERFACE:${YOGA_ROOT}>)

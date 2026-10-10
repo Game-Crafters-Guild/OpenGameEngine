@@ -1,0 +1,76 @@
+{
+  "name": "repro_assets_splitter_resize_loop",
+  "windowIndex": 0,
+  "minFrames": 240,
+  "probe": {
+    "gridViewUnderId": "assets-grid",
+    "scrollViewUnderId": "assets-grid",
+    "scrollbarVUnderId": "assets-grid",
+    "elementId": "assets-grid",
+    "visualPatchElementIds": { "enabled": true, "max": 16 }
+  },
+  "asserts": [
+    {
+      "kind": "elementVisible",
+      "elementId": "assets-grid",
+      "frameStart": 40,
+      "frameEnd": 200
+    },
+    {
+      "kind": "paintOffsetsMatch",
+      "elementId": "assets-grid",
+      "requiredClass": "grid-cell",
+      "frameStart": 55,
+      "frameEnd": 170,
+      "maxMismatchCount": 0
+    },
+    {
+      "kind": "layoutConverged",
+      "elementId": "assets-grid",
+      "frameStart": 170,
+      "frameEnd": 200,
+      "includeStyleDirty": false
+    },
+    {
+      "kind": "visibleTextNotFullyClipped",
+      "subtreeId": "assets-grid",
+      "scrollViewUnderId": "assets-grid",
+      "requiredClasses": ["grid-title"],
+      "frameStart": 55,
+      "frameEnd": 200,
+      "minVisiblePx": 2.0,
+      "maxChecks": 1500
+    }
+  ],
+  "events": [
+    { "frame": 2, "type": "mouseMove", "target": { "kind": "elementId", "id": "tab:Assets", "relX": 0.5, "relY": 0.5 } },
+    { "frame": 3, "type": "mouseDown", "button": 0 },
+    { "frame": 4, "type": "mouseUp", "button": 0 },
+
+    { "frame": 40, "type": "mouseMove", "target": { "kind": "elementId", "id": "assets-splitter", "relX": 0.5, "relY": 0.5 } },
+
+    { "frame": 55, "type": "mouseDown", "button": 0 },
+    { "frame": 56, "type": "mouseMove", "dx": 320.0, "dy": 0.0 },
+    { "frame": 57, "type": "mouseMove", "dx": -480.0, "dy": 0.0 },
+    { "frame": 58, "type": "mouseUp", "button": 0 },
+
+    { "frame": 70, "type": "mouseMove", "target": { "kind": "elementId", "id": "assets-splitter", "relX": 0.5, "relY": 0.5 } },
+    { "frame": 71, "type": "mouseDown", "button": 0 },
+    { "frame": 72, "type": "mouseMove", "dx": -260.0, "dy": 0.0 },
+    { "frame": 73, "type": "mouseMove", "dx": 420.0, "dy": 0.0 },
+    { "frame": 74, "type": "mouseUp", "button": 0 },
+
+    { "frame": 86, "type": "mouseMove", "target": { "kind": "elementId", "id": "assets-splitter", "relX": 0.5, "relY": 0.5 } },
+    { "frame": 87, "type": "mouseDown", "button": 0 },
+    { "frame": 88, "type": "mouseMove", "dx": 280.0, "dy": 0.0 },
+    { "frame": 89, "type": "mouseMove", "dx": -380.0, "dy": 0.0 },
+    { "frame": 90, "type": "mouseUp", "button": 0 },
+
+    { "frame": 110, "type": "mouseMove", "target": { "kind": "elementId", "id": "assets-grid", "relX": 0.5, "relY": 0.5 } },
+    { "frame": 112, "type": "scroll", "dx": 0.0, "dy": -10.0 },
+    { "frame": 116, "type": "scroll", "dx": 0.0, "dy": -10.0 },
+    { "frame": 120, "type": "scroll", "dx": 0.0, "dy": 10.0 },
+    { "frame": 124, "type": "scroll", "dx": 0.0, "dy": 10.0 }
+  ]
+}
+

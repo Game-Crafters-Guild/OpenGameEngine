@@ -1,0 +1,175 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Grass Render Modes</title>
+<style>
+  :root {
+    --bg: #11151b; --panel: #1b222c; --panel-light: #222b38; --border: #344152;
+    --text: #e5eaf0; --muted: #a4afbd; --accent: #83baff; --ok: #6bd08a; --warn: #e7c06a;
+  }
+  * { box-sizing: border-box; }
+  body {
+    background: var(--bg); color: var(--text);
+    font: 16px/1.62 -apple-system, "Segoe UI", system-ui, sans-serif;
+    max-width: 940px; margin: 40px auto; padding: 0 24px;
+  }
+  h1 { font-size: 30px; margin: 0 0 6px; }
+  h2 { font-size: 21px; margin: 44px 0 14px; padding-top: 22px; border-top: 1px solid var(--border); }
+  h3 { font-size: 16px; margin: 24px 0 8px; color: var(--accent); }
+  p.lede { color: var(--muted); font-size: 12px; letter-spacing: .05em; text-transform: uppercase; margin: 0 0 26px; }
+  code { font-family: "Cascadia Code", Consolas, monospace; font-size: 13.5px; color: var(--accent);
+         background: rgba(255,255,255,.045); border-radius: 4px; padding: 1px 5px; }
+  table { border-collapse: collapse; width: 100%; margin: 14px 0 20px; font-size: 14px; }
+  th { text-align: left; background: var(--panel-light); color: var(--muted); font-weight: 600;
+       padding: 8px 10px; border-bottom: 1px solid var(--border); }
+  td { padding: 8px 10px; border-bottom: 1px solid var(--border); vertical-align: top; }
+  tr:hover td { background: rgba(255,255,255,.025); }
+  .panel { background: var(--panel); border: 1px solid var(--border); border-left: 4px solid var(--accent);
+           border-radius: 6px; padding: 12px 16px; margin: 18px 0; }
+  .panel.ok { border-left-color: var(--ok); }
+  .panel.warn { border-left-color: var(--warn); }
+  .panel-title { font-weight: 600; margin: 0 0 6px; }
+  .panel p:last-child { margin-bottom: 0; }
+  ul { padding-left: 22px; } li { margin: 5px 0; }
+  footer { color: var(--muted); font-size: 12.5px; margin-top: 48px; padding-top: 14px;
+           border-top: 1px solid var(--border); }
+</style>
+</head>
+<body>
+
+<p class="lede">Guide &middot; terrain authoring / grass</p>
+<h1>Grass Render Modes</h1>
+<p>Grass blades resolve their alpha in one of two authored ways, <b>Dither</b> or <b>Blend</b>. Dither is
+the default and the right answer for almost all content. This page is what the choice means, when the
+other one is worth reaching for, and what the editor does when your choice cannot apply.</p>
+
+<h2>The short version</h2>
+
+<div class="panel ok">
+<p class="panel-title">Leave it on Dither.</p>
+<p>Dither writes depth, so blades sort correctly against each other and against everything else in the
+scene at any blade size, from any angle. Blend does not write depth and cannot: within a distance band
+its blades composite in placement order, which reads as a wrong occlusion order. Reach for Blend only
+for card grass whose texture alpha you want genuinely blended rather than stippled.</p>
+</div>
+
+<h2>The modes</h2>
+
+<table>
+<thead><tr><th>Authored mode</th><th>What soft alpha becomes</th><th>Depth</th><th>Blade against blade</th></tr></thead>
+<tbody>
+<tr>
+  <td><b>Dither</b> (default), on a view with MSAA</td>
+  <td>MSAA sample coverage, through alpha-to-coverage</td>
+  <td>write + test</td>
+  <td>depth-correct</td>
+</tr>
+<tr>
+  <td><b>Dither</b> (default), on a single-sample view</td>
+  <td>a screen-door discard against a static interleaved-gradient pattern</td>
+  <td>write + test</td>
+  <td>depth-correct</td>
+</tr>
+<tr>
+  <td><b>Blend</b></td>
+  <td>alpha blending</td>
+  <td>test only, no write</td>
+  <td>placement order within a distance band</td>
+</tr>
+</tbody>
+</table>
+
+<p>Alpha-to-coverage needs real samples: on a single-sample view the hardware degenerates it to a hard
+0.5 cutoff, so Dither takes the screen-door discard there instead. You do not choose between those two
+&mdash; the view's sample count does, and both are depth-correct.</p>
+
+<h3>The opaque fast path, which outranks your choice</h3>
+
+<p>A view whose grass binds nothing carrying live alpha has no soft alpha to resolve. That view draws
+grass opaque: no alpha-to-coverage, and no discard instruction at all, so the hardware can early-Z the
+blades. This covers geometric ribbon grass, which binds no texture, and card grass whose bound texture
+probes uniformly opaque.</p>
+
+<p>This is checked <b>before</b> the authored mode and overrides it, Blend included. Blending a blade
+that is opaque everywhere buys nothing back except Blend's ordering artefact, so the authored value is
+simply not consulted. The editor says so: with nothing carrying alpha, the Render Mode row shows a note
+explaining that the choice currently resolves nothing, and the row stays enabled rather than graying
+out, because the scoping rule below means your choice can still count.</p>
+
+<div class="panel warn">
+<p class="panel-title">A texture classified opaque renders solid.</p>
+<p>An alpha probe decides whether a bound texture carries alpha. Under the opaque path the card cutout
+is compiled out, so a texture that does carry soft alpha but is classified opaque renders as a solid
+card instead of having its holes punched. The probe accepts KTX2 only; for a PNG or TGA source it
+answers from the header (no alpha channel) or not at all, because the cook re-encodes to BC7 and that
+result is not a function of the source alpha.</p>
+</div>
+
+<h2>The mode is per view, not per blade or per terrain</h2>
+
+<p>Blades from every terrain share one instance buffer and one indirect draw per distance band, and
+blend-versus-depth-write is pipeline state on the draw. One draw cannot serve two pipeline classes.</p>
+
+<p>So <b>Blend requires every active grass terrain to author it</b>. If any active terrain authors
+Dither, every terrain in that view draws Dither &mdash; the depth-correct choice wins the tie. The
+reduction runs once per parameter upload over every <i>active</i> terrain in the world, not per view and
+not frustum-filtered, so a terrain no camera can currently see still counts toward the answer. That is
+why the inspector's note is scoped to every active terrain rather than to the one you have selected.</p>
+
+<p>The only genuinely per-view input is the view's color sample count, which is what splits Dither into
+its alpha-to-coverage and screen-door forms.</p>
+
+<h2>Choosing between them</h2>
+
+<h3>Geometric grass: Dither</h3>
+<p>A geometric blade is opaque everywhere. In Blend's no-depth-write bucket, "blending" such a fragment
+is a pure overwrite with a hard edge, so placement order inside a band reads as occlusion order. Dither
+is both the default and the depth-correct choice here. In practice geometric grass binds no texture at
+all, so the opaque fast path takes it before the authored mode is consulted.</p>
+
+<h3>Card grass with texture alpha: either, and Blend is the reason Blend exists</h3>
+<p>Blend keeps its authored alpha genuinely blended, at the cost of ordering within a band; the far band
+is drawn first so it can never composite over near blades, but blade against blade inside a band follows
+placement order. Dither resolves the same alpha through coverage or a screen door and stays
+depth-correct. Pick Blend when the soft edges matter more than the ordering.</p>
+
+<h3>What it costs</h3>
+<p>Dither and the opaque path write depth and get early-Z; Blend does not. Removing the discard for
+opaque grass measurably shortens the world pass, because a fragment module that carries a kill loses
+early-Z whether or not the kill is reachable. The first view to enter opaque mode compiles its own
+shader variant once per content hash per machine, then hits the disk cache. The Release measurements
+behind those statements, and the alternatives that were weighed and rejected (GPU sort, weighted blended
+order-independent transparency, z-write-only variants), are in the grass render modes design record in
+the support repository.</p>
+
+<h2>Where to author it</h2>
+
+<table>
+<thead><tr><th>Surface</th><th>How</th></tr></thead>
+<tbody>
+<tr><td>Inspector</td><td>Terrain inspector &rarr; Grass &rarr; Advanced &rarr; <b>Render Mode</b> dropdown. Its tooltip names what each mode does, and adds the "resolves nothing" sentence when nothing in the view carries alpha.</td></tr>
+<tr><td>Component field</td><td><code>TerrainGrass.RenderMode</code>, a <code>TerrainGrassRenderMode</code> &mdash; <code>Dither</code> (default) or <code>Blend</code>.</td></tr>
+<tr><td>Scene file</td><td><code>TerrainGrass.renderMode = Dither|Blend</code>. The name or the numeric value is accepted, case and quotes tolerant.</td></tr>
+<tr><td>Debug server</td><td><code>set_component TerrainGrass {"RenderMode": "Blend"}</code>. The value comes back in the component snapshot and in the per-terrain grass JSON.</td></tr>
+</tbody>
+</table>
+
+<p>The neighboring <b>Alpha Cutoff</b> row appears only while a bound texture actually carries alpha,
+so the panel never offers a cutoff that nothing would read.</p>
+
+<h2>Limits</h2>
+<ul>
+  <li>Blend's ordering within a distance band cannot be fixed by emission order. Instance order inside a
+      band comes from subgroup atomic compaction in the placement compute and is not deterministic; only
+      depth can order blades against each other, which is what Dither does.</li>
+  <li>The alpha probe's reach is narrower than it looks &mdash; see the warning above.</li>
+  <li>Grass placement is planar only. A spherical terrain sources no grass at all, so no mode applies
+      to it.</li>
+</ul>
+
+<footer>Grass render modes &middot; terrain authoring guide. The design, the evaluated alternatives and the measurement record live in the support repository.</footer>
+
+</body>
+</html>

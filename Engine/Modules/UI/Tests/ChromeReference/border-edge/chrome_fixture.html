@@ -1,0 +1,51 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<title>border-edge fractional-position fixture</title>
+<style>
+  html, body { margin: 0; padding: 0; background: #000; }
+  .case {
+    position: absolute;
+    width: 160px;
+    height: 40px;
+    background: rgba(30,30,30,1);
+    border: 1px solid rgba(255,255,255,1);
+    box-sizing: border-box;
+  }
+  /* Vertical sweep of fractional x offsets. Each row: left = 20 + phase,
+     width = 160 (integer), so left edge phase == right edge phase.
+     The .fw rows add a fractional width (160.5) so the two edges carry
+     DIFFERENT device-pixel phases — the toolbar case. */
+  #c000 { left: 20px;    top: 20px;  }
+  #c025 { left: 20.25px; top: 80px;  }
+  #c050 { left: 20.5px;  top: 140px; }
+  #c075 { left: 20.75px; top: 200px; }
+  #fw000 { left: 20px;    top: 260px; width: 160.5px; }
+  #fw025 { left: 20.25px; top: 320px; width: 160.5px; }
+  #fw050 { left: 20.5px;  top: 380px; width: 160.5px; }
+  #fw075 { left: 20.75px; top: 440px; width: 160.5px; }
+  /* Rounded variant matching the scene toolbar (radius 6, alpha border on
+     alpha bg) to confirm radius does not change straight-edge snapping. */
+  .toolbarlike {
+    background: rgba(30,30,30,0.85);
+    border: 1px solid rgba(255,255,255,0.28);
+    border-radius: 6px;
+  }
+  #tb050 { left: 220.5px; top: 20px; }
+  #tb033 { left: 220.33px; top: 80px; width: 160.29px; }
+</style>
+</head>
+<body>
+  <div class="case" id="c000"></div>
+  <div class="case" id="c025"></div>
+  <div class="case" id="c050"></div>
+  <div class="case" id="c075"></div>
+  <div class="case" id="fw000"></div>
+  <div class="case" id="fw025"></div>
+  <div class="case" id="fw050"></div>
+  <div class="case" id="fw075"></div>
+  <div class="case toolbarlike" id="tb050"></div>
+  <div class="case toolbarlike" id="tb033"></div>
+</body>
+</html>

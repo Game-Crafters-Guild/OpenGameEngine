@@ -1,0 +1,18 @@
+{
+  "schemaVersion": 3,
+  "materialName": "OpenPBR - Clear Glass",
+  "lightingModel": "StandardPBR",
+  "alphaMode": "Opaque",
+  "doubleSided": false,
+  "surfaceShader": "Surfaces/standard_pbr.glsl",
+  "properties": {
+    "baseColor": [1.0, 1.0, 1.0, 1.0],
+    "metallic": 0.0,
+    "roughness": 0.04,
+    "enableTransmission": true,
+    "transmissionColor": [0.9, 0.97, 0.95],
+    "transmissionWeight": 1.0,
+    "specularIor": 1.5
+  },
+  "textures": {}
+}

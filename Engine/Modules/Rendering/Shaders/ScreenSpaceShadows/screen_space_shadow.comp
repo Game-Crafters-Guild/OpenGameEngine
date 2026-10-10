@@ -1,0 +1,147 @@
+#version 460
+
+// Copyright 2023 Sony Interactive Entertainment.
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//     http://www.apache.org/licenses/LICENSE-2.0
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+//
+// Modified GLSL port of Bend's public implementation; see
+// ThirdParty/BendScreenSpaceShadows/UPSTREAM.md for provenance and changes.
+// One logical 64-thread ray group may span multiple hardware subgroups.
+layout(local_size_x = 64, local_size_y = 1, local_size_z = 1) in;
+layout(set = 0, binding = 0) uniform sampler2D uDepth;
+layout(set = 0, binding = 1, std430) buffer Visibility { uint visibility[]; };
+layout(set = 0, binding = 2, std140) uniform ScreenSpaceShadowParams
+{
+    vec4 uLight; // pixel xy, projected z, sign of clip w
+    ivec4 uWave; // dispatch offset xy, viewport width/height zw
+    vec4 uSettings; // thickness, bilinear threshold, contrast; w unused
+};
+#ifdef GE_SSS_TEST_COVERAGE
+layout(set = 0, binding = 3, std430) buffer Coverage { uint writes[]; };
+#endif
+shared float rayDepth[128];
+shared float raySurfaceDepth[128];
+
+bool InBounds(ivec2 p)
+{
+    return all(greaterThanEqual(p, ivec2(0))) && all(lessThan(p, uWave.zw));
+}
+float ReadDepth(ivec2 p)
+{
+    // Explicit far border: clamping to an edge texel creates offscreen blockers.
+    return InBounds(p) ? texelFetch(uDepth, p, 0).r : 0.0;
+}
+void main()
+{
+    int lane = int(gl_LocalInvocationIndex);
+    ivec2 xy = ivec2(gl_WorkGroupID.yz) * 64 + uWave.xy;
+    vec2 lightCenter = floor(uLight.xy) + 0.5;
+    vec2 lightFraction = uLight.xy - lightCenter;
+    ivec2 signs = sign(xy);
+    bool horizontal = abs(xy.x + signs.y) < abs(xy.y - signs.x);
+    ivec2 axis = horizontal ? ivec2(signs.y, 0) : ivec2(0, -signs.x);
+    xy += axis * int(gl_WorkGroupID.x);
+    bool majorX = abs(xy.x) > abs(xy.y);
+    float major = float(majorX ? xy.x : xy.y);
+    float fraction = majorX ? lightFraction.x : lightFraction.y;
+    fraction = major > 0.0 ? -fraction : fraction;
+    float extent = abs(major) + fraction;
+    // Keep every lane participating in the barrier, even at the light center.
+    float safeExtent = abs(extent) < 1e-6 ? 1e-6 : extent;
+    vec2 start = vec2(xy) + lightCenter;
+    // Evaluate the short delta directly: lerping to a far-offscreen light and
+    // subtracting it again loses subpixel precision through cancellation.
+    vec2 delta = (start - uLight.xy) * (64.0 / safeExtent);
+    float step = float(lane ^ (uLight.w > 0.0 ? 0 : 63));
+    vec2 pixel = start - delta * (step / 64.0);
+    float distance = extent - step;
+    float direction = -uLight.w;
+    ivec2 outputPixel = ivec2(floor(pixel));
+    float receiverDepth = ReadDepth(outputPixel);
+    float traceReceiverDepth = receiverDepth;
+
+    for (int i = 0; i < 2; ++i)
+    {
+        ivec2 p = ivec2(floor(pixel));
+        float minor = majorX ? pixel.y : pixel.x;
+        int bias = fract(minor) > 0.5 ? 1 : -1;
+        ivec2 offset = majorX ? ivec2(0, bias) : ivec2(bias, 0);
+        float a = ReadDepth(p);
+        float b = ReadDepth(p + offset);
+        bool edge = abs(a - b) > a * uSettings.y;
+        // The receiver starts at its own point depth. Any lane in this
+        // wavefront may interpolate toward the minor-axis neighbor, so the
+        // depth this pixel CASTS from is pushed to the farther of the pair
+        // (reverse-Z: subtract) and an edge pixel casts from its own depth.
+        float shadowDepth = edge ? a : a - abs(a - b);
+        if (i == 0) traceReceiverDepth = a;
+        float sampleDistance = distance + float(64 * i) * direction;
+        raySurfaceDepth[lane + 64 * i] = a;
+        rayDepth[lane + 64 * i] = a <= 0.0 || sampleDistance <= 1e-6
+            ? 1e10 : (shadowDepth - uLight.z) / sampleDistance;
+        pixel += delta * direction;
+    }
+    barrier();
+    if (!InBounds(outputPixel))
+        return;
+#ifdef GE_SSS_TEST_COVERAGE
+    atomicAdd(writes[outputPixel.y * uWave.zw.x + outputPixel.x], 1u);
+#endif
+    float result = 1.0;
+    if (receiverDepth > 0.0 && distance > 1e-6)
+    {
+        float scale = min(distance + direction, 1.0 / uSettings.x) * distance / receiverDepth;
+        float reference = (traceReceiverDepth - uLight.z) / distance * scale + 1.0;
+        vec4 softShadow = vec4(1.0);
+        float hardShadow = 1.0;
+        for (int i = 0; i < 60; ++i)
+        {
+            int index = lane + 1 + i;
+            float deltaA = reference - rayDepth[index] * scale;
+            float difference = abs(deltaA);
+            // A sloping blocker can cross the ray between samples without
+            // either endpoint entering the thin hit window. Test that segment
+            // too, but never bridge a depth discontinuity or the far border.
+            float depthA = raySurfaceDepth[index];
+            float depthB = raySurfaceDepth[index + 1];
+            if (i < 59 && depthA > 0.0 && depthB > 0.0 &&
+                abs(depthA - depthB) <= min(depthA, depthB) * uSettings.y &&
+                abs(rayDepth[index]) < 1e9 && abs(rayDepth[index + 1]) < 1e9)
+            {
+                float deltaB = reference - rayDepth[index + 1] * scale;
+                float segmentDistance = deltaA * deltaB <= 0.0 ? 0.0 : min(abs(deltaA), abs(deltaB));
+                difference = min(difference, segmentDistance);
+            }
+            if (i < 4)
+                hardShadow = min(hardShadow, difference);
+            else
+            {
+                float fade = i >= 52 ? float(i + 1 - 52) / 9.0 * 0.75 : 0.0;
+                softShadow[i & 3] = min(softShadow[i & 3], difference + fade);
+            }
+        }
+        softShadow = clamp(softShadow * uSettings.z + (1.0 - uSettings.z), 0.0, 1.0);
+        hardShadow = clamp(hardShadow * uSettings.z + (1.0 - uSettings.z), 0.0, 1.0);
+        // Opaque blockers use the union of the four interleaved sample lanes.
+        // Averaging them here makes a thin depth crossing partly transparent,
+        // leaving a lighter ring next to the fully shadowed cascade footprint.
+        // The depth-aware resolve provides spatial antialiasing once, after
+        // the opaque visibility has been established.
+        result = min(hardShadow, min(min(softShadow.x, softShadow.y),
+                                     min(softShadow.z, softShadow.w)));
+        if ((floatBitsToUint(result) & 0x7f800000u) == 0x7f800000u)
+            result = 1.0;
+    }
+    // Radial rays overlap near the light. Buffer atomics are portable across
+    // the native Metal and Vulkan backends; image atomics require extra Metal
+    // backing storage. The final compute resolve produces the sampled texture.
+    atomicMin(visibility[outputPixel.y * uWave.z + outputPixel.x],
+              uint(round(clamp(result, 0.0, 1.0) * 255.0)));
+}

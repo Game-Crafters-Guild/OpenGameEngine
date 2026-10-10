@@ -1,0 +1,15 @@
+---
+# Based on LLVM style with custom indentation
+BasedOnStyle: LLVM
+
+# Indentation settings
+IndentWidth: 4
+UseTab: Never
+
+# Common formatting options
+ColumnLimit: 0
+PointerAlignment: Left
+BreakBeforeBraces: Allman
+AllowShortFunctionsOnASingleLine: Inline
+AllowShortIfStatementsOnASingleLine: Never
+AllowShortLoopsOnASingleLine: false

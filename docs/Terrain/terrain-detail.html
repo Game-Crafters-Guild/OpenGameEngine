@@ -1,0 +1,131 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Terrain Detail</title>
+<style>
+  :root {
+    --bg: #11151b; --panel: #1b222c; --panel-light: #222b38; --border: #344152;
+    --text: #e5eaf0; --muted: #a4afbd; --accent: #83baff; --ok: #6bd08a; --warn: #e7c06a;
+  }
+  * { box-sizing: border-box; }
+  body {
+    background: var(--bg); color: var(--text);
+    font: 16px/1.62 -apple-system, "Segoe UI", system-ui, sans-serif;
+    max-width: 940px; margin: 40px auto; padding: 0 24px;
+  }
+  h1 { font-size: 30px; margin: 0 0 6px; }
+  h2 { font-size: 21px; margin: 44px 0 14px; padding-top: 22px; border-top: 1px solid var(--border); }
+  h3 { font-size: 16px; margin: 24px 0 8px; color: var(--accent); }
+  p.lede { color: var(--muted); font-size: 12px; letter-spacing: .05em; text-transform: uppercase; margin: 0 0 26px; }
+  code { font-family: "Cascadia Code", Consolas, monospace; font-size: 13.5px; color: var(--accent);
+         background: rgba(255,255,255,.045); border-radius: 4px; padding: 1px 5px; }
+  table { border-collapse: collapse; width: 100%; margin: 14px 0 20px; font-size: 14px; }
+  th { text-align: left; background: var(--panel-light); color: var(--muted); font-weight: 600;
+       padding: 8px 10px; border-bottom: 1px solid var(--border); }
+  td { padding: 8px 10px; border-bottom: 1px solid var(--border); vertical-align: top; }
+  tr:hover td { background: rgba(255,255,255,.025); }
+  .panel { background: var(--panel); border: 1px solid var(--border); border-left: 4px solid var(--accent);
+           border-radius: 6px; padding: 12px 16px; margin: 18px 0; }
+  .panel.ok { border-left-color: var(--ok); }
+  .panel.warn { border-left-color: var(--warn); }
+  .panel-title { font-weight: 600; margin: 0 0 6px; }
+  .panel p:last-child { margin-bottom: 0; }
+  ul { padding-left: 22px; } li { margin: 5px 0; }
+  footer { color: var(--muted); font-size: 12.5px; margin-top: 48px; padding-top: 14px;
+           border-top: 1px solid var(--border); }
+</style>
+</head>
+<body>
+
+<p class="lede">Guide &middot; terrain authoring / level of detail</p>
+<h1>Terrain Detail</h1>
+<p>A terrain is drawn as one adaptive mesh: triangles are small near the camera and grow with distance,
+and the mesh re-adapts every frame as the camera moves. Two things decide how fine it is. Near the camera
+of a heightfield terrain, the height data's own spacing sets the smallest triangle. Farther away,
+<b>Target Pixel Error</b> sets how long a triangle edge may be on screen. This page explains both and
+what each one costs.</p>
+
+<h2>The short version</h2>
+
+<div class="panel ok">
+<p class="panel-title">Leave Target Pixel Error at 11 and choose detail with Samples Per Meter.</p>
+<p>The default draws distant ground with edges of about 11 pixels at 1080 rows, and draws the same
+triangle count at any screen resolution of the same aspect ratio. For finer ground near the camera on a
+heightfield terrain, raise <b>Samples Per Meter</b>: the terrain then holds more height data, and the
+mesh near the camera follows it sample for sample.</p>
+</div>
+
+<h2>Near the camera: the height data</h2>
+<p>This section applies to heightfield terrains. A planet has no height grid and no Samples Per Meter: it
+refines procedurally near the camera, down to a depth limit that follows its radius, and Target Pixel
+Error applies to it the same way.</p>
+<p>The terrain's height data is a grid of samples. Its spacing follows <b>Size</b> and
+<b>Samples Per Meter</b>, rounded up so that each axis holds 64 &times; 2<sup>k</sup> intervals. A
+576 m terrain at 1 sample per meter therefore holds 1,024 intervals, 0.5625 m apart. The mesh refines
+down to exactly that spacing and no further: where the ground has relief, a vertex sits on every sample
+near the camera. Smaller
+triangles would only interpolate the same samples, so they would add cost and no shape.</p>
+<ul>
+  <li>Fine relief (ruts, ridges, a path's edge) needs samples at least twice as dense as the feature.
+      A 1 m wide rut needs about 2 samples per meter.</li>
+  <li>Doubling Samples Per Meter quadruples the height data's memory and the triangles near the
+      camera, where the mesh reaches the data's spacing.</li>
+  <li>The surface's lighting comes from a normal map at the same resolution, per pixel, so smooth
+      ground looks smooth even where its triangles are large on screen.</li>
+</ul>
+
+<h2>Farther away: Target Pixel Error</h2>
+<p><b>Target Pixel Error</b> (Terrain component, Advanced) is the longest edge a triangle may have on
+screen, measured in pixels of a 1080-row view. A triangle whose edge projects longer than the target is
+split; a split pair is merged back once the edge it was split from projects shorter than half
+of the target.</p>
+
+<h3>It follows the view's height</h3>
+<p>The target is relative to resolution. In a view <i>H</i> rows tall, the edge limit is
+<code>target &times; H / 1080</code> pixels. A 2160-row view uses 22-pixel edges at the default, so it
+draws the same triangles as a 1080-row view of the same aspect ratio, and the terrain's memory does not
+grow with the display.
+The same holds for a reduced render scale: the triangle count follows the camera and the ground, not
+the pixel count.</p>
+
+<table>
+<thead><tr><th>Target</th><th>Edge at 1080 rows</th><th>Edge at 2160 rows</th><th>Distant triangles, relative to 11</th></tr></thead>
+<tbody>
+<tr><td>8</td><td>8 px</td><td>16 px</td><td>about 1.9&times;</td></tr>
+<tr><td><b>11 (default)</b></td><td>11 px</td><td>22 px</td><td>1&times;</td></tr>
+<tr><td>16</td><td>16 px</td><td>32 px</td><td>about 0.5&times;</td></tr>
+</tbody>
+</table>
+<h3>Flat ground stays coarse</h3>
+<p>On a heightfield terrain a triangle also splits only while the heights under it vary by more than
+about one pixel on screen, measured at the triangle's nearest point to the camera. Flat ground therefore
+stays as a few large triangles at any distance, even right under the camera, and relief keeps every
+triangle the target and the data allow. Shading comes from the per-pixel normal map. A coarse triangle
+can sit up to that pixel's worth of height off the data, so under grazing light a long shadow's edge
+on it can move by a pixel or two. The rule does not apply to planets or to terrains streamed through
+the tile atlas (the largest tiled terrains); they refine on the edge length alone.</p>
+
+<p>The distant triangle count goes as about 1/target<sup>2</sup>. Near the camera the count does not
+change with the target on a heightfield terrain, because the triangles there already sit at the data's
+spacing.</p>
+
+<div class="panel warn">
+<p class="panel-title">Lowering the target is the expensive direction.</p>
+<p>A lower target refines all distant ground with relief, including gentle slopes where the extra
+triangles change little that is visible. On a large terrain at a low target the mesh can reach its capacity; it then coarsens
+the largest triangles first, so distant ground ends up coarser than the target asks.</p>
+</div>
+
+<h2>Changelog</h2>
+<ul>
+  <li>2026-10-03: flat ground stays coarse: a triangle splits only while its heights vary by more than
+      about a pixel on screen.</li>
+  <li>2026-10-03: first version. Target Pixel Error becomes relative to a 1080-row view, with a default
+      of 11; the mesh near the camera reaches the height data's provisioned spacing.</li>
+</ul>
+
+<footer>Terrain Detail &middot; engine documentation &middot; 2026-10-03</footer>
+</body>
+</html>

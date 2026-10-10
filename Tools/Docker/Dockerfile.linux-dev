@@ -1,0 +1,38 @@
+FROM mcr.microsoft.com/dotnet/sdk:10.0
+
+# Linux development image for building the GameEngine repo with CMake + Ninja.
+# This image is intended to be used from Windows via a bind mount of the
+# repository; it does not copy the source into the image.
+
+ENV DEBIAN_FRONTEND=noninteractive
+
+RUN apt-get update && \
+	apt-get install -y --no-install-recommends \
+	    build-essential \
+	    cmake \
+	    ninja-build \
+	    pkg-config \
+	    python3 \
+		    autoconf \
+		    autoconf-archive \
+		    automake \
+		    libtool \
+	    git \
+	    curl \
+	    zip \
+	    unzip \
+	    # GLFW / X11 dev dependencies used by the Editor
+	    libxinerama-dev \
+	    libxcursor-dev \
+	    xorg-dev \
+		    libglu1-mesa-dev \
+		    libwayland-dev \
+	&& rm -rf /var/lib/apt/lists/*
+
+WORKDIR /src
+
+# vcpkg will be discovered automatically by cmake/Dependencies.cmake when
+# configuring the project. We expect the repo to be bind-mounted at /src so
+# that /src/dependencies/vcpkg is available inside the container.
+
+CMD ["bash", "-lc", "echo 'GameEngine Linux dev container ready. Mount the repo at /src and run cmake/ninja as documented.'"]

@@ -1,0 +1,12 @@
+#version 450
+
+// SDSM receiver reduce over a multisampled depth: reads sample 0, the sample
+// every single-sample reader of the view depth takes (depth_resolve.comp). The
+// body is Includes/shadow_receiver_reduce.glsl; depth_reduce.comp is the
+// single-sample twin.
+
+layout(set = 0, binding = 0) uniform sampler2DMS DepthTex;
+
+#define GE_RECEIVER_DEPTH(pixel) texelFetch(DepthTex, (pixel), 0).r
+
+#include "Includes/shadow_receiver_reduce.glsl"

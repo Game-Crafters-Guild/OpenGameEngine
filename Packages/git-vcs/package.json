@@ -1,0 +1,15 @@
+{
+  "name": "git-vcs",
+  "version": "1.0.0",
+  "displayName": "Git Version Control",
+  "assets": "Assets/",
+  "modules": [
+    {
+      "name": "git-vcs-editor",
+      "kind": "Editor",
+      "lang": "Cpp",
+      "root": "Editor/",
+      "prebuilt": "Binaries/"
+    }
+  ]
+}

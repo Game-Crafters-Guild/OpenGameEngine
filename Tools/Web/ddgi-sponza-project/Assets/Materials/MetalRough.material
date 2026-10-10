@@ -1,0 +1,14 @@
+{
+  "schemaVersion": 3,
+  "materialName": "MetalRough",
+  "lightingModel": "StandardPBR",
+  "alphaMode": "Opaque",
+  "doubleSided": false,
+  "surfaceShader": "Surfaces/standard_pbr.glsl",
+  "properties": {
+    "baseColor": [0.95, 0.94, 0.92, 1.0],
+    "metallic": 1.0,
+    "roughness": 0.7
+  },
+  "textures": {}
+}

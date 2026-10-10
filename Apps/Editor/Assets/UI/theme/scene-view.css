@@ -1,0 +1,376 @@
+/* ======================================
+   SceneView root & Viewport
+   ====================================== */
+/* SceneViewPanel binds "children-only" but root classes are applied by UIHotReload. */
+.sceneview-panel {
+    display: flex;
+    flex-direction: column;
+    height: 100%;
+    width: 100%;
+    /* The plate behind the viewport, seen through its rounded corners. It wears
+       the toolbar's color so the corners read as the toolbar continuing under
+       the view rather than a darker sheet showing through. */
+    background-color: var(--ui_color_bg_toolbar);
+    position: relative;
+    overflow: visible;
+}
+
+.scene-viewport-host {
+    display: flex;
+    flex: 1;
+    flex-grow: 1;
+    position: relative;
+    min-width: 0;
+    min-height: 0;
+    background-color: var(--ui_color_bg_toolbar);
+    overflow: hidden;
+}
+
+.scene-viewport-host.quad-layout {
+    display: block;
+}
+
+.scene-viewport {
+    display: flex;
+    flex: 1;
+    flex-grow: 1;
+    position: relative;
+    min-width: 0;
+    min-height: 0;
+
+    background-image: engine("scene_main");
+    background-size: 100% 100%;
+    background-position: center;
+    background-repeat: no-repeat;
+    /* All four corners match. The leaf rounds its own bottom, but the top sits
+       under the toolbar where the leaf is square, so the viewport carries the
+       radius itself to keep the four the same. Keep in step with .dock-content
+       in theme/core.css. */
+    border-radius: 5px;
+    overflow: hidden;
+}
+
+/* Quad slots tile the panel: the block as a whole gets four rounded corners, one
+   per outside corner, and every edge where two panes meet stays square. */
+.scene-viewport-host.quad-layout .scene-viewport-slot {
+    position: absolute;
+    flex: none;
+    border-radius: 0;
+}
+
+.scene-viewport-host.quad-layout .quad-top-left {
+    border-radius: 5px 0 0 0;
+}
+
+.scene-viewport-host.quad-layout .quad-top-right {
+    border-radius: 0 5px 0 0;
+}
+
+.scene-viewport-host.quad-layout .quad-bottom-left {
+    border-radius: 0 0 0 5px;
+}
+
+.scene-viewport-host.quad-layout .quad-bottom-right {
+    border-radius: 0 0 5px 0;
+}
+
+.scene-quad-split-handle {
+    position: absolute;
+    z-index: 90;
+    background-color: transparent;
+    pointer-events: auto;
+}
+
+.scene-quad-split-line {
+    position: absolute;
+    background-color: rgba(98, 183, 255, 0.35);
+    pointer-events: none;
+}
+
+.scene-quad-split-handle:hover .scene-quad-split-line {
+    background-color: rgba(98, 183, 255, 0.75);
+}
+
+.scene-quad-split-line-vertical {
+    top: 0;
+    width: 2px;
+    height: 100%;
+}
+
+.scene-quad-split-line-horizontal {
+    left: 0;
+    width: 100%;
+    height: 2px;
+}
+
+.scene-quad-split-vertical {
+    top: 0;
+    height: 100%;
+    cursor: col-resize;
+}
+
+.scene-quad-split-horizontal {
+    left: 0;
+    width: 100%;
+    cursor: row-resize;
+}
+
+.scene-viewport-slot.hidden {
+    display: none;
+}
+
+.scene-viewport-slot.quad-collapsed {
+    pointer-events: none;
+}
+
+.scene-viewport-slot.active-viewport {
+    z-index: 2;
+}
+
+.scene-viewport-active-outline {
+    position: absolute;
+    left: 0;
+    top: 0;
+    right: 0;
+    bottom: 0;
+    width: 100%;
+    height: 100%;
+    pointer-events: none;
+    z-index: 75;
+    border-style: solid;
+    border-width: 0;
+    border-color: transparent;
+    box-shadow: none;
+}
+
+.scene-viewport-host.quad-layout .scene-viewport-slot.active-viewport .scene-viewport-active-outline {
+    border-width: 2px;
+    border-color: #62b7ff;
+    box-shadow: inset 0 0 0 1px rgba(98, 183, 255, 0.55);
+}
+
+.scene-viewport-label {
+    position: absolute;
+    right: 14px;
+    bottom: 14px;
+    min-width: 48px;
+    padding: 3px 7px;
+    color: #ffffff;
+    background-color: rgba(0, 0, 0, 0.28);
+    font-size: 11px;
+    font-family: var(--ui_font_family);
+    line-height: normal;
+    border-radius: 4px;
+    text-align: center;
+    white-space: nowrap;
+    pointer-events: none;
+    z-index: 40;
+}
+
+.scene-view-hdr-test-pattern-overlay {
+    position: absolute;
+    left: 0;
+    top: 0;
+    right: 0;
+    bottom: 0;
+    width: 100%;
+    height: 100%;
+    display: none;
+    pointer-events: none;
+    z-index: 10000;
+    background-size: cover;
+    background-position: center;
+    background-repeat: no-repeat;
+}
+
+.scene-view-measure-overlay {
+    position: absolute;
+    left: 0;
+    top: 0;
+    right: 0;
+    bottom: 0;
+    width: 100%;
+    height: 100%;
+    pointer-events: none;
+    z-index: 70;
+}
+
+.scene-view-measure-overlay.hidden {
+    display: none;
+}
+
+/* Hover outline label: centered pill when an entity is hovered in the scene view. */
+.scene-view-hover-pill {
+    position: absolute;
+    max-width: min(320px, 70vw);
+    padding: 5px 14px;
+    background-color: rgba(0, 0, 0, 0.59);
+    color: #f0f0f0;
+    font-size: 14px;
+    font-family: var(--ui_font_family);
+    font-weight: 500;
+    line-height: normal;
+    border-radius: 999px;
+    text-align: center;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    pointer-events: none;
+}
+
+/* ======================================
+   Toolbar & it's widgets
+   ====================================== */
+.sceneview-toolbar {
+    display: flex;
+    align-items: center;
+    padding: 0 8px;
+    height: 36px;
+    min-height: 32px;
+    background-color: #252525; /* same as panel: ui_color_bg_panel */
+    flex-shrink: 0;
+    gap: 8px; /* space between toolboxes */
+    position: relative;
+}
+
+/* ======================================
+   Camera Bookmarks Widget
+   ====================================== */
+.camera-bookmarks {
+    display: flex;
+    flex-direction: row;
+    align-items: center;
+    gap: 4px;
+    padding-right: 8px;
+}
+
+.camera-bookmarks-row {
+    display: flex;
+    flex-direction: row;
+    align-items: center;
+    gap: 4px;
+
+    --camera-bookmark-idle-opacity: 0.24;
+    --camera-bookmark-active: #A8A8A8;
+}
+
+/* Override default button/icon-button styling - use parent scope for higher specificity */
+.camera-bookmarks-row .camera-bookmarks-slot,
+.camera-bookmarks-row button.camera-bookmarks-slot {
+    width: 22px;
+    height: 22px;
+    min-width: 22px;
+    min-height: 22px;
+    padding: 0;
+    font-size: var(--ui_font_size_medium);
+    font-weight: 500;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border-radius: var(--ui_radius_sm);
+    background-color: #2f2f2f;
+    color: #FFFFFF;
+    opacity: var(--camera-bookmark-idle-opacity);
+    line-height: normal;
+    text-align: center;
+    vertical-align: middle;
+    appearance: none;
+    -webkit-appearance: none;
+    border: 2px solid #FFFFFF;
+}
+
+.camera-bookmarks-row .camera-bookmarks-slot.active,
+.camera-bookmarks-row button.camera-bookmarks-slot.active {
+    background-color: #242424;
+    border-color: var(--camera-bookmark-active);
+    color: var(--camera-bookmark-active);
+    opacity: 1.0;
+}
+
+/* Hover rules come after .active so hover feedback wins on both states. */
+.camera-bookmarks-row .camera-bookmarks-slot:hover,
+.camera-bookmarks-row button.camera-bookmarks-slot:hover,
+.camera-bookmarks-row .camera-bookmarks-slot.active:hover,
+.camera-bookmarks-row button.camera-bookmarks-slot.active:hover {
+    background-color: #3a3a3a;
+    border-color: #F2F2F2;
+    color: #F2F2F2;
+    opacity: 1.0;
+}
+
+/* Camera bookmark icon button (always visible) - do not override; keep 26px */
+.camera-bookmarks-row .camera-bookmarks-slot.cambookmark-icon,
+.camera-bookmarks-row button.camera-bookmarks-slot.cambookmark-icon {
+    background-image: url("editor:Icons/cambookmark.png");
+    background-size: 26px 26px;
+    background-repeat: no-repeat;
+    background-position: center;
+    background-color: transparent;
+    border: none;
+    border-width: 0px;
+    width: 26px;
+    height: 26px;
+    min-width: 26px;
+    min-height: 26px;
+    padding: 0px;
+    opacity: var(--camera-bookmark-idle-opacity);
+}
+
+.camera-bookmarks-row .camera-bookmarks-slot.cambookmark-icon.active,
+.camera-bookmarks-row button.camera-bookmarks-slot.cambookmark-icon.active {
+    background-color: transparent;
+    border: none;
+    opacity: 0.40;
+}
+
+/* Hover rules come after .active so hover feedback wins on both states. */
+.camera-bookmarks-row .camera-bookmarks-slot.cambookmark-icon:hover,
+.camera-bookmarks-row button.camera-bookmarks-slot.cambookmark-icon:hover,
+.camera-bookmarks-row .camera-bookmarks-slot.cambookmark-icon.active:hover,
+.camera-bookmarks-row button.camera-bookmarks-slot.cambookmark-icon.active:hover {
+    background-color: transparent;
+    border: none;
+    opacity: 1.0;
+}
+
+.camera-bookmarks-preview {
+    position: absolute;
+    width: 128px;
+    height: 72px;
+
+    background-color: #444;
+    border-radius: 12px;
+
+    overflow: hidden;
+    border: 2px solid #8D8D8D;
+
+    pointer-events: none;
+    visibility: hidden;
+    z-index: 10002;
+}
+
+.camera-bookmarks-preview-image {
+    width: 100%;
+    height: 100%;
+    min-width: 128px;
+    min-height: 72px;
+    background-image: engine("editor_camera_bookmark_preview");
+    background-size: contain;
+    background-position: center;
+    background-repeat: no-repeat;
+}
+
+.camera-bookmarks-preview.visible { visibility: visible; }
+
+/* Plus button in camera bookmarks - inherit layout plus-icon style */
+.camera-bookmarks-row .plus-icon,
+.camera-bookmarks-row .icon-button.plus-icon {
+    background-color: transparent;
+    border: none;
+}
+
+.camera-bookmarks-row .plus-icon:hover,
+.camera-bookmarks-row .icon-button.plus-icon:hover {
+    opacity: 1.0;
+    background-color: transparent;
+}

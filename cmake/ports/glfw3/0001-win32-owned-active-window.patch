@@ -1,0 +1,20 @@
+diff --git a/src/win32_window.c b/src/win32_window.c
+--- a/src/win32_window.c
++++ b/src/win32_window.c
+@@ -2125,7 +2125,15 @@ void _glfwPollEventsWin32(void)
+     handle = GetActiveWindow();
+     if (handle)
+     {
+-        window = GetPropW(handle, L"GLFW");
++        // Attached input queues can expose a window from another process or
++        // GLFW instance.  Its "GLFW" property is not a pointer we may use.
++        // Resolve the native handle through this instance's owned windows.
++        for (window = _glfw.windowListHead;  window;  window = window->next)
++        {
++            if (window->win32.handle == handle)
++                break;
++        }
++
+         if (window)
+         {
+             int i;

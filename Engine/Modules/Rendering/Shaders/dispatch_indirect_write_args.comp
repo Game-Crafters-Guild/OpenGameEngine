@@ -1,0 +1,20 @@
+#version 450
+
+#include "Includes/storage_access.glsl"
+
+// F1 DispatchIndirect test — kernel A.
+// Writes a VkDispatchIndirectCommand (three tightly packed u32 workgroup
+// counts) so a following DispatchIndirect consumes {2,1,1}. Proving the args
+// come from GPU-written memory (not a CPU-side constant) is the whole point of
+// the indirect path.
+layout(local_size_x = 1, local_size_y = 1, local_size_z = 1) in;
+
+layout(set = 0, binding = 0, std430) restrict GE_STORAGE_WRITEONLY buffer ArgsBuffer {
+    uint GroupCounts[]; // [groupCountX, groupCountY, groupCountZ]
+};
+
+void main() {
+    GroupCounts[0] = 2u; // groupCountX -> expect 2 workgroups
+    GroupCounts[1] = 1u;
+    GroupCounts[2] = 1u;
+}

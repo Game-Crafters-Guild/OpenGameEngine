@@ -1,0 +1,77 @@
+#version 450
+// The screen-pixel floor is the compat profile's; this shader tests it on the desktop compiler.
+#define GE_SHADOW_FILTER_FLOOR 1
+#include "Includes/shadow_distance_fade.glsl"
+#include "Includes/shadow_filter.glsl"
+
+layout(local_size_x = 64) in;
+layout(set = 0, binding = 0) uniform sampler2DArrayShadow uShadow;
+struct Query
+{
+    vec4 uvDepthLayer;
+    vec4 bias; // authored world cap, world/texel, reference world/texel, softness
+    vec4 control; // quality, cosine, max penumbra, receiver-plane toggle
+    vec4 planeDx; // UV/depth derivative, expected dz/du
+    vec4 planeDy; // UV/depth derivative, expected dz/dv
+    vec4 fadeDepth; // linear depth, max shadow distance, ranged (cascade) term, terrain term
+    vec4 fadeControl; // authored fade fraction, reserved
+    vec4 footprintDx; // shadow-UV change per screen pixel along x, disk radius (texels), taps
+    vec4 footprintDy; // shadow-UV change per screen pixel along y, receiver depth change per pixel along x and y
+};
+layout(std430, set = 0, binding = 1) readonly buffer Queries { Query queries[]; };
+struct Result
+{
+    vec4 filtering; // filtered, reference, bias, receiver-plane gradient error
+    vec4 fade; // distance fade, the ranged and terrain terms joined after it
+    vec4 footprint; // floored disk radius (texels), the disk kernel's visibility at that radius, floor binds
+};
+layout(std430, set = 0, binding = 2) writeonly buffer Results { Result results[]; };
+
+void main()
+{
+    uint index = gl_GlobalInvocationID.x;
+    if (index >= queries.length())
+        return;
+    Query q = queries[index];
+    vec2 uv = q.uvDepthLayer.xy;
+    float depth = q.uvDepthLayer.z;
+    float layer = q.uvDepthLayer.w;
+    float filtered = GE_ShadowPcf5x5(uShadow, uv, layer, depth);
+
+    // Independent reference: the unoptimized 25-sample convolution at the
+    // original UV. This also checks hardware border and reverse-Z semantics.
+    const float kernel[5] = float[5](1.0, 4.0, 6.0, 4.0, 1.0);
+    vec2 texel = 1.0 / vec2(textureSize(uShadow, 0).xy);
+    float reference = 0.0;
+    for (int y = 0; y < 5; ++y)
+        for (int x = 0; x < 5; ++x)
+            reference += kernel[x] * kernel[y] * texture(uShadow,
+                vec4(uv + vec2(x - 2, y - 2) * texel, layer, depth));
+    float bias = GE_ShadowNormalBiasWorld(q.bias.x, q.bias.y, q.bias.z,
+        int(q.control.x), q.bias.w, q.control.y, q.control.z, q.control.w > 0.5, 0.0);
+    vec2 gradient = GE_ShadowReceiverPlaneGradient(q.planeDx.xyz, q.planeDy.xyz);
+    vec2 gradientError = abs(gradient - vec2(q.planeDx.w, q.planeDy.w));
+    results[index].filtering = vec4(filtered, reference / 256.0, bias, max(gradientError.x, gradientError.y));
+    results[index].fade = vec4(GE_ShadowDistanceFade(q.fadeDepth.x, q.fadeDepth.y, q.fadeControl.x),
+                               GE_JoinTerrainAfterFade(q.fadeDepth.z, q.fadeDepth.w, q.fadeDepth.x, q.fadeDepth.y, q.fadeControl.x),
+                               0.0, 0.0);
+
+    // Poisson's floored loop, unrotated: the floor's radius, the receiver plane
+    // from the per-pixel footprint, and the floored tap depth.
+    vec2 size = vec2(textureSize(uShadow, 0).xy);
+    float floorTexels = GE_ShadowFilterFloorTexels(q.footprintDx.xy, q.footprintDy.xy, size);
+    bool floorBinds = floorTexels > q.footprintDx.z;
+    float radius = max(q.footprintDx.z, floorTexels);
+    vec2 planeGradient = GE_ShadowReceiverPlaneGradient(vec3(q.footprintDx.xy, q.footprintDy.z),
+                                                        vec3(q.footprintDy.xy, q.footprintDy.w));
+    int taps = max(int(q.footprintDx.w), 1);
+    float disk = 0.0;
+    for (int i = 0; i < taps; ++i)
+    {
+        vec2 offset = GE_VogelDisk(i, taps, vec2(1.0, 0.0)) * radius / size;
+        disk += texture(uShadow, vec4(uv + offset, layer,
+            GE_FlooredKernelTapDepth(floorBinds, depth, offset, planeGradient, 1.0 / size.x)));
+    }
+    results[index].footprint = vec4(radius, disk / float(taps), floorBinds ? 1.0 : 0.0, 0.0);
+
+}

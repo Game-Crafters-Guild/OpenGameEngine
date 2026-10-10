@@ -1,0 +1,137 @@
+[scene name="Parallax" version=1]
+; Parallax materials test and visualisation scene. Three height-mapped standard materials: a
+; cobbled ground (2 m repeat), a brick wall facing the camera (1 m repeat) and the tiled roof of a
+; lean-to house, pitched 25 degrees away from the camera (2 m repeat), under a low sun from behind the
+; camera's left (27 degrees up) so the relief's self-shadow falls across the mortar, the stone gaps
+; and the tile lips.
+;
+; Poses (scene view camera; eye in metres, yaw and pitch in degrees, look =
+; (cos p cos y, sin p, cos p sin y)):
+;   PG  eye (0, 1.7, -8)        yaw 90  pitch -6    eye height, the ground running to the wall
+;   PW  eye (-3, 1.7, 14)       yaw 60  pitch 0     eye height, the wall 6 m away, oblique
+;   P1  eye (0, 12.34, -2.71)   yaw 90  pitch -40   overhead at 19.2 m, pivot (0, 0, 12)
+;   P2  eye (0, 33.94, -28.45)  yaw 90  pitch -40   overhead at 52.8 m, pivot (0, 0, 12)
+;   P4  eye (14, 20.21, -4.71)  yaw 90  pitch -40   overhead at 19.2 m on the roof, 75 deg to its normal
+
+[entity id="e_sun"]
+Light.type = 0
+Light.color = (1, 0.96, 0.9)
+Light.intensity = 1e+05
+Light.intensityUnit = Lux
+Light.castsLight = true
+Light.castsShadows = true
+Name.value = "Sun"
+Transform.position = (0, 10, 0)
+Transform.rotation = (0.2686, 0.4776, 0, 0.8365)
+Transform.scale = (1, 1, 1)
+
+[entity id="e_ambient"]
+Light.type = 3
+Light.color = (0.8, 0.85, 0.95)
+Light.intensity = 2.0
+Name.value = "Ambient"
+Transform.position = (0, 0, 0)
+Transform.rotation = (0, 0, 0, 1)
+Transform.scale = (1, 1, 1)
+
+[entity id="e_sky"]
+SkyEnvironment.TimeOfDayHours = 16
+SkyEnvironment.AutoSunMoon = false
+SkyEnvironment.SunDirOverride = (-0.799, 0.4494, -0.3995)
+SkyEnvironment.SunLight = "e_sun"
+Name.value = "Sky"
+Transform.position = (0, 0, 0)
+Transform.rotation = (0, 0, 0, 1)
+Transform.scale = (1, 1, 1)
+
+[entity id="e_postprocess"]
+Name.value = "Post Process Volume"
+PostProcessVolume.enabled = true
+PostProcessVolume.weight = 1
+PostProcessVolume.priority = 0
+PostProcessVolume.postProcessMask = 4294967295
+PostProcessVolume.tonemap = 4
+PostProcessVolume.isGlobal = true
+Transform.position = (0, 0, 0)
+Transform.rotation = (0, 0, 0, 1)
+Transform.scale = (1, 1, 1)
+
+[entity id="e_camera"]
+Camera.enabled = true
+Camera.fovY = 42
+Camera.nearZ = 0.1
+Camera.farZ = 1000
+Camera.exposureControl = 1
+Camera.manualExposureEV = 14.5
+Name.value = "Main Camera"
+Transform.position = (0, 12.34, -2.71)
+Transform.rotation = (0.342, 0, 0, 0.94)
+Transform.scale = (1, 1, 1)
+
+[entity id="e_ground"]
+MeshRenderer.meshPrimitive = Plane
+MeshRenderer.material = [path="Materials/CobbledGround.material"]
+MeshRenderer.renderLayerMask = 1
+MeshRenderer.receiveShadows = true
+Name.value = "Cobbled Ground"
+Transform.position = (0, 0, 10)
+Transform.rotation = (0, 0, 0, 1)
+Transform.scale = (60, 1, 60)
+
+[entity id="e_wall"]
+MeshRenderer.meshPrimitive = Cube
+MeshRenderer.material = [path="Materials/BrickWall.material"]
+MeshRenderer.renderLayerMask = 1
+MeshRenderer.receiveShadows = true
+Name.value = "Brick Wall"
+Transform.position = (0, 2, 20)
+Transform.rotation = (0, 0, 0, 1)
+Transform.scale = (16, 4, 0.6)
+
+; The house box sits 5 cm below the roof's low eave, past the roof tiles' 3.8 cm relief: a top level
+; with the eave would stand above the carved tiles there and show as a line along it.
+[entity id="e_house"]
+MeshRenderer.meshPrimitive = Cube
+MeshRenderer.renderLayerMask = 1
+MeshRenderer.receiveShadows = true
+Name.value = "House"
+Transform.position = (14, 2.95, 10)
+Transform.rotation = (0, 0, 0, 1)
+Transform.scale = (10, 6, 8)
+
+[entity id="e_house_front"]
+MeshRenderer.meshPrimitive = Cube
+MeshRenderer.renderLayerMask = 1
+MeshRenderer.receiveShadows = true
+Name.value = "House Front Wall"
+Transform.position = (14, 7.87, 6.15)
+Transform.rotation = (0, 0, 0, 1)
+Transform.scale = (10, 3.73, 0.3)
+
+[entity id="e_roof"]
+MeshRenderer.meshPrimitive = Plane
+MeshRenderer.material = [path="Materials/RoofTiles.material"]
+MeshRenderer.renderLayerMask = 1
+MeshRenderer.receiveShadows = true
+Name.value = "Roof"
+Transform.position = (14, 7.87, 10)
+Transform.rotation = (0.2164, 0, 0, 0.9763)
+Transform.scale = (10, 1, 8.83)
+
+[entity id="e_crate1"]
+MeshRenderer.meshPrimitive = Cube
+MeshRenderer.renderLayerMask = 1
+MeshRenderer.receiveShadows = true
+Name.value = "Crate 1"
+Transform.position = (3, 0.5, 8)
+Transform.rotation = (0, 0.2588, 0, 0.9659)
+Transform.scale = (1, 1, 1)
+
+[entity id="e_crate2"]
+MeshRenderer.meshPrimitive = Cube
+MeshRenderer.renderLayerMask = 1
+MeshRenderer.receiveShadows = true
+Name.value = "Crate 2"
+Transform.position = (-2.5, 0.4, 15)
+Transform.rotation = (0, 0, 0, 1)
+Transform.scale = (0.8, 0.8, 0.8)

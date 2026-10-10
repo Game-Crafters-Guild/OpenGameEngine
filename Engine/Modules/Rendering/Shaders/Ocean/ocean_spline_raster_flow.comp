@@ -1,0 +1,4 @@
+#version 450
+// Spline ribbons into the flow cascade.
+#define OCEAN_RIBBON_FIELD 1
+#include "Ocean/ocean_spline_raster.glsl"

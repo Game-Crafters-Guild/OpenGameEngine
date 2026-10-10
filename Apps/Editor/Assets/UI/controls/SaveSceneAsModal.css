@@ -1,0 +1,38 @@
+.save-scene-as-directory-row {
+	display: flex;
+	flex-direction: row;
+	align-items: center;
+	gap: 8px;
+}
+
+.save-scene-as-directory-label {
+	color: #fff;
+	font-size: 13px;
+	flex: 1 1 auto;
+	overflow: hidden;
+}
+
+.save-scene-as-warning {
+	display: none;
+	color: #ffb4a8;
+	font-size: 13px;
+}
+
+.save-scene-as-warning.visible {
+	display: block;
+}
+
+.save-scene-as-folder-list {
+	display: flex;
+	flex-direction: column;
+	gap: 2px;
+	max-height: 180px;
+	overflow-y: auto;
+	margin-top: 4px;
+}
+
+.save-scene-as-folder-row {
+	justify-content: flex-start;
+	text-align: left;
+	font-size: 12px;
+}

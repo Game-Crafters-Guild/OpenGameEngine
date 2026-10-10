@@ -1,0 +1,133 @@
+{
+  "name": "gameengine",
+  "version-string": "1.0.0",
+
+  "dependencies": [
+    "freetype",
+    {
+      "name": "harfbuzz",
+      "platform": "!nothreads",
+      "$wasm-note": "nothreads is defined by cmake/triplets/wasm32-emscripten-nothreads.cmake (VCPKG_DEP_INFO_OVERRIDE_VARS): harfbuzz's meson build mixes -pthread across subtargets on that ABI and fails to link; Text falls back to GE_HAVE_HARFBUZZ=0 there."
+    },
+    "miniaudio",
+    "nlohmann-json",
+    "sqlite3",
+    "concurrentqueue",
+    "cgltf",
+    "stb",
+    "meshoptimizer",
+    "clipper2",
+    "tinyexpr",
+    "ez-tree-upstream",
+    "diharaw-volumetric-fog-upstream",
+    "sanielx-height-fog-upstream",
+    "mirzabeig-gpu-fog-particles-upstream",
+    "crest-ocean-upstream",
+    "godot-visual-shader-upstream",
+    {
+      "name": "renderdoc-app-api-upstream",
+      "platform": "!wasm32"
+    },
+    {
+      "name": "nvtx3-upstream",
+      "platform": "!wasm32"
+    },
+    "glm",
+    {
+      "name": "glfw3",
+      "platform": "!wasm32"
+    },
+    {
+      "name": "vulkan-memory-allocator",
+      "platform": "!wasm32"
+    },
+    {
+      "name": "shaderc",
+      "platform": "!wasm32"
+    },
+    {
+      "name": "vulkan-loader",
+      "features": [ "wayland", "xcb", "xlib" ],
+      "platform": "linux"
+    },
+    {
+      "name": "vulkan",
+      "platform": "!wasm32"
+    },
+    {
+      "name": "vulkan-headers",
+      "platform": "wasm32"
+    },
+    {
+      "name": "wgpu-native",
+      "platform": "osx | (windows & x64 & !uwp) | (linux & x64)"
+    },
+    "pugixml",
+    "yoga",
+    {
+      "name": "spirv-reflect",
+      "platform": "!wasm32"
+    },
+    {
+      "name": "spirv-cross",
+      "platform": "osx"
+    },
+    "ktx",
+    {
+      "name": "directxtex",
+      "default-features": false,
+      "platform": "windows | linux | osx"
+    },
+    {
+      "name": "mimalloc",
+      "platform": "!wasm32"
+    },
+    {
+      "name": "curl",
+      "platform": "!wasm32"
+    },
+    "utf8proc",
+    "unordered-dense"
+  ],
+
+  "default-features": [ "video", "physics", "nav", "ui-extras", "tests" ],
+
+  "features": {
+    "video": {
+      "description": "Video playback / recording via FFmpeg (VideoPlayerFFmpeg + AsyncVideoRecorder). Without this feature, the engine compiles VideoPlayerNull as a stub and video playback/capture is unavailable.",
+      "dependencies": [
+        {
+          "name": "ffmpeg",
+          "default-features": false,
+          "features": [ "avcodec", "avformat", "swscale" ],
+          "platform": "!osx & !wasm32"
+        }
+      ]
+    },
+
+    "physics": {
+      "description": "Jolt physics integration (Physics + PhysicsECS modules). Opting out auto-disables the Jolt backend via CMake's find_package(Jolt CONFIG QUIET); the Physics module compiles as a stub.",
+      "dependencies": [ "joltphysics" ]
+    },
+
+    "nav": {
+      "description": "Recast/Detour navigation meshes (Pathfinding + PathfindingECS modules). Opting out auto-disables the Recast/Detour backend via CMake's find_package(RecastNavigation CONFIG QUIET); the Pathfinding module compiles as a stub.",
+      "dependencies": [ "recastnavigation" ]
+    },
+
+    "ui-extras": {
+      "description": "Optional UI helpers: HTML parsing via lexbor (used by the editor's docs/AI tooling) and SVG rasterization via thorvg (used by SvgRasterizer). Both have QUIET find_package's so opting out degrades gracefully.",
+      "dependencies": [ "lexbor", "thorvg" ]
+    },
+
+    "tests": {
+      "description": "Test/benchmark frameworks (gtest, benchmark). Enable BUILD_TESTING / BUILD_BENCHMARKS at CMake configure to actually define the test/bench targets — this feature just supplies the libraries.",
+      "dependencies": [ "gtest", "benchmark" ]
+    },
+
+    "docs": {
+      "description": "Optional docs generation tools (graphviz).",
+      "dependencies": [ "graphviz" ]
+    }
+  }
+}

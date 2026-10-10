@@ -1,0 +1,64 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Model viewer</title>
+<!-- Cross-origin isolation for the threaded build on hosts that cannot set headers: the
+     service worker adds COOP and COEP require-corp; the first visit reloads once. -->
+<script>window.coi = { coepCredentialless: () => false };</script>
+<script src="../../coi-serviceworker.js"></script>
+<!-- Where the library is served from; the package build sets this. -->
+<script type="importmap">{ "imports": { "@openengine/web": "../../ts/dist/src/index.js" } }</script>
+<link rel="stylesheet" href="panel.css">
+</head>
+<body>
+<!-- The download bar along the top edge, and the status over the canvas until the first frame
+     draws: both show whatever the viewport and whether the panel is open. -->
+<progress class="download" hidden></progress>
+<canvas></canvas>
+<p class="canvas-status">Loading the engine...</p>
+<details class="panel" open>
+<summary>Model viewer <span class="summary-progress"></span></summary>
+<p class="hint">Early access (alpha): the engine and its API change between releases.</p>
+<!-- The controls stay disabled until the engine starts (panel.js enables them). -->
+<label>Model <select name="model" disabled></select></label>
+<label class="button">Open a .glb <input type="file" name="file" accept=".glb,.gltf" disabled></label>
+<p class="hint">or drop one on the page. A .gltf must embed its buffers and images; FBX is not supported on the web.</p>
+<!-- The shown model's clips; disabled, with the note in place of the clip list, for a model that has none. -->
+<fieldset name="animation" disabled>
+<legend>Animation</legend>
+<label>Clip <select name="clip"></select></label>
+<p class="hint no-animation" hidden>This model has no animations.</p>
+<label>Speed <output name="rate"></output><input type="range" name="speed" min="0" max="2" step="0.05" value="1"></label>
+<button type="button" name="pause">Pause</button>
+</fieldset>
+<!-- The time of day and the exposure share a row, as the switches below do. -->
+<div class="sliders">
+<label>Time of day <output name="clock"></output><input type="range" name="time" min="6" max="18" step="0.05" title="6:00 to 18:00: the lit hours" disabled></label>
+<label>Exposure <output name="ev"></output><input type="range" name="exposure" min="-2" max="4" step="0.5" list="exposure-ticks" title="Exposure compensation in stops: each stop doubles the brightness (+) or halves it (&#8722;)" disabled></label>
+<!-- Ticks at 0 and at the page's default (panel.js adds it), so either can be found again. -->
+<datalist id="exposure-ticks"><option value="0"></option></datalist>
+</div>
+<!-- The two switches share a row, so the open panel fits a 1264x625 page without scrolling. -->
+<div class="checks">
+<label class="check"><input type="checkbox" name="turn" checked disabled> Turntable</label>
+<label class="check"><input type="checkbox" name="floor" checked disabled> Floor</label>
+</div>
+<!-- Global illumination is a preview the page shows only with ?gi=1 (panel.js). -->
+<label class="check" hidden><input type="checkbox" name="gi" disabled> Global illumination (preview)</label>
+<p class="hint gi-hint" hidden>Light bouncing off the floor and the model. On the web it runs without probe depth, so creases and contact shadows can darken.</p>
+<button type="button" name="fps" title="Frames drawn in the last second and the longest of them. At the display&#39;s frame-rate cap the rate is the cap, not what the page costs." disabled>Frame rate <kbd>F</kbd></button>
+<output name="status">Loading the engine...</output>
+</details>
+<!-- Over the canvas's left edge: the frame-rate readout, and the credit or note of the model on
+     screen while there is one. -->
+<div class="overlays">
+<div class="fps" title="Frames drawn in the last second and the longest of them. At the display&#39;s frame-rate cap the rate is the cap, not what the page costs." hidden></div>
+<p class="credit" hidden></p>
+</div>
+<!-- On a narrow page the panel is a strip over the lower canvas: it starts collapsed there. -->
+<script>if (matchMedia('(max-width: 600px)').matches) document.querySelector('.panel').open = false;</script>
+<script type="module" src="main.js"></script>
+</body>
+</html>

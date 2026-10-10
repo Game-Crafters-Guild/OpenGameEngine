@@ -1,0 +1,25 @@
+{
+  "alphaMode": "Opaque",
+  "doubleSided": true,
+  "lightingModel": "StandardPBR",
+  "materialName": "DefaultWhite_texture.png",
+  "properties": {
+    "alphaCutoff": 0.5,
+    "baseColor": [
+      1.0,
+      1.0,
+      1.0,
+      1.0
+    ],
+    "metallic": 0.0,
+    "roughness": 0.6000000238418579
+  },
+  "schemaVersion": 3,
+  "surfaceShader": "Surfaces/standard_pbr.glsl",
+  "textures": {
+    "albedoMap": {
+      "guid": "6bb2c714-33f9-4fd8-aaf0-7ebb71428512",
+      "path": "Models/Planes/AircoDH2/textures/DefaultWhite_texture.png_baseColor.png"
+    }
+  }
+}

@@ -1,0 +1,1336 @@
+{
+  "outputs": {
+    "FinalColor": "View.Resolve"
+  },
+  "passes": [
+    {
+      "buffer": "ViewParams",
+      "enabled": true,
+      "id": "ViewParamsUpload",
+      "type": "ViewParamsUpload"
+    },
+    {
+      "enabled": true,
+      "id": "TerrainUpload",
+      "type": "TerrainUpload"
+    },
+    {
+      "enabled": true,
+      "id": "CBTTerrain",
+      "type": "CBTRender"
+    },
+    {
+      "enabled": true,
+      "id": "TerrainGrass",
+      "type": "TerrainGrass"
+    },
+    {
+      "enabled": true,
+      "id": "DepthPrepass",
+      "type": "DepthPrepass"
+    },
+    {
+      "enabled": true,
+      "id": "DepthResolve",
+      "type": "DepthResolve"
+    },
+    {
+      "enabled": true,
+      "id": "DDGI",
+      "type": "DDGIGen"
+    },
+    {
+      "buffer": "LightBuffer",
+      "enabled": true,
+      "id": "LightUpload",
+      "type": "LightUpload"
+    },
+    {
+      "bufferUsages": {
+        "DepthMinMaxBuffer": "StorageWrite"
+      },
+      "buffers": {
+        "DepthMinMaxBuffer": "DepthMinMaxBuffer"
+      },
+      "dispatch": {
+        "x": "ceil(renderWidth / 32)",
+        "y": "ceil(renderHeight / 32)",
+        "z": 1
+      },
+      "enabled": true,
+      "id": "DepthMinMax",
+      "inputUsages": {
+        "DepthTex": "Sampled"
+      },
+      "inputs": {
+        "DepthTex": "View.DepthResolved"
+      },
+      "shaderPkg": "Shaders/cluster_depth_minmax.shaderpkg",
+      "targetBuffer": "DepthMinMaxBuffer",
+      "type": "ComputeShader"
+    },
+    {
+      "buffer": "ShadowData",
+      "cascades": 4,
+      "depthBias": 0.0001,
+      "enabled": true,
+      "fitShadowDistanceToScene": true,
+      "id": "CascadedShadowMap",
+      "maxShadowDistance": 200.0,
+      "normalBias": 0.5,
+      "resolution": 2048,
+      "splitLambda": 0.75,
+      "type": "ShadowMap"
+    },
+    {
+      "bufferUsages": {
+        "ClusterBuffer": "StorageWrite",
+        "ClusterParams": "Sampled",
+        "DepthMinMaxBuffer": "StorageRead",
+        "LightBuffer": "StorageRead",
+        "LightIndexBuffer": "StorageWrite",
+        "ViewParams": "ConstantBuffer"
+      },
+      "buffers": {
+        "ClusterBuffer": "ClusterBuffer",
+        "ClusterParams": "ClusterParams",
+        "DepthMinMaxBuffer": "DepthMinMaxBuffer",
+        "LightBuffer": "LightBuffer",
+        "LightIndexBuffer": "LightIndexBuffer",
+        "ViewParams": "ViewParams"
+      },
+      "dispatch": {
+        "x": "ceil(renderWidth / 32)",
+        "y": "ceil(renderHeight / 32)",
+        "z": 24
+      },
+      "enabled": true,
+      "id": "ClusteredLightCull",
+      "requiresLights": true,
+      "shaderPkg": "Shaders/clustered_light_cull.shaderpkg",
+      "targetBuffer": "LightIndexBuffer",
+      "type": "ComputeShader",
+      "uniformWrites": {
+        "ClusterParams": {
+          "u32x4": [
+            32,
+            32,
+            24,
+            32
+          ]
+        }
+      }
+    },
+    {
+      "enabled": true,
+      "id": "Sky",
+      "output": "View.Color",
+      "type": "SkyRender"
+    },
+    {
+      "enabled": true,
+      "id": "IBLGen",
+      "type": "IBLGen"
+    },
+    {
+      "colorResolveTarget": "SceneColor",
+      "enabled": true,
+      "id": "World",
+      "keywords": [
+        "ForwardPlus",
+        "Instanced",
+        "Shadows",
+        "IBL"
+      ],
+      "type": "WorldRender"
+    },
+    {
+      "enabled": true,
+      "id": "Transmissive",
+      "keywords": [
+        "ForwardPlus",
+        "Instanced",
+        "Shadows",
+        "IBL"
+      ],
+      "type": "TransmissiveRender"
+    },
+    {
+      "enabled": true,
+      "id": "HZBBuild",
+      "type": "HZBBuild"
+    },
+    {
+      "enabled": true,
+      "id": "ScreenSpaceReflections",
+      "input": "SceneColor",
+      "output": "HDRSSSR",
+      "type": "ScreenSpaceReflections"
+    },
+    {
+      "enabled": true,
+      "id": "SunGlare",
+      "output": "HDRSSSR",
+      "type": "SunGlare"
+    },
+    {
+      "bufferUsages": {
+        "ViewParams": "ConstantBuffer",
+        "uExposure": "Storage"
+      },
+      "buffers": {
+        "ViewParams": "ViewParams",
+        "uExposure": "ExposureHistory"
+      },
+      "enabled": true,
+      "id": "BloomThreshold",
+      "inputUsages": {
+        "uDepth": "Sampled"
+      },
+      "inputs": {
+        "uDepth": "View.DepthResolved",
+        "uHDR": "HDRSSSR"
+      },
+      "output": "BloomA",
+      "ppOverrides": true,
+      "pushConstants": {
+        "bloomAntiFlicker": 1,
+        "bloomDepthVeilEnabled": 0,
+        "bloomDepthVeilEnd": 500.0,
+        "bloomDepthVeilIntensity": 1.0,
+        "bloomDepthVeilStart": 25.0,
+        "exposure": 1.0,
+        "knee": 0.1,
+        "threshold": 1.0,
+        "thresholdFree": 0,
+        "useAutoExposure": 0
+      },
+      "samplers": {
+        "uDepth": "PointClamp",
+        "uHDR": "LinearClamp"
+      },
+      "shaderPkg": "Shaders/bloom_threshold.shaderpkg",
+      "skipWhen": {
+        "bloomHighlightsActive": 0.0
+      },
+      "type": "FullscreenShader"
+    },
+    {
+      "enabled": true,
+      "id": "BloomDownQuarter",
+      "inputs": {
+        "uSrc": "BloomA"
+      },
+      "output": "BloomQuarter",
+      "ppOverrides": true,
+      "pushConstants": {
+        "reserved": 0.0
+      },
+      "samplers": {
+        "uSrc": "LinearClamp"
+      },
+      "shaderPkg": "Shaders/bloom_downsample.shaderpkg",
+      "skipWhen": {
+        "bloomHighlightsActive": 0.0
+      },
+      "type": "FullscreenShader"
+    },
+    {
+      "enabled": true,
+      "id": "BloomDownEighth",
+      "inputs": {
+        "uSrc": "BloomQuarter"
+      },
+      "output": "BloomEighth",
+      "ppOverrides": true,
+      "pushConstants": {
+        "reserved": 0.0
+      },
+      "samplers": {
+        "uSrc": "LinearClamp"
+      },
+      "shaderPkg": "Shaders/bloom_downsample.shaderpkg",
+      "skipWhen": {
+        "bloomHighlightsActive": 0.0
+      },
+      "type": "FullscreenShader"
+    },
+    {
+      "enabled": true,
+      "id": "BloomDownSixteenth",
+      "inputs": {
+        "uSrc": "BloomEighth"
+      },
+      "output": "BloomSixteenth",
+      "ppOverrides": true,
+      "pushConstants": {
+        "reserved": 0.0
+      },
+      "samplers": {
+        "uSrc": "LinearClamp"
+      },
+      "shaderPkg": "Shaders/bloom_downsample.shaderpkg",
+      "skipWhen": {
+        "bloomOctave4Active": 0.0
+      },
+      "type": "FullscreenShader"
+    },
+    {
+      "enabled": true,
+      "id": "BloomDownThirtySecond",
+      "inputs": {
+        "uSrc": "BloomSixteenth"
+      },
+      "output": "BloomThirtySecond",
+      "ppOverrides": true,
+      "pushConstants": {
+        "reserved": 0.0
+      },
+      "samplers": {
+        "uSrc": "LinearClamp"
+      },
+      "shaderPkg": "Shaders/bloom_downsample.shaderpkg",
+      "skipWhen": {
+        "bloomOctave5Active": 0.0
+      },
+      "type": "FullscreenShader"
+    },
+    {
+      "enabled": true,
+      "id": "BloomDownSixtyFourth",
+      "inputs": {
+        "uSrc": "BloomThirtySecond"
+      },
+      "output": "BloomSixtyFourth",
+      "ppOverrides": true,
+      "pushConstants": {
+        "reserved": 0.0
+      },
+      "samplers": {
+        "uSrc": "LinearClamp"
+      },
+      "shaderPkg": "Shaders/bloom_downsample.shaderpkg",
+      "skipWhen": {
+        "bloomOctave6Active": 0.0
+      },
+      "type": "FullscreenShader"
+    },
+    {
+      "enabled": true,
+      "id": "BloomDownOneTwentyEighth",
+      "inputs": {
+        "uSrc": "BloomSixtyFourth"
+      },
+      "output": "BloomOneTwentyEighth",
+      "ppOverrides": true,
+      "pushConstants": {
+        "reserved": 0.0
+      },
+      "samplers": {
+        "uSrc": "LinearClamp"
+      },
+      "shaderPkg": "Shaders/bloom_downsample.shaderpkg",
+      "skipWhen": {
+        "bloomOctave7Active": 0.0
+      },
+      "type": "FullscreenShader"
+    },
+    {
+      "enabled": true,
+      "id": "BloomDownTwoFiftySixth",
+      "inputs": {
+        "uSrc": "BloomOneTwentyEighth"
+      },
+      "output": "BloomTwoFiftySixth",
+      "ppOverrides": true,
+      "pushConstants": {
+        "reserved": 0.0
+      },
+      "samplers": {
+        "uSrc": "LinearClamp"
+      },
+      "shaderPkg": "Shaders/bloom_downsample.shaderpkg",
+      "skipWhen": {
+        "bloomOctave8Active": 0.0
+      },
+      "type": "FullscreenShader"
+    },
+    {
+      "enabled": true,
+      "id": "BloomOctaveGather",
+      "inputs": {
+        "uBloom0": "BloomA",
+        "uBloom1": "BloomQuarter",
+        "uBloom2": "BloomEighth",
+        "uBloom3": "BloomSixteenth",
+        "uBloom4": "BloomThirtySecond",
+        "uBloom5": "BloomSixtyFourth",
+        "uBloom6": "BloomOneTwentyEighth",
+        "uBloom7": "BloomTwoFiftySixth"
+      },
+      "output": "BloomNormalized",
+      "passthroughInput": "uBloom0",
+      "ppOverrides": true,
+      "pushConstants": {
+        "bloomOctaveBlend": 1.0,
+        "bloomOctaves": 3,
+        "bloomSampleScale": 1.0,
+        "bloomScatter": 0.5
+      },
+      "samplers": {
+        "uBloom0": "LinearClamp",
+        "uBloom1": "LinearClamp",
+        "uBloom2": "LinearClamp",
+        "uBloom3": "LinearClamp",
+        "uBloom4": "LinearClamp",
+        "uBloom5": "LinearClamp",
+        "uBloom6": "LinearClamp",
+        "uBloom7": "LinearClamp"
+      },
+      "shaderPkg": "Shaders/bloom_octave_gather.shaderpkg",
+      "skipWhen": {
+        "bloomHighlightsActive": 0.0
+      },
+      "type": "FullscreenShader"
+    },
+    {
+      "enabled": true,
+      "id": "BloomLensDirtGather",
+      "inputs": {
+        "uBloom0": "BloomA",
+        "uBloom1": "BloomQuarter",
+        "uBloom2": "BloomEighth",
+        "uBloom3": "BloomSixteenth",
+        "uBloom4": "BloomThirtySecond",
+        "uBloom5": "BloomSixtyFourth",
+        "uBloom6": "BloomOneTwentyEighth",
+        "uBloom7": "BloomTwoFiftySixth"
+      },
+      "output": "BloomLensDirtLight",
+      "passthroughInput": "uBloom0",
+      "ppOverrides": true,
+      "pushConstants": {
+        "bloomLensDirtScatter": 0.5
+      },
+      "samplers": {
+        "uBloom0": "LinearClamp",
+        "uBloom1": "LinearClamp",
+        "uBloom2": "LinearClamp",
+        "uBloom3": "LinearClamp",
+        "uBloom4": "LinearClamp",
+        "uBloom5": "LinearClamp",
+        "uBloom6": "LinearClamp",
+        "uBloom7": "LinearClamp"
+      },
+      "shaderPkg": "Shaders/bloom_lens_dirt_gather.shaderpkg",
+      "skipWhen": {
+        "bloomLensDirtActive": 0.0
+      },
+      "type": "FullscreenShader"
+    },
+    {
+      "bufferUsages": {
+        "ViewParams": "ConstantBuffer",
+        "uExposure": "Storage"
+      },
+      "buffers": {
+        "ViewParams": "ViewParams",
+        "uExposure": "ExposureHistory"
+      },
+      "enabled": true,
+      "id": "ScatteringThreshold",
+      "inputUsages": {
+        "uDepth": "Sampled"
+      },
+      "inputs": {
+        "uDepth": "View.DepthResolved",
+        "uHDR": "HDRSSSR"
+      },
+      "output": "ScatteringA",
+      "ppOverrides": true,
+      "pushConstants": {
+        "bloomAntiFlicker": 1,
+        "bloomDepthVeilEnabled": 0,
+        "bloomDepthVeilEnd": 500.0,
+        "bloomDepthVeilIntensity": 1.0,
+        "bloomDepthVeilStart": 25.0,
+        "exposure": 1.0,
+        "knee": 0.1,
+        "threshold": 1.0,
+        "thresholdFree": 1,
+        "useAutoExposure": 0
+      },
+      "samplers": {
+        "uDepth": "PointClamp",
+        "uHDR": "LinearClamp"
+      },
+      "shaderPkg": "Shaders/bloom_threshold.shaderpkg",
+      "skipWhen": {
+        "bloomScatteringActive": 0.0
+      },
+      "type": "FullscreenShader"
+    },
+    {
+      "enabled": true,
+      "id": "ScatteringDownQuarter",
+      "inputs": {
+        "uSrc": "ScatteringA"
+      },
+      "output": "ScatteringQuarter",
+      "ppOverrides": true,
+      "pushConstants": {
+        "reserved": 0.0
+      },
+      "samplers": {
+        "uSrc": "LinearClamp"
+      },
+      "shaderPkg": "Shaders/bloom_downsample.shaderpkg",
+      "skipWhen": {
+        "bloomScatteringActive": 0.0
+      },
+      "type": "FullscreenShader"
+    },
+    {
+      "enabled": true,
+      "id": "ScatteringDownEighth",
+      "inputs": {
+        "uSrc": "ScatteringQuarter"
+      },
+      "output": "ScatteringEighth",
+      "ppOverrides": true,
+      "pushConstants": {
+        "reserved": 0.0
+      },
+      "samplers": {
+        "uSrc": "LinearClamp"
+      },
+      "shaderPkg": "Shaders/bloom_downsample.shaderpkg",
+      "skipWhen": {
+        "bloomScatteringActive": 0.0
+      },
+      "type": "FullscreenShader"
+    },
+    {
+      "enabled": true,
+      "id": "ScatteringDownSixteenth",
+      "inputs": {
+        "uSrc": "ScatteringEighth"
+      },
+      "output": "ScatteringSixteenth",
+      "ppOverrides": true,
+      "pushConstants": {
+        "reserved": 0.0
+      },
+      "samplers": {
+        "uSrc": "LinearClamp"
+      },
+      "shaderPkg": "Shaders/bloom_downsample.shaderpkg",
+      "skipWhen": {
+        "scatteringOctave4Active": 0.0
+      },
+      "type": "FullscreenShader"
+    },
+    {
+      "enabled": true,
+      "id": "ScatteringDownThirtySecond",
+      "inputs": {
+        "uSrc": "ScatteringSixteenth"
+      },
+      "output": "ScatteringThirtySecond",
+      "ppOverrides": true,
+      "pushConstants": {
+        "reserved": 0.0
+      },
+      "samplers": {
+        "uSrc": "LinearClamp"
+      },
+      "shaderPkg": "Shaders/bloom_downsample.shaderpkg",
+      "skipWhen": {
+        "scatteringOctave5Active": 0.0
+      },
+      "type": "FullscreenShader"
+    },
+    {
+      "enabled": true,
+      "id": "ScatteringDownSixtyFourth",
+      "inputs": {
+        "uSrc": "ScatteringThirtySecond"
+      },
+      "output": "ScatteringSixtyFourth",
+      "ppOverrides": true,
+      "pushConstants": {
+        "reserved": 0.0
+      },
+      "samplers": {
+        "uSrc": "LinearClamp"
+      },
+      "shaderPkg": "Shaders/bloom_downsample.shaderpkg",
+      "skipWhen": {
+        "scatteringOctave6Active": 0.0
+      },
+      "type": "FullscreenShader"
+    },
+    {
+      "enabled": true,
+      "id": "ScatteringDownOneTwentyEighth",
+      "inputs": {
+        "uSrc": "ScatteringSixtyFourth"
+      },
+      "output": "ScatteringOneTwentyEighth",
+      "ppOverrides": true,
+      "pushConstants": {
+        "reserved": 0.0
+      },
+      "samplers": {
+        "uSrc": "LinearClamp"
+      },
+      "shaderPkg": "Shaders/bloom_downsample.shaderpkg",
+      "skipWhen": {
+        "scatteringOctave7Active": 0.0
+      },
+      "type": "FullscreenShader"
+    },
+    {
+      "enabled": true,
+      "id": "ScatteringDownTwoFiftySixth",
+      "inputs": {
+        "uSrc": "ScatteringOneTwentyEighth"
+      },
+      "output": "ScatteringTwoFiftySixth",
+      "ppOverrides": true,
+      "pushConstants": {
+        "reserved": 0.0
+      },
+      "samplers": {
+        "uSrc": "LinearClamp"
+      },
+      "shaderPkg": "Shaders/bloom_downsample.shaderpkg",
+      "skipWhen": {
+        "scatteringOctave8Active": 0.0
+      },
+      "type": "FullscreenShader"
+    },
+    {
+      "enabled": true,
+      "id": "ScatteringOctaveGather",
+      "inputs": {
+        "uBloom0": "ScatteringA",
+        "uBloom1": "ScatteringQuarter",
+        "uBloom2": "ScatteringEighth",
+        "uBloom3": "ScatteringSixteenth",
+        "uBloom4": "ScatteringThirtySecond",
+        "uBloom5": "ScatteringSixtyFourth",
+        "uBloom6": "ScatteringOneTwentyEighth",
+        "uBloom7": "ScatteringTwoFiftySixth"
+      },
+      "output": "ScatteringNormalized",
+      "passthroughInput": "uBloom0",
+      "ppOverrides": true,
+      "pushConstants": {
+        "bloomOctaveBlend": 1.0,
+        "bloomOctaves": 3,
+        "bloomSampleScale": 1.0,
+        "bloomScatter": 0.5
+      },
+      "samplers": {
+        "uBloom0": "LinearClamp",
+        "uBloom1": "LinearClamp",
+        "uBloom2": "LinearClamp",
+        "uBloom3": "LinearClamp",
+        "uBloom4": "LinearClamp",
+        "uBloom5": "LinearClamp",
+        "uBloom6": "LinearClamp",
+        "uBloom7": "LinearClamp"
+      },
+      "shaderPkg": "Shaders/bloom_octave_gather.shaderpkg",
+      "skipWhen": {
+        "bloomScatteringActive": 0.0
+      },
+      "type": "FullscreenShader"
+    },
+    {
+      "enabled": true,
+      "id": "BloomCombine",
+      "inputGates": {
+        "uBloom": "bloomHighlightsActive",
+        "uScattering": "bloomScatteringActive"
+      },
+      "inputs": {
+        "uBloom": "BloomNormalized",
+        "uHDR": "HDRSSSR",
+        "uScattering": "ScatteringNormalized"
+      },
+      "output": "HDRCombined",
+      "passthroughInput": "uHDR",
+      "ppOverrides": true,
+      "pushConstants": {
+        "bloomDepthVeilEnabled": 0,
+        "bloomDepthVeilEnd": 500.0,
+        "bloomDepthVeilIntensity": 0.0,
+        "bloomDepthVeilStart": 25.0,
+        "bloomDepthVeilTintB": 1.0,
+        "bloomDepthVeilTintG": 1.0,
+        "bloomDepthVeilTintR": 1.0,
+        "bloomScatteringAmount": 0.0,
+        "bloomTintB": 1.0,
+        "bloomTintG": 1.0,
+        "bloomTintR": 1.0,
+        "intensity": 1.0
+      },
+      "samplers": {
+        "uBloom": "LinearClamp",
+        "uHDR": "LinearClamp",
+        "uScattering": "LinearClamp"
+      },
+      "shaderPkg": "Shaders/bloom_combine.shaderpkg",
+      "skipWhen": {
+        "bloomChainActive": 0.0
+      },
+      "type": "FullscreenShader"
+    },
+    {
+      "assetTextures": {
+        "uLensDirt": "Textures/Bloom/lensDirt1.png"
+      },
+      "enabled": true,
+      "id": "BloomLensDirtComposite",
+      "inputs": {
+        "uHDR": "HDRCombined",
+        "uLensBloom": "BloomLensDirtLight"
+      },
+      "output": "HDRBloomWithDirt",
+      "passthroughInput": "uHDR",
+      "ppOverrides": true,
+      "pushConstants": {
+        "bloomDepthVeilTintB": 1.0,
+        "bloomDepthVeilTintG": 1.0,
+        "bloomDepthVeilTintR": 1.0,
+        "bloomLensDirtIntensity": 0.0,
+        "bloomLensDirtVignette": 0,
+        "bloomLensDirtVignetteColorB": 1.0,
+        "bloomLensDirtVignetteColorG": 1.0,
+        "bloomLensDirtVignetteColorR": 1.0,
+        "bloomLensDirtVignetteIntensity": 1.0,
+        "bloomLensDirtVignetteRadius": 0.25,
+        "bloomLensDirtVignetteRounded": 0,
+        "bloomLensDirtVignetteSmoothness": 0.2,
+        "bloomTintB": 1.0,
+        "bloomTintG": 1.0,
+        "bloomTintR": 1.0,
+        "intensity": 1.0
+      },
+      "samplers": {
+        "uHDR": "LinearClamp",
+        "uLensBloom": "LinearClamp",
+        "uLensDirt": "LinearClamp"
+      },
+      "serviceTextures": [
+        "uLensDirt"
+      ],
+      "shaderPkg": "Shaders/bloom_lens_dirt.shaderpkg",
+      "skipWhen": {
+        "bloomLensDirtActive": 0.0
+      },
+      "type": "FullscreenShader"
+    },
+    {
+      "enabled": true,
+      "id": "AutoExposure",
+      "input": "HDRSSSR",
+      "type": "AutoExposure"
+    },
+    {
+      "bufferUsages": {
+        "uExposure": "Storage"
+      },
+      "buffers": {
+        "uExposure": "ExposureHistory"
+      },
+      "enabled": true,
+      "id": "Tonemap",
+      "inputs": {
+        "uHDRColor": "HDRBloomWithDirt"
+      },
+      "output": "LDRFinal",
+      "ppOverrides": true,
+      "pushConstants": {
+        "ditherMode": 0,
+        "exposure": 1.0,
+        "outEncoding": 0,
+        "paperWhiteNits": 350.0,
+        "tonemapMode": 4,
+        "useAutoExposure": 0
+      },
+      "samplers": {
+        "uHDRColor": "LinearClamp"
+      },
+      "shaderPkg": "Shaders/tonemap.shaderpkg",
+      "type": "FullscreenShader"
+    },
+    {
+      "elideWhenIdentity": true,
+      "enabled": true,
+      "id": "FinalCopy",
+      "inputs": {
+        "uTex": "LDRFinal"
+      },
+      "output": "View.Resolve",
+      "samplers": {
+        "uTex": "LinearClamp"
+      },
+      "shaderPkg": "Shaders/copy.shaderpkg",
+      "type": "FullscreenShader"
+    }
+  ],
+  "pipelineName": "Web Library",
+  "resources": {
+    "BloomA": {
+      "extent": {
+        "basis": "output",
+        "scale": [
+          0.5,
+          0.5
+        ]
+      },
+      "format": "R16G16B16A16_FLOAT",
+      "kind": "Texture",
+      "scope": "PerView",
+      "size": {
+        "variables": {}
+      },
+      "usage": [
+        "RenderTarget",
+        "ShaderResource"
+      ]
+    },
+    "BloomEighth": {
+      "extent": {
+        "basis": "output",
+        "scale": [
+          0.125,
+          0.125
+        ]
+      },
+      "format": "R16G16B16A16_FLOAT",
+      "kind": "Texture",
+      "scope": "PerView",
+      "size": {
+        "variables": {}
+      },
+      "usage": [
+        "RenderTarget",
+        "ShaderResource"
+      ]
+    },
+    "BloomLensDirtLight": {
+      "extent": {
+        "basis": "output",
+        "scale": [
+          0.125,
+          0.125
+        ]
+      },
+      "format": "R16G16B16A16_FLOAT",
+      "kind": "Texture",
+      "scope": "PerView",
+      "size": {
+        "variables": {}
+      },
+      "usage": [
+        "RenderTarget",
+        "ShaderResource"
+      ]
+    },
+    "BloomNormalized": {
+      "extent": {
+        "basis": "output",
+        "scale": [
+          0.5,
+          0.5
+        ]
+      },
+      "format": "R16G16B16A16_FLOAT",
+      "kind": "Texture",
+      "scope": "PerView",
+      "size": {
+        "variables": {}
+      },
+      "usage": [
+        "RenderTarget",
+        "ShaderResource"
+      ]
+    },
+    "BloomOneTwentyEighth": {
+      "extent": {
+        "basis": "output",
+        "scale": [
+          0.0078125,
+          0.0078125
+        ]
+      },
+      "format": "R16G16B16A16_FLOAT",
+      "kind": "Texture",
+      "scope": "PerView",
+      "size": {
+        "variables": {}
+      },
+      "usage": [
+        "RenderTarget",
+        "ShaderResource"
+      ]
+    },
+    "BloomQuarter": {
+      "extent": {
+        "basis": "output",
+        "scale": [
+          0.25,
+          0.25
+        ]
+      },
+      "format": "R16G16B16A16_FLOAT",
+      "kind": "Texture",
+      "scope": "PerView",
+      "size": {
+        "variables": {}
+      },
+      "usage": [
+        "RenderTarget",
+        "ShaderResource"
+      ]
+    },
+    "BloomSixteenth": {
+      "extent": {
+        "basis": "output",
+        "scale": [
+          0.0625,
+          0.0625
+        ]
+      },
+      "format": "R16G16B16A16_FLOAT",
+      "kind": "Texture",
+      "scope": "PerView",
+      "size": {
+        "variables": {}
+      },
+      "usage": [
+        "RenderTarget",
+        "ShaderResource"
+      ]
+    },
+    "BloomSixtyFourth": {
+      "extent": {
+        "basis": "output",
+        "scale": [
+          0.015625,
+          0.015625
+        ]
+      },
+      "format": "R16G16B16A16_FLOAT",
+      "kind": "Texture",
+      "scope": "PerView",
+      "size": {
+        "variables": {}
+      },
+      "usage": [
+        "RenderTarget",
+        "ShaderResource"
+      ]
+    },
+    "BloomThirtySecond": {
+      "extent": {
+        "basis": "output",
+        "scale": [
+          0.03125,
+          0.03125
+        ]
+      },
+      "format": "R16G16B16A16_FLOAT",
+      "kind": "Texture",
+      "scope": "PerView",
+      "size": {
+        "variables": {}
+      },
+      "usage": [
+        "RenderTarget",
+        "ShaderResource"
+      ]
+    },
+    "BloomTwoFiftySixth": {
+      "extent": {
+        "basis": "output",
+        "scale": [
+          0.00390625,
+          0.00390625
+        ]
+      },
+      "format": "R16G16B16A16_FLOAT",
+      "kind": "Texture",
+      "scope": "PerView",
+      "size": {
+        "variables": {}
+      },
+      "usage": [
+        "RenderTarget",
+        "ShaderResource"
+      ]
+    },
+    "ClusterBuffer": {
+      "kind": "Buffer",
+      "memoryUsage": "DeviceLocal",
+      "scope": "PerView",
+      "size": {
+        "expression": "16 + clustersX * clustersY * depthSlices * clusterDataBytes",
+        "variables": {
+          "clusterDataBytes": 8,
+          "clustersX": "ceil(renderWidth / 32)",
+          "clustersY": "ceil(renderHeight / 32)",
+          "depthSlices": 24
+        }
+      },
+      "usage": [
+        "Storage",
+        "ShaderResource",
+        "CopyDestination"
+      ]
+    },
+    "ClusterParams": {
+      "flags": [
+        "PersistentlyMapped"
+      ],
+      "kind": "Buffer",
+      "memoryUsage": "Upload",
+      "scope": "PerView",
+      "usage": [
+        "ConstantBuffer"
+      ]
+    },
+    "DepthMinMaxBuffer": {
+      "kind": "Buffer",
+      "memoryUsage": "DeviceLocal",
+      "scope": "PerView",
+      "size": {
+        "expression": "tilesX * tilesY * tileMinMaxBytes",
+        "variables": {
+          "tileMinMaxBytes": 8,
+          "tilesX": "ceil(renderWidth / 32)",
+          "tilesY": "ceil(renderHeight / 32)"
+        }
+      },
+      "usage": [
+        "Storage",
+        "ShaderResource",
+        "CopyDestination"
+      ]
+    },
+    "ExposureHistory": {
+      "kind": "Buffer",
+      "memoryUsage": "DeviceLocal",
+      "scope": "PerView",
+      "size": {
+        "bytes": 16,
+        "variables": {}
+      },
+      "usage": [
+        "Storage",
+        "CopySrc"
+      ],
+      "zeroOnCreate": true
+    },
+    "HDRBloomWithDirt": {
+      "extent": {
+        "basis": "output"
+      },
+      "format": "R16G16B16A16_FLOAT",
+      "kind": "Texture",
+      "scope": "PerView",
+      "size": {
+        "variables": {}
+      },
+      "usage": [
+        "RenderTarget",
+        "ShaderResource"
+      ]
+    },
+    "HDRCombined": {
+      "extent": {
+        "basis": "output"
+      },
+      "format": "R16G16B16A16_FLOAT",
+      "kind": "Texture",
+      "scope": "PerView",
+      "size": {
+        "variables": {}
+      },
+      "usage": [
+        "RenderTarget",
+        "ShaderResource"
+      ]
+    },
+    "HDRSSSR": {
+      "format": "R16G16B16A16_FLOAT",
+      "kind": "Texture",
+      "scope": "PerView",
+      "size": {
+        "variables": {}
+      },
+      "usage": [
+        "RenderTarget",
+        "ShaderResource",
+        "UnorderedAccess"
+      ]
+    },
+    "LDRFinal": {
+      "format": "R16G16B16A16_FLOAT",
+      "kind": "Texture",
+      "scope": "PerView",
+      "size": {
+        "variables": {}
+      },
+      "usage": [
+        "RenderTarget",
+        "ShaderResource"
+      ]
+    },
+    "LightBuffer": {
+      "flags": [
+        "PersistentlyMapped"
+      ],
+      "kind": "Buffer",
+      "memoryUsage": "Upload",
+      "scope": "PerView",
+      "usage": [
+        "Storage",
+        "ShaderResource",
+        "CopyDestination"
+      ]
+    },
+    "LightIndexBuffer": {
+      "kind": "Buffer",
+      "memoryUsage": "DeviceLocal",
+      "scope": "PerView",
+      "size": {
+        "expression": "clustersX * clustersY * depthSlices * maxLightsPerCluster * indexBytes",
+        "variables": {
+          "clustersX": "ceil(renderWidth / 32)",
+          "clustersY": "ceil(renderHeight / 32)",
+          "depthSlices": 24,
+          "indexBytes": 4,
+          "maxLightsPerCluster": 32
+        }
+      },
+      "usage": [
+        "Storage",
+        "ShaderResource",
+        "CopyDestination"
+      ]
+    },
+    "ScatteringA": {
+      "extent": {
+        "basis": "output",
+        "scale": [
+          0.5,
+          0.5
+        ]
+      },
+      "format": "R16G16B16A16_FLOAT",
+      "kind": "Texture",
+      "scope": "PerView",
+      "size": {
+        "variables": {}
+      },
+      "usage": [
+        "RenderTarget",
+        "ShaderResource"
+      ]
+    },
+    "ScatteringEighth": {
+      "extent": {
+        "basis": "output",
+        "scale": [
+          0.125,
+          0.125
+        ]
+      },
+      "format": "R16G16B16A16_FLOAT",
+      "kind": "Texture",
+      "scope": "PerView",
+      "size": {
+        "variables": {}
+      },
+      "usage": [
+        "RenderTarget",
+        "ShaderResource"
+      ]
+    },
+    "ScatteringNormalized": {
+      "extent": {
+        "basis": "output",
+        "scale": [
+          0.5,
+          0.5
+        ]
+      },
+      "format": "R16G16B16A16_FLOAT",
+      "kind": "Texture",
+      "scope": "PerView",
+      "size": {
+        "variables": {}
+      },
+      "usage": [
+        "RenderTarget",
+        "ShaderResource"
+      ]
+    },
+    "ScatteringOneTwentyEighth": {
+      "extent": {
+        "basis": "output",
+        "scale": [
+          0.0078125,
+          0.0078125
+        ]
+      },
+      "format": "R16G16B16A16_FLOAT",
+      "kind": "Texture",
+      "scope": "PerView",
+      "size": {
+        "variables": {}
+      },
+      "usage": [
+        "RenderTarget",
+        "ShaderResource"
+      ]
+    },
+    "ScatteringQuarter": {
+      "extent": {
+        "basis": "output",
+        "scale": [
+          0.25,
+          0.25
+        ]
+      },
+      "format": "R16G16B16A16_FLOAT",
+      "kind": "Texture",
+      "scope": "PerView",
+      "size": {
+        "variables": {}
+      },
+      "usage": [
+        "RenderTarget",
+        "ShaderResource"
+      ]
+    },
+    "ScatteringSixteenth": {
+      "extent": {
+        "basis": "output",
+        "scale": [
+          0.0625,
+          0.0625
+        ]
+      },
+      "format": "R16G16B16A16_FLOAT",
+      "kind": "Texture",
+      "scope": "PerView",
+      "size": {
+        "variables": {}
+      },
+      "usage": [
+        "RenderTarget",
+        "ShaderResource"
+      ]
+    },
+    "ScatteringSixtyFourth": {
+      "extent": {
+        "basis": "output",
+        "scale": [
+          0.015625,
+          0.015625
+        ]
+      },
+      "format": "R16G16B16A16_FLOAT",
+      "kind": "Texture",
+      "scope": "PerView",
+      "size": {
+        "variables": {}
+      },
+      "usage": [
+        "RenderTarget",
+        "ShaderResource"
+      ]
+    },
+    "ScatteringThirtySecond": {
+      "extent": {
+        "basis": "output",
+        "scale": [
+          0.03125,
+          0.03125
+        ]
+      },
+      "format": "R16G16B16A16_FLOAT",
+      "kind": "Texture",
+      "scope": "PerView",
+      "size": {
+        "variables": {}
+      },
+      "usage": [
+        "RenderTarget",
+        "ShaderResource"
+      ]
+    },
+    "ScatteringTwoFiftySixth": {
+      "extent": {
+        "basis": "output",
+        "scale": [
+          0.00390625,
+          0.00390625
+        ]
+      },
+      "format": "R16G16B16A16_FLOAT",
+      "kind": "Texture",
+      "scope": "PerView",
+      "size": {
+        "variables": {}
+      },
+      "usage": [
+        "RenderTarget",
+        "ShaderResource"
+      ]
+    },
+    "SceneColor": {
+      "format": "R16G16B16A16_FLOAT",
+      "kind": "Texture",
+      "scope": "PerView",
+      "size": {
+        "variables": {}
+      },
+      "usage": [
+        "RenderTarget",
+        "ShaderResource"
+      ]
+    },
+    "ShadowData": {
+      "flags": [
+        "PersistentlyMapped"
+      ],
+      "kind": "Buffer",
+      "memoryUsage": "Upload",
+      "scope": "PerView",
+      "usage": [
+        "ConstantBuffer",
+        "CopyDestination"
+      ]
+    },
+    "ViewParams": {
+      "flags": [
+        "PersistentlyMapped"
+      ],
+      "kind": "Buffer",
+      "memoryUsage": "Upload",
+      "scope": "PerView",
+      "usage": [
+        "ConstantBuffer",
+        "CopyDestination"
+      ]
+    }
+  },
+  "schemaVersion": 2
+}

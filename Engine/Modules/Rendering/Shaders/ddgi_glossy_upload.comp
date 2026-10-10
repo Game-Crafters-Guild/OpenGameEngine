@@ -1,0 +1,63 @@
+#version 450
+
+// DDGI glossy-lobe atlas upload kernel: RESOLVES the unnormalized
+// numerator/denominator history (ddgi_glossy_blend.comp's doc on why it is
+// stored that way) into the write-only glossy atlas the forward pass samples.
+//
+// The division lives here, not in the blend kernel, for the same reason the
+// irradiance denoise does (ddgi_upload.comp): this kernel reads state
+// read-only and writes only the atlas, so the resolved value never re-enters
+// the temporal history and the same state can be re-uploaded any number of
+// times for the same result.
+//
+// Unlike the rough lobe, tiles are packed in NEAR-SQUARE rows
+// (GE_DDGIGlossyTileOrigin) rather than the probe-XYZ z-major layout — at
+// 18x18 tiles the z-major height would pass the 8192 texture limit well
+// inside the probe counts this volume supports.
+//
+// One workgroup per probe, one thread per atlas texel (324 threads).
+
+#include "Includes/ddgi_common.glsl"
+
+layout(local_size_x = GE_DDGI_GLOSSY_TILE, local_size_y = GE_DDGI_GLOSSY_TILE, local_size_z = 1) in;
+
+layout(std140, set = 0, binding = 0) uniform DDGIGlossyUploadParams
+{
+    ivec4 uProbeCount;   // xyz = res; w = probeTotal
+    ivec4 uAtlas0;       // x = glossyTilesX (yzw unused)
+    uvec4 uDispatch0;    // x = probeBase, y = probesThisTick
+} DDGIParams;
+
+layout(std430, set = 0, binding = 1) readonly buffer DDGIGlossyNumeratorRO
+{
+    vec4 ge_ddgiGlossyNumerator[];
+};
+
+layout(std430, set = 0, binding = 2) readonly buffer DDGIGlossyWeightRO
+{
+    float ge_ddgiGlossyWeight[];
+};
+
+layout(set = 0, binding = 3, rgba16f) uniform writeonly image2D uGlossyAtlas;
+
+void main()
+{
+    uint probeLocal = gl_WorkGroupID.x;
+    int probeIdx = int(DDGIParams.uDispatch0.x) + int(probeLocal);
+    if (probeLocal >= DDGIParams.uDispatch0.y || probeIdx >= DDGIParams.uProbeCount.w)
+        return;
+
+    uvec2 texel = gl_LocalInvocationID.xy;
+    uint stateIdx = uint(probeIdx) * uint(GE_DDGI_GLOSSY_TILE * GE_DDGI_GLOSSY_TILE) +
+                    texel.y * uint(GE_DDGI_GLOSSY_TILE) + texel.x;
+
+    vec4 numerator = ge_ddgiGlossyNumerator[stateIdx];
+    float weight = max(ge_ddgiGlossyWeight[stateIdx], 1.0e-6);
+    // rgb = coverage-premultiplied radiance, a = coverage fraction — the same
+    // pairing the rough atlas carries, so the consumer composites both lobes
+    // identically.
+    vec4 resolved = vec4(numerator.rgb / weight, clamp(numerator.a / weight, 0.0, 1.0));
+
+    ivec2 tileOrigin = GE_DDGIGlossyTileOrigin(probeIdx, DDGIParams.uAtlas0.x);
+    imageStore(uGlossyAtlas, tileOrigin + ivec2(texel), resolved);
+}

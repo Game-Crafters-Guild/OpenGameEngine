@@ -1,0 +1,22 @@
+<uielement id="hud-root" class="hud-root">
+    <uielement id="hp-panel" class="hp-panel">
+        <label class="hp-title" text="HEALTH" />
+        <uielement class="hp-track">
+            <uielement id="hp-fill" class="hp-fill" />
+        </uielement>
+        <label id="hp-label" class="hp-label" text="-- / --" />
+        <uielement class="pips-track">
+            <hp-pips id="hp-pips" class="hp-pips" percent="72" />
+        </uielement>
+    </uielement>
+    <button id="damage-btn" class="damage-btn" text="TAKE DAMAGE" />
+    <uielement id="controls-panel" class="controls-panel">
+        <label class="panel-title" text="CONTROLS" />
+        <slider id="volume-slider" class="volume-slider" min="0" max="100" step="1" />
+        <label id="volume-label" class="row-label" text="volume: unwired" />
+        <toggle id="mute-toggle" class="mute-toggle" />
+        <label id="mute-label" class="row-label" text="mute: unwired" />
+        <textfield id="name-field" class="name-field" />
+        <label id="name-label" class="row-label" text="name: unwired" />
+    </uielement>
+</uielement>

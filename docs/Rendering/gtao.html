@@ -1,0 +1,168 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>GTAO — ambient occlusion node</title>
+<style>
+  :root {
+    --bg: #0f1115; --panel: #171a21; --panel-light: #1f232c; --border: #2a2f3a;
+    --text: #d7dae0; --muted: #8b93a3; --accent: #6aa9ff; --danger: #ff6b6b; --bad: #ff6b6b;
+    --ok: #5fd38d; --good: #5fd38d; --warn: #ffc857;
+  }
+  body { margin: 0; background: var(--bg); color: var(--text); font: 15px/1.55 -apple-system, Segoe UI, Roboto, sans-serif; }
+  .wrap { max-width: 1040px; margin: 0 auto; padding: 40px 28px 64px; }
+  h1 { font-size: 30px; margin: 0 0 4px; }
+  h2 { font-size: 21px; margin: 40px 0 14px; padding: 8px 0; border-bottom: 2px solid var(--border); }
+  h3 { font-size: 16px; margin: 22px 0 8px; color: var(--accent); }
+  .lede { color: var(--muted); margin: 0 0 24px; letter-spacing: .04em; text-transform: uppercase; font-size: 12px; }
+  code, pre { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 13px; }
+  code { background: var(--panel-light); padding: 1px 5px; border-radius: 4px; }
+  pre { background: var(--panel); border: 1px solid var(--border); border-radius: 8px; padding: 14px 16px; overflow-x: auto; }
+  pre code { background: none; padding: 0; }
+  table { width: 100%; border-collapse: collapse; margin: 12px 0 18px; background: var(--panel); border: 1px solid var(--border); border-radius: 8px; overflow: hidden; }
+  th { text-align: left; background: var(--panel-light); color: var(--muted); font-weight: 600; font-size: 12px; text-transform: uppercase; letter-spacing: .04em; }
+  th, td { padding: 8px 12px; border-bottom: 1px solid var(--border); }
+  tr:last-child td { border-bottom: none; }
+  tr:hover td { background: rgba(255,255,255,.02); }
+  td.num, th.num { text-align: right; font-variant-numeric: tabular-nums; }
+  .panel { background: var(--panel); border: 1px solid var(--border); border-left: 4px solid var(--accent); border-radius: 8px; padding: 12px 16px; margin: 14px 0; }
+  .panel.warn { border-left-color: var(--warn); }
+  .panel.ok { border-left-color: var(--ok); }
+  .panel.danger { border-left-color: var(--danger); }
+  .pill { display: inline-block; padding: 1px 8px; border-radius: 999px; font-size: 11px; font-weight: 600; letter-spacing: .04em; text-transform: uppercase; vertical-align: middle; }
+  .pill.keep { background: rgba(106,169,255,.15); color: var(--accent); }
+  .pill.del { background: rgba(255,107,107,.15); color: var(--danger); }
+  .pill.mod { background: rgba(255,200,87,.15); color: var(--warn); }
+  .two-col { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+  .muted { color: var(--muted); }
+  hr { border: 0; border-top: 1px solid var(--border); margin: 36px 0; }
+  .footer { color: var(--muted); font-size: 13px; margin-top: 48px; padding-top: 16px; border-top: 1px solid var(--border); }
+</style>
+</head>
+<body>
+<div class="wrap">
+
+<h1>GTAO</h1>
+<p class="lede">GUIDE · rendering · <code>AONode</code> · living document</p>
+
+<p>The Forward+ ambient-occlusion node produces world-space bent normals in RGB and
+visibility in alpha. Material AO still combines with visibility using <code>min()</code>;
+IBL retains its multibounce and specular-occlusion responses.</p>
+
+<h2>Configuration</h2>
+<p>The <code>AmbientOcclusion</code> node accepts these render-graph settings:</p>
+<pre><code>{
+  "id": "AmbientOcclusion",
+  "type": "AmbientOcclusion",
+  "enabled": true,
+  "quality": "medium",
+  "temporal": true,
+  "output": "View.GTAO"
+}</code></pre>
+
+<table>
+  <thead><tr><th>Quality</th><th>Sweep / history resolution</th><th class="num">Slices</th><th class="num">Steps per side</th><th class="num">Depth taps per pixel</th></tr></thead>
+  <tbody>
+    <tr><td><code>medium</code> (default)</td><td>Half width and height</td><td class="num">5</td><td class="num">3</td><td class="num">30</td></tr>
+    <tr><td><code>high</code></td><td>Full</td><td class="num">5</td><td class="num">3</td><td class="num">30</td></tr>
+    <tr><td><code>ultra</code></td><td>Full</td><td class="num">8</td><td class="num">3</td><td class="num">48</td></tr>
+  </tbody>
+</table>
+
+<div class="panel ok">
+<b>A preset changes noise, never the amount of occlusion.</b> Steps per side is the same for every
+preset and is not a field of the preset table. The sweep marks the sectors its taps land in, so its
+horizon is a maximum over samples: occlusion rises with the tap count and does not converge.
+Measured on the GPU over three synthetic fixtures, three / four / six / twelve / twenty-four taps
+gave 0.027 / 0.033 / 0.046 / 0.064 / 0.077 mean occlusion on the same frame — a preset that raised
+the tap count would darken every frame and silently retune every AmbientOcclusion volume.
+Resolution and slice count are neutral in amount (within 10 % and 1.5 % respectively) and are
+therefore what the presets buy: Medium to High is sharpness, High to Ultra is less slice banding.
+<code>GtaoComputeTest.PresetsAgreeOnOcclusionAmount</code> holds the three presets to 10 % of each
+other on the GPU, and the tap count lives in <code>kGtaoSweepSteps</code>.
+</div>
+
+<div class="panel warn">
+<b>There is no <code>low</code> preset.</b> A fixed per-frame cost — prepare, the depth mip chain, the
+denoiser and the temporal pass, about 0.105 ms of the Medium chain on an RTX 5080 at 3067×900 —
+dominates below Medium, so a 3-slice preset measured 13 % cheaper for 40 % fewer taps.
+A cheaper tier has to remove passes, not taps; until one does, Medium is the floor.
+</div>
+
+<p>Radius, thickness, and intensity remain PostProcessVolume properties. Invalid quality names
+fail node initialization. With <code>temporal: false</code>, the noise phase is fixed and no history
+pass or resources are allocated. AO intensity zero disables the node and invalidates its history.</p>
+
+<div class="panel warn">
+<b>Existing volumes may need their Intensity re-tuned.</b> This estimator puts occlusion on contact
+geometry rather than spreading a tint over whole objects, so the same Intensity does not reproduce
+the same picture as the single-pass node it replaces. Tune Intensity against a scene, not against a
+number carried over.
+</div>
+
+<p>The Inspector has no control for quality or temporal accumulation.
+Edit the <code>quality</code> and <code>temporal</code> fields on the
+<code>AmbientOcclusion</code> node in the rendergraph asset used by your camera's pipeline,
+using the values above. Edit the source asset, not a staged build copy.</p>
+
+<h2>Limits</h2>
+<p>GTAO runs before object motion vectors are available. Reprojection therefore handles camera
+motion; conservative rejection limits stale occlusion on moving objects but does not provide
+object-motion reprojection. The temporal toggle is useful when evaluating rapidly moving or
+deforming geometry. Letterboxed subrect views use the unoccluded fallback because their depth UV
+mapping differs.</p>
+
+<p>On the web (WebGPU), an adapter without the <code>float32-filterable</code> feature
+leaves the effect inactive, and the log says so once.</p>
+
+<h2>Cost</h2>
+
+<h3>Persistent VRAM per view</h3>
+<p>Figures at 1920×1080, bytes per texel × texels; the previous single-pass node kept one full-res
+RGBA16F output (16.6 MB).</p>
+<table>
+  <thead><tr><th>Resource</th><th>Format</th><th>Medium</th><th>High / Ultra</th></tr></thead>
+  <tbody>
+    <tr><td>Depth mip chain (6 levels)</td><td>R32F, full res</td><td class="num">11.1 MB</td><td class="num">11.1 MB</td></tr>
+    <tr><td>Published output</td><td>RGBA16F, full res</td><td class="num">16.6 MB</td><td class="num muted">— (history is the output)</td></tr>
+    <tr><td>AO history × 2</td><td>RGBA16F, sweep res</td><td class="num">8.3 MB</td><td class="num">33.2 MB</td></tr>
+    <tr><td>Surface history × 2</td><td>RG32F, sweep res</td><td class="num">8.3 MB</td><td class="num">33.2 MB</td></tr>
+    <tr><td><b>Total</b></td><td></td><td class="num"><b>44.2 MB</b> (2.7×)</td><td class="num"><b>77.5 MB</b> (4.7×)</td></tr>
+  </tbody>
+</table>
+
+<h3>GPU time</h3>
+<p>Release, RTX 5080, 3067×900 viewport, Biggles Lanscape.scene, whole GTAO chain per frame. The
+control is the previous single-pass node (same scene, same build configuration).</p>
+<table>
+  <thead><tr><th>Preset</th><th class="num">Chain (ms)</th><th class="num">vs control</th></tr></thead>
+  <tbody>
+    <tr><td>Control (previous node)</td><td class="num">0.061</td><td class="num">1.0×</td></tr>
+    <tr><td>Medium (default)</td><td class="num">0.149</td><td class="num">2.4×</td></tr>
+    <tr><td>High</td><td class="num">0.241</td><td class="num">4.0×</td></tr>
+    <tr><td>Ultra</td><td class="num">0.341</td><td class="num">5.6×</td></tr>
+  </tbody>
+</table>
+<p class="muted">Only Release timings are comparable; DebugFast numbers from this arc were not used.
+Metal/MoltenVK frame timings have not been measured in an application frame.</p>
+
+<div class="footer">
+<b>Changelog</b><br>
+2026-10-05 · v5 — split: this page keeps configuration, presets, cost and limits; the estimator, filtering and history design, validation, source layout and web cook constraints move out of the user documentation into the design record.<br>
+2026-09-13 · v4 — the radial tap count leaves the preset table and becomes
+<code>kGtaoSweepSteps</code>, so presets change noise and sharpness only; calibration measured and
+gated on the GPU; the upsampler drops rather than blends taps from another surface; the
+kernels, their includes and the two policy headers move into per-feature
+<code>AmbientOcclusion</code> folders.<br>
+2026-09-13 · v3 — record the source-asset configuration path; fill the RTX 5080 variance values
+and correct the scene name.<br>
+2026-09-10 · v2 — converted from two Markdown files (<code>docs/Rendering/gtao.md</code>,
+<code>docs/performance/gtao-2026-09-06/README.md</code>) into this canonical; the <code>low</code> preset is
+removed and the reason recorded; persistent VRAM per view and Release chain timings added; the
+variance-reduction figure is quoted per GPU rather than as one number; web cook constraints
+documented; the depth-plane denoiser test described.<br>
+2026-09-06 · v1 — created with the GTAO rework.
+</div>
+</div>
+</body>
+</html>

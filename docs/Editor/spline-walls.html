@@ -1,0 +1,215 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Spline Walls — a wall you draw</title>
+<style>
+  :root{
+    --bg:#0e1116; --panel:#161b22; --panel-light:#1c232c; --border:#2a323d;
+    --text:#d7dde5; --muted:#8b97a6; --accent:#5db0ff;
+    --danger:#ff6b6b; --bad:#ff6b6b; --ok:#5ad19b; --good:#5ad19b; --warn:#e8c468;
+    --mono:"SF Mono",ui-monospace,Menlo,Consolas,monospace;
+  }
+  *{box-sizing:border-box}
+  body{background:var(--bg);color:var(--text);font:15px/1.6 -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif;
+       margin:0;padding:0 0 80px}
+  .wrap{max-width:980px;margin:0 auto;padding:32px 24px}
+  h1{font-size:30px;margin:0 0 4px;letter-spacing:-.4px}
+  h2{font-size:22px;margin:42px 0 14px;padding-top:22px;border-top:1px solid var(--border)}
+  h3{font-size:17px;margin:26px 0 8px;color:#e9eef4}
+  p,li{color:var(--text)}
+  .lede{color:var(--muted);font-size:13px;text-transform:uppercase;letter-spacing:.12em;margin:0 0 26px}
+  a{color:var(--accent);text-decoration:none}
+  code{font-family:var(--mono);font-size:.88em;background:#11161d;border:1px solid var(--border);
+       border-radius:4px;padding:1px 5px}
+  .panel{border:1px solid var(--border);border-left-width:4px;border-radius:8px;background:var(--panel);
+         padding:14px 18px;margin:16px 0}
+  .panel.ok{border-left-color:var(--ok)} .panel.warn{border-left-color:var(--warn)}
+  .panel h4{margin:0 0 6px;font-size:14px;text-transform:uppercase;letter-spacing:.06em}
+  .panel.ok h4{color:var(--ok)} .panel.warn h4{color:var(--warn)}
+  .grid-2{display:grid;grid-template-columns:1fr 1fr;gap:16px}
+  @media(max-width:760px){.grid-2{grid-template-columns:1fr}}
+  table{border-collapse:collapse;width:100%;margin:16px 0;font-size:13.5px}
+  th,td{border:1px solid var(--border);padding:8px 11px;text-align:left;vertical-align:top}
+  th{background:var(--panel-light);color:#e9eef4}
+  tr:hover td{background:#12171e}
+  .muted{color:var(--muted)}
+  ul{padding-left:22px} li{margin:4px 0}
+  .step{border:1px solid var(--border);border-radius:8px;background:var(--panel);padding:12px 16px;margin:10px 0}
+  .step b{color:var(--accent)}
+  footer{max-width:980px;margin:40px auto 0;padding:18px 24px 0;border-top:1px solid var(--border);color:var(--muted);font-size:12.5px}
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <h1>Spline Walls</h1>
+  <p class="lede">Feature guide · level authoring / splines</p>
+
+  <p>A <b>Spline Wall</b> is a wall you draw. Place a spline, add the <b>Spline Wall</b>
+  component to it, and a wall of the thickness and height you set stands along the spline as
+  one continuous mesh. It has no kit pieces, so there are no joins and nothing stretches. A
+  corner point on a spline of straight segments gives a sharp mitred corner. A curved spline
+  gives a curved wall. One setting makes the corners round instead. The texture runs along
+  the wall in metres, so a 10 m wall and a 100 m wall show stones of the same size.</p>
+
+  <h2>Draw a wall</h2>
+
+  <div class="step"><b>1.</b> Create a spline and place its points. Set the spline's
+  <b>Type</b> to <b>Linear</b> for straight walls with sharp corners, or keep a curved type
+  for a curved wall.</div>
+  <div class="step"><b>2.</b> Select the spline and add the <b>Spline Wall</b> component. A
+  0.6 m thick, 3 m tall gray wall appears along the spline and stands on the ground under
+  it.</div>
+  <div class="step"><b>3.</b> To close a courtyard, set the spline to <b>Closed</b>. The wall
+  runs from the last point back to the first and meets itself with no seam.</div>
+  <div class="step"><b>4.</b> Assign a <b>Material</b> to give the wall its stone. Set
+  <b>Thickness</b> and <b>Height</b> to taste.</div>
+
+  <div class="panel ok">
+    <h4>Nothing else to set</h4>
+    <p>A plain wall needs no settings. The spline's width does not affect the wall; its
+    thickness is the component's <b>Thickness</b>. Edits rebuild the wall a quarter of a
+    second after you stop dragging.</p>
+  </div>
+
+  <h2>Settings</h2>
+  <table>
+    <tr><th>Setting</th><th>Default</th><th>What it does</th></tr>
+    <tr><td>Thickness</td><td>0.6 m</td><td>Metres across the wall. A garden wall and a
+      curtain wall differ here.</td></tr>
+    <tr><td>Height</td><td>3 m</td><td>Metres from the ground to the top of the wall.</td></tr>
+    <tr><td>Grade</td><td>Racked</td><td>How the wall meets a slope. See
+      <a href="#slopes">Slopes</a>.</td></tr>
+    <tr><td>Corner</td><td>From the spline's type</td><td>What the wall builds where the
+      spline turns at a point. See <a href="#corners">Corners</a>.</td></tr>
+    <tr><td>Material</td><td>Empty (flat gray)</td><td>The wall's surface. See
+      <a href="#materials">Materials</a>.</td></tr>
+    <tr><td>ConformMode</td><td>Height</td><td>How the wall follows the ground. <b>None</b>
+      keeps the spline's own heights. <b>Height</b> and <b>HeightAndSlope</b> both set the
+      wall on the surface below the spline.</td></tr>
+    <tr><td>ConformTarget</td><td>Scene</td><td>What counts as ground. <b>Scene</b> takes the
+      nearest surface of any kind. <b>TerrainOnly</b> ignores props, so a wall passing under
+      a tree stands on the terrain, not on the tree.</td></tr>
+    <tr><td>CastShadows, ReceiveShadows</td><td>On</td><td>Shadowing, as on any mesh.</td></tr>
+  </table>
+
+  <h2 id="corners">Corners</h2>
+
+  <p>A corner is an authored point on a <b>Linear</b> spline, or a point on a curved spline
+  where the curve turns sharply, by more than 5 degrees (a Bezier point whose two handles are
+  broken). Between corners a curved spline is always swept as the curve it is, whatever the
+  <b>Corner</b> setting says.</p>
+
+  <div class="grid-2">
+    <div class="panel">
+      <h4>Mitre</h4>
+      <p>The two faces meet on one sharp vertical edge, and the top meets on the mitre line,
+      the way a masonry corner does. This is what a wall on a Linear spline starts with.</p>
+    </div>
+    <div class="panel">
+      <h4>Round</h4>
+      <p>The outside of the corner sweeps an arc, and the inside meets at a point. Use it for
+      earthworks, hedges and rounded bastions. This is what a wall on a curved spline starts
+      with.</p>
+    </div>
+  </div>
+
+  <p>Adding the component picks the corner from the spline's type at that moment. Changing the
+  spline's type afterwards leaves your choice alone, and resetting the component restores the
+  values it had when you first selected it, not a corner picked again from the type.</p>
+
+  <div class="panel warn">
+    <h4>Turns sharper than 120 degrees are always round</h4>
+    <p>A mitred corner on a very sharp turn would reach out toward infinity, so a turn past
+    120 degrees is built round even with <b>Corner</b> set to <b>Mitre</b>, and the log says
+    so, naming the point. Its inside meets where the two inside faces cross. On a leg too
+    short to reach that point, the inside narrows toward the corner instead.</p>
+  </div>
+
+  <h2 id="slopes">Slopes</h2>
+
+  <p>The wall's base always stands in the ground: on a cross slope the base sinks so its
+  downhill edge meets the ground, which leaves its uphill edge buried a little. Nothing
+  floats.</p>
+
+  <div class="grid-2">
+    <div class="panel">
+      <h4>Racked</h4>
+      <p>The top runs parallel to the ground, as a hedge or a palisade does. This is the
+      default.</p>
+    </div>
+    <div class="panel">
+      <h4>Stepped</h4>
+      <p>The top of each stretch between two points is level, at <b>Height</b> above that
+      stretch's highest ground, and the wall steps up or down where two stretches meet, as
+      coursed masonry does. No part of the wall is shorter than <b>Height</b>; it grows taller
+      toward the downhill end of each stretch. Put a point wherever you want a step.</p>
+    </div>
+  </div>
+
+  <h2 id="materials">Materials</h2>
+
+  <p>With no material assigned the wall is a flat gray, so it is visible on the first try. Two
+  kinds of material give it stone.</p>
+
+  <h3>A material that tiles in metres</h3>
+  <p>Any material with a tiling texture works. The wall's texture coordinates are in metres,
+  so the material's own tiling sets the stone size: a texture that covers 2 m of wall needs a
+  tiling of 0.5. The coordinates are laid out so a coursed texture reads right:</p>
+  <ul>
+    <li>Along each side face, the texture runs the face's own length. The outside of a corner
+    or a bend is longer than the inside, and each face tiles at the same size, so stones at a
+    corner match stones mid-wall.</li>
+    <li>Up the faces, the texture runs in world height above the wall's lowest point, so
+    courses stay level on a slope, the top cuts across them, and they meet across every
+    corner and every step.</li>
+    <li>On a closed wall each face closes on itself on a whole metre, so the texture has no
+    seam where the loop meets.</li>
+    <li>The top runs along the wall and across its width. At a mitred corner the top's joints
+    stay square to each leg and meet on the mitre line. On top of a round corner the pattern
+    runs around the outer edge at its true size and gathers to a point at the inside
+    corner, as coping stones do.</li>
+  </ul>
+
+  <h3>A world-space material</h3>
+  <p>A material whose surface shader is the triplanar one projects its texture in world space
+  and ignores the wall's texture coordinates. The same material then continues across the
+  wall and across any kit pieces beside it. On a wall that runs diagonally to the world axes,
+  a coursed texture shows its courses from two projections, so prefer the metre-tiling
+  material for coursed stone and brick.</p>
+
+  <h2>What the log tells you</h2>
+  <p>Each problem is logged once, naming the wall and the point, with the fix. Rebuilding the
+  same wall does not repeat it.</p>
+  <table>
+    <tr><th>Message</th><th>What to do</th></tr>
+    <tr><td>A point turns past the 120-degree mitre limit, so the corner is built round.</td>
+      <td>Widen the turn to keep a mitred corner.</td></tr>
+    <tr><td>A point is too close to the end of the wall for its corner.</td>
+      <td>Lengthen the end leg or thin the wall.</td></tr>
+    <tr><td>Two points turn the same way too close together.</td>
+      <td>Lengthen the leg between them or thin the wall.</td></tr>
+    <tr><td>The curve between two points bends tighter than half the wall's thickness, so the
+      inside face folds there.</td>
+      <td>Widen the curve or thin the wall.</td></tr>
+    <tr><td>Thickness or Height is below 0.05 m.</td>
+      <td>Set at least 0.05 m; the wall is built at that size until you do.</td></tr>
+  </table>
+
+  <h2>Limits</h2>
+  <ul>
+    <li>The wall is built in the editor. It is saved with the scene as its settings, not as a
+    mesh, and a game built from the scene does not generate it.</li>
+    <li>The wall has no collider yet: characters and physics objects pass through it.</li>
+    <li>Towers, gates and battlements are not part of the wall. Place kit pieces for them by
+    hand.</li>
+    <li>A spline longer than 4096 m is followed less closely past that length, and the log
+    says so.</li>
+  </ul>
+
+</div>
+<footer>Spline Walls guide · 2026-09-23</footer>
+</body>
+</html>

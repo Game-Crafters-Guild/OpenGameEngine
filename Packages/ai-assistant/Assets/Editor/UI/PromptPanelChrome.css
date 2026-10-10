@@ -1,0 +1,24 @@
+.prompt-panel-tab-icon {
+    background-image: url("ai-assistant:Editor/Icons/chatbox.svg");
+    background-size: 16px 16px;
+    background-repeat: no-repeat;
+    background-position: center;
+    background-image-tint: rgba(255, 255, 255, 0.35);
+    background-color: transparent;
+    border-width: 0;
+}
+
+.prompt-panel-tab-icon:hover {
+    background-image-tint: rgba(255, 255, 255, 1.0);
+}
+
+/* The AI Assistant's Session list (AgentSessionPicker): a hairline between sessions,
+   so the two-line entries read apart when the list is long. */
+.agent-session-picker .search-result-row {
+    border-bottom: 1px solid var(--ui_color_border_subtle);
+}
+
+/* The AI Assistant page's icon in the Settings tree. */
+.settings-tree-pane .ai-assistant-row .tree-title {
+    background-image: url("ai-assistant:Editor/Icons/chatbox.svg");
+}

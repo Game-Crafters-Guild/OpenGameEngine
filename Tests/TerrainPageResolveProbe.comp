@@ -1,0 +1,69 @@
+#version 460
+// The paged height resolve (cbt_page.glsl) run on the device for TerrainPageResolveGpuTests: one
+// invocation per query point, the taps defined as a consumer defines them (the cache through a
+// linear-clamp sampler at the texel's centre), so the hardware's bilinear filter is what the test
+// holds to the CPU mirror.
+#extension GL_GOOGLE_include_directive : require
+
+#include "cbt_page.glsl"
+
+layout(local_size_x = 64, local_size_y = 1, local_size_z = 1) in;
+
+layout(set = 0, binding = 0) uniform sampler2D uPageCache;
+
+layout(std430, set = 0, binding = 1) readonly buffer PageTableEntries
+{
+    uint Entries[];
+};
+
+layout(std430, set = 0, binding = 2) readonly buffer PageSlotFades
+{
+    float SlotFade[];
+};
+
+layout(std430, set = 0, binding = 3) readonly buffer PageLevelShapes
+{
+    CBTPageLevel Levels[];
+};
+
+// The field, the point count, then one (u, v, lambda, unused) per point.
+layout(std430, set = 0, binding = 4) readonly buffer ProbeQueries
+{
+    CBTPageField Field;
+    uvec4 Count;
+    vec4 Points[];
+};
+
+layout(std430, set = 0, binding = 5) writeonly buffer ProbeResults
+{
+    float Heights[];
+};
+
+uint CBT_PageTableEntry(uint index)
+{
+    return Entries[index];
+}
+
+float CBT_PageSlotFade(uint slot)
+{
+    return SlotFade[slot];
+}
+
+CBTPageLevel CBT_PageLevelShape(uint level)
+{
+    return Levels[level];
+}
+
+float CBT_PageCacheBilinear(float texelX, float texelZ)
+{
+    return textureLod(uPageCache, CBT_PageCacheUV(texelX, texelZ, vec2(textureSize(uPageCache, 0))), 0.0).r;
+}
+
+void main()
+{
+    uint i = gl_GlobalInvocationID.x;
+    if (i >= Count.x)
+        return;
+    vec4 p = Points[i];
+    Heights[i] = CBT_PageSample(p.x, p.y, p.z, Field);
+}

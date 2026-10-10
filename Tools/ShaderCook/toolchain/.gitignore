@@ -1,0 +1,3 @@
+# Host tool binaries fetched by setup.py from the release pinned in manifest.json.
+# Only the pin, the fetch script and this file are tracked.
+*/

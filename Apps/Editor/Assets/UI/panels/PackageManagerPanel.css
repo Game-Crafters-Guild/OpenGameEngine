@@ -1,0 +1,384 @@
+/* Package Manager panel — toolbar + master-detail (left list / right detail).
+ *
+ * Attached to the panel subtree via RequestSubtreeStyleAssetPath so the panel
+ * carries its own properly-scoped styles instead of borrowing inspector CSS
+ * context (the old .inspector-text-field class was a no-op here, which is why
+ * the add/ref/path fields rendered border-less). All selectors are matched
+ * inside the .package-manager-panel subtree; design tokens resolve from :root.
+ */
+
+.package-manager-panel .pkg-root {
+    display: flex;
+    flex-direction: column;
+    flex: 1 1 auto;
+    width: 100%;
+    min-width: 0;
+    min-height: 0;
+    background-color: var(--ui_color_bg_panel);
+    padding: 8px;
+    gap: 6px;
+    box-sizing: border-box;
+}
+
+/* ---- Toolbar: global actions (add / browse / refresh) ---- */
+
+.package-manager-panel .pkg-toolbar {
+    display: flex;
+    flex-direction: row;
+    align-items: center;
+    flex-wrap: wrap;
+    column-gap: 6px;
+    row-gap: 6px;
+    flex: 0 0 auto;
+}
+
+.package-manager-panel .pkg-toolbar-spacer {
+    flex: 1 1 0;
+    min-width: 0;
+}
+
+.package-manager-panel .pkg-add-field {
+    flex: 1 1 auto;
+    min-width: 120px;
+}
+
+.package-manager-panel .pkg-toolbar Button {
+    flex: 0 0 auto;
+    white-space: nowrap;
+}
+
+/* ---- Text fields: give the inner TextInput a real box in this scope ---- */
+
+.package-manager-panel .pkg-field TextInput {
+    padding: 4px 8px;
+    border-radius: 4px;
+    border-width: 1px;
+    border-color: var(--ui_color_border_subtle);
+    background-color: #202020;
+    color: var(--ui_color_text);
+    height: 24px;
+    min-height: 24px;
+    width: 100%;
+    box-sizing: border-box;
+    white-space: nowrap;
+    overflow: hidden;
+}
+
+.package-manager-panel .pkg-field TextInput:focus {
+    border-color: var(--ui_color_accent_blue);
+    background-color: #232323;
+}
+
+/* ---- Status + inline action outcome + resolver issues ---- */
+
+.package-manager-panel .pkg-status {
+    flex: 0 0 auto;
+    font-size: var(--ui_font_size_small);
+    color: var(--ui_color_text_dim);
+    white-space: normal;
+}
+
+.package-manager-panel .pkg-status.notice {
+    color: #D8B860;
+}
+
+.package-manager-panel .pkg-action-status {
+    flex: 0 0 auto;
+    font-size: 11px;
+    color: #70C080;
+    white-space: normal;
+}
+
+.package-manager-panel .pkg-action-status.error {
+    color: #E06060;
+}
+
+.package-manager-panel .pkg-issues {
+    display: flex;
+    flex-direction: column;
+    flex: 0 0 auto;
+    gap: 2px;
+}
+
+.package-manager-panel .pkg-issue-error {
+    font-size: 11px;
+    color: #E06060;
+}
+
+.package-manager-panel .pkg-issue-warn {
+    font-size: 11px;
+    color: #D8B860;
+}
+
+/* ---- Body: master-detail split ---- */
+
+.package-manager-panel .pkg-body {
+    display: flex;
+    flex-direction: row;
+    flex: 1 1 auto;
+    min-height: 0;
+    gap: 0;
+}
+
+.package-manager-panel .pkg-pane {
+    display: flex;
+    flex-direction: column;
+    flex-basis: 0;
+    flex-shrink: 1;
+    min-width: 0;
+    min-height: 0;
+}
+
+.package-manager-panel .pkg-splitter {
+    flex: 0 0 6px;
+    width: 6px;
+    background-color: transparent;
+    cursor: col-resize;
+}
+
+/* ---- Left: package list ---- */
+
+.package-manager-panel .pkg-list {
+    flex: 1 1 auto;
+    min-width: 0;
+    min-height: 0;
+    background-color: var(--ui_color_bg_grid);
+    border-radius: 4px;
+    overflow-x: hidden;
+    overflow-y: auto;
+}
+
+.package-manager-panel .pkg-list .scroll-content {
+    display: flex;
+    flex-direction: column;
+    padding: 4px;
+    gap: 1px;
+    min-width: 0;
+}
+
+.package-manager-panel .pkg-row {
+    display: flex;
+    flex-direction: column;
+    flex: 0 0 auto;
+    gap: 2px;
+    padding: 5px 8px;
+    border-radius: 3px;
+    border-left-width: 3px;
+    border-left-color: transparent;
+    cursor: pointer;
+    min-width: 0;
+}
+
+.package-manager-panel .pkg-row:hover {
+    background-color: var(--ui_color_bg_item_hover);
+}
+
+.package-manager-panel .pkg-row.selected,
+.package-manager-panel .pkg-row.selected:hover {
+    background-color: var(--ui_color_bg_selected);
+}
+
+.package-manager-panel .pkg-row-main {
+    display: flex;
+    flex-direction: row;
+    align-items: center;
+    gap: 6px;
+    min-width: 0;
+}
+
+.package-manager-panel .pkg-row-name {
+    flex: 0 1 auto;
+    min-width: 0;
+    font-size: var(--ui_font_size_list);
+    color: var(--ui_color_text_dim);
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.package-manager-panel .pkg-row.selected .pkg-row-name,
+.package-manager-panel .pkg-row.enabled .pkg-row-name {
+    color: var(--ui_color_text_bright);
+}
+
+.package-manager-panel .pkg-row.disabled .pkg-row-name {
+    color: #7A7266;
+}
+
+.package-manager-panel .pkg-row-version {
+    flex: 0 0 auto;
+    font-size: 11px;
+    color: #808890;
+    white-space: nowrap;
+}
+
+.package-manager-panel .pkg-row-spacer {
+    flex: 1 1 0;
+    min-width: 4px;
+}
+
+.package-manager-panel .pkg-row-badges {
+    display: flex;
+    flex-direction: row;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 4px;
+    min-width: 0;
+}
+
+/* ---- Kind pills + status badges (shared pill shell) ---- */
+
+.package-manager-panel .pkg-pill {
+    flex: 0 0 auto;
+    font-size: 10px;
+    font-weight: 600;
+    padding: 1px 6px;
+    border-radius: 8px;
+    white-space: nowrap;
+}
+
+.package-manager-panel .pkg-pill.git      { background-color: #223A55; color: #8FC0FF; }
+.package-manager-panel .pkg-pill.file     { background-color: #263A2A; color: #9FD09F; }
+.package-manager-panel .pkg-pill.embedded { background-color: #352C4E; color: #C4AEF0; }
+.package-manager-panel .pkg-pill.engine   { background-color: #333333; color: #B0B0B0; }
+
+.package-manager-panel .pkg-badge {
+    flex: 0 0 auto;
+    font-size: 10px;
+    font-weight: 700;
+    padding: 1px 6px;
+    border-radius: 3px;
+    white-space: nowrap;
+}
+
+.package-manager-panel .pkg-badge.missing  { background-color: #5A2020; color: #FF9090; }
+.package-manager-panel .pkg-badge.disabled { background-color: #3A3A3A; color: #B0A488; }
+.package-manager-panel .pkg-badge.drift    { background-color: #3A2E12; color: #E0BC66; }
+
+/* ---- Right: detail view ---- */
+
+.package-manager-panel .pkg-detail {
+    flex: 1 1 auto;
+    min-width: 0;
+    min-height: 0;
+    background-color: var(--ui_color_bg_grid);
+    border-radius: 4px;
+    overflow-x: hidden;
+    overflow-y: auto;
+}
+
+.package-manager-panel .pkg-detail .scroll-content {
+    display: flex;
+    flex-direction: column;
+    padding: 10px 12px;
+    gap: 4px;
+    min-width: 0;
+}
+
+.package-manager-panel .pkg-detail-empty {
+    font-size: var(--ui_font_size_base);
+    color: #808890;
+    padding: 4px 0;
+}
+
+.package-manager-panel .pkg-detail-head {
+    display: flex;
+    flex-direction: row;
+    align-items: baseline;
+    flex-wrap: wrap;
+    gap: 8px;
+    min-width: 0;
+}
+
+.package-manager-panel .pkg-detail-name {
+    flex: 0 1 auto;
+    min-width: 0;
+    font-size: 17px;
+    color: var(--ui_color_text_bright);
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.package-manager-panel .pkg-detail-version {
+    flex: 0 0 auto;
+    font-size: var(--ui_font_size_base);
+    color: #808890;
+}
+
+.package-manager-panel .pkg-detail-kindrow {
+    display: flex;
+    flex-direction: row;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 6px;
+    padding: 2px 0 6px 0;
+}
+
+.package-manager-panel .pkg-detail-state {
+    flex: 0 0 auto;
+    font-size: var(--ui_font_size_small);
+    color: var(--ui_color_text_dim);
+}
+
+.package-manager-panel .pkg-detail-state.notice { color: #E0BC66; }
+.package-manager-panel .pkg-detail-state.error  { color: #E06060; }
+
+/* Info rows: fixed-width dim label + monospace value */
+.package-manager-panel .pkg-info-row {
+    display: flex;
+    flex-direction: row;
+    align-items: baseline;
+    gap: 8px;
+    min-width: 0;
+}
+
+.package-manager-panel .pkg-info-key {
+    flex: 0 0 64px;
+    font-size: var(--ui_font_size_small);
+    color: #808890;
+    text-align: right;
+}
+
+.package-manager-panel .pkg-info-val {
+    flex: 1 1 auto;
+    min-width: 0;
+    font-size: var(--ui_font_size_small);
+    color: var(--ui_color_text);
+    font-family: var(--ui_font_mono);
+    white-space: normal;
+}
+
+/* ---- Action cluster: wraps so buttons never overflow the pane width ---- */
+
+.package-manager-panel .pkg-actions {
+    display: flex;
+    flex-direction: row;
+    align-items: center;
+    flex-wrap: wrap;
+    column-gap: 6px;
+    row-gap: 6px;
+    padding-top: 8px;
+    min-width: 0;
+}
+
+.package-manager-panel .pkg-actions Button {
+    flex: 0 0 auto;
+    white-space: nowrap;
+}
+
+.package-manager-panel .pkg-actions button.confirm {
+    border-color: #7A2528;
+    color: #F0A0A2;
+}
+
+.package-manager-panel .pkg-ref-field {
+    flex: 0 0 auto;
+    width: 150px;
+    min-width: 150px;
+}
+
+.package-manager-panel .pkg-path-field {
+    flex: 0 1 340px;
+    min-width: 200px;
+}

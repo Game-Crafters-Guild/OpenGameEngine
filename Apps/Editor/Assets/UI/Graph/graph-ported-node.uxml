@@ -1,0 +1,10 @@
+<UIElement class="graph-node-body">
+  <UIElement class="graph-node-header">
+    <UIElement class="graph-node-icon" />
+    <Label class="graph-node-title graph-node-detail" />
+  </UIElement>
+  <UIElement class="graph-node-content graph-node-detail">
+    <GraphPortDropSlot class="graph-node-preview graph-node-detail graph-port-drop-slot" />
+    <Label class="graph-node-value" />
+  </UIElement>
+</UIElement>

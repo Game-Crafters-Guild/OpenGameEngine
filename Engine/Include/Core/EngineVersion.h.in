@@ -1,0 +1,16 @@
+#pragma once
+
+#include <cstdint>
+
+// Generated from the repository root's VERSION file by the root CMakeLists.txt
+// (cmake/EngineVersion.cmake); edit VERSION, never the generated copy.
+namespace GameEngine
+{
+/// The engine version, `<year>.<month>.<patch>` with the prerelease suffix when there is one
+/// (`2026.10.0-alpha.4`).
+inline constexpr const char* kEngineVersion = "@GE_ENGINE_VERSION@";
+/// The numeric parts of kEngineVersion.
+inline constexpr uint32_t kEngineVersionYear = @GE_ENGINE_VERSION_YEAR@;
+inline constexpr uint32_t kEngineVersionMonth = @GE_ENGINE_VERSION_MONTH@;
+inline constexpr uint32_t kEngineVersionPatch = @GE_ENGINE_VERSION_PATCH@;
+} // namespace GameEngine

@@ -1,0 +1,37 @@
+{
+  "version": 1,
+  "name": "HumanoidStandard",
+  "description": "Engine-default humanoid skeleton profile. 24 body bones in canonical T-pose; LH +Y up, +Z forward, X-axis as the arm-extension axis. Fingers are reserved in HumanBone but not bound by this default profile.",
+  "bones": [
+    { "bone": "Hips",          "parent": "None",          "restTranslation": [0.0, 1.0, 0.0],   "restRotation": [1.0, 0.0, 0.0, 0.0], "restScale": [1.0, 1.0, 1.0], "localForward": [0.0, 0.0, 1.0], "localUp": [0.0, 1.0, 0.0] },
+    { "bone": "Spine",         "parent": "Hips",          "restTranslation": [0.0, 0.10, 0.0],  "restRotation": [1.0, 0.0, 0.0, 0.0], "restScale": [1.0, 1.0, 1.0], "localForward": [0.0, 1.0, 0.0], "localUp": [0.0, 0.0, 1.0] },
+    { "bone": "Chest",         "parent": "Spine",         "restTranslation": [0.0, 0.18, 0.0],  "restRotation": [1.0, 0.0, 0.0, 0.0], "restScale": [1.0, 1.0, 1.0], "localForward": [0.0, 1.0, 0.0], "localUp": [0.0, 0.0, 1.0] },
+    { "bone": "UpperChest",    "parent": "Chest",         "restTranslation": [0.0, 0.12, 0.0],  "restRotation": [1.0, 0.0, 0.0, 0.0], "restScale": [1.0, 1.0, 1.0], "localForward": [0.0, 1.0, 0.0], "localUp": [0.0, 0.0, 1.0] },
+    { "bone": "Neck",          "parent": "UpperChest",    "restTranslation": [0.0, 0.15, 0.0],  "restRotation": [1.0, 0.0, 0.0, 0.0], "restScale": [1.0, 1.0, 1.0], "localForward": [0.0, 1.0, 0.0], "localUp": [0.0, 0.0, 1.0] },
+    { "bone": "Head",          "parent": "Neck",          "restTranslation": [0.0, 0.10, 0.0],  "restRotation": [1.0, 0.0, 0.0, 0.0], "restScale": [1.0, 1.0, 1.0], "localForward": [0.0, 1.0, 0.0], "localUp": [0.0, 0.0, 1.0] },
+
+    { "bone": "LeftShoulder",  "parent": "UpperChest",    "restTranslation": [-0.05, 0.10, 0.0],"restRotation": [1.0, 0.0, 0.0, 0.0], "restScale": [1.0, 1.0, 1.0], "localForward": [-1.0, 0.0, 0.0], "localUp": [0.0, 1.0, 0.0] },
+    { "bone": "LeftUpperArm",  "parent": "LeftShoulder",  "restTranslation": [-0.13, 0.0, 0.0], "restRotation": [1.0, 0.0, 0.0, 0.0], "restScale": [1.0, 1.0, 1.0], "localForward": [-1.0, 0.0, 0.0], "localUp": [0.0, 1.0, 0.0] },
+    { "bone": "LeftLowerArm",  "parent": "LeftUpperArm",  "restTranslation": [-0.28, 0.0, 0.0], "restRotation": [1.0, 0.0, 0.0, 0.0], "restScale": [1.0, 1.0, 1.0], "localForward": [-1.0, 0.0, 0.0], "localUp": [0.0, 1.0, 0.0] },
+    { "bone": "LeftHand",      "parent": "LeftLowerArm",  "restTranslation": [-0.27, 0.0, 0.0], "restRotation": [1.0, 0.0, 0.0, 0.0], "restScale": [1.0, 1.0, 1.0], "localForward": [-1.0, 0.0, 0.0], "localUp": [0.0, 1.0, 0.0] },
+
+    { "bone": "RightShoulder", "parent": "UpperChest",    "restTranslation": [0.05, 0.10, 0.0], "restRotation": [1.0, 0.0, 0.0, 0.0], "restScale": [1.0, 1.0, 1.0], "localForward": [1.0, 0.0, 0.0], "localUp": [0.0, 1.0, 0.0] },
+    { "bone": "RightUpperArm", "parent": "RightShoulder", "restTranslation": [0.13, 0.0, 0.0],  "restRotation": [1.0, 0.0, 0.0, 0.0], "restScale": [1.0, 1.0, 1.0], "localForward": [1.0, 0.0, 0.0], "localUp": [0.0, 1.0, 0.0] },
+    { "bone": "RightLowerArm", "parent": "RightUpperArm", "restTranslation": [0.28, 0.0, 0.0],  "restRotation": [1.0, 0.0, 0.0, 0.0], "restScale": [1.0, 1.0, 1.0], "localForward": [1.0, 0.0, 0.0], "localUp": [0.0, 1.0, 0.0] },
+    { "bone": "RightHand",     "parent": "RightLowerArm", "restTranslation": [0.27, 0.0, 0.0],  "restRotation": [1.0, 0.0, 0.0, 0.0], "restScale": [1.0, 1.0, 1.0], "localForward": [1.0, 0.0, 0.0], "localUp": [0.0, 1.0, 0.0] },
+
+    { "bone": "LeftUpperLeg",  "parent": "Hips",          "restTranslation": [-0.10, 0.0, 0.0], "restRotation": [1.0, 0.0, 0.0, 0.0], "restScale": [1.0, 1.0, 1.0], "localForward": [0.0, -1.0, 0.0], "localUp": [0.0, 0.0, 1.0] },
+    { "bone": "LeftLowerLeg",  "parent": "LeftUpperLeg",  "restTranslation": [0.0, -0.45, 0.0], "restRotation": [1.0, 0.0, 0.0, 0.0], "restScale": [1.0, 1.0, 1.0], "localForward": [0.0, -1.0, 0.0], "localUp": [0.0, 0.0, 1.0] },
+    { "bone": "LeftFoot",      "parent": "LeftLowerLeg",  "restTranslation": [0.0, -0.45, 0.0], "restRotation": [1.0, 0.0, 0.0, 0.0], "restScale": [1.0, 1.0, 1.0], "localForward": [0.0, 0.0, 1.0], "localUp": [0.0, 1.0, 0.0] },
+    { "bone": "LeftToes",      "parent": "LeftFoot",      "restTranslation": [0.0, -0.05, 0.10],"restRotation": [1.0, 0.0, 0.0, 0.0], "restScale": [1.0, 1.0, 1.0], "localForward": [0.0, 0.0, 1.0], "localUp": [0.0, 1.0, 0.0] },
+
+    { "bone": "RightUpperLeg", "parent": "Hips",          "restTranslation": [0.10, 0.0, 0.0],  "restRotation": [1.0, 0.0, 0.0, 0.0], "restScale": [1.0, 1.0, 1.0], "localForward": [0.0, -1.0, 0.0], "localUp": [0.0, 0.0, 1.0] },
+    { "bone": "RightLowerLeg", "parent": "RightUpperLeg", "restTranslation": [0.0, -0.45, 0.0], "restRotation": [1.0, 0.0, 0.0, 0.0], "restScale": [1.0, 1.0, 1.0], "localForward": [0.0, -1.0, 0.0], "localUp": [0.0, 0.0, 1.0] },
+    { "bone": "RightFoot",     "parent": "RightLowerLeg", "restTranslation": [0.0, -0.45, 0.0], "restRotation": [1.0, 0.0, 0.0, 0.0], "restScale": [1.0, 1.0, 1.0], "localForward": [0.0, 0.0, 1.0], "localUp": [0.0, 1.0, 0.0] },
+    { "bone": "RightToes",     "parent": "RightFoot",     "restTranslation": [0.0, -0.05, 0.10],"restRotation": [1.0, 0.0, 0.0, 0.0], "restScale": [1.0, 1.0, 1.0], "localForward": [0.0, 0.0, 1.0], "localUp": [0.0, 1.0, 0.0] },
+
+    { "bone": "LeftEye",       "parent": "Head",          "restTranslation": [-0.03, 0.07, 0.08],"restRotation": [1.0, 0.0, 0.0, 0.0],"restScale": [1.0, 1.0, 1.0], "localForward": [0.0, 0.0, 1.0], "localUp": [0.0, 1.0, 0.0] },
+    { "bone": "RightEye",      "parent": "Head",          "restTranslation": [0.03, 0.07, 0.08],"restRotation": [1.0, 0.0, 0.0, 0.0], "restScale": [1.0, 1.0, 1.0], "localForward": [0.0, 0.0, 1.0], "localUp": [0.0, 1.0, 0.0] },
+    { "bone": "Jaw",           "parent": "Head",          "restTranslation": [0.0, 0.02, 0.03], "restRotation": [1.0, 0.0, 0.0, 0.0], "restScale": [1.0, 1.0, 1.0], "localForward": [0.0, 0.0, 1.0], "localUp": [0.0, 1.0, 0.0] }
+  ]
+}

@@ -1,0 +1,75 @@
+/* Color Picker panel – wheel, sliders, HSV/RGB, HDR intensity, palette */
+
+.colorpicker-view {
+    background-color: #252526;
+    border: none;
+    border-radius: 0;
+    padding: 12px;
+    min-width: 320px;
+}
+
+.colorpicker-wheel {
+    background-color: transparent;
+}
+
+.colorpicker-label {
+    color: #ffffff;
+    font-size: 14px;
+    margin-bottom: 2px;
+}
+
+.colorpicker-swatch {
+    border: none;
+    min-height: 28px;
+}
+
+.colorpicker-field {
+    min-width: 0;
+    padding: 4px 6px;
+    font-size: 14px;
+    background-color: #3c3c3c;
+    border: none;
+    color: #ffffff;
+}
+
+/* Ensure all value text (inputs, labels) is white */
+.colorpicker-label,
+.colorpicker-field,
+#colorpicker-hex {
+    color: #ffffff;
+}
+
+.colorpicker-field:focus {
+    outline: none;
+}
+
+#colorpicker-palette {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 4px;
+    padding: 4px 0;
+}
+
+#colorpicker-palette > * {
+    width: 20px;
+    height: 20px;
+    border: none;
+    border-radius: 4px;
+    cursor: pointer;
+}
+
+#colorpicker-palette > *:hover {
+    transform: scale(1.05);
+}
+
+/* Color picker icon at bottom left of panel */
+.colorpicker-panel-icon {
+    width: 24px;
+    height: 24px;
+    background-image: url("editor:Icons/colorpicker.png");
+    background-size: contain;
+    background-repeat: no-repeat;
+    background-position: center;
+    background-color: transparent;
+    flex-shrink: 0;
+}

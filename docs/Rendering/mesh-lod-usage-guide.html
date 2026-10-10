@@ -1,0 +1,143 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Mesh LODs — Usage Guide</title>
+<style>
+:root {
+  --bg: #0f1115; --panel: #161a22; --panel-light: #1d2330; --border: #2a3245;
+  --text: #d8dee9; --muted: #8792a8; --accent: #5aa0f2;
+  --danger: #e06c75; --bad: #e06c75; --ok: #7fd18b; --good: #7fd18b; --warn: #e5c07b;
+}
+* { box-sizing: border-box; }
+body { background: var(--bg); color: var(--text); font: 15px/1.6 "Segoe UI", system-ui, sans-serif; margin: 0; padding: 32px 24px 64px; }
+.wrap { max-width: 1080px; margin: 0 auto; }
+h1 { font-size: 30px; margin: 0 0 4px; }
+h2 { font-size: 22px; margin-top: 48px; border-top: 1px solid var(--border); padding-top: 24px; }
+h3 { font-size: 17px; margin-top: 28px; color: var(--accent); }
+.lede { color: var(--muted); margin-bottom: 28px; }
+code { background: var(--panel-light); border: 1px solid var(--border); border-radius: 4px; padding: 1px 6px; font-size: 13px; }
+pre { background: var(--panel-light); border: 1px solid var(--border); border-radius: 8px; padding: 14px 16px; overflow-x: auto; font-size: 13px; line-height: 1.5; }
+pre code { background: none; border: none; padding: 0; }
+.panel { background: var(--panel); border: 1px solid var(--border); border-left: 4px solid var(--accent); border-radius: 8px; padding: 14px 18px; margin: 18px 0; }
+.panel.ok { border-left-color: var(--ok); }
+.panel.warn { border-left-color: var(--warn); }
+.panel.danger { border-left-color: var(--danger); }
+.panel b.tag { text-transform: uppercase; font-size: 11px; letter-spacing: .08em; display: block; margin-bottom: 4px; }
+.panel.ok b.tag { color: var(--ok); } .panel.warn b.tag { color: var(--warn); } .panel.danger b.tag { color: var(--danger); } .panel b.tag { color: var(--accent); }
+table { border-collapse: collapse; width: 100%; margin: 16px 0; font-size: 14px; }
+th { background: var(--panel-light); text-align: left; padding: 8px 12px; border: 1px solid var(--border); font-size: 12px; text-transform: uppercase; letter-spacing: .05em; color: var(--muted); }
+td { padding: 8px 12px; border: 1px solid var(--border); }
+tr:hover td { background: var(--panel); }
+.two-col { display: grid; grid-template-columns: 1fr 1fr; gap: 18px; }
+@media (max-width: 900px) { .two-col { grid-template-columns: 1fr; } }
+img.shot { max-width: 100%; border: 1px solid var(--border); border-radius: 8px; margin: 8px 0; }
+.cap { color: var(--muted); font-size: 13px; margin: 2px 0 18px; }
+footer { color: var(--muted); font-size: 13px; margin-top: 56px; border-top: 1px solid var(--border); padding-top: 16px; }
+.kbd { background: var(--panel-light); border: 1px solid var(--border); border-bottom-width: 2px; border-radius: 4px; padding: 0 6px; font-size: 13px; }
+</style>
+</head>
+<body>
+<div class="wrap">
+
+<h1>Mesh LODs — Usage Guide</h1>
+<p class="lede">GUIDE · 2026-07-12 · mesh LOD pipeline (auto-generation, per-asset settings, runtime selection)</p>
+
+<div class="panel ok">
+<b class="tag">TL;DR</b>
+Static (non-animated) models get LOD chains <b>automatically</b> — nothing to set up. Import a model, and
+up to 4 LOD levels are generated at load time by meshoptimizer, selected per-instance on the GPU
+by screen coverage. Skinned meshes are excluded by default (opt-in per asset). The whole 828-model POLYGON
+ElvenRealm pack generates in <b>91 ms total</b> (worst single model: 6.3 ms), on background threads.
+</div>
+
+<h2>Zero-config path (what happens by default)</h2>
+<ol>
+<li>Drop FBX/glTF files into your project's <code>Assets/</code> folder (or open a project that has them).</li>
+<li>On load, each non-skinned mesh gets up to 4 LOD levels. You'll see one log line per model:
+<pre><code>LOD gen: 3 meshes -&gt; 4 LODs in 0.64 ms (7262 tris) (assets/fbx/props/sm_prop_tent_01.fbx)</code></pre></li>
+<li>At runtime the GPU picks the LOD per instance from projected screen coverage — distant instances render
+with fewer triangles. Shadow cascades benefit the most (measured: generated chains cut cascaded-shadow GPU
+time by up to <b>10×</b> on heavy scenes).</li>
+</ol>
+<div class="panel">
+<b class="tag">Note</b>
+Meshes that are already simple stay LOD0-only — the simplifier only keeps a level when it actually reduces
+triangles meaningfully. On stylized low-poly content (Synty), ~80% of meshes are correctly left untouched;
+the heavy 20% (buildings, rocks, props) get chains.
+</div>
+
+<h2>Per-asset settings (Model Inspector)</h2>
+<p>Select a model in the <b>Assets</b> panel. The Inspector shows a <b>Levels of Detail</b> section:</p>
+<img class="shot" src="lod-usage-inspector.png" alt="Model inspector LOD section">
+<p class="cap">Per-model LOD controls with the achieved-results table and forced-LOD preview slider.</p>
+<table>
+<tr><th>Control</th><th>What it does</th></tr>
+<tr><td><b>Use project defaults</b></td><td>ON (default): this asset follows the project-wide policy. Turn OFF to override LOD count, per-level target ratios/errors, border locking, and the skinned opt-in for this asset only. Overrides persist in the asset database (git-friendly, shared with the team).</td></tr>
+<tr><td><b>Auto-generate</b></td><td>Shows the resolved policy (<code>on (project default)</code> in the screenshot). With a per-asset override you can force generation on/off regardless of the project setting.</td></tr>
+<tr><td><b>Generate LODs</b></td><td>Explicitly (re)generates now and refreshes the results table. Useful after changing settings.</td></tr>
+<tr><td><b>Achieved table</b></td><td>Per level: triangle count, % of LOD0, achieved simplification error, and the derived switch threshold. This is your quality window — if LOD1 shows a large error on a hero asset, override the ratios or disable generation for it.</td></tr>
+<tr><td><b>Preview LOD</b></td><td>Forces a LOD level in the asset preview so you can eyeball each level before it ships.</td></tr>
+</table>
+
+<h2>Project-wide setting</h2>
+<p><b>Settings → Import → Auto-generate LODs</b> toggles the project default (stored as
+<code>import.autoGenerateLODs</code> in the project settings). It applies on every project-open path —
+picker, last-project auto-load, and <code>--project</code> launches. Packaged Player builds inherit the
+policy through <code>game.config</code> (<code>lod.autoGenerate</code>, also default-on), so shipped games
+generate the same chains from the same settings.</p>
+<p>To regenerate everything after changing the policy: run the <b>Reimport LODs (project)</b> command —
+it walks every model in the project and reports <code>regenerated / skipped</code> counts.</p>
+
+<h2>What it costs</h2>
+<table>
+<tr><th>Corpus</th><th>Models</th><th>Meshes / tris</th><th>Total gen time</th><th>Worst model</th><th>p95</th></tr>
+<tr><td>POLYGON ElvenRealm (Synty)</td><td>828</td><td>1,345 / 769k</td><td><b>91.3 ms</b> (CPU, sum)</td><td>6.31 ms</td><td>0.43 ms</td></tr>
+</table>
+<p>Generation runs on background asset workers during load — it never blocks the frame. The measured
+number above is why auto-generation is on by default: it is effectively free next to FBX parsing
+(~23 s for the same corpus).</p>
+
+<h2>Runtime behavior (how selection works)</h2>
+<ul>
+<li>A LOD level is either <b>index-only</b> or <b>own-vertex</b>. An index-only level is an index buffer over
+LOD0's vertices and adds no vertex memory. An own-vertex level carries its own vertex block, uploaded after
+LOD0's block in the same vertex buffer; an authored level on a mesh with vertex colors also carries its own
+RGBA block. Levels of an authored LOD chain are own-vertex, and so are generated far levels that fell back to
+the sloppy simplifier (rebuilt with their own vertices so normals and UVs stay correct); every other generated
+level is index-only.</li>
+<li>Per-mesh switch thresholds are <b>derived from the achieved simplification error</b>: a level that
+simplified almost losslessly switches in earlier (bigger win, invisible), a lossy level waits until the
+instance is small on screen.</li>
+<li>Selection happens in the GPU draw-command scatter pass per instance per view, from projected coverage
+of the bounding sphere — this includes shadow cascade views.</li>
+<li>A switch between levels dissolves instead of popping: for <b>LOD Crossfade (s)</b> in
+<b>Settings → Level of Detail</b> (default 0.25 s, 0 turns it off) both levels draw, each keeping a
+complementary half of a screen-space dither; shadow casters switch without a fade.</li>
+<li>An LOD chain imported with the model (<code>_LOD&lt;N&gt;</code> name suffixes, <code>MSFT_lod</code>,
+FBX LOD groups, explicit slots) takes precedence over generation for that mesh.</li>
+<li>A global LOD bias is available for debugging/perf work (<code>lodBiasGlobal</code>, exposed via render
+stats tooling).</li>
+</ul>
+
+<div class="panel">
+<b class="tag">No per-object LOD authoring</b>
+There is no LOD component to add to an object and no per-renderer switch heights to tune. The mesh asset
+carries the chain, the switch thresholds follow from the measured simplification error, and every instance of
+the mesh uses them. The global LOD bias above scales every switch.
+</div>
+
+<h2>Skinned / animated models</h2>
+<div class="panel warn">
+<b class="tag">Opt-in by design</b>
+Skinned meshes are skipped by default: position-only simplification ignores joint-assignment seams, which
+can produce "weight swim" on animated silhouettes. If you want chains on a specific character, turn OFF
+<b>Use project defaults</b> on that asset and enable <b>Allow skinned</b>, then verify animation quality with
+the Preview LOD slider (static poses) and in Play mode.
+</div>
+
+<footer>v1.3 · 2026-10-05 · v1.3: the roadmap table is removed; the dithered LOD crossfade and the precedence of an imported chain are stated in the runtime section · v1.2 (2026-10-01): the runtime section's mapping panel is stated in the engine's own terms; the scene-converter smoke-test section is removed · v1.1: runtime behavior states the index-only and own-vertex level rule; roadmap phases B and C marked shipped · v1.0 (2026-07-12) · mesh LOD pipeline usage guide · screenshots from the POLYGON ElvenRealm verification run</footer>
+</div>
+</body>
+</html>

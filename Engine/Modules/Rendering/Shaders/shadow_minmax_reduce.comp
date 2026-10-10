@@ -1,0 +1,96 @@
+#version 450
+
+// Min/max reduction for the PCSS shadow depth pyramid.
+//
+// Reduces a cascade's shadow depth (or a previous pyramid level) into the
+// next coarser RG32_SFLOAT (min,max) mip level. The pyramid lets the PCSS
+// filter test a whole shadow-map footprint against one texel instead of the
+// full blocker-search + PCF kernel: if the footprint's max depth is at or
+// behind the receiver, nothing in it occludes the light (fully lit); if its
+// min depth is at or in front of the receiver, everything in it does (fully
+// shadowed). Both early-outs skip the filter loop entirely.
+//
+// Two reduction modes, selected by pc.mode:
+//   0 - depth -> level 0: reads the D32_SFLOAT cascade depth array directly,
+//       reducing a 4x4 texel footprint (base level is shadow resolution / 4).
+//   1 - level N -> level N+1: reads the previous RG32_SFLOAT pyramid level,
+//       reducing a 2x2 footprint of already-reduced (min,max) pairs.
+//
+// Unlike a scene-depth min/max reduction, cleared (depth == 0.0) texels are
+// NOT filtered out. A cleared shadow-map texel means no occluder was
+// rasterized along that ray, so it must be free to pull min down — that is
+// what keeps the fully-shadowed early-out (min > refDepth) from firing over
+// a footprint that has a gap in it.
+//
+// Conventions:
+//   - Reverse-Z: NDC depth in [0,1], near -> 1.0, far -> 0.0. A larger stored
+//     value is closer to the light, so max is the nearest occluder and min
+//     is the farthest — not swapped to match a forward-Z intuition.
+//   - Source is D32_SFLOAT; never mipped directly (depth formats only get
+//     point sampling in Vulkan, and comparison samplers can't read raw
+//     values), which is why this reduction exists as its own pyramid.
+//   - Destination is RG32_SFLOAT: R = min, G = max, one layer per cascade.
+//   - Edge texels are clamped to srcSize - 1 rather than skipped, so a
+//     non-power-of-two shadow resolution duplicates its edge texel into the
+//     last workgroup instead of leaving it out of the reduction. Duplicating
+//     a texel can only widen [lo, hi], never narrow it, so the clamp is
+//     conservative in both directions.
+
+// 8x8 threads per workgroup; one dispatch covers one mip level of every
+// active cascade. Z workgroups address independent array layers.
+layout(local_size_x = 8, local_size_y = 8) in;
+
+layout(set = 0, binding = 0) uniform sampler2DArray uSrcDepth;  // mode 0
+layout(set = 0, binding = 1) uniform sampler2DArray uSrcLevel;  // mode 1
+layout(set = 0, binding = 2, rg32f) uniform writeonly image2DArray uDst;
+
+// The block ends on a multiple of its largest member's alignment (ivec2: 8), so
+// it is the same 24 bytes in SPIR-V and in the MSL struct SPIRV-Cross emits,
+// which rounds a struct's size up to that alignment. Without `pad0` the MSL
+// struct is 24 bytes against a 20-byte push and the Metal API validation
+// layer aborts the dispatch.
+layout(push_constant) uniform Push {
+    ivec2 dstSize;
+    int   layerCount;
+    int   srcLevel;
+    int   mode;      // 0 = depth -> level 0 (4x4), 1 = level N -> N+1 (2x2)
+    int   pad0;
+} pc;
+
+void main()
+{
+    const ivec2 dst = ivec2(gl_GlobalInvocationID.xy);
+    const int layer = int(gl_GlobalInvocationID.z);
+    if (dst.x >= pc.dstSize.x || dst.y >= pc.dstSize.y || layer >= pc.layerCount)
+        return;
+
+    float lo =  1.0e30;
+    float hi = -1.0e30;
+
+    if (pc.mode == 0)
+    {
+        const ivec3 srcSize = textureSize(uSrcDepth, 0);
+        for (int y = 0; y < 4; ++y)
+        for (int x = 0; x < 4; ++x)
+        {
+            const ivec2 c = clamp(dst * 4 + ivec2(x, y), ivec2(0), srcSize.xy - ivec2(1));
+            const float d = texelFetch(uSrcDepth, ivec3(c, layer), 0).r;
+            lo = min(lo, d);
+            hi = max(hi, d);
+        }
+    }
+    else
+    {
+        const ivec3 srcSize = textureSize(uSrcLevel, pc.srcLevel);
+        for (int y = 0; y < 2; ++y)
+        for (int x = 0; x < 2; ++x)
+        {
+            const ivec2 c = clamp(dst * 2 + ivec2(x, y), ivec2(0), srcSize.xy - ivec2(1));
+            const vec2 v = texelFetch(uSrcLevel, ivec3(c, layer), pc.srcLevel).rg;
+            lo = min(lo, v.r);
+            hi = max(hi, v.g);
+        }
+    }
+
+    imageStore(uDst, ivec3(dst, layer), vec4(lo, hi, 0.0, 0.0));
+}

@@ -1,0 +1,1127 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Creating Render Pipelines</title>
+<script src="https://cdn.jsdelivr.net/npm/mermaid@10/dist/mermaid.min.js"></script>
+<style>
+  :root {
+    --bg: #1a1d23;
+    --panel: #232831;
+    --panel-light: #2c323d;
+    --border: #3a414d;
+    --text: #d8dde6;
+    --muted: #8a93a3;
+    --accent: #6db4ff;
+    --danger: #ff8a6e;
+    --ok: #7bd88f;
+    --warn: #f6c177;
+  }
+  * { box-sizing: border-box; }
+  html, body {
+    background: var(--bg);
+    color: var(--text);
+    font-family: -apple-system, "Segoe UI", system-ui, sans-serif;
+    line-height: 1.55;
+    margin: 0;
+    padding: 0;
+  }
+  .container { max-width: 1280px; margin: 0 auto; padding: 48px 32px 96px; }
+  h1 { font-size: 28px; margin: 0 0 8px; letter-spacing: -0.01em; }
+  h2 { font-size: 20px; margin: 48px 0 16px; padding-top: 12px; border-top: 1px solid var(--border); }
+  h3 { font-size: 16px; margin: 24px 0 8px; color: var(--accent); }
+  h4 { font-size: 14px; margin: 16px 0 6px; color: var(--accent); }
+  p { margin: 8px 0 14px; }
+  a { color: var(--accent); text-decoration: none; }
+  a:hover { text-decoration: underline; }
+  code, .mono { font-family: "JetBrains Mono", Consolas, monospace; font-size: 0.85em; background: var(--panel-light); padding: 1px 6px; border-radius: 3px; }
+  pre {
+    background: var(--panel);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 14px 16px;
+    overflow-x: auto;
+    font-family: "JetBrains Mono", Consolas, monospace;
+    font-size: 13px;
+    line-height: 1.5;
+  }
+  pre code { background: none; padding: 0; font-size: 1em; }
+  .lede { color: var(--muted); margin-bottom: 4px; font-size: 14px; }
+  .lede + h1 { margin-top: 0; }
+
+  .panel {
+    background: var(--panel);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 20px 24px;
+    margin: 16px 0;
+  }
+  .panel.danger { border-color: var(--danger); }
+  .panel.ok { border-color: var(--ok); }
+  .panel.warn { border-color: var(--warn); }
+  .panel.before { border-color: #5a3a3a; }
+  .panel.after  { border-color: #3a5a3f; }
+  .panel-title {
+    font-weight: 600;
+    font-size: 14px;
+    margin: 0 0 8px;
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+    color: var(--muted);
+  }
+  .panel.danger .panel-title { color: var(--danger); }
+  .panel.ok .panel-title { color: var(--ok); }
+  .panel.warn .panel-title { color: var(--warn); }
+
+  table { border-collapse: collapse; width: 100%; margin: 12px 0 20px; font-size: 13.5px; }
+  th, td { text-align: left; padding: 10px 12px; border-bottom: 1px solid var(--border); vertical-align: top; }
+  th { color: var(--muted); font-weight: 600; font-size: 12px; text-transform: uppercase; letter-spacing: 0.05em; }
+  tbody tr:hover { background: var(--panel); }
+  td code { font-size: 0.95em; }
+
+  .diagram-wrap {
+    background: var(--panel);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 24px;
+    margin: 16px 0;
+    overflow-x: auto;
+  }
+  .diagram-label {
+    font-size: 12px;
+    color: var(--muted);
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    margin-bottom: 8px;
+  }
+
+  .two-col { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+  @media (max-width: 900px) { .two-col { grid-template-columns: 1fr; } }
+
+  ul, ol { margin: 8px 0 16px; padding-left: 24px; }
+  li { margin: 4px 0; }
+  li code { font-size: 0.92em; }
+
+  .pill { display: inline-block; padding: 2px 8px; border-radius: 10px; font-size: 11px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.04em; }
+  .pill.new { background: rgba(123, 216, 143, 0.15); color: var(--ok); border: 1px solid rgba(123, 216, 143, 0.4); }
+  .pill.del { background: rgba(255, 138, 110, 0.15); color: var(--danger); border: 1px solid rgba(255, 138, 110, 0.4); }
+  .pill.mod { background: rgba(246, 193, 119, 0.15); color: var(--warn); border: 1px solid rgba(246, 193, 119, 0.4); }
+  .pill.keep { background: rgba(109, 180, 255, 0.13); color: var(--accent); border: 1px solid rgba(109, 180, 255, 0.4); }
+
+  .timeline {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 12px;
+    margin-top: 16px;
+  }
+  .timeline .step {
+    background: var(--panel);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 14px 16px;
+  }
+  .timeline .step h4 { margin: 0 0 8px; color: var(--accent); font-size: 14px; }
+  .timeline .step p { margin: 0; font-size: 13px; color: var(--muted); }
+  @media (max-width: 980px) { .timeline { grid-template-columns: 1fr; } }
+
+  hr { border: none; border-top: 1px solid var(--border); margin: 32px 0; }
+  .footer { text-align: center; color: var(--muted); font-size: 12px; margin-top: 64px; }
+
+  .toc { background: var(--panel); border: 1px solid var(--border); border-radius: 8px; padding: 16px 20px; margin: 16px 0 32px; }
+  .toc-title { font-size: 12px; text-transform: uppercase; letter-spacing: 0.06em; color: var(--muted); margin-bottom: 8px; }
+  .toc ol { margin: 0; padding-left: 20px; columns: 2; column-gap: 32px; }
+</style>
+</head>
+<body>
+<div class="container">
+
+<p class="lede">GUIDE &middot; GRAPHICS &middot; pipeline authoring</p>
+<h1>Creating Render Pipelines</h1>
+
+<p>A render <em>pipeline</em> in this engine is the <strong>complete frame-level execution plan</strong> for rendering a view: which passes run, in what order, with what resources, producing what final output. This guide covers reading existing pipelines, modifying them, and creating new ones &mdash; including a deferred pipeline and a raytracing/path-tracing pipeline.</p>
+
+<p>For individual pass authoring (the pieces a pipeline is made of), see the recipes section of <a href="Rendering_Architecture_Guide.html"><code>Rendering_Architecture_Guide.html</code></a> and <a href="RenderGraph.md"><code>RenderGraph.md</code></a>. For the broader rendering architecture, see <a href="Rendering_Architecture_Guide.html"><code>Rendering_Architecture_Guide.html</code></a>.</p>
+
+<div class="toc">
+  <div class="toc-title">Table of Contents</div>
+  <ol>
+    <li><a href="#what-is-a-render-pipeline">What is a Render Pipeline?</a></li>
+    <li><a href="#pipeline-file-format">Pipeline File Format</a></li>
+    <li><a href="#how-pipelines-load">How Pipelines Load</a></li>
+    <li><a href="#walkthrough-poststack">Walkthrough: <code>Sample_PostStack.rendergraph</code></a></li>
+    <li><a href="#walkthrough-forwardplus">Walkthrough: <code>ForwardPlus.rendergraph</code></a></li>
+    <li><a href="#creating-a-new-pipeline">Creating a New Pipeline From Scratch</a></li>
+    <li><a href="#worked-example-deferred">Worked Example: A Deferred Pipeline</a></li>
+    <li><a href="#worked-example-raytracing">Worked Example: A Raytracing Pipeline</a></li>
+    <li><a href="#switching-pipelines">Switching Pipelines at Runtime</a></li>
+    <li><a href="#validating-and-debugging">Validating and Debugging Pipelines</a></li>
+  </ol>
+</div>
+
+<h2 id="what-is-a-render-pipeline">What is a Render Pipeline?</h2>
+
+<p>A pipeline answers these questions for every frame:</p>
+
+<table>
+  <thead>
+    <tr><th>Question</th><th>Answered by</th></tr>
+  </thead>
+  <tbody>
+    <tr><td>What intermediate buffers/textures does the frame need?</td><td>The <code>resources</code> block in the JSON</td></tr>
+    <tr><td>What passes run, in what order, with what dependencies?</td><td>The <code>passes</code> array</td></tr>
+    <tr><td>What is the <em>final</em> output the editor / swapchain presents?</td><td>The <code>outputs</code> block</td></tr>
+  </tbody>
+</table>
+
+<p>The pipeline is <strong>per-project</strong>: a project selects which <code>.rendergraph</code> to use (default is <code>ForwardPlus.rendergraph</code> shipped with the editor). Different projects can use entirely different pipelines &mdash; a stylized 2D project might use a very minimal pipeline; a high-fidelity 3D project uses the full ForwardPlus chain.</p>
+
+<h3>Why is this data-driven rather than code?</h3>
+
+<p>Three reasons:</p>
+<ol>
+  <li><strong>Hot-reload.</strong> Editing JSON is instant feedback in the running editor &mdash; no rebuild.</li>
+  <li><strong>Variants without recompilation.</strong> A <code>ForwardPlus_DebugOverlay.rendergraph</code> can enable cluster visualization without code changes.</li>
+  <li><strong>Engine vs Game separation.</strong> Game projects can ship their own pipelines without forking the engine.</li>
+</ol>
+
+<p>Pipelines are written in JSON for parsing simplicity, but the schema is rich enough to express complex orchestration (per-view scope, expressions for dynamic sizes, phase-based ordering).</p>
+
+<h3>Built-in pipeline files</h3>
+
+<p>Currently shipped in <a href="../../../../Assets/RenderPipelines/"><code>Assets/RenderPipelines/</code></a>:</p>
+
+<table>
+  <thead>
+    <tr><th>File</th><th>Purpose</th></tr>
+  </thead>
+  <tbody>
+    <tr><td><code>Sample_PostStack.rendergraph</code></td><td>World + a single fullscreen pass &mdash; minimal post-process example</td></tr>
+    <tr><td><code>ForwardPlus.rendergraph</code></td><td><strong>The canonical full pipeline</strong> &mdash; forward+ clustered lighting, cascaded shadows, full post stack</td></tr>
+    <tr><td><code>ForwardPlus_DebugOverlay.rendergraph</code></td><td>ForwardPlus + the cluster debug overlay enabled</td></tr>
+  </tbody>
+</table>
+
+<h2 id="pipeline-file-format">Pipeline File Format</h2>
+
+<h3>Top-level schema</h3>
+
+<pre><code>{
+  "schemaVersion": 2,
+  "pipelineName": "MyPipeline",
+  "outputs": { /* final view output mapping */ },
+  "resources": { /* named intermediate resources */ },
+  "passes": [ /* ordered pass entries */ ]
+}</code></pre>
+
+<h3>Outputs</h3>
+
+<p>Maps a logical pipeline output to a resource reference. The editor consults this to know what to display:</p>
+
+<pre><code>"outputs": {
+  "FinalColor": "View.Resolve"
+}</code></pre>
+
+<p><code>View.Resolve</code> is the per-view final output texture managed by <code>RenderServices</code>. You can route to any named resource.</p>
+
+<h3>Resources</h3>
+
+<p>Each entry declares one texture or buffer the pipeline owns. Resources have a <strong>scope</strong> (<code>PerView</code>, <code>Frame</code>, <code>Persistent</code>) and a <strong>kind</strong> (<code>Texture</code> or <code>Buffer</code>).</p>
+
+<h4>Texture entry</h4>
+
+<pre><code>"BloomA": {
+  "kind": "Texture",
+  "format": "R16G16B16A16_FLOAT",
+  "scope": "PerView",
+  "extent": { "scale": [0.5, 0.5] },       // half-res of the view
+  "usage": ["RenderTarget", "ShaderResource"]
+}</code></pre>
+
+<table>
+  <thead>
+    <tr><th>Field</th><th>Values</th></tr>
+  </thead>
+  <tbody>
+    <tr><td><code>format</code></td><td>Any <code>TextureFormat</code> enum value as a string. Common: <code>R8_UNORM</code>, <code>R8G8B8A8_UNORM</code>, <code>R16G16B16A16_FLOAT</code>, <code>R11G11B10_FLOAT</code>, <code>D32_FLOAT</code>, <code>R32_UINT</code></td></tr>
+    <tr><td><code>scope</code></td><td><code>PerView</code> (one per camera), <code>Frame</code> (one per frame), <code>Persistent</code> (across frames)</td></tr>
+    <tr><td><code>extent.scale</code></td><td><code>[sx, sy]</code> relative to view size. Omit for view-sized.</td></tr>
+    <tr><td><code>extent.absolute</code></td><td><code>[w, h]</code> for fixed-size targets (e.g. shadow maps)</td></tr>
+    <tr><td><code>usage</code></td><td>Array of: <code>RenderTarget</code>, <code>DepthStencil</code>, <code>ShaderResource</code>, <code>Storage</code>, <code>CopySource</code>, <code>CopyDestination</code></td></tr>
+    <tr><td><code>mipLevels</code></td><td>Optional, default 1</td></tr>
+    <tr><td><code>arrayLayers</code></td><td>Optional, default 1 (4 for cascaded shadows)</td></tr>
+  </tbody>
+</table>
+
+<h4>Buffer entry</h4>
+
+<pre><code>"ClusterBuffer": {
+  "kind": "Buffer",
+  "memoryUsage": "DeviceLocal",
+  "scope": "PerView",
+  "size": {
+    "expression": "clustersX * clustersY * depthSlices * clusterDataBytes",
+    "variables": {
+      "clusterDataBytes": 16,
+      "clustersX": "ceil(renderWidth / tileSizeX)",
+      "clustersY": "ceil(renderHeight / tileSizeY)",
+      "depthSlices": 24,
+      "tileSizeX": 16,
+      "tileSizeY": 16
+    }
+  },
+  "usage": ["Storage", "ShaderResource", "CopyDestination"]
+}</code></pre>
+
+<table>
+  <thead>
+    <tr><th>Field</th><th>Values</th></tr>
+  </thead>
+  <tbody>
+    <tr><td><code>memoryUsage</code></td><td><code>DeviceLocal</code> (fast GPU-only), <code>Upload</code> (host-visible, persistently mapped), <code>Readback</code> (GPU &rarr; CPU)</td></tr>
+    <tr><td><code>size.bytes</code></td><td>Fixed size in bytes</td></tr>
+    <tr><td><code>size.expression</code></td><td>String expression evaluated at allocation time. Vars from <code>size.variables</code></td></tr>
+    <tr><td><code>size.variables</code></td><td>Map of name &rarr; number or expression string. Built-in: <code>renderWidth</code>, <code>renderHeight</code></td></tr>
+    <tr><td><code>flags</code></td><td>Array, optional. <code>PersistentlyMapped</code> keeps the buffer mapped for CPU writes</td></tr>
+    <tr><td><code>usage</code></td><td><code>Storage</code>, <code>ConstantBuffer</code>, <code>VertexBuffer</code>, <code>IndexBuffer</code>, <code>IndirectArgs</code>, <code>CopySource</code>, <code>CopyDestination</code></td></tr>
+  </tbody>
+</table>
+
+<h4>Expression language</h4>
+
+<p>Resource size expressions support: integer arithmetic (<code>+</code>, <code>-</code>, <code>*</code>, <code>/</code>), <code>ceil()</code>, <code>floor()</code>, <code>min()</code>, <code>max()</code>, plus the built-in vars <code>renderWidth</code> and <code>renderHeight</code> (the active view's resolution). Implementation: <a href="../../../Source/Engine/Rendering/Pipeline/ExpressionEvaluator.cpp"><code>Engine/Source/Engine/Rendering/Pipeline/ExpressionEvaluator.cpp</code></a>.</p>
+
+<h3>Passes</h3>
+
+<p>Each entry is one pipeline node instantiation:</p>
+
+<pre><code>{
+  "id": "MyPass",            // unique within the pipeline
+  "type": "FullscreenShader", // must match a registered node type
+  "enabled": true,            // can be toggled
+  // ... type-specific fields ...
+
+  // Optional ordering
+  "phase": "PostProcess",
+  "tags": ["mytag"],
+  "after": ["OtherPassId"]
+}</code></pre>
+
+<p><code>type</code> is the critical field &mdash; it dictates which <code>IRenderPipelineNode</code> subclass instantiates. Available built-in types:</p>
+
+<table>
+  <thead>
+    <tr><th>Type</th><th>What it does</th><th>Where to find more</th></tr>
+  </thead>
+  <tbody>
+    <tr><td><code>DepthPrepass</code></td><td>Clears + renders world depth</td><td><a href="../../../Source/Engine/Rendering/Pipeline/Nodes/DepthPrepassNode.cpp"><code>DepthPrepassNode.cpp</code></a></td></tr>
+    <tr><td><code>ViewParamsUpload</code></td><td>Uploads per-view UBO</td><td><a href="../../../Source/Engine/Rendering/Pipeline/Nodes/ViewParamsUploadNode.cpp"><code>ViewParamsUploadNode.cpp</code></a></td></tr>
+    <tr><td><code>LightUpload</code></td><td>Uploads light SSBO</td><td><a href="../../../Source/Engine/Rendering/Pipeline/Nodes/LightUploadNode.cpp"><code>LightUploadNode.cpp</code></a></td></tr>
+    <tr><td><code>ShadowMap</code> <span style="opacity:.6">(alias: <code>CascadedShadowMap</code>, deprecated)</span></td><td>Renders all shadow families (cascades + area/spot/point) + uploads shadow UBO. <code>"fitShadowDistanceToScene": true</code> replaces <code>maxShadowDistance</code> with a range fitted per view to the bounds of every mesh instance in the scene, in every world and render layer: the fade starts just beyond the far side of those bounds as seen from the camera, and the cascades split only that range. Terrain and water are not mesh instances and do not extend the range; its only limit is the camera's far plane, which clamps the cascade splits. Meant for pipelines whose scenes have no fixed scale, such as a model viewer.</td><td><a href="../../../Source/Engine/Rendering/Pipeline/Nodes/ShadowMapNode.cpp"><code>ShadowMapNode.cpp</code></a></td></tr>
+    <tr><td><code>SkyRender</code></td><td>Sky atmosphere</td><td><a href="../../../Source/Engine/Rendering/Pipeline/Nodes/SkyRenderNode.cpp"><code>SkyRenderNode.cpp</code></a></td></tr>
+    <tr><td><code>WorldRender</code></td><td>Forward+ world geometry with material binding</td><td><a href="../../../Source/Engine/Rendering/Pipeline/Nodes/WorldRenderNode.cpp"><code>WorldRenderNode.cpp</code></a></td></tr>
+    <tr><td><code>ComputeShader</code></td><td>JSON-driven generic compute dispatch</td><td><a href="../../../Source/Engine/Rendering/Pipeline/Nodes/ComputeShaderNode.cpp"><code>ComputeShaderNode.cpp</code></a></td></tr>
+    <tr><td><code>FullscreenShader</code></td><td>JSON-driven generic fullscreen pass</td><td><a href="../../../Source/Engine/Rendering/Pipeline/Nodes/FullscreenShaderNode.cpp"><code>FullscreenShaderNode.cpp</code></a></td></tr>
+  </tbody>
+</table>
+
+<p><strong>Adding new types</strong> = implementing <code>IRenderPipelineNode</code> + registering &mdash; see <a href="RenderPassAuthoring.html"><code>RenderPassAuthoring.html</code></a> for the recipe.</p>
+
+<h3>Resource reference grammar</h3>
+
+<p>Inside a pass entry, resource refs are strings:</p>
+
+<table>
+  <thead>
+    <tr><th>Form</th><th>Means</th></tr>
+  </thead>
+  <tbody>
+    <tr><td><code>"View.Color"</code></td><td>Per-view standard color target</td></tr>
+    <tr><td><code>"View.Depth"</code></td><td>Per-view standard depth target</td></tr>
+    <tr><td><code>"View.Resolve"</code></td><td>Per-view final-resolve target (display output)</td></tr>
+    <tr><td><code>"MyResource"</code></td><td>A resource declared in the pipeline's <code>resources</code> block</td></tr>
+  </tbody>
+</table>
+
+<p>Per-view resources are automatically expanded per view by the framework &mdash; you reference them by name regardless of how many cameras are active.</p>
+
+<h3>Pass ordering</h3>
+
+<p>Three mechanisms, in priority order:</p>
+
+<ol>
+  <li><strong>Resource dependencies</strong> (automatic) &mdash; if pass A writes resource X and pass B reads X, B runs after A. Most ordering should come from here.</li>
+  <li><strong>Phases</strong> &mdash; <code>phase: "EarlySetup" | "WorldRender" | "PostProcess" | "Overlay" | "UI" | "Finalize" | "Present"</code> (or an integer). Passes in the same phase obey resource dependencies; passes in different phases are forced into phase order.</li>
+  <li><strong>Explicit ordering</strong> &mdash; <code>"after": ["OtherPassId"]</code> (handle-based edge) or <code>"tags": ["x"]</code> + <code>"afterTag": "x"</code> (decoupled tag-based edge). Use sparingly.</li>
+</ol>
+
+<h2 id="how-pipelines-load">How Pipelines Load</h2>
+
+<div class="diagram-wrap">
+  <div class="diagram-label">Pipeline load &amp; build flow</div>
+  <pre class="mermaid">
+flowchart TD
+    A[".rendergraph JSON file<br/>(Assets/RenderPipelines/X.rendergraph)"]
+    B["RenderPipelineAsset<br/>parsed JSON, validated"]
+    C["RenderPipelineCompiler::Compile(asset, registry)<br/>validates against registered node types"]
+    D["RenderPipelineBlueprint<br/>resolved schema, hashed for change detection"]
+    E["RenderPipelineInstance::SetBlueprint(blueprint)<br/>atomically swaps active pipeline"]
+    F["EnsureBuilt(rg, views)<br/>called each frame; creates nodes only when changed"]
+    G["RenderGraph passes<br/>real RG passes for current view set"]
+
+    A -->|loaded as asset| B
+    B -->|Compile()| C
+    C --> D
+    D -->|SetBlueprint()| E
+    E -->|per frame| F
+    F --> G
+
+    classDef io fill:#1a2a3a,stroke:#6db4ff,color:#d8dde6;
+    classDef proc fill:#2c323d,stroke:#3a414d,color:#d8dde6;
+    classDef out fill:#1a3a2a,stroke:#7bd88f,color:#d8dde6;
+    class A io;
+    class B,C,D,E,F proc;
+    class G out;
+  </pre>
+</div>
+
+<p>Key types in <a href="../../../Include/Engine/Rendering/Pipeline/RenderPipeline.h"><code>Engine/Include/Engine/Rendering/Pipeline/RenderPipeline.h</code></a>:</p>
+
+<ul>
+  <li><code>RenderPipelineCompiler::Compile(asset, registry) &rarr; Blueprint</code> &mdash; validates JSON against registered node types</li>
+  <li><code>RenderPipelineInstance::SetBlueprint(blueprint)</code> &mdash; atomically swaps the active pipeline (passes from the old blueprint disabled on next build)</li>
+  <li><code>RenderPipelineInstance::EnsureBuilt(rg, views)</code> &mdash; called each frame; creates persistent nodes/resources only when they change</li>
+</ul>
+
+<p>The framework caches pass handles by (node, view, suffix) so that frame-to-frame work is just <code>RG::Compile()</code> fast-path &mdash; no Setup callbacks re-run when nothing changed.</p>
+
+<h2 id="walkthrough-poststack">Walkthrough: <code>Sample_PostStack.rendergraph</code></h2>
+
+<p>Demonstrates the minimum to add a post-process effect over the world.</p>
+
+<pre><code>{
+  "schemaVersion": 2,
+  "pipelineName": "Sample_PostStack",
+  "passes": [
+    { "id": "World", "type": "WorldRender", "enabled": true },
+    {
+      "id": "SolidColor",
+      "type": "FullscreenShader",
+      "enabled": false,
+      "output": "View.Resolve",
+      "shaderPkg": "Shaders/solidcolor.shaderpkg"
+    }
+  ],
+  "outputs": {
+    "FinalColor": "View.Resolve"
+  }
+}</code></pre>
+
+<p>Two passes: <code>World</code> renders meshes, then <code>SolidColor</code> (disabled by default) writes a flat color over the result. Toggle <code>enabled</code> on <code>SolidColor</code> for instant override.</p>
+
+<p><strong>Pedagogical value</strong>: this is the entry-level template for any custom pipeline that wants to add a single post-process step.</p>
+
+<h2 id="walkthrough-forwardplus">Walkthrough: <code>ForwardPlus.rendergraph</code> (the canonical pipeline)</h2>
+
+<p>The full production pipeline. Worth reading <a href="../../../../Assets/RenderPipelines/ForwardPlus.rendergraph">the whole file</a> end-to-end &mdash; it's the most concrete reference for everything below.</p>
+
+<h3>Frame flow</h3>
+
+<div class="diagram-wrap">
+  <div class="diagram-label">ForwardPlus pipeline execution order</div>
+  <pre class="mermaid">
+flowchart TD
+    subgraph EarlySetup["EarlySetup phase"]
+        direction TB
+        VPU["ViewParamsUpload<br/>matrices, camera position"]
+        DP["DepthPrepass<br/>Z prepass to reduce overdraw"]
+        LU["LightUpload<br/>extracted lights -> SSBO"]
+        CSM["ShadowMap<br/>all shadow families + UBO"]
+        CLC["ClusteredLightCull<br/>per-cluster light index lists"]
+        VPU --> DP --> LU --> CSM --> CLC
+    end
+
+    subgraph WorldRender["WorldRender phase"]
+        direction TB
+        SKY["Sky<br/>writes sky into View.Color"]
+        TER["Terrain<br/>terrain CDLOD rendering"]
+        WR["World<br/>forward+ world geometry"]
+        SKY --> TER --> WR
+    end
+
+    subgraph PostProcess["PostProcess phase"]
+        direction TB
+        BT["BloomThreshold<br/>View.Resolve -> BloomA"]
+        BBH["BloomBlurH<br/>BloomA -> BloomB"]
+        BBV["BloomBlurV<br/>BloomB -> BloomA"]
+        BC["BloomCombine<br/>-> HDRCombined"]
+        HCF["HDRColorFx<br/>HDR grading -> HDRFiltered"]
+        TM["Tonemap<br/>HDR -> LDR -> LDRBeforeFilter"]
+        LFX["LdrFxStack<br/>CAS etc. -> LDRBeforeCRT"]
+        CRT["Crt<br/>CRT emulation -> View.Resolve"]
+        BT --> BBH --> BBV --> BC --> HCF --> TM --> LFX --> CRT
+    end
+
+    EarlySetup --> WorldRender --> PostProcess
+
+    classDef phase fill:#232831,stroke:#3a414d,color:#d8dde6;
+    classDef setup fill:#1a2a3a,stroke:#6db4ff,color:#d8dde6;
+    classDef world fill:#2a3a1a,stroke:#7bd88f,color:#d8dde6;
+    classDef post fill:#3a2a3a,stroke:#f6c177,color:#d8dde6;
+    class DP,VPU,LU,CSM,CLC setup;
+    class SKY,TER,WR world;
+    class BT,BBH,BBV,BC,HCF,TM,LFX,CRT post;
+  </pre>
+</div>
+
+<pre><code>EarlySetup phase:
+  ViewParamsUpload       &mdash; uploads per-view UBO (matrices, camera position)
+  DepthPrepass           &mdash; renders world depth (Z prepass to reduce overdraw)
+  LightUpload            &mdash; uploads light SSBO from extracted lights
+  ShadowMap              &mdash; renders all shadow families + uploads shadow UBO
+  ClusteredLightCull     &mdash; compute pass; builds per-cluster light index lists
+
+WorldRender phase:
+  Sky                    &mdash; writes sky into View.Color
+  Terrain                &mdash; terrain CDLOD rendering
+  World                  &mdash; forward+ world geometry (samples clusters + shadows)
+
+PostProcess phase:
+  BloomThreshold         &mdash; extract bright pixels from View.Resolve into BloomA
+  BloomBlurH             &mdash; horizontal blur BloomA &rarr; BloomB
+  BloomBlurV             &mdash; vertical blur BloomB &rarr; BloomA
+  BloomCombine           &mdash; combine bloom with HDR &rarr; HDRCombined
+  HDRColorFx             &mdash; HDR color grading &rarr; HDRFiltered
+  Tonemap                &mdash; HDR &rarr; LDR &rarr; LDRBeforeFilter
+  LdrFxStack             &mdash; CAS sharpening etc. &rarr; LDRBeforeCRT
+  Crt                    &mdash; CRT emulation &rarr; View.Resolve
+
+ClusterDebugOverlay      &mdash; (disabled) cluster visualization
+ForwardPlusLighting      &mdash; (disabled) standalone deferred-style lighting reference</code></pre>
+
+<h3>Resources it owns</h3>
+
+<pre><code>Per-view textures:  BloomA, BloomB, HDRCombined, HDRFiltered, LDRBeforeFilter, LDRBeforeCRT
+Per-view buffers:   ClusterBuffer, LightIndexBuffer, ClusterParams, LightBuffer, ShadowData, ViewParams</code></pre>
+
+<p><code>View.Color</code>, <code>View.Depth</code>, <code>View.Resolve</code> come from <code>RenderServices</code> automatically per active camera.</p>
+
+<h3>What makes it "Forward+"</h3>
+
+<ul>
+  <li><strong>DepthPrepass</strong> writes depth before world rendering, enabling early-Z rejection</li>
+  <li><strong>ClusteredLightCull</strong> runs after the prepass with depth available, building per-cluster (16&times;16 screen tile &times; 24 depth slice) light index lists</li>
+  <li><strong>World</strong> pass samples the cluster lists per fragment &mdash; only iterating lights that affect this cluster instead of all lights</li>
+</ul>
+
+<p>This is dramatically more efficient than naive forward rendering for scenes with many lights, while keeping forward's per-material MSAA support and transparency flexibility.</p>
+
+<h2 id="creating-a-new-pipeline">Creating a New Pipeline From Scratch</h2>
+
+<h3>Step 1: write the JSON</h3>
+
+<p>Create <code>Assets/RenderPipelines/MyPipeline.rendergraph</code>. Start from <code>Sample_PostStack.rendergraph</code> as a template and add what you need.</p>
+
+<h3>Step 2: the build copies it to the staged location</h3>
+
+<p>Standard build copies <code>Assets/RenderPipelines/*.rendergraph</code> to <code>build\&lt;preset&gt;\bin\&lt;config&gt;\Apps\Editor\Assets\RenderPipelines\</code>. <strong>For hot-reload while the editor runs, edit the staged copy directly.</strong></p>
+
+<h3>Step 3: tell the project which pipeline to use</h3>
+
+<p>Project settings: select the new <code>.rendergraph</code> as the active pipeline. Implementation lives in <a href="../../../../Apps/Editor/Source/Settings/RenderPipelineSettings.cpp"><code>Apps/Editor/Source/Settings/RenderPipelineSettings.cpp</code></a>. The setting persists per project.</p>
+
+<h3>Step 4: launch the editor</h3>
+
+<pre><code>.\build\vs2022-x64-local-fast\bin\DebugFast\Apps\Editor\Editor.exe</code></pre>
+
+<p>If your project selects the new pipeline, it loads automatically. You can also switch the active pipeline from inside the editor via the settings panel.</p>
+
+<h2 id="worked-example-deferred">Worked Example: A Deferred Pipeline</h2>
+
+<p>Builds on the GBuffer + Deferred Lighting passes from <a href="RenderPassAuthoring.html"><code>RenderPassAuthoring.html</code></a>. The pipeline JSON is the orchestration glue.</p>
+
+<div class="diagram-wrap">
+  <div class="diagram-label">Deferred pipeline execution order</div>
+  <pre class="mermaid">
+flowchart TD
+    subgraph EarlySetup["EarlySetup phase"]
+        direction TB
+        VPU["ViewParamsUpload"]
+        DP["DepthPrepass"]
+        LU["LightUpload"]
+        CSM["ShadowMap"]
+        CLC["ClusteredLightCull"]
+        VPU --> DP --> LU --> CSM --> CLC
+    end
+
+    subgraph WorldRender["WorldRender phase (deferred)"]
+        direction TB
+        SKY["Sky -> View.Color"]
+        GB["GBuffer<br/>writes GB_Albedo / GB_Normal / GB_MotionAO / GB_Emissive"]:::new
+        DL["DeferredLighting<br/>reads 4 G-buffers + clusters -> View.Resolve"]:::new
+        SKY --> GB --> DL
+    end
+
+    subgraph PostProcess["PostProcess phase"]
+        direction TB
+        POST["(copy from ForwardPlus:<br/>Bloom -> Tonemap -> LdrFxStack -> Crt)"]
+    end
+
+    EarlySetup --> WorldRender --> PostProcess
+
+    classDef new fill:#1a3a2a,stroke:#7bd88f,color:#d8dde6,stroke-width:2px;
+    classDef setup fill:#1a2a3a,stroke:#6db4ff,color:#d8dde6;
+    classDef world fill:#2a3a1a,stroke:#7bd88f,color:#d8dde6;
+    classDef post fill:#3a2a3a,stroke:#f6c177,color:#d8dde6;
+    class DP,VPU,LU,CSM,CLC setup;
+    class SKY world;
+    class POST post;
+  </pre>
+</div>
+
+<h3><code>MyDeferred.rendergraph</code></h3>
+
+<pre><code>{
+  "schemaVersion": 2,
+  "pipelineName": "MyDeferred",
+  "outputs": { "FinalColor": "View.Resolve" },
+  "passes": [
+    // &#9472;&#9472; EarlySetup &#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;
+    { "id": "ViewParamsUpload",   "type": "ViewParamsUpload",
+      "buffer": "ViewParams",     "enabled": true },
+    { "id": "DepthPrepass",       "type": "DepthPrepass",      "enabled": true },
+    { "id": "LightUpload",        "type": "LightUpload",
+      "buffer": "LightBuffer",    "enabled": true },
+    { "id": "ShadowMap",          "type": "ShadowMap",
+      "buffer": "ShadowData",     "cascades": 4, "resolution": 2048,
+      "splitLambda": 0.75, "depthBias": 0.005, "normalBias": 0.5,
+      "maxShadowDistance": 200.0, "enabled": true },
+
+    // &#9472;&#9472; ClusteredLightCull &#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;
+    {
+      "id": "ClusteredLightCull",
+      "type": "ComputeShader",
+      "shaderPkg": "Shaders/clustered_light_cull.shaderpkg",
+      "buffers": {
+        "ClusterBuffer": "ClusterBuffer",
+        "ClusterParams": "ClusterParams",
+        "LightBuffer": "LightBuffer",
+        "LightIndexBuffer": "LightIndexBuffer",
+        "ViewParams": "ViewParams"
+      },
+      "bufferUsages": {
+        "ClusterBuffer": "StorageWrite",
+        "ClusterParams": "Sampled",
+        "LightBuffer": "StorageRead",
+        "LightIndexBuffer": "StorageWrite",
+        "ViewParams": "ConstantBuffer"
+      },
+      "inputs": { "DepthTex": "View.Depth" },
+      "inputUsages": { "DepthTex": "DepthSampled" },
+      "dispatch": { "x": "ceil(renderWidth / 16)", "y": "ceil(renderHeight / 16)", "z": 1 },
+      "uniformWrites": { "ClusterParams": { "u32x4": [16, 16, 24, 64] } },
+      "enabled": true
+    },
+
+    // &#9472;&#9472; Sky &#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;
+    { "id": "Sky", "type": "SkyRender", "output": "View.Color", "enabled": true },
+
+    // &#9472;&#9472; GBuffer &#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;
+    { "id": "GBuffer", "type": "GBuffer", "enabled": true,
+      "targets": {
+        "AlbedoMetallic":  "GB_Albedo",
+        "NormalRoughness": "GB_Normal",
+        "MotionAO":        "GB_MotionAO",
+        "Emissive":        "GB_Emissive"
+      },
+      "depth": "View.Depth"
+    },
+
+    // &#9472;&#9472; Deferred Lighting &#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;
+    {
+      "id": "DeferredLighting",
+      "type": "FullscreenShader",
+      "shaderPkg": "Shaders/deferred_lighting.shaderpkg",
+      "inputs": {
+        "uGBufferAlbedo":   "GB_Albedo",
+        "uGBufferNormal":   "GB_Normal",
+        "uGBufferMotionAO": "GB_MotionAO",
+        "uGBufferEmissive": "GB_Emissive",
+        "uSceneDepth":      "View.Depth"
+      },
+      "inputUsages": { "uSceneDepth": "DepthSampled" },
+      "samplers": {
+        "uGBufferAlbedo":   "PointClamp",
+        "uGBufferNormal":   "PointClamp",
+        "uGBufferMotionAO": "PointClamp",
+        "uGBufferEmissive": "PointClamp",
+        "uSceneDepth":      "PointClamp"
+      },
+      "buffers": {
+        "ClusterBuffer": "ClusterBuffer", "ClusterParams": "ClusterParams",
+        "LightBuffer": "LightBuffer",     "LightIndexBuffer": "LightIndexBuffer",
+        "ViewParams": "ViewParams",       "ShadowData": "ShadowData"
+      },
+      "bufferUsages": {
+        "ClusterBuffer": "StorageRead", "ClusterParams": "ConstantBuffer",
+        "LightBuffer": "StorageRead",   "LightIndexBuffer": "StorageRead",
+        "ViewParams": "ConstantBuffer", "ShadowData": "ConstantBuffer"
+      },
+      "output": "View.Resolve",
+      "enabled": true
+    }
+
+    // (post-process chain: copy from ForwardPlus.rendergraph, change `View.Resolve` flow)
+  ],
+
+  "resources": {
+    "GB_Albedo":    { "kind": "Texture", "format": "R8G8B8A8_UNORM",
+                      "scope": "PerView",
+                      "usage": ["RenderTarget", "ShaderResource"] },
+    "GB_Normal":    { "kind": "Texture", "format": "R16G16B16A16_FLOAT",
+                      "scope": "PerView",
+                      "usage": ["RenderTarget", "ShaderResource"] },
+    "GB_MotionAO":  { "kind": "Texture", "format": "R16G16B16A16_FLOAT",
+                      "scope": "PerView",
+                      "usage": ["RenderTarget", "ShaderResource"] },
+    "GB_Emissive":  { "kind": "Texture", "format": "R11G11B10_FLOAT",
+                      "scope": "PerView",
+                      "usage": ["RenderTarget", "ShaderResource"] },
+
+    // Same buffers as ForwardPlus &mdash; clustered lighting is shared
+    "ClusterBuffer": { "kind": "Buffer", "memoryUsage": "DeviceLocal", "scope": "PerView",
+      "size": {
+        "expression": "clustersX * clustersY * depthSlices * clusterDataBytes",
+        "variables": {
+          "clusterDataBytes": 16,
+          "clustersX": "ceil(renderWidth / tileSizeX)",
+          "clustersY": "ceil(renderHeight / tileSizeY)",
+          "depthSlices": 24, "tileSizeX": 16, "tileSizeY": 16
+        }
+      },
+      "usage": ["Storage", "ShaderResource", "CopyDestination"]
+    }
+    // (... declare ClusterParams, LightBuffer, LightIndexBuffer, ShadowData, ViewParams
+    //  same as in ForwardPlus.rendergraph)
+  }
+}</code></pre>
+
+<h3>What's NEW vs ForwardPlus</h3>
+
+<table>
+  <thead>
+    <tr><th>Difference</th><th>Effect</th></tr>
+  </thead>
+  <tbody>
+    <tr><td><code>GBuffer</code> pass replaces <code>WorldRender</code> for opaque geometry</td><td>Material variants compiled for <code>RENDER_PATH_DEFERRED</code> adapter</td></tr>
+    <tr><td><code>DeferredLighting</code> after <code>GBuffer</code> reads all 4 G-buffer textures + cluster lists</td><td>Single fullscreen pass produces final lit color</td></tr>
+    <tr><td><code>GB_*</code> texture resources added to resources block</td><td>Allocated per-view, transient or persistent depending on whether anything later samples them</td></tr>
+  </tbody>
+</table>
+
+<h3>What's the SAME</h3>
+
+<ul>
+  <li>Clustered light culling, light upload, shadow rendering &mdash; unchanged</li>
+  <li>Post-process chain &mdash; copy as-is from ForwardPlus</li>
+  <li>View targets (<code>View.Color</code>, <code>View.Depth</code>, <code>View.Resolve</code>) &mdash; managed by RenderServices</li>
+</ul>
+
+<h3>Tradeoffs you've just signed up for</h3>
+
+<table>
+  <thead>
+    <tr><th>Forward+</th><th>Deferred</th></tr>
+  </thead>
+  <tbody>
+    <tr><td>Per-material MSAA support</td><td>Limited / impossible MSAA</td></tr>
+    <tr><td>Transparency in one pass</td><td>Transparency requires a separate forward pass after deferred</td></tr>
+    <tr><td>Many BRDFs/material types</td><td>Limited by GBuffer layout</td></tr>
+    <tr><td>Higher overdraw cost</td><td>Constant overdraw (one lighting evaluation per pixel)</td></tr>
+    <tr><td>~equal VRAM</td><td>More VRAM (4+ GBuffer targets)</td></tr>
+  </tbody>
+</table>
+
+<p>The engine's existing surface-shader-on-adapter system means transparent geometry can run <strong>both</strong> paths &mdash; the deferred adapter for opaques, the forward adapter for transparents. You'd add a <code>ForwardTransparent</code> pass after <code>DeferredLighting</code> that uses the forward adapter for <code>MaterialAlphaMode::Blended</code> materials only.</p>
+
+<h2 id="worked-example-raytracing">Worked Example: A Raytracing Pipeline</h2>
+
+<p>This is the more ambitious case. <strong>The engine does not yet have a complete ray-tracing pipeline</strong> &mdash; but the pieces are in place to build one without ripping anything out.</p>
+
+<h3>What exists today</h3>
+
+<table>
+  <thead>
+    <tr><th>Component</th><th>Status</th><th>Location</th></tr>
+  </thead>
+  <tbody>
+    <tr><td><code>IDevice::supportsRayTracing</code> capability bit</td><td><span class="pill keep">DONE</span></td><td><a href="../Include/Rendering/Core/Device.h"><code>Device.h:318</code></a></td></tr>
+    <tr><td><code>PipelineType::RayTracing</code> enum value</td><td><span class="pill keep">DONE</span> Declared (not implemented)</td><td><a href="../Include/Rendering/Core/Device.h"><code>Device.h:625</code></a></td></tr>
+    <tr><td>GPU top-level acceleration structure (TLAS) from the scene</td><td><span class="pill del">MISSING</span></td><td>None yet. <code>SceneTlas</code> in <code>Engine/Modules/Scene</code> is a CPU BVH over world bounds for editor picking, brought current on demand; it is not a ray-tracing acceleration structure.</td></tr>
+    <tr><td>GPU bottom-level acceleration structures (BLAS) per mesh</td><td><span class="pill del">MISSING</span></td><td>None yet.</td></tr>
+    <tr><td>Vulkan <code>VK_KHR_acceleration_structure</code> extension load</td><td><span class="pill mod">CHECK</span></td><td>Check <code>VulkanDevice.cpp</code></td></tr>
+    <tr><td>Vulkan <code>VK_KHR_ray_tracing_pipeline</code> extension load</td><td><span class="pill mod">CHECK</span></td><td>Check <code>VulkanDevice.cpp</code></td></tr>
+    <tr><td>RT pipeline state object creation API</td><td><span class="pill del">MISSING</span></td><td>Needs to be added to <code>IDevice</code></td></tr>
+    <tr><td>Shader binding table (SBT) construction</td><td><span class="pill del">MISSING</span></td><td>Needs new helper in rendering module</td></tr>
+    <tr><td><code>.rgen</code> / <code>.rmiss</code> / <code>.rchit</code> shader compilation</td><td><span class="pill del">MISSING</span></td><td><code>shaderc</code> supports it, but build system doesn't route it yet</td></tr>
+    <tr><td>Denoising pass (e.g. NRD or custom SVGF)</td><td><span class="pill del">MISSING</span></td><td>Could be added as a pipeline node consuming RT outputs</td></tr>
+    <tr><td><code>cmdTraceRays</code> command list method</td><td><span class="pill del">MISSING</span></td><td>Add to <code>CommandList</code> interface</td></tr>
+  </tbody>
+</table>
+
+<p>So the work breaks into three layers:</p>
+
+<div class="diagram-wrap">
+  <div class="diagram-label">Raytracing implementation gap &mdash; three layers</div>
+  <pre class="mermaid">
+flowchart TD
+    subgraph L1["Layer 1: Rendering module primitives"]
+        direction TB
+        L1A["IDevice::CreateAccelerationStructure"]:::missing
+        L1B["IDevice::CreateRayTracingPipeline"]:::missing
+        L1C["IDevice::BuildSBT"]:::missing
+        L1D["CommandList::BindRayTracingPipeline"]:::missing
+        L1E["CommandList::TraceRays"]:::missing
+        L1F["Vulkan backend extension impl<br/>(VK_KHR_acceleration_structure,<br/>VK_KHR_ray_tracing_pipeline)"]:::missing
+        L1G["ShaderCompileService<br/>.rgen/.rmiss/.rchit routing"]:::missing
+        L1H["GPU BLAS per mesh"]:::missing
+        L1I["GPU TLAS from the scene"]:::missing
+    end
+
+    subgraph L2["Layer 2: Engine glue"]
+        direction TB
+        L2A["RaytracingRenderFeature<br/>owns SBT, RT pipeline, denoiser, output tex"]:::missing
+        L2B["RaytracingPassNode<br/>resolves TLAS, binds desc, cmdTraceRays"]:::missing
+        L2C["DenoisePassNode<br/>SVGF or external denoiser"]:::missing
+    end
+
+    subgraph L3["Layer 3: Pipeline JSON"]
+        direction TB
+        L3A["MyRaytracing.rendergraph<br/>Raytracing + Denoise + Composite + post"]:::missing
+    end
+
+    L1 --> L2 --> L3
+
+    classDef missing fill:#3a1818,stroke:#ff8a6e,color:#ffcfc0,stroke-dasharray: 4 3;
+    classDef exists fill:#1a3a2a,stroke:#7bd88f,color:#d8dde6;
+  </pre>
+</div>
+
+<h3>Layer 1: Rendering module primitives (rendering library)</h3>
+
+<p>Additions to <a href="../"><code>Engine/Modules/Rendering/</code></a>:</p>
+
+<ol>
+  <li><strong><code>IDevice</code> extensions</strong> &mdash; add:
+    <ul>
+      <li><code>AccelerationStructureHandle CreateAccelerationStructure(const ASDesc&amp;)</code></li>
+      <li><code>RayTracingPipelineHandle CreateRayTracingPipeline(const RTPipelineDesc&amp;)</code></li>
+      <li><code>void BuildSBT(SBTBuffer&amp; out, const RTPipelineHandle&amp;, const SBTLayout&amp;)</code></li>
+    </ul>
+  </li>
+  <li><strong><code>CommandList</code> extensions</strong> &mdash; add:
+    <ul>
+      <li><code>BindRayTracingPipeline(handle)</code></li>
+      <li><code>BindAccelerationStructure(set, binding, handle)</code></li>
+      <li><code>TraceRays(uint32_t width, uint32_t height, uint32_t depth)</code></li>
+    </ul>
+  </li>
+  <li><strong>Vulkan backend</strong> &mdash; actually implement the above using <code>VK_KHR_acceleration_structure</code> and <code>VK_KHR_ray_tracing_pipeline</code>. The DX12 backend can be a follow-up.</li>
+  <li><strong>Shader compilation routing</strong> &mdash; extend <code>ShaderCompileService</code> to handle <code>.rgen</code>/<code>.rmiss</code>/<code>.rchit</code>/<code>.rahit</code>/<code>.rint</code> files; <code>shaderc</code> already compiles these to SPIR-V given the right <code>shaderc_glsl_*_shader</code> kind.</li>
+  <li><strong><code>.shaderpkg</code> layout</strong> &mdash; extend the package format to bundle the RT shader group table alongside the SPIR-V (for SBT construction).</li>
+</ol>
+
+<h3>Layer 2: Engine glue (RenderServices + pipeline node)</h3>
+
+<p>Once primitives exist, add to <a href="../../../Source/Engine/Rendering/"><code>Engine/{Include,Source}/Engine/Rendering/</code></a>:</p>
+
+<ol>
+  <li><strong><code>RaytracingRenderFeature</code></strong> &mdash; owns the SBT, RT pipeline handle, denoiser state, output texture, and the GPU TLAS it exposes to passes (to be built; <code>SceneTlas</code> is the CPU picking BVH, not this).</li>
+  <li><strong><code>RaytracingPassNode</code></strong> &mdash; new <code>IRenderPipelineNode</code>:
+    <ul>
+      <li>Resolves the TLAS via the feature</li>
+      <li>Sets up: reads world data buffers (geometry + materials + textures, all bindless), writes a per-view output color/normal/depth (for denoising)</li>
+      <li>Execute: bind RT pipeline, bind TLAS + descriptors, <code>cmdTraceRays</code></li>
+    </ul>
+  </li>
+  <li><strong><code>DenoisePassNode</code></strong> &mdash; consumes RT outputs (color + variance + albedo + normal + depth), produces denoised color. Implementation can be a fullscreen shader (SVGF) or a custom node integrating an external denoiser library.</li>
+</ol>
+
+<h3>Three-layer implementation plan at a glance</h3>
+
+<div class="timeline">
+  <div class="step">
+    <h4>Layer 1 &mdash; Primitives</h4>
+    <p>Add IDevice / CommandList APIs for acceleration structures, RT pipelines, SBT, and TraceRays. Implement them on the Vulkan backend with VK_KHR_acceleration_structure and VK_KHR_ray_tracing_pipeline. Route .rgen/.rmiss/.rchit through ShaderCompileService.</p>
+  </div>
+  <div class="step">
+    <h4>Layer 2 &mdash; Engine glue</h4>
+    <p>RaytracingRenderFeature owns SBT, RT pipeline, denoiser state, output tex. RaytracingPassNode binds TLAS + descriptors and calls cmdTraceRays. DenoisePassNode consumes RT outputs and produces a denoised color.</p>
+  </div>
+  <div class="step">
+    <h4>Layer 3 &mdash; Pipeline JSON</h4>
+    <p>MyRaytracing.rendergraph wires Raytracing -&gt; Denoise -&gt; Composite -&gt; post chain. Trivial once Layers 1+2 exist &mdash; pure configuration.</p>
+  </div>
+</div>
+
+<h3>Layer 3: The pipeline JSON</h3>
+
+<p><code>MyRaytracing.rendergraph</code> (after Layers 1+2 are done):</p>
+
+<pre><code>{
+  "schemaVersion": 2,
+  "pipelineName": "MyRaytracing",
+  "outputs": { "FinalColor": "View.Resolve" },
+  "passes": [
+    // &#9472;&#9472; Setup (same as forward) &#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;
+    { "id": "ViewParamsUpload",  "type": "ViewParamsUpload",
+      "buffer": "ViewParams", "enabled": true },
+    { "id": "LightUpload", "type": "LightUpload",
+      "buffer": "LightBuffer", "enabled": true },
+
+    // &#9472;&#9472; The GPU TLAS build has no implementation yet &#9472;&#9472;
+    // (it would be a pass here; the CPU SceneTlas is a picking BVH)
+
+    // &#9472;&#9472; Ray Tracing &#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;
+    {
+      "id": "RaytraceMain",
+      "type": "Raytracing",
+      "shaderPkg": "Shaders/path_tracer.shaderpkg",
+      "buffers": {
+        "ViewParams": "ViewParams",
+        "LightBuffer": "LightBuffer"
+        // TLAS is bound via the feature, not the JSON refs
+      },
+      "bufferUsages": {
+        "ViewParams": "ConstantBuffer",
+        "LightBuffer": "StorageRead"
+      },
+      "outputs": {
+        "Color":    "RT_Color",
+        "Normal":   "RT_Normal",
+        "Depth":    "RT_Depth",
+        "Variance": "RT_Variance",
+        "Albedo":   "RT_Albedo"
+      },
+      "maxBounces": 4,
+      "samplesPerPixel": 1,
+      "enabled": true
+    },
+
+    // &#9472;&#9472; Denoiser &#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;
+    {
+      "id": "RTDenoise",
+      "type": "Denoise",
+      "inputs": {
+        "uColor":    "RT_Color",
+        "uVariance": "RT_Variance",
+        "uAlbedo":   "RT_Albedo",
+        "uNormal":   "RT_Normal",
+        "uDepth":    "RT_Depth"
+      },
+      "samplers": {
+        "uColor":    "LinearClamp",
+        "uVariance": "LinearClamp",
+        "uAlbedo":   "LinearClamp",
+        "uNormal":   "PointClamp",
+        "uDepth":    "PointClamp"
+      },
+      "output": "DenoiseColor",
+      "history": "RT_History",     // persistent across frames for temporal accumulation
+      "enabled": true
+    },
+
+    // &#9472;&#9472; Composite + Post &#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;
+    {
+      "id": "Composite",
+      "type": "FullscreenShader",
+      "shaderPkg": "Shaders/copy.shaderpkg",
+      "inputs": { "uSrc": "DenoiseColor" },
+      "samplers": { "uSrc": "LinearClamp" },
+      "output": "HDRCombined",
+      "enabled": true
+    },
+
+    // (post chain &mdash; bloom, tonemap, etc., same as ForwardPlus)
+  ],
+  "resources": {
+    "RT_Color":    { "kind": "Texture", "format": "R16G16B16A16_FLOAT", "scope": "PerView",
+                     "usage": ["Storage", "ShaderResource"] },
+    "RT_Normal":   { "kind": "Texture", "format": "R16G16B16A16_FLOAT", "scope": "PerView",
+                     "usage": ["Storage", "ShaderResource"] },
+    "RT_Depth":    { "kind": "Texture", "format": "R32_FLOAT", "scope": "PerView",
+                     "usage": ["Storage", "ShaderResource"] },
+    "RT_Variance": { "kind": "Texture", "format": "R16G16_FLOAT", "scope": "PerView",
+                     "usage": ["Storage", "ShaderResource"] },
+    "RT_Albedo":   { "kind": "Texture", "format": "R8G8B8A8_UNORM", "scope": "PerView",
+                     "usage": ["Storage", "ShaderResource"] },
+    "DenoiseColor":{ "kind": "Texture", "format": "R16G16B16A16_FLOAT", "scope": "PerView",
+                     "usage": ["RenderTarget", "ShaderResource"] },
+    "RT_History":  { "kind": "Texture", "format": "R16G16B16A16_FLOAT", "scope": "Persistent",
+                     "usage": ["Storage", "ShaderResource"] }
+    // (... ViewParams, LightBuffer same as ForwardPlus)
+  }
+}</code></pre>
+
+<div class="panel warn">
+  <div class="panel-title">Persistent across frames</div>
+  <p>Note <code>RT_History</code> is <code>scope: Persistent</code> &mdash; temporal denoising requires the previous frame's denoised output to weight the new sample. The render graph will not transient-alias it.</p>
+</div>
+
+<h3>Raytracing frame flow (once implemented)</h3>
+
+<div class="diagram-wrap">
+  <div class="diagram-label">Raytracing pipeline execution order</div>
+  <pre class="mermaid">
+flowchart TD
+    subgraph Setup["Setup phase"]
+        direction TB
+        VPU["ViewParamsUpload"]
+        LU["LightUpload"]
+        TLAS["GPU TLAS build<br/>(not implemented yet)"]:::ecs
+        VPU --> LU --> TLAS
+    end
+
+    subgraph RT["Raytracing phase"]
+        direction TB
+        RTM["RaytraceMain<br/>writes RT_Color / RT_Normal / RT_Depth /<br/>RT_Variance / RT_Albedo"]:::rt
+        DEN["RTDenoise<br/>temporal accumulation with RT_History<br/>-> DenoiseColor"]:::rt
+        RTM --> DEN
+    end
+
+    subgraph Post["Composite + Post phase"]
+        direction TB
+        COMP["Composite<br/>DenoiseColor -> HDRCombined"]
+        POST["Bloom -> Tonemap -> LdrFxStack -> Crt -> View.Resolve"]
+        COMP --> POST
+    end
+
+    Setup --> RT --> Post
+
+    classDef setup fill:#1a2a3a,stroke:#6db4ff,color:#d8dde6;
+    classDef rt fill:#3a2a3a,stroke:#f6c177,color:#d8dde6;
+    classDef ecs fill:#2a3a1a,stroke:#7bd88f,color:#d8dde6;
+    class VPU,LU setup;
+    class COMP,POST setup;
+  </pre>
+</div>
+
+<h3>Path-tracing variant</h3>
+
+<p>For full path tracing (not just primary-ray RT), the shader does multiple bounces inside the <code>.rgen</code>/<code>.rchit</code> shaders and the JSON above changes minimally &mdash; bump <code>maxBounces</code> and <code>samplesPerPixel</code>, accept slower frame times. The denoiser handles the variance with temporal accumulation.</p>
+
+<h3>Engine integration plan</h3>
+
+<p>If you implement this, the recommended order is:</p>
+<ol>
+  <li><strong>Layer 1 primitive work first</strong> &mdash; get a hello-world ray tracing demo running against a hand-built RG (no JSON). Pure Vulkan backend extension work.</li>
+  <li><strong>Add a TraceRays unit test</strong> &mdash; confirm the device + command list flow works.</li>
+  <li><strong>Then Layer 2</strong> &mdash; <code>RaytracingRenderFeature</code> + <code>RaytracingPassNode</code>. Now you can describe RT passes in JSON.</li>
+  <li><strong>Layer 3 last</strong> &mdash; the <code>.rendergraph</code> is the easy part once the substrate exists.</li>
+</ol>
+
+<p>Each layer is testable in isolation. You don't need to commit to the whole stack to start.</p>
+
+<h2 id="switching-pipelines">Switching Pipelines at Runtime</h2>
+
+<p>The editor can swap pipelines without restart. Mechanism:</p>
+
+<ol>
+  <li><strong>Editor UI</strong> triggers <code>RenderPipelineSettings::SetActivePipeline(newPath)</code></li>
+  <li>The setting loads the new <code>.rendergraph</code>, runs <code>RenderPipelineCompiler::Compile</code>, gets a new <code>RenderPipelineBlueprint</code></li>
+  <li><code>RenderPipelineInstance::SetBlueprint(blueprint)</code> &mdash; the <strong>next</strong> call to <code>EnsureBuilt()</code> will disable passes from the previous blueprint that aren't in the new one</li>
+  <li>New nodes have <code>Initialize()</code> + <code>EnsureBuilt()</code> called; existing nodes whose JSON didn't change reuse their state</li>
+  <li>Per-view resources are reallocated only if their description hash changed</li>
+</ol>
+
+<p>So switching between forward and deferred at runtime is supported; just make sure both pipelines' resources are correctly scoped.</p>
+
+<h2 id="validating-and-debugging">Validating and Debugging Pipelines</h2>
+
+<h3>Validate at load time</h3>
+
+<p><code>RenderPipelineCompiler::Compile</code> returns <code>Blueprint::issues</code> &mdash; an array of warnings/errors. Inspect via <code>Blueprint::HasErrors()</code>. The Editor logs these on load.</p>
+
+<p>Common issues:</p>
+<ul>
+  <li>Unknown <code>type</code> (node not registered)</li>
+  <li>Resource referenced by a pass but not declared in <code>resources</code></li>
+  <li>Cycle in <code>after</code> dependencies</li>
+  <li>A <code>DepthPrepass</code> or <code>WorldRender</code> declared before <code>ViewParamsUpload</code>:
+    passes are declared in blueprint order and bind their buffers when declared, so a pass above the
+    upload would read the fallback view parameters (no projection, no texture-sharpness bias). The
+    compiler rejects the order; move <code>ViewParamsUpload</code> above them.</li>
+  <li>A <code>TerrainUpload</code>, <code>CBTRender</code> or <code>TerrainGrass</code> listed after
+    <code>DepthPrepass</code> (a warning): these passes feed the depth prepass, which draws the terrain's
+    and the grass's depth from the buffers they fill this frame, so the compiler declares them just above
+    the first <code>DepthPrepass</code>, in their listed order, and reports each one it moved. List them
+    there to clear the warning.</li>
+</ul>
+
+<h3>Inspect the live pipeline</h3>
+
+<p>When the editor is running:</p>
+<ul>
+  <li><strong>RenderGraph panel</strong> &mdash; live list of passes, resources, barriers</li>
+  <li><strong>RenderPipelineInspector</strong> &mdash; shows the active blueprint's structure</li>
+  <li><strong>VRAM panel</strong> &mdash; per-resource memory usage</li>
+  <li><strong>Visual Profiler panel</strong> &mdash; per-pass GPU timings</li>
+</ul>
+
+<h3>Render graph debug flags (per-process)</h3>
+
+<p>Set before launching the editor:</p>
+
+<pre><code>$env:GE_DEBUG_TRACE_RENDERING = "1"
+.\build\vs2022-x64-local-fast\bin\DebugFast\Apps\Editor\Editor.exe</code></pre>
+
+<table>
+  <thead>
+    <tr><th>Flag</th><th>Effect</th></tr>
+  </thead>
+  <tbody>
+    <tr><td><code>GE_DEBUG_TRACE_RENDERING=1</code></td><td>Full compile + execute log to stdout</td></tr>
+    <tr><td><code>GE_RG_DUMP_RESOURCE_VERSIONS=1</code></td><td>Show resource version state per compile</td></tr>
+    <tr><td><code>GE_RG_DUMP_RESOURCE_VERSIONS_FULL=1</code></td><td>Verbose version dump</td></tr>
+    <tr><td><code>GE_RG_DISABLE_BARRIER_BATCHING=1</code></td><td>Disable barrier merging (debug)</td></tr>
+    <tr><td><code>GE_RG_AUTO_COMPILE=0</code></td><td>Disable auto-compile-on-topology-change</td></tr>
+  </tbody>
+</table>
+
+<h3>Dot graph of the compiled DAG</h3>
+
+<p><a href="../Source/Core/RenderGraphDebug.cpp"><code>RenderGraphDebug.cpp</code></a> emits a <code>.dot</code> file per compile. Render with:</p>
+
+<pre><code>dot -Tpng rendergraph.dot -o rendergraph.png</code></pre>
+
+<p>Useful when phase/ordering changes have produced an unexpected sequence &mdash; visually inspect the DAG to see what edges the compiler inferred.</p>
+
+<h3>Test pipelines exist</h3>
+
+<p>The <code>Tests/Projects/WASDDemo/</code> directory contains test projects with their own <code>.rendergraph</code> files. You can copy these as starting templates for new pipelines and run them in the demo via the WASD smoke test.</p>
+
+<hr>
+
+<p><em>Pipelines are configuration, not code &mdash; and that's the point. When in doubt about adding C++, try JSON first.</em></p>
+
+<div class="footer">Render Pipeline Authoring &middot; v1 &middot; forward / deferred / raytracing</div>
+
+</div>
+<script>
+mermaid.initialize({
+  startOnLoad: true,
+  theme: 'dark',
+  themeVariables: {
+    darkMode: true,
+    background: '#232831',
+    primaryColor: '#2c323d',
+    primaryTextColor: '#d8dde6',
+    primaryBorderColor: '#3a414d',
+    lineColor: '#8a93a3',
+    secondaryColor: '#2a3a4a',
+    tertiaryColor: '#3a2a4a'
+  },
+  flowchart: { curve: 'basis', padding: 16 }
+});
+</script>
+</body>
+</html>

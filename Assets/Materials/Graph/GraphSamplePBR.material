@@ -1,0 +1,22 @@
+{
+  "schemaVersion": 3,
+  "materialName": "Graph Sample Blue Orange",
+  "lightingModel": "StandardPBR",
+  "alphaMode": "Opaque",
+  "doubleSided": false,
+  "surfaceShader": "GraphSampleRed.glsl",
+  "properties": {
+    "baseColor": [1.0, 1.0, 1.0, 1.0],
+    "roughness": 0.45,
+    "metallic": 0.0,
+    "emissive": [0.0, 0.0, 0.0],
+    "emissionLuminance": 203.0,
+    "ao": 1.0,
+    "opacity": 1.0
+  },
+  "textures": {
+    "albedoMap": "",
+    "normalMap": "",
+    "metallicRoughnessMap": ""
+  }
+}

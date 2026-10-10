@@ -1,0 +1,343 @@
+#version 450
+
+// LDS-cooperative clustered light cull.
+//
+// Shape: one workgroup per cluster (tileX, tileY, slice), 64 threads each.
+// Each workgroup cooperatively iterates the light list with stride 64.
+// Hits stage into LDS (atomic-counter slot + index array). Lane 0 writes
+// the per-cluster (firstIndex, count) entry; lanes then cooperatively copy
+// LDS indices into the cluster's fixed slot in the global index buffer.
+//
+// The global light list is sorted strongest-first on the CPU
+// (RenderServices::FinalizeWorldLights), so a smaller light index means a
+// stronger light. When a cluster's hits exceed the per-cluster cap, the
+// shortlist keeps the LOWEST indices (the strongest lights) deterministically
+// instead of whichever hits won the atomic race — this makes dense-cluster
+// overflow stable frame-to-frame (no flicker) and least-visible.
+//
+// Per-cluster cap is fixed (no global atomic offset alloc); the cluster's
+// slot in LightIndexBuffer is at clusterId * maxLightsPerCluster. At 1080p
+// with 32x32 tiles, 24 Z slices, and a 32-light cap, total LightIndexBuffer
+// footprint is ~6.3 MB.
+//
+// Reads DepthMinMaxBuffer (from cluster_depth_minmax.comp, also 32x32 tiles)
+// to skip Z slices that don't overlap any opaque depth in the tile
+// (Drobot 2017 / HDRP-FPTL pattern).
+//
+// Directional lights are NOT in the cluster index list — they're shaded
+// out-of-band by the consumer via LightUBO. The cull producer filters
+// them out via LightUploadNode (see LightUploadNode.cpp), so the
+// LightBuffer.header.x light count here is point+spot only.
+
+// 64 threads per workgroup. One workgroup per cluster. Dispatch is
+// (tilesX, tilesY, depthSlices).
+layout(local_size_x = 64, local_size_y = 1, local_size_z = 1) in;
+
+// ----- Inputs ---------------------------------------------------------------
+
+struct LightPacked
+{
+#include "Includes/light_packed_fields.glsl"
+};
+
+layout(set = 0, binding = 4, std430) readonly buffer LightBufferBlock
+{
+    uvec4 header;        // x=non-directional light count (point + spot only after step 1)
+    LightPacked lights[];
+} LightBuffer;
+
+layout(set = 0, binding = 5, std140) uniform ViewParamsBlock
+{
+    // 160 B core prefix of the shared ViewParams list.
+#define GE_VP_MAT4(name) mat4 name;
+#define GE_VP_VEC4(name) vec4 name;
+#define GE_VIEWPARAMS_CORE_ONLY 1
+#include "Includes/view_params_fields.glsl"
+#undef GE_VIEWPARAMS_CORE_ONLY
+#undef GE_VP_VEC4
+#undef GE_VP_MAT4
+} ViewParams;
+
+layout(set = 0, binding = 2, std140) uniform ClusterParamsBlock
+{
+    uvec4 params0;       // tileX, tileY, depthSlices, maxLightsPerCluster
+} ClusterParams;
+
+layout(set = 0, binding = 6, std430) readonly buffer DepthMinMaxBufferBlock
+{
+    uvec2 tileMinMax[];  // (asuint(Zmin_depth), asuint(Zmax_depth)); empty tile -> (UINT_MAX, 0)
+} DepthMinMaxBuffer;
+
+// ----- Outputs --------------------------------------------------------------
+
+// ClusterBuffer schema:
+//   header @ [0]        = (clustersX, clustersY, depthSlices, maxLightsPerCluster)
+//   clusters[clusterId] = uvec2(firstIndex, count)
+// where firstIndex = clusterId * maxLightsPerCluster (deterministic, no
+// global atomic needed; per-cluster fixed slot in LightIndexBuffer).
+layout(set = 0, binding = 1, std430) buffer ClusterBufferBlock
+{
+    uvec4 header;
+    uvec2 clusters[];
+} ClusterBuffer;
+
+layout(set = 0, binding = 0, std430) buffer LightIndexBufferBlock
+{
+    uint indices[];
+} LightIndexBuffer;
+
+// ----- LDS ------------------------------------------------------------------
+
+// Upper bound on per-cluster cap; real cap comes from ClusterParams. LDS array
+// is sized for the upper bound so the shader stays valid at any runtime cap.
+const uint kLdsMaxLights = 64u;
+shared uint sCount;
+shared uint sIndices[kLdsMaxLights];
+
+// ----- Helpers --------------------------------------------------------------
+
+// Reverse-Z LH-ZO depth -> view-space Z (matches forwardplus_lighting.frag's
+// ViewZFromDepth_ReverseZ_LH).
+float ViewZFromDepth(float depth, float zNear, float zFar)
+{
+    return (zNear * zFar) / max(depth * (zFar - zNear) + zNear, 1e-6);
+}
+
+// ----- Main -----------------------------------------------------------------
+
+void main()
+{
+    const uint tileX = gl_WorkGroupID.x;
+    const uint tileY = gl_WorkGroupID.y;
+    const uint slice = gl_WorkGroupID.z;
+    const uint lane  = gl_LocalInvocationID.x;
+
+    const uint clustersX   = gl_NumWorkGroups.x;
+    const uint clustersY   = gl_NumWorkGroups.y;
+    const uint depthSlices = gl_NumWorkGroups.z;
+
+    const uint maxLightsPerCluster = min(max(ClusterParams.params0.w, 1u), kLdsMaxLights);
+    const uint clusterId = tileX + tileY * clustersX + slice * (clustersX * clustersY);
+    const uint clusterSlot = clusterId * maxLightsPerCluster;
+
+    // Init shared state.
+    if (lane == 0u)
+    {
+        sCount = 0u;
+        // Lane 0 of cluster 0 writes the global header so the consumer
+        // can read the grid dimensions out-of-band.
+        if (clusterId == 0u)
+        {
+            ClusterBuffer.header = uvec4(clustersX, clustersY, depthSlices, maxLightsPerCluster);
+        }
+    }
+    barrier();
+
+#if defined(GE_COMPAT_PROFILE)
+    bool clusterActive = true;
+#endif
+
+    // --- Tile frustum planes (identical math to placeholder cull) ---------------
+
+    const uvec2 tileSize = max(uvec2(ClusterParams.params0.xy), uvec2(1u, 1u));
+    const float renderW = float(clustersX * tileSize.x);
+    const float renderH = float(clustersY * tileSize.y);
+
+    const float x0 = (float(tileX * tileSize.x)        / renderW) * 2.0 - 1.0;
+    const float x1 = (float((tileX + 1u) * tileSize.x) / renderW) * 2.0 - 1.0;
+    // Y is top-down for our viewport convention.
+    const float y0 = 1.0 - (float((tileY + 1u) * tileSize.y) / renderH) * 2.0;
+    const float y1 = 1.0 - (float(tileY * tileSize.y)        / renderH) * 2.0;
+
+    // Reverse-Z: unproject the tile corners at the far plane (ndcZ=0).
+    vec4 TL = ViewParams.ge_invProj * vec4(x0, y1, 0.0, 1.0);
+    vec4 TR = ViewParams.ge_invProj * vec4(x1, y1, 0.0, 1.0);
+    vec4 BL = ViewParams.ge_invProj * vec4(x0, y0, 0.0, 1.0);
+    vec4 BR = ViewParams.ge_invProj * vec4(x1, y0, 0.0, 1.0);
+    vec3 pTL = TL.xyz / max(abs(TL.w), 1e-6);
+    vec3 pTR = TR.xyz / max(abs(TR.w), 1e-6);
+    vec3 pBL = BL.xyz / max(abs(BL.w), 1e-6);
+    vec3 pBR = BR.xyz / max(abs(BR.w), 1e-6);
+
+    vec3 rTL = normalize(pTL);
+    vec3 rTR = normalize(pTR);
+    vec3 rBL = normalize(pBL);
+    vec3 rBR = normalize(pBR);
+    vec3 rC  = normalize((rTL + rTR + rBL + rBR) * 0.25);
+
+    vec3 nLeft   = normalize(cross(rBL, rTL)); if (dot(nLeft, rC)   < 0.0) nLeft   = -nLeft;
+    vec3 nRight  = normalize(cross(rTR, rBR)); if (dot(nRight, rC)  < 0.0) nRight  = -nRight;
+    vec3 nTop    = normalize(cross(rTL, rTR)); if (dot(nTop, rC)    < 0.0) nTop    = -nTop;
+    vec3 nBottom = normalize(cross(rBR, rBL)); if (dot(nBottom, rC) < 0.0) nBottom = -nBottom;
+
+    // --- Z slice bounds (log partition in view Z) ------------------------------
+
+    const float zNear = max(ViewParams.ge_nearFar.x, 1e-4);
+    float zFar = ViewParams.ge_nearFar.y;
+    if (zFar <= zNear + 1e-4) zFar = zNear + 1000.0;
+    const float invLogRatio = ViewParams.ge_nearFar.z;
+    const float logRatio = (invLogRatio > 0.0) ? (1.0 / invLogRatio) : log(zFar / zNear);
+
+    const float tSliceMin = float(slice)        / float(depthSlices);
+    const float tSliceMax = float(slice + 1u)   / float(depthSlices);
+    const float zSliceMin = zNear * exp(tSliceMin * logRatio);
+    const float zSliceMax = zNear * exp(tSliceMax * logRatio);
+
+    // --- Per-tile depth tightening (Drobot 2017 / HDRP-FPTL pattern) -----------
+
+    const uint dmIdx = tileY * clustersX + tileX;
+    const uvec2 dmBits = DepthMinMaxBuffer.tileMinMax[dmIdx];
+    // Sentinel: empty tile (no opaque pixel) reports (UINT_MAX, 0).
+    const bool tileHasOpaque = (dmBits.x != 0xFFFFFFFFu) && (dmBits.y != 0u);
+    if (tileHasOpaque)
+    {
+        // Reverse-Z: dmBits.x = smallest depth = farthest opaque.
+        const float depthFarthestBits = uintBitsToFloat(dmBits.x);
+        const float viewZ_farthest = ViewZFromDepth(depthFarthestBits, zNear, zFar);
+        // Skip ONLY slices entirely BEHIND the farthest opaque — nothing visible
+        // is occluded back there. Do NOT skip slices in front of the nearest
+        // opaque: transparent forward+ surfaces (e.g. the ocean water drawn over
+        // a submerged object) live in those near slices and need the lights, or
+        // their lighting bands as the surface depth crosses skipped slices.
+        if (zSliceMin > viewZ_farthest)
+        {
+#if defined(GE_COMPAT_PROFILE)
+            // Whole-workgroup skip. Expressed as a flag instead of an early
+            // return so every lane still reaches the barriers below in
+            // uniform control flow (WGSL rejects barriers after a return
+            // it cannot prove workgroup-uniform); the zero-light path then
+            // writes the same uvec2(clusterSlot, 0) the return wrote.
+            clusterActive = false;
+#else
+            if (lane == 0u)
+            {
+                ClusterBuffer.clusters[clusterId] = uvec2(clusterSlot, 0u);
+            }
+            return;
+#endif
+        }
+    }
+    // Tile with no opaque content (sky-only): don't skip — transparents using
+    // forward+ would still need light data. Per-cluster cost stays small since
+    // few lights tend to occupy those clusters.
+
+    // --- Cooperative inner light loop ------------------------------------------
+
+#if defined(GE_COMPAT_PROFILE)
+    const uint lightCount = clusterActive ? LightBuffer.header.x : 0u;
+#else
+    const uint lightCount = LightBuffer.header.x;
+#endif
+    for (uint i = lane; i < lightCount; i += 64u)
+    {
+        const uint lightType = LightBuffer.lights[i].meta.x;
+        if (lightType == 0u) continue;  // skip directionals (out of band)
+        if (LightBuffer.lights[i].meta.w == 0u) continue;
+
+        const vec3 posWS  = LightBuffer.lights[i].posRange.xyz;
+        const float fullRadius = max(LightBuffer.lights[i].posRange.w, 0.0);
+
+        // View-space center.
+        vec3 posV = (ViewParams.ge_view * vec4(posWS, 1.0)).xyz;
+        float radius = fullRadius;
+        if (lightType == 4u)
+        {
+            const uint areaShape = LightBuffer.lights[i].meta.z;
+            const float w = max(LightBuffer.lights[i].colorAreaWidth.w, 0.001);
+            const float h = max(LightBuffer.lights[i].areaParams.x, 0.001);
+            const float r = max(LightBuffer.lights[i].areaParams.y, 0.001);
+            float extent = 0.0;
+            if (areaShape == 0u) extent = 0.5 * length(vec2(w, h));
+            else if (areaShape == 1u) extent = r;
+            else if (areaShape == 2u) extent = r;
+            else extent = length(vec2(r, 0.5 * h));
+            radius += extent;
+        }
+
+        // Spot light: tighten the bounding sphere along the cone axis using
+        // the Unreal trick (LightGridInjection.usf). For a cone with apex
+        // at the light, range R, and outer half-angle theta, shift the
+        // sphere centre R/2 forward along the axis and shrink the radius to
+        // R * sqrt(1.25 - cosOuter). Narrows the spot's footprint
+        // considerably for typical (< 60deg) cones; for very wide cones
+        // (cosOuter < 0.05) the formula produces a sphere larger than the
+        // original so we fall back to point-light bounds.
+        if (lightType == 2u)
+        {
+            const float cosOuter = LightBuffer.lights[i].spotParams.x;
+            if (cosOuter > 0.05)
+            {
+                const vec3 dirWS = LightBuffer.lights[i].dirIntensity.xyz;
+                const vec3 coneDirV = (ViewParams.ge_view * vec4(dirWS, 0.0)).xyz;
+                posV   += 0.5 * fullRadius * coneDirV;
+                radius  = fullRadius * sqrt(max(1.25 - cosOuter, 0.0));
+            }
+        }
+
+        // Cull lights entirely behind the near plane.
+        if (posV.z + radius < zNear) continue;
+
+        // Sphere-vs-frustum-plane: reject if entire sphere outside any plane.
+        if (dot(nLeft,   posV) < -radius) continue;
+        if (dot(nRight,  posV) < -radius) continue;
+        if (dot(nTop,    posV) < -radius) continue;
+        if (dot(nBottom, posV) < -radius) continue;
+
+        // Z slab.
+        if (posV.z - radius > zSliceMax) continue;
+        if (posV.z + radius < zSliceMin) continue;
+
+        // Hit: claim a slot in the LDS shortlist. Over-collect up to the LDS
+        // capacity (not just the per-cluster cap) so an overflowing cluster can
+        // keep the strongest lights deterministically below.
+        const uint slot = atomicAdd(sCount, 1u);
+        if (slot < kLdsMaxLights)
+        {
+            sIndices[slot] = i;
+        }
+    }
+    barrier();
+
+    // --- Output -----------------------------------------------------------------
+
+    const uint collected = min(sCount, kLdsMaxLights);
+    const uint count = min(collected, maxLightsPerCluster);
+    if (lane == 0u)
+    {
+        ClusterBuffer.clusters[clusterId] = uvec2(clusterSlot, count);
+    }
+
+    if (collected <= maxLightsPerCluster)
+    {
+        // Fast path (no overflow): flush the shortlist as-is. Byte-identical to
+        // the pre-sort behaviour — the consumer reads the per-cluster list
+        // order-independently.
+        for (uint i = lane; i < count; i += 64u)
+        {
+            LightIndexBuffer.indices[clusterSlot + i] = sIndices[i];
+        }
+        return;
+    }
+
+    // Overflow (dense cluster): keep the `count` LOWEST light indices. The
+    // global list is sorted strongest-first (contribution sort), so lowest
+    // index = strongest light. Shortlist indices are unique, so rank-by-index
+    // is a total order and the kept set is deterministic regardless of the
+    // atomic fill order — this is what kills dense-cluster flicker. Only runs
+    // when a cluster genuinely overflows its cap (rare), so the common path
+    // pays nothing.
+    for (uint j = lane; j < collected; j += 64u)
+    {
+        const uint idx = sIndices[j];
+        uint rank = 0u;
+        for (uint k = 0u; k < collected; ++k)
+        {
+            if (sIndices[k] < idx)
+                ++rank;
+        }
+        if (rank < count)
+        {
+            LightIndexBuffer.indices[clusterSlot + rank] = idx;
+        }
+    }
+}

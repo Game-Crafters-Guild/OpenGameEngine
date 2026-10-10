@@ -1,0 +1,8 @@
+# GameEngine AssetDatabase.assetdb (authoritative)
+# Format: JSON Lines (one JSON object per line). Lines starting with '#' are comments.
+{"format":"assetdb","version":2}
+{"guid":"5d466837-98de-4c69-a209-eb705dfad810","path":"shaders/ffx_dof_prepare.comp","type":"Shader"}
+{"guid":"b2a3e27e-76e5-429b-bdb4-719cc3fc8aaa","path":"shaders/ffx_dof_tile.comp","type":"Shader"}
+{"guid":"aa16385e-41b2-44b1-af1c-ee5a95561c67","path":"shaders/ffx_dof_dilate.comp","type":"Shader"}
+{"guid":"59e87774-2322-4b66-a3a3-c8bc0c1d57fc","path":"shaders/ffx_dof_blur.comp","type":"Shader"}
+{"guid":"5263167c-6444-4f11-9cc7-a74e0bbab1ec","path":"shaders/ffx_dof_composite.comp","type":"Shader"}

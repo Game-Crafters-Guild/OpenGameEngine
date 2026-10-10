@@ -1,0 +1,121 @@
+#version 450
+
+// Test-only probe for the sun glare kernel (SunGlareRadianceTests).
+//
+// The properties under test are statements about the shipped GLSL — that the kernel is the
+// published CIE equation, that it integrates to one over the sphere, that the composited
+// radiance therefore carries exactly the documented fraction of the sun's irradiance, and
+// that an occluder in front of the sun zeroes the term. A CPU re-implementation of any of
+// those functions would prove its own arithmetic rather than theirs, so everything is
+// evaluated HERE and the CPU only sums what comes back.
+//
+// Mode 0 (kernel sweep): invocation i < sampleCount evaluates the kernel at the i-th
+// log-spaced polar angle, building the two unit vectors and going through
+// GE_SunGlareChordSq exactly as the fragment stage does. Invocation sampleCount reports the
+// scalars. The CPU applies the sphere's own measure, 2 pi sin(theta) dtheta.
+//
+// Mode 1 (screen visibility): invocation 0 evaluates GE_SunGlareScreenVisibility against a
+// bound depth texture at the probe position in the push constants.
+//
+// Mode 2 (coefficients): invocations 0 and 1 report the UNNORMALISED kernel at two given
+// angles, so the CPU can solve the 2x2 system for the 1/theta^3 and 1/theta^2 coefficients
+// and compare them with the published pair instead of with a second copy of them.
+//
+// Mode 3 (cascade lookup): invocation 0 evaluates GE_SunGlareCascadeSunlit against a bound
+// comparison-sampled shadow array and a light view-projection handed in through the push
+// constants. That term had no behavioural test at all -- only source text -- so a cascade whose
+// stored depth says "occluded" could have returned lit and nothing would have caught it.
+
+#include "Includes/sun_glare.glsl"
+
+layout(local_size_x = 64) in;
+
+layout(set = 0, binding = 0) buffer ProbeOut { vec4 result[]; } uOut;
+layout(set = 0, binding = 1) uniform sampler2D uProbeDepth;
+layout(set = 0, binding = 2) uniform sampler2DArrayShadow uProbeShadow;
+
+layout(push_constant) uniform ProbePC
+{
+    // x = sun angular radius (rad), y = sun irradiance, z = sample count, w = mode.
+    vec4 kernelParams;
+    // Mode 0: x = smallest polar angle swept (rad), y = largest.
+    // Mode 2: x, y = the two angles to report the kernel at (DEGREES).
+    vec4 sweepParams;
+    // xy = probe position in UV, zw = probe ring radius in UV, per axis.
+    vec4 visParams;
+    // Mode 3: the cascade's light view-projection, and the world position to test.
+    mat4 cascadeVP;
+    // Mode 3: xyz = world position at the eye, w = the depth bias to add.
+    vec4 cascadeProbe;
+} pc;
+
+void main()
+{
+    uint i = gl_GlobalInvocationID.x;
+    float radius = pc.kernelParams.x;
+    int mode = int(pc.kernelParams.w + 0.5);
+
+    if (mode == 1)
+    {
+        if (i != 0u)
+            return;
+        uOut.result[0] = vec4(
+            GE_SunGlareScreenVisibility(uProbeDepth, pc.visParams.xy, pc.visParams.zw),
+            0.0, 0.0, 0.0);
+        return;
+    }
+
+    if (mode == 2)
+    {
+        if (i > 1u)
+            return;
+        // theta is given in degrees; the kernel takes a squared CHORD in radians^2.
+        float thetaDeg = (i == 0u) ? pc.sweepParams.x : pc.sweepParams.y;
+        float theta = radians(thetaDeg);
+        vec3 sunDir = vec3(0.0, 0.0, 1.0);
+        vec3 viewDir = vec3(sin(theta), 0.0, cos(theta));
+        float chordSq = GE_SunGlareChordSq(viewDir, sunDir);
+        uOut.result[i] = vec4(thetaDeg, GE_SunGlareKernel(chordSq, radius), 0.0, 0.0);
+        return;
+    }
+
+    if (mode == 3)
+    {
+        if (i != 0u)
+            return;
+        uOut.result[0] = vec4(GE_SunGlareCascadeSunlit(uProbeShadow, pc.cascadeVP, 0,
+                                                       pc.cascadeProbe.xyz, pc.cascadeProbe.w),
+                              0.0, 0.0, 0.0);
+        return;
+    }
+
+    uint count = uint(pc.kernelParams.z);
+    if (i > count)
+        return;
+
+    if (i == count)
+    {
+        uOut.result[i] = vec4(GE_SunGlareNormalisation(radius),
+                              GE_SunGlarePsf(0.0, radius),
+                              GE_SunGlareRadiance(pc.kernelParams.y, 0.0, radius,
+                                                  GE_SUN_GLARE_FRACTION),
+                              GE_SUN_GLARE_FRACTION);
+        return;
+    }
+
+    // Log-spaced midpoints: the kernel spans six decades of angle between the sun's radius
+    // and the far hemisphere, so a uniform sweep would spend every sample in the tail.
+    float logMin = log(pc.sweepParams.x);
+    float logMax = log(pc.sweepParams.y);
+    float dLog = (logMax - logMin) / float(count);
+    float theta = exp(logMin + (float(i) + 0.5) * dLog);
+    float dTheta = theta * dLog;
+
+    vec3 sunDir = vec3(0.0, 0.0, 1.0);
+    vec3 viewDir = vec3(sin(theta), 0.0, cos(theta));
+    float chordSq = GE_SunGlareChordSq(viewDir, sunDir);
+
+    uOut.result[i] = vec4(theta, GE_SunGlarePsf(chordSq, radius), dTheta,
+                          GE_SunGlareRadiance(pc.kernelParams.y, chordSq, radius,
+                                              GE_SUN_GLARE_FRACTION));
+}

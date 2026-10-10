@@ -1,0 +1,95 @@
+/* Complex HUD — dark theme. Demonstrates absolute corner anchoring, flexbox
+   (column panels + a centered row ability bar), border-radius, borders, rgba
+   translucency, box-shadow, gap, letter-spacing, opacity, and a progress bar. */
+
+.hud-root {
+    position: absolute;
+    left: 0;
+    top: 0;
+    width: 100%;
+    height: 100%;
+}
+
+.panel {
+    position: absolute;
+    display: flex;
+    flex-direction: column;
+    padding: 14px 18px;
+    gap: 8px;
+    background-color: rgba(44, 45, 50, 0.82);
+    border: 2px solid rgba(93, 152, 237, 0.85);
+    border-radius: 10px;
+    box-shadow: 0 6px 20px rgba(0, 0, 0, 0.45);
+}
+
+.panel-tl { left: 32px; top: 32px; width: 280px; }
+.panel-tr { right: 32px; top: 32px; width: 200px; align-items: flex-end; }
+
+.panel-title {
+    color: rgba(150, 190, 255, 0.95);
+    font-size: 14px;
+    letter-spacing: 2px;
+}
+
+.panel-sub { color: #ffffff; font-size: 16px; }
+
+.bar-track {
+    width: 100%;
+    height: 16px;
+    background-color: rgba(0, 0, 0, 0.28);
+    border: 1px solid rgba(120, 173, 255, 0.6);
+    border-radius: 8px;
+}
+
+.bar-fill {
+    width: 78%;
+    height: 100%;
+    background-color: rgba(80, 220, 130, 0.95);
+    border-radius: 8px;
+}
+
+.score-value {
+    color: #ffd35a;
+    font-size: 30px;
+    letter-spacing: 1px;
+}
+
+.ability-bar {
+    position: absolute;
+    left: 0;
+    bottom: 36px;
+    width: 100%;
+    flex-direction: row;
+    justify-content: center;
+    gap: 14px;
+}
+
+.slot {
+    width: 64px;
+    height: 64px;
+    align-items: center;
+    justify-content: center;
+    background-color: rgba(42, 45, 52, 0.85);
+    border: 2px solid rgba(120, 172, 251, 0.7);
+    border-radius: 12px;
+}
+
+.slot-ready { border: 2px solid rgba(82, 223, 130, 0.9); }
+.slot-cd { opacity: 0.45; }
+.slot-ult {
+    border: 2px solid rgba(255, 200, 80, 0.95);
+    background-color: rgba(66, 54, 41, 0.85);
+}
+
+/* pointer-events:none so the slot itself is the hover/click target (not the
+   label), making .slot:hover / .slot:active fire when the slot is pointed at. */
+.slot-key { color: #ffffff; font-size: 22px; pointer-events: none; }
+
+/* Interactive slot states (hover/press). */
+.slot:hover {
+    background-color: rgba(90, 150, 230, 0.95);
+    border: 2px solid rgba(190, 225, 255, 1.0);
+}
+.slot:active {
+    background-color: rgba(150, 205, 255, 1.0);
+}

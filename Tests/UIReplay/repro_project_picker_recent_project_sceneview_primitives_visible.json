@@ -1,0 +1,49 @@
+{
+  "name": "repro_project_picker_recent_project_sceneview_primitives_visible",
+  "launchWithoutProject": true,
+  "windowIndex": 0,
+  "minFrames": 520,
+  "probe": {
+    "elementId": "SceneViewViewport",
+    "pixelHash": {
+      "enabled": true,
+      "frameStart": 300,
+      "frameEnd": 500,
+      "everyNFrames": 2,
+      "maxPending": 1,
+      "readbackDelayFrames": 4,
+      "failOnAllBlack": true,
+      "failIfMeanByteBelow": 6.0,
+      "failIfNonZeroBytesBelow": 512,
+      "sampleWidth": 512,
+      "sampleHeight": 512,
+      "center": false,
+      "normalizedRegion": {
+        "x": 0.30,
+        "y": 0.16,
+        "w": 0.34,
+        "h": 0.42
+      }
+    }
+  },
+  "events": [
+    { "frame": 2, "type": "waitTextContains", "underId": "recent-projects-container", "needle": "GameEngine", "atLeast": 1, "timeoutFrames": 300 },
+    { "frame": 3, "type": "mouseMove", "target": { "kind": "elementId", "id": "recent-open-c-dev-gameengine", "relX": 0.5, "relY": 0.5 } },
+    { "frame": 4, "type": "mouseDown", "button": 0 },
+    { "frame": 5, "type": "mouseUp", "button": 0 },
+    { "frame": 6, "type": "waitFrames", "frames": 140 },
+
+    { "frame": 150, "type": "mouseMove", "target": { "kind": "elementId", "id": "tab:Hierarchy", "relX": 0.5, "relY": 0.5 } },
+    { "frame": 151, "type": "mouseDown", "button": 0 },
+    { "frame": 152, "type": "mouseUp", "button": 0 },
+
+    { "frame": 180, "type": "invokeCommand", "commandId": 16659 },
+    { "frame": 250, "type": "invokeCommand", "commandId": 16656 },
+    { "frame": 320, "type": "invokeCommand", "commandId": 16657 },
+
+    { "frame": 360, "type": "mouseMove", "target": { "kind": "elementId", "id": "tab:SceneView", "relX": 0.5, "relY": 0.5 } },
+    { "frame": 361, "type": "mouseDown", "button": 0 },
+    { "frame": 362, "type": "mouseUp", "button": 0 },
+    { "frame": 380, "type": "mouseMove", "target": { "kind": "elementId", "id": "SceneViewViewport", "relX": 0.5, "relY": 0.5 } }
+  ]
+}

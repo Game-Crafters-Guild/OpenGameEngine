@@ -1,0 +1,70 @@
+#version 450
+
+// SMAA pass 1 of 3: luma edge detection with local contrast adaptation
+// (Jimenez 2012). Output R = left edge (boundary to the left neighbor),
+// G = top edge (boundary to the top neighbor); BA unused. An edge survives
+// only when its delta dominates the local neighborhood (adaptation factor 2),
+// which suppresses the low-contrast edges blending cannot improve.
+//
+// This implementation is LUT-free SMAA 1x: loop searches instead of the
+// packed search texture, analytic revectorization areas instead of the area
+// texture, and no diagonal pass. Runs on the tonemapped LDR frame like FXAA.
+
+layout(local_size_x = 8, local_size_y = 8) in;
+
+layout(set = 0, binding = 0, rgba8) uniform writeonly image2D uEdges;
+layout(set = 0, binding = 1) uniform sampler2D uSceneColor;
+
+const float kThreshold = 0.1;
+const float kLocalContrastAdaptation = 2.0;
+
+#include "Includes/perceptual_luma.glsl"
+
+// Edge detection runs on perceptual luma, not the linear RGB this pass is
+// handed — see the include for the curve and why.
+float Luma(vec3 c) { return GE_PerceptualLuma(c); }
+
+float LumaAt(ivec2 p, ivec2 size)
+{
+    return Luma(texelFetch(uSceneColor, clamp(p, ivec2(0), size - 1), 0).rgb);
+}
+
+void main()
+{
+    const ivec2 size = imageSize(uEdges);
+    const ivec2 p = ivec2(gl_GlobalInvocationID.xy);
+    if (p.x >= size.x || p.y >= size.y)
+        return;
+
+    const float lC = LumaAt(p, size);
+    const float lL = LumaAt(p + ivec2(-1, 0), size);
+    const float lT = LumaAt(p + ivec2(0, -1), size);
+
+    const float dL = abs(lC - lL);
+    const float dT = abs(lC - lT);
+    vec2 edges = vec2(dL >= kThreshold ? 1.0 : 0.0, dT >= kThreshold ? 1.0 : 0.0);
+    if (edges.x + edges.y == 0.0)
+    {
+        imageStore(uEdges, p, vec4(0.0));
+        return;
+    }
+
+    // Local contrast adaptation: an edge must dominate the strongest delta in
+    // its immediate neighborhood, or it is texture detail, not a contour.
+    const float lR = LumaAt(p + ivec2(1, 0), size);
+    const float lB = LumaAt(p + ivec2(0, 1), size);
+    const float lLL = LumaAt(p + ivec2(-2, 0), size);
+    const float lTT = LumaAt(p + ivec2(0, -2), size);
+    const float dR = abs(lC - lR);
+    const float dB = abs(lC - lB);
+    const float dLL = abs(lL - lLL);
+    const float dTT = abs(lT - lTT);
+    const float maxDelta = max(max(dL, dT), max(max(dR, dB), max(dLL, dTT)));
+
+    if (kLocalContrastAdaptation * dL < maxDelta)
+        edges.x = 0.0;
+    if (kLocalContrastAdaptation * dT < maxDelta)
+        edges.y = 0.0;
+
+    imageStore(uEdges, p, vec4(edges, 0.0, 0.0));
+}

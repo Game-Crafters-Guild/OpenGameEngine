@@ -1,0 +1,935 @@
+[scene name="Gate1Content" version=1]
+; Gate-1 formal content scene: skinned + animated character (Fox), textured
+; static models (Duck, Lantern), 4-cascade sun shadows, and a cube field that
+; extends well past the frustum so GPU culling has real work. All model refs
+; are PATH-based (resolved to GUIDs by the asset registry at load).
+
+; ---- Lighting / sky -------------------------------------------------------
+
+[entity id="e_3001"]
+Light.type = 0
+Light.color = (1, 0.96, 0.9)
+Light.intensity = 2.5
+Light.castsShadows = true
+Light.castsLight = true
+Light.cascadeCount = 4
+Name.value = "Sun"
+Transform.position = (0, 10, 0)
+Transform.rotation = (0.35, 0.27, -0.1, 0.89)
+Transform.scale = (1, 1, 1)
+
+
+[entity id="e_3002"]
+Light.type = 3
+Light.color = (0.6, 0.65, 0.75)
+Light.intensity = 0.35
+Name.value = "Ambient"
+Transform.position = (0, 0, 0)
+Transform.rotation = (0, 0, 0, 1)
+Transform.scale = (1, 1, 1)
+
+
+[entity id="e_3003"]
+SkyEnvironment.TimeOfDayHours = 14.5
+SkyEnvironment.AutoSunMoon = false
+Name.value = "Sky"
+Transform.position = (0, 0, 0)
+Transform.rotation = (0, 0, 0, 1)
+Transform.scale = (1, 1, 1)
+
+
+; ---- Ground ---------------------------------------------------------------
+
+[entity id="e_3010"]
+MeshRenderer.meshPrimitive = Plane
+MeshRenderer.renderLayerMask = 1
+MeshRenderer.castShadows = false
+MeshRenderer.receiveShadows = true
+Name.value = "Ground"
+Transform.position = (0, 0, 0)
+Transform.rotation = (0, 0, 0, 1)
+Transform.scale = (60, 1, 60)
+
+
+; ---- Animated fox (skinned; embedded clips: Survey / Walk / Run) ---------
+
+[entity id="e_3100"]
+MeshRenderer.meshAsset = [path="Models/Fox/Fox.glb"]
+MeshRenderer.renderLayerMask = 1
+MeshRenderer.castShadows = true
+MeshRenderer.receiveShadows = true
+Animator.active = true
+Animator.loop = true
+Animator.source = "Clip"
+Animator.assignedAnimation = "Run"
+Animator.autoPlayOnEnterPlayMode = true
+Name.value = "Fox"
+Transform.position = (-1.5, 0, 2)
+Transform.rotation = (0, 0.38, 0, 0.92)
+Transform.scale = (0.025, 0.025, 0.025)
+
+
+[entity id="e_3101"]
+MeshRenderer.meshAsset = [path="Models/Fox/Fox.glb"]
+MeshRenderer.renderLayerMask = 1
+MeshRenderer.castShadows = true
+MeshRenderer.receiveShadows = true
+Animator.active = true
+Animator.loop = true
+Animator.source = "Clip"
+Animator.assignedAnimation = "Survey"
+Animator.autoPlayOnEnterPlayMode = true
+Name.value = "FoxSurvey"
+Transform.position = (2.5, 0, 3.5)
+Transform.rotation = (0, -0.5, 0, 0.866)
+Transform.scale = (0.025, 0.025, 0.025)
+
+
+; ---- Static glTF sample models -------------------------------------------
+
+[entity id="e_3110"]
+MeshRenderer.meshAsset = [path="Models/Duck/Duck.glb"]
+MeshRenderer.renderLayerMask = 1
+MeshRenderer.castShadows = true
+MeshRenderer.receiveShadows = true
+Name.value = "Duck"
+Transform.position = (0.5, 0, 5)
+Transform.rotation = (0, 0.7, 0, 0.714)
+Transform.scale = (0.01, 0.01, 0.01)
+
+
+[entity id="e_3111"]
+MeshRenderer.meshAsset = [path="Models/Lantern/Lantern.glb"]
+MeshRenderer.renderLayerMask = 1
+MeshRenderer.castShadows = true
+MeshRenderer.receiveShadows = true
+Name.value = "Lantern"
+Transform.position = (5.5, 0, 4)
+Transform.rotation = (0, -0.2, 0, 0.98)
+Transform.scale = (0.12, 0.12, 0.12)
+
+
+; ---- Camera ---------------------------------------------------------------
+
+[entity id="e_3200"]
+Camera.enabled = true
+Camera.fovY = 60
+Camera.nearZ = 0.1
+Camera.farZ = 300
+Name.value = "Main Camera"
+Transform.position = (0, 2.2, -6)
+Transform.rotation = (0.06, 0, 0, 0.9982)
+Transform.scale = (1, 1, 1)
+
+; ---- Cube field (culling traffic: 9x9 grid over 200m, most off-frustum) ---
+
+[entity id="e_4000"]
+MeshRenderer.meshPrimitive = Cube
+MeshRenderer.renderLayerMask = 1
+MeshRenderer.castShadows = true
+MeshRenderer.receiveShadows = true
+Name.value = "Cube_4000"
+Transform.position = (-102, 1.24, -95)
+Transform.rotation = (0, 0, 0, 1)
+Transform.scale = (1.5, 2.48, 1.5)
+
+[entity id="e_4001"]
+MeshRenderer.meshPrimitive = Cube
+MeshRenderer.renderLayerMask = 1
+MeshRenderer.castShadows = true
+MeshRenderer.receiveShadows = true
+Name.value = "Cube_4001"
+Transform.position = (-106, 1.265, -77)
+Transform.rotation = (0, 0, 0, 1)
+Transform.scale = (1.5, 2.53, 1.5)
+
+[entity id="e_4002"]
+MeshRenderer.meshPrimitive = Cube
+MeshRenderer.renderLayerMask = 1
+MeshRenderer.castShadows = true
+MeshRenderer.receiveShadows = true
+Name.value = "Cube_4002"
+Transform.position = (-106, 1.515, -44)
+Transform.rotation = (0, 0, 0, 1)
+Transform.scale = (1.5, 3.03, 1.5)
+
+[entity id="e_4003"]
+MeshRenderer.meshPrimitive = Cube
+MeshRenderer.renderLayerMask = 1
+MeshRenderer.castShadows = true
+MeshRenderer.receiveShadows = true
+Name.value = "Cube_4003"
+Transform.position = (-95, 1.65, -26)
+Transform.rotation = (0, 0, 0, 1)
+Transform.scale = (1.5, 3.3, 1.5)
+
+[entity id="e_4004"]
+MeshRenderer.meshPrimitive = Cube
+MeshRenderer.renderLayerMask = 1
+MeshRenderer.castShadows = true
+MeshRenderer.receiveShadows = true
+Name.value = "Cube_4004"
+Transform.position = (-101, 1.575, -5)
+Transform.rotation = (0, 0, 0, 1)
+Transform.scale = (1.5, 3.15, 1.5)
+
+[entity id="e_4005"]
+MeshRenderer.meshPrimitive = Cube
+MeshRenderer.renderLayerMask = 1
+MeshRenderer.castShadows = true
+MeshRenderer.receiveShadows = true
+Name.value = "Cube_4005"
+Transform.position = (-101, 0.755, 29)
+Transform.rotation = (0, 0, 0, 1)
+Transform.scale = (1.5, 1.51, 1.5)
+
+[entity id="e_4006"]
+MeshRenderer.meshPrimitive = Cube
+MeshRenderer.renderLayerMask = 1
+MeshRenderer.castShadows = true
+MeshRenderer.receiveShadows = true
+Name.value = "Cube_4006"
+Transform.position = (-95, 1.37, 44)
+Transform.rotation = (0, 0, 0, 1)
+Transform.scale = (1.5, 2.74, 1.5)
+
+[entity id="e_4007"]
+MeshRenderer.meshPrimitive = Cube
+MeshRenderer.renderLayerMask = 1
+MeshRenderer.castShadows = true
+MeshRenderer.receiveShadows = true
+Name.value = "Cube_4007"
+Transform.position = (-99, 0.965, 71)
+Transform.rotation = (0, 0, 0, 1)
+Transform.scale = (1.5, 1.93, 1.5)
+
+[entity id="e_4008"]
+MeshRenderer.meshPrimitive = Cube
+MeshRenderer.renderLayerMask = 1
+MeshRenderer.castShadows = true
+MeshRenderer.receiveShadows = true
+Name.value = "Cube_4008"
+Transform.position = (-101, 1.68, 94)
+Transform.rotation = (0, 0, 0, 1)
+Transform.scale = (1.5, 3.36, 1.5)
+
+[entity id="e_4009"]
+MeshRenderer.meshPrimitive = Cube
+MeshRenderer.renderLayerMask = 1
+MeshRenderer.castShadows = true
+MeshRenderer.receiveShadows = true
+Name.value = "Cube_4009"
+Transform.position = (-81, 1.33, -100)
+Transform.rotation = (0, 0, 0, 1)
+Transform.scale = (1.5, 2.66, 1.5)
+
+[entity id="e_4010"]
+MeshRenderer.meshPrimitive = Cube
+MeshRenderer.renderLayerMask = 1
+MeshRenderer.castShadows = true
+MeshRenderer.receiveShadows = true
+Name.value = "Cube_4010"
+Transform.position = (-71, 0.42, -78)
+Transform.rotation = (0, 0, 0, 1)
+Transform.scale = (1.5, 0.84, 1.5)
+
+[entity id="e_4011"]
+MeshRenderer.meshPrimitive = Cube
+MeshRenderer.renderLayerMask = 1
+MeshRenderer.castShadows = true
+MeshRenderer.receiveShadows = true
+Name.value = "Cube_4011"
+Transform.position = (-79, 0.35, -55)
+Transform.rotation = (0, 0, 0, 1)
+Transform.scale = (1.5, 0.7, 1.5)
+
+[entity id="e_4012"]
+MeshRenderer.meshPrimitive = Cube
+MeshRenderer.renderLayerMask = 1
+MeshRenderer.castShadows = true
+MeshRenderer.receiveShadows = true
+Name.value = "Cube_4012"
+Transform.position = (-71, 1.065, -30)
+Transform.rotation = (0, 0, 0, 1)
+Transform.scale = (1.5, 2.13, 1.5)
+
+[entity id="e_4013"]
+MeshRenderer.meshPrimitive = Cube
+MeshRenderer.renderLayerMask = 1
+MeshRenderer.castShadows = true
+MeshRenderer.receiveShadows = true
+Name.value = "Cube_4013"
+Transform.position = (-69, 1.24, 5)
+Transform.rotation = (0, 0, 0, 1)
+Transform.scale = (1.5, 2.48, 1.5)
+
+[entity id="e_4014"]
+MeshRenderer.meshPrimitive = Cube
+MeshRenderer.renderLayerMask = 1
+MeshRenderer.castShadows = true
+MeshRenderer.receiveShadows = true
+Name.value = "Cube_4014"
+Transform.position = (-80, 1.145, 19)
+Transform.rotation = (0, 0, 0, 1)
+Transform.scale = (1.5, 2.29, 1.5)
+
+[entity id="e_4015"]
+MeshRenderer.meshPrimitive = Cube
+MeshRenderer.renderLayerMask = 1
+MeshRenderer.castShadows = true
+MeshRenderer.receiveShadows = true
+Name.value = "Cube_4015"
+Transform.position = (-69, 1.1, 53)
+Transform.rotation = (0, 0, 0, 1)
+Transform.scale = (1.5, 2.2, 1.5)
+
+[entity id="e_4016"]
+MeshRenderer.meshPrimitive = Cube
+MeshRenderer.renderLayerMask = 1
+MeshRenderer.castShadows = true
+MeshRenderer.receiveShadows = true
+Name.value = "Cube_4016"
+Transform.position = (-71, 0.585, 70)
+Transform.rotation = (0, 0, 0, 1)
+Transform.scale = (1.5, 1.17, 1.5)
+
+[entity id="e_4017"]
+MeshRenderer.meshPrimitive = Cube
+MeshRenderer.renderLayerMask = 1
+MeshRenderer.castShadows = true
+MeshRenderer.receiveShadows = true
+Name.value = "Cube_4017"
+Transform.position = (-70, 1.62, 103)
+Transform.rotation = (0, 0, 0, 1)
+Transform.scale = (1.5, 3.24, 1.5)
+
+[entity id="e_4018"]
+MeshRenderer.meshPrimitive = Cube
+MeshRenderer.renderLayerMask = 1
+MeshRenderer.castShadows = true
+MeshRenderer.receiveShadows = true
+Name.value = "Cube_4018"
+Transform.position = (-49, 1.295, -96)
+Transform.rotation = (0, 0, 0, 1)
+Transform.scale = (1.5, 2.59, 1.5)
+
+[entity id="e_4019"]
+MeshRenderer.meshPrimitive = Cube
+MeshRenderer.renderLayerMask = 1
+MeshRenderer.castShadows = true
+MeshRenderer.receiveShadows = true
+Name.value = "Cube_4019"
+Transform.position = (-54, 0.755, -73)
+Transform.rotation = (0, 0, 0, 1)
+Transform.scale = (1.5, 1.51, 1.5)
+
+[entity id="e_4020"]
+MeshRenderer.meshPrimitive = Cube
+MeshRenderer.renderLayerMask = 1
+MeshRenderer.castShadows = true
+MeshRenderer.receiveShadows = true
+Name.value = "Cube_4020"
+Transform.position = (-47, 0.96, -56)
+Transform.rotation = (0, 0, 0, 1)
+Transform.scale = (1.5, 1.92, 1.5)
+
+[entity id="e_4021"]
+MeshRenderer.meshPrimitive = Cube
+MeshRenderer.renderLayerMask = 1
+MeshRenderer.castShadows = true
+MeshRenderer.receiveShadows = true
+Name.value = "Cube_4021"
+Transform.position = (-55, 0.48, -30)
+Transform.rotation = (0, 0, 0, 1)
+Transform.scale = (1.5, 0.96, 1.5)
+
+[entity id="e_4022"]
+MeshRenderer.meshPrimitive = Cube
+MeshRenderer.renderLayerMask = 1
+MeshRenderer.castShadows = true
+MeshRenderer.receiveShadows = true
+Name.value = "Cube_4022"
+Transform.position = (-46, 0.285, -3)
+Transform.rotation = (0, 0, 0, 1)
+Transform.scale = (1.5, 0.57, 1.5)
+
+[entity id="e_4023"]
+MeshRenderer.meshPrimitive = Cube
+MeshRenderer.renderLayerMask = 1
+MeshRenderer.castShadows = true
+MeshRenderer.receiveShadows = true
+Name.value = "Cube_4023"
+Transform.position = (-46, 1.23, 26)
+Transform.rotation = (0, 0, 0, 1)
+Transform.scale = (1.5, 2.46, 1.5)
+
+[entity id="e_4024"]
+MeshRenderer.meshPrimitive = Cube
+MeshRenderer.renderLayerMask = 1
+MeshRenderer.castShadows = true
+MeshRenderer.receiveShadows = true
+Name.value = "Cube_4024"
+Transform.position = (-46, 0.47, 56)
+Transform.rotation = (0, 0, 0, 1)
+Transform.scale = (1.5, 0.94, 1.5)
+
+[entity id="e_4025"]
+MeshRenderer.meshPrimitive = Cube
+MeshRenderer.renderLayerMask = 1
+MeshRenderer.castShadows = true
+MeshRenderer.receiveShadows = true
+Name.value = "Cube_4025"
+Transform.position = (-55, 0.415, 74)
+Transform.rotation = (0, 0, 0, 1)
+Transform.scale = (1.5, 0.83, 1.5)
+
+[entity id="e_4026"]
+MeshRenderer.meshPrimitive = Cube
+MeshRenderer.renderLayerMask = 1
+MeshRenderer.castShadows = true
+MeshRenderer.receiveShadows = true
+Name.value = "Cube_4026"
+Transform.position = (-45, 0.715, 99)
+Transform.rotation = (0, 0, 0, 1)
+Transform.scale = (1.5, 1.43, 1.5)
+
+[entity id="e_4027"]
+MeshRenderer.meshPrimitive = Cube
+MeshRenderer.renderLayerMask = 1
+MeshRenderer.castShadows = true
+MeshRenderer.receiveShadows = true
+Name.value = "Cube_4027"
+Transform.position = (-26, 0.75, -104)
+Transform.rotation = (0, 0, 0, 1)
+Transform.scale = (1.5, 1.5, 1.5)
+
+[entity id="e_4028"]
+MeshRenderer.meshPrimitive = Cube
+MeshRenderer.renderLayerMask = 1
+MeshRenderer.castShadows = true
+MeshRenderer.receiveShadows = true
+Name.value = "Cube_4028"
+Transform.position = (-25, 1.135, -70)
+Transform.rotation = (0, 0, 0, 1)
+Transform.scale = (1.5, 2.27, 1.5)
+
+[entity id="e_4029"]
+MeshRenderer.meshPrimitive = Cube
+MeshRenderer.renderLayerMask = 1
+MeshRenderer.castShadows = true
+MeshRenderer.receiveShadows = true
+Name.value = "Cube_4029"
+Transform.position = (-29, 0.655, -49)
+Transform.rotation = (0, 0, 0, 1)
+Transform.scale = (1.5, 1.31, 1.5)
+
+[entity id="e_4030"]
+MeshRenderer.meshPrimitive = Cube
+MeshRenderer.renderLayerMask = 1
+MeshRenderer.castShadows = true
+MeshRenderer.receiveShadows = true
+Name.value = "Cube_4030"
+Transform.position = (-27, 0.98, -23)
+Transform.rotation = (0, 0, 0, 1)
+Transform.scale = (1.5, 1.96, 1.5)
+
+[entity id="e_4031"]
+MeshRenderer.meshPrimitive = Cube
+MeshRenderer.renderLayerMask = 1
+MeshRenderer.castShadows = true
+MeshRenderer.receiveShadows = true
+Name.value = "Cube_4031"
+Transform.position = (-29, 1.54, -4)
+Transform.rotation = (0, 0, 0, 1)
+Transform.scale = (1.5, 3.08, 1.5)
+
+[entity id="e_4032"]
+MeshRenderer.meshPrimitive = Cube
+MeshRenderer.renderLayerMask = 1
+MeshRenderer.castShadows = true
+MeshRenderer.receiveShadows = true
+Name.value = "Cube_4032"
+Transform.position = (-29, 1.725, 31)
+Transform.rotation = (0, 0, 0, 1)
+Transform.scale = (1.5, 3.45, 1.5)
+
+[entity id="e_4033"]
+MeshRenderer.meshPrimitive = Cube
+MeshRenderer.renderLayerMask = 1
+MeshRenderer.castShadows = true
+MeshRenderer.receiveShadows = true
+Name.value = "Cube_4033"
+Transform.position = (-26, 0.905, 45)
+Transform.rotation = (0, 0, 0, 1)
+Transform.scale = (1.5, 1.81, 1.5)
+
+[entity id="e_4034"]
+MeshRenderer.meshPrimitive = Cube
+MeshRenderer.renderLayerMask = 1
+MeshRenderer.castShadows = true
+MeshRenderer.receiveShadows = true
+Name.value = "Cube_4034"
+Transform.position = (-24, 1.11, 69)
+Transform.rotation = (0, 0, 0, 1)
+Transform.scale = (1.5, 2.22, 1.5)
+
+[entity id="e_4035"]
+MeshRenderer.meshPrimitive = Cube
+MeshRenderer.renderLayerMask = 1
+MeshRenderer.castShadows = true
+MeshRenderer.receiveShadows = true
+Name.value = "Cube_4035"
+Transform.position = (-24, 1.41, 95)
+Transform.rotation = (0, 0, 0, 1)
+Transform.scale = (1.5, 2.82, 1.5)
+
+[entity id="e_4036"]
+MeshRenderer.meshPrimitive = Cube
+MeshRenderer.renderLayerMask = 1
+MeshRenderer.castShadows = true
+MeshRenderer.receiveShadows = true
+Name.value = "Cube_4036"
+Transform.position = (3, 0.815, -100)
+Transform.rotation = (0, 0, 0, 1)
+Transform.scale = (1.5, 1.63, 1.5)
+
+[entity id="e_4037"]
+MeshRenderer.meshPrimitive = Cube
+MeshRenderer.renderLayerMask = 1
+MeshRenderer.castShadows = true
+MeshRenderer.receiveShadows = true
+Name.value = "Cube_4037"
+Transform.position = (1, 0.61, -78)
+Transform.rotation = (0, 0, 0, 1)
+Transform.scale = (1.5, 1.22, 1.5)
+
+[entity id="e_4038"]
+MeshRenderer.meshPrimitive = Cube
+MeshRenderer.renderLayerMask = 1
+MeshRenderer.castShadows = true
+MeshRenderer.receiveShadows = true
+Name.value = "Cube_4038"
+Transform.position = (-6, 1.485, -52)
+Transform.rotation = (0, 0, 0, 1)
+Transform.scale = (1.5, 2.97, 1.5)
+
+[entity id="e_4039"]
+MeshRenderer.meshPrimitive = Cube
+MeshRenderer.renderLayerMask = 1
+MeshRenderer.castShadows = true
+MeshRenderer.receiveShadows = true
+Name.value = "Cube_4039"
+Transform.position = (-5, 0.53, -23)
+Transform.rotation = (0, 0, 0, 1)
+Transform.scale = (1.5, 1.06, 1.5)
+
+[entity id="e_4040"]
+MeshRenderer.meshPrimitive = Cube
+MeshRenderer.renderLayerMask = 1
+MeshRenderer.castShadows = true
+MeshRenderer.receiveShadows = true
+Name.value = "Cube_4040"
+Transform.position = (1, 1.32, 2)
+Transform.rotation = (0, 0, 0, 1)
+Transform.scale = (1.5, 2.64, 1.5)
+
+[entity id="e_4041"]
+MeshRenderer.meshPrimitive = Cube
+MeshRenderer.renderLayerMask = 1
+MeshRenderer.castShadows = true
+MeshRenderer.receiveShadows = true
+Name.value = "Cube_4041"
+Transform.position = (3, 1.64, 24)
+Transform.rotation = (0, 0, 0, 1)
+Transform.scale = (1.5, 3.28, 1.5)
+
+[entity id="e_4042"]
+MeshRenderer.meshPrimitive = Cube
+MeshRenderer.renderLayerMask = 1
+MeshRenderer.castShadows = true
+MeshRenderer.receiveShadows = true
+Name.value = "Cube_4042"
+Transform.position = (-4, 1.34, 51)
+Transform.rotation = (0, 0, 0, 1)
+Transform.scale = (1.5, 2.68, 1.5)
+
+[entity id="e_4043"]
+MeshRenderer.meshPrimitive = Cube
+MeshRenderer.renderLayerMask = 1
+MeshRenderer.castShadows = true
+MeshRenderer.receiveShadows = true
+Name.value = "Cube_4043"
+Transform.position = (-3, 0.915, 80)
+Transform.rotation = (0, 0, 0, 1)
+Transform.scale = (1.5, 1.83, 1.5)
+
+[entity id="e_4044"]
+MeshRenderer.meshPrimitive = Cube
+MeshRenderer.renderLayerMask = 1
+MeshRenderer.castShadows = true
+MeshRenderer.receiveShadows = true
+Name.value = "Cube_4044"
+Transform.position = (-5, 0.68, 99)
+Transform.rotation = (0, 0, 0, 1)
+Transform.scale = (1.5, 1.36, 1.5)
+
+[entity id="e_4045"]
+MeshRenderer.meshPrimitive = Cube
+MeshRenderer.renderLayerMask = 1
+MeshRenderer.castShadows = true
+MeshRenderer.receiveShadows = true
+Name.value = "Cube_4045"
+Transform.position = (30, 0.52, -96)
+Transform.rotation = (0, 0, 0, 1)
+Transform.scale = (1.5, 1.04, 1.5)
+
+[entity id="e_4046"]
+MeshRenderer.meshPrimitive = Cube
+MeshRenderer.renderLayerMask = 1
+MeshRenderer.castShadows = true
+MeshRenderer.receiveShadows = true
+Name.value = "Cube_4046"
+Transform.position = (28, 1.475, -69)
+Transform.rotation = (0, 0, 0, 1)
+Transform.scale = (1.5, 2.95, 1.5)
+
+[entity id="e_4047"]
+MeshRenderer.meshPrimitive = Cube
+MeshRenderer.renderLayerMask = 1
+MeshRenderer.castShadows = true
+MeshRenderer.receiveShadows = true
+Name.value = "Cube_4047"
+Transform.position = (29, 0.335, -51)
+Transform.rotation = (0, 0, 0, 1)
+Transform.scale = (1.5, 0.67, 1.5)
+
+[entity id="e_4048"]
+MeshRenderer.meshPrimitive = Cube
+MeshRenderer.renderLayerMask = 1
+MeshRenderer.castShadows = true
+MeshRenderer.receiveShadows = true
+Name.value = "Cube_4048"
+Transform.position = (30, 0.765, -21)
+Transform.rotation = (0, 0, 0, 1)
+Transform.scale = (1.5, 1.53, 1.5)
+
+[entity id="e_4049"]
+MeshRenderer.meshPrimitive = Cube
+MeshRenderer.renderLayerMask = 1
+MeshRenderer.castShadows = true
+MeshRenderer.receiveShadows = true
+Name.value = "Cube_4049"
+Transform.position = (22, 1.555, -4)
+Transform.rotation = (0, 0, 0, 1)
+Transform.scale = (1.5, 3.11, 1.5)
+
+[entity id="e_4050"]
+MeshRenderer.meshPrimitive = Cube
+MeshRenderer.renderLayerMask = 1
+MeshRenderer.castShadows = true
+MeshRenderer.receiveShadows = true
+Name.value = "Cube_4050"
+Transform.position = (19, 0.805, 19)
+Transform.rotation = (0, 0, 0, 1)
+Transform.scale = (1.5, 1.61, 1.5)
+
+[entity id="e_4051"]
+MeshRenderer.meshPrimitive = Cube
+MeshRenderer.renderLayerMask = 1
+MeshRenderer.castShadows = true
+MeshRenderer.receiveShadows = true
+Name.value = "Cube_4051"
+Transform.position = (29, 1.025, 55)
+Transform.rotation = (0, 0, 0, 1)
+Transform.scale = (1.5, 2.05, 1.5)
+
+[entity id="e_4052"]
+MeshRenderer.meshPrimitive = Cube
+MeshRenderer.renderLayerMask = 1
+MeshRenderer.castShadows = true
+MeshRenderer.receiveShadows = true
+Name.value = "Cube_4052"
+Transform.position = (28, 1.105, 79)
+Transform.rotation = (0, 0, 0, 1)
+Transform.scale = (1.5, 2.21, 1.5)
+
+[entity id="e_4053"]
+MeshRenderer.meshPrimitive = Cube
+MeshRenderer.renderLayerMask = 1
+MeshRenderer.castShadows = true
+MeshRenderer.receiveShadows = true
+Name.value = "Cube_4053"
+Transform.position = (27, 0.985, 99)
+Transform.rotation = (0, 0, 0, 1)
+Transform.scale = (1.5, 1.97, 1.5)
+
+[entity id="e_4054"]
+MeshRenderer.meshPrimitive = Cube
+MeshRenderer.renderLayerMask = 1
+MeshRenderer.castShadows = true
+MeshRenderer.receiveShadows = true
+Name.value = "Cube_4054"
+Transform.position = (44, 1.165, -100)
+Transform.rotation = (0, 0, 0, 1)
+Transform.scale = (1.5, 2.33, 1.5)
+
+[entity id="e_4055"]
+MeshRenderer.meshPrimitive = Cube
+MeshRenderer.renderLayerMask = 1
+MeshRenderer.castShadows = true
+MeshRenderer.receiveShadows = true
+Name.value = "Cube_4055"
+Transform.position = (56, 1.55, -76)
+Transform.rotation = (0, 0, 0, 1)
+Transform.scale = (1.5, 3.1, 1.5)
+
+[entity id="e_4056"]
+MeshRenderer.meshPrimitive = Cube
+MeshRenderer.renderLayerMask = 1
+MeshRenderer.castShadows = true
+MeshRenderer.receiveShadows = true
+Name.value = "Cube_4056"
+Transform.position = (56, 0.995, -54)
+Transform.rotation = (0, 0, 0, 1)
+Transform.scale = (1.5, 1.99, 1.5)
+
+[entity id="e_4057"]
+MeshRenderer.meshPrimitive = Cube
+MeshRenderer.renderLayerMask = 1
+MeshRenderer.castShadows = true
+MeshRenderer.receiveShadows = true
+Name.value = "Cube_4057"
+Transform.position = (52, 1.305, -27)
+Transform.rotation = (0, 0, 0, 1)
+Transform.scale = (1.5, 2.61, 1.5)
+
+[entity id="e_4058"]
+MeshRenderer.meshPrimitive = Cube
+MeshRenderer.renderLayerMask = 1
+MeshRenderer.castShadows = true
+MeshRenderer.receiveShadows = true
+Name.value = "Cube_4058"
+Transform.position = (48, 0.54, 3)
+Transform.rotation = (0, 0, 0, 1)
+Transform.scale = (1.5, 1.08, 1.5)
+
+[entity id="e_4059"]
+MeshRenderer.meshPrimitive = Cube
+MeshRenderer.renderLayerMask = 1
+MeshRenderer.castShadows = true
+MeshRenderer.receiveShadows = true
+Name.value = "Cube_4059"
+Transform.position = (52, 1.245, 30)
+Transform.rotation = (0, 0, 0, 1)
+Transform.scale = (1.5, 2.49, 1.5)
+
+[entity id="e_4060"]
+MeshRenderer.meshPrimitive = Cube
+MeshRenderer.renderLayerMask = 1
+MeshRenderer.castShadows = true
+MeshRenderer.receiveShadows = true
+Name.value = "Cube_4060"
+Transform.position = (51, 0.87, 55)
+Transform.rotation = (0, 0, 0, 1)
+Transform.scale = (1.5, 1.74, 1.5)
+
+[entity id="e_4061"]
+MeshRenderer.meshPrimitive = Cube
+MeshRenderer.renderLayerMask = 1
+MeshRenderer.castShadows = true
+MeshRenderer.receiveShadows = true
+Name.value = "Cube_4061"
+Transform.position = (55, 1.53, 72)
+Transform.rotation = (0, 0, 0, 1)
+Transform.scale = (1.5, 3.06, 1.5)
+
+[entity id="e_4062"]
+MeshRenderer.meshPrimitive = Cube
+MeshRenderer.renderLayerMask = 1
+MeshRenderer.castShadows = true
+MeshRenderer.receiveShadows = true
+Name.value = "Cube_4062"
+Transform.position = (44, 1.075, 98)
+Transform.rotation = (0, 0, 0, 1)
+Transform.scale = (1.5, 2.15, 1.5)
+
+[entity id="e_4063"]
+MeshRenderer.meshPrimitive = Cube
+MeshRenderer.renderLayerMask = 1
+MeshRenderer.castShadows = true
+MeshRenderer.receiveShadows = true
+Name.value = "Cube_4063"
+Transform.position = (79, 0.335, -105)
+Transform.rotation = (0, 0, 0, 1)
+Transform.scale = (1.5, 0.67, 1.5)
+
+[entity id="e_4064"]
+MeshRenderer.meshPrimitive = Cube
+MeshRenderer.renderLayerMask = 1
+MeshRenderer.castShadows = true
+MeshRenderer.receiveShadows = true
+Name.value = "Cube_4064"
+Transform.position = (76, 1.035, -80)
+Transform.rotation = (0, 0, 0, 1)
+Transform.scale = (1.5, 2.07, 1.5)
+
+[entity id="e_4065"]
+MeshRenderer.meshPrimitive = Cube
+MeshRenderer.renderLayerMask = 1
+MeshRenderer.castShadows = true
+MeshRenderer.receiveShadows = true
+Name.value = "Cube_4065"
+Transform.position = (73, 1.67, -46)
+Transform.rotation = (0, 0, 0, 1)
+Transform.scale = (1.5, 3.34, 1.5)
+
+[entity id="e_4066"]
+MeshRenderer.meshPrimitive = Cube
+MeshRenderer.renderLayerMask = 1
+MeshRenderer.castShadows = true
+MeshRenderer.receiveShadows = true
+Name.value = "Cube_4066"
+Transform.position = (74, 0.735, -19)
+Transform.rotation = (0, 0, 0, 1)
+Transform.scale = (1.5, 1.47, 1.5)
+
+[entity id="e_4067"]
+MeshRenderer.meshPrimitive = Cube
+MeshRenderer.renderLayerMask = 1
+MeshRenderer.castShadows = true
+MeshRenderer.receiveShadows = true
+Name.value = "Cube_4067"
+Transform.position = (75, 0.28, -3)
+Transform.rotation = (0, 0, 0, 1)
+Transform.scale = (1.5, 0.56, 1.5)
+
+[entity id="e_4068"]
+MeshRenderer.meshPrimitive = Cube
+MeshRenderer.renderLayerMask = 1
+MeshRenderer.castShadows = true
+MeshRenderer.receiveShadows = true
+Name.value = "Cube_4068"
+Transform.position = (73, 1.25, 24)
+Transform.rotation = (0, 0, 0, 1)
+Transform.scale = (1.5, 2.5, 1.5)
+
+[entity id="e_4069"]
+MeshRenderer.meshPrimitive = Cube
+MeshRenderer.renderLayerMask = 1
+MeshRenderer.castShadows = true
+MeshRenderer.receiveShadows = true
+Name.value = "Cube_4069"
+Transform.position = (77, 0.46, 49)
+Transform.rotation = (0, 0, 0, 1)
+Transform.scale = (1.5, 0.92, 1.5)
+
+[entity id="e_4070"]
+MeshRenderer.meshPrimitive = Cube
+MeshRenderer.renderLayerMask = 1
+MeshRenderer.castShadows = true
+MeshRenderer.receiveShadows = true
+Name.value = "Cube_4070"
+Transform.position = (73, 1.635, 69)
+Transform.rotation = (0, 0, 0, 1)
+Transform.scale = (1.5, 3.27, 1.5)
+
+[entity id="e_4071"]
+MeshRenderer.meshPrimitive = Cube
+MeshRenderer.renderLayerMask = 1
+MeshRenderer.castShadows = true
+MeshRenderer.receiveShadows = true
+Name.value = "Cube_4071"
+Transform.position = (80, 0.97, 94)
+Transform.rotation = (0, 0, 0, 1)
+Transform.scale = (1.5, 1.94, 1.5)
+
+[entity id="e_4072"]
+MeshRenderer.meshPrimitive = Cube
+MeshRenderer.renderLayerMask = 1
+MeshRenderer.castShadows = true
+MeshRenderer.receiveShadows = true
+Name.value = "Cube_4072"
+Transform.position = (95, 0.605, -104)
+Transform.rotation = (0, 0, 0, 1)
+Transform.scale = (1.5, 1.21, 1.5)
+
+[entity id="e_4073"]
+MeshRenderer.meshPrimitive = Cube
+MeshRenderer.renderLayerMask = 1
+MeshRenderer.castShadows = true
+MeshRenderer.receiveShadows = true
+Name.value = "Cube_4073"
+Transform.position = (103, 0.445, -70)
+Transform.rotation = (0, 0, 0, 1)
+Transform.scale = (1.5, 0.89, 1.5)
+
+[entity id="e_4074"]
+MeshRenderer.meshPrimitive = Cube
+MeshRenderer.renderLayerMask = 1
+MeshRenderer.castShadows = true
+MeshRenderer.receiveShadows = true
+Name.value = "Cube_4074"
+Transform.position = (98, 0.265, -54)
+Transform.rotation = (0, 0, 0, 1)
+Transform.scale = (1.5, 0.53, 1.5)
+
+[entity id="e_4075"]
+MeshRenderer.meshPrimitive = Cube
+MeshRenderer.renderLayerMask = 1
+MeshRenderer.castShadows = true
+MeshRenderer.receiveShadows = true
+Name.value = "Cube_4075"
+Transform.position = (99, 0.645, -31)
+Transform.rotation = (0, 0, 0, 1)
+Transform.scale = (1.5, 1.29, 1.5)
+
+[entity id="e_4076"]
+MeshRenderer.meshPrimitive = Cube
+MeshRenderer.renderLayerMask = 1
+MeshRenderer.castShadows = true
+MeshRenderer.receiveShadows = true
+Name.value = "Cube_4076"
+Transform.position = (96, 1.71, -6)
+Transform.rotation = (0, 0, 0, 1)
+Transform.scale = (1.5, 3.42, 1.5)
+
+[entity id="e_4077"]
+MeshRenderer.meshPrimitive = Cube
+MeshRenderer.renderLayerMask = 1
+MeshRenderer.castShadows = true
+MeshRenderer.receiveShadows = true
+Name.value = "Cube_4077"
+Transform.position = (97, 1.605, 21)
+Transform.rotation = (0, 0, 0, 1)
+Transform.scale = (1.5, 3.21, 1.5)
+
+[entity id="e_4078"]
+MeshRenderer.meshPrimitive = Cube
+MeshRenderer.renderLayerMask = 1
+MeshRenderer.castShadows = true
+MeshRenderer.receiveShadows = true
+Name.value = "Cube_4078"
+Transform.position = (98, 1.195, 45)
+Transform.rotation = (0, 0, 0, 1)
+Transform.scale = (1.5, 2.39, 1.5)
+
+[entity id="e_4079"]
+MeshRenderer.meshPrimitive = Cube
+MeshRenderer.renderLayerMask = 1
+MeshRenderer.castShadows = true
+MeshRenderer.receiveShadows = true
+Name.value = "Cube_4079"
+Transform.position = (99, 1.53, 75)
+Transform.rotation = (0, 0, 0, 1)
+Transform.scale = (1.5, 3.06, 1.5)
+
+[entity id="e_4080"]
+MeshRenderer.meshPrimitive = Cube
+MeshRenderer.renderLayerMask = 1
+MeshRenderer.castShadows = true
+MeshRenderer.receiveShadows = true
+Name.value = "Cube_4080"
+Transform.position = (96, 1.605, 99)
+Transform.rotation = (0, 0, 0, 1)
+Transform.scale = (1.5, 3.21, 1.5)
+

@@ -1,0 +1,58 @@
+#version 450
+// GPU key/value sort primitive for the sorted transparent path
+// (transparency-scale S1). Single-workgroup shared-memory bitonic over a
+// fixed power-of-two capacity — the reusable standalone form of the network
+// the runtime drain (sorted_transparent_drain.comp) fuses with its gather and
+// scatter phases. The network itself lives in
+// Includes/sorted_transparent_sort_network.glsl so the two cannot drift.
+//
+// Sorts (key, value) pairs ASCENDING by a 64-bit key stored as a uvec2
+// {lo, hi}; the producer encodes the key so ascending order is back-to-front
+// (see SortedTransparentKey.h). Padding slots (index >= live count) must carry
+// key {0xFFFFFFFF, 0xFFFFFFFF}; they sort to the end where the draw count
+// clamps them off.
+//
+// Caller contract (F6 — this shader has no bounds knowledge of its own):
+//  - dispatch exactly ONE workgroup: vkCmdDispatch(1, 1, 1);
+//  - both bound buffers hold exactly kCapacity elements (keys 8 B, values
+//    4 B) — every slot in [0, kCapacity) is read AND written unconditionally,
+//    so a smaller binding is an OOB access;
+//  - live count <= kCapacity, enforced by the producer (the drain clamps to
+//    kSortedTransparentSortCapacity and CPU-sorts past it).
+// Must match kSortedTransparentSortCapacity (SortedTransparentKey.h).
+
+layout(local_size_x = 256) in;
+
+// Power-of-two element capacity. 2048 * (8 B key + 4 B value) = 24 KiB shared —
+// within the 32 KiB floor.
+const uint kCapacity = 2048u;
+
+layout(std430, set = 0, binding = 0) buffer KeysBuffer { uvec2 keys[]; };
+layout(std430, set = 0, binding = 1) buffer ValuesBuffer { uint values[]; };
+
+shared uvec2 sKeys[kCapacity];
+shared uint sVals[kCapacity];
+
+#include "Includes/sorted_transparent_sort_network.glsl"
+
+void main()
+{
+    const uint lid = gl_LocalInvocationID.x;
+    const uint threads = gl_WorkGroupSize.x;
+
+    // Cooperative load into shared memory.
+    for (uint i = lid; i < kCapacity; i += threads)
+    {
+        sKeys[i] = keys[i];
+        sVals[i] = values[i];
+    }
+
+    SortSharedBitonic(lid, threads);
+
+    // Cooperative store back.
+    for (uint i = lid; i < kCapacity; i += threads)
+    {
+        keys[i] = sKeys[i];
+        values[i] = sVals[i];
+    }
+}

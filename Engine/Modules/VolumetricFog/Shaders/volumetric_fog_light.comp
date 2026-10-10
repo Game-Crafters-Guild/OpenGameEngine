@@ -1,0 +1,397 @@
+#version 450
+
+#define GE_VOLUMETRIC_FOG_BIND_JITTER_ATLAS 1
+#include "volumetric_fog_common.glsl"
+
+layout(local_size_x = 8, local_size_y = 8, local_size_z = 8) in;
+layout(rgba16f, set = 0, binding = 0) uniform writeonly image3D uOutLighting;
+layout(set = 0, binding = 1) uniform sampler3D uMedia;
+layout(set = 0, binding = 16) uniform sampler3D uEmission;
+
+layout(set = 0, binding = 4, std140) uniform ShadowData
+{
+    mat4 ge_shadowVP[4];
+    vec4 ge_shadowSplits;
+    vec4 ge_shadowParams;
+    vec4 ge_shadowDebug;
+    vec4 ge_shadowPcss;
+    vec4 ge_shadowPcssCascades[4];
+    vec4 ge_shadowPcssPyramid[4];
+};
+
+layout(set = 0, binding = 5) uniform sampler2DArrayShadow ge_shadowMapArray;
+
+// Engine-shared diffuse irradiance cube (sky + reflection probes), the same
+// resource the forward pass binds as ge_irradianceCube. Sampled per froxel for
+// indirect in-scatter; gated by fog.uDensityParams.w (iblEnabled).
+layout(set = 0, binding = 14) uniform samplerCube uFogIrradianceCube;
+
+struct FogLocalLightPacked
+{
+#include "Includes/light_packed_fields.glsl"
+};
+
+#include "volumetric_fog_local_shadows.glsl"
+
+// Shadow visibility is averaged over the froxel's ray segment. One lookup per
+// cell makes a whole depth slice flip as a blocker moves across it, which
+// history rejection then shows as bands; four stratified taps resolve the
+// blocker edge inside the cell. The offsets stay within the cell, so they
+// remain inside the brick bounds the light cull tested.
+const int kFogShadowSamples = 4;
+
+layout(set = 0, binding = 6, std430) readonly buffer FogLightIndexBuffer
+{
+    uint fog_lightIndices[];
+};
+
+layout(set = 0, binding = 7, std430) readonly buffer FogClusterBuffer
+{
+    uvec4 fog_clusterHeader; // x=clustersX, y=clustersY, z=depthSlices, w=maxLightsPerCluster
+    uvec2 fog_clusters[];
+};
+
+layout(set = 0, binding = 8, std430) readonly buffer FogLightBuffer
+{
+    uvec4 fog_lightHeader; // x=point/spot/area count
+    FogLocalLightPacked fog_lights[];
+};
+
+float FogLocalLightAttenuation(float dist, float range, float decay)
+{
+    float distNorm = dist / max(range, 0.001);
+    float attenuation = max(1.0 - distNorm * distNorm, 0.0);
+    attenuation *= attenuation;
+    if (decay > 0.01)
+        attenuation /= pow(max(dist, 1.0), decay * 0.5);
+    return attenuation;
+}
+
+float FogSpotConeAttenuation(FogLocalLightPacked light, vec3 lightToFog, vec3 lightToFogN, float froxelFootprint)
+{
+    vec3 spotDir = normalize(light.dirIntensity.xyz);
+    float cosInner = clamp(light.areaParams.w, -0.999, 0.999);
+    float cosOuter = clamp(light.spotParams.x, -0.999, 0.999);
+    if (cosInner <= 0.001 || cosOuter <= 0.001)
+    {
+        float cone = clamp((dot(lightToFogN, spotDir) - cosOuter) / max(cosInner - cosOuter, 1.0e-4), 0.0, 1.0);
+        return cone * cone * (3.0 - 2.0 * cone);
+    }
+
+    float axial = dot(lightToFog, spotDir);
+    if (axial <= 0.0)
+        return 0.0;
+
+    vec3 radialVec = lightToFog - spotDir * axial;
+    float radial = length(radialVec);
+    float tanInner = sqrt(max(1.0 - cosInner * cosInner, 0.0)) / max(cosInner, 1.0e-4);
+    float tanOuter = sqrt(max(1.0 - cosOuter * cosOuter, 0.0)) / max(cosOuter, 1.0e-4);
+    float innerRadius = max(axial * min(tanInner, tanOuter), 0.0);
+    float outerRadius = max(axial * max(tanInner, tanOuter), 0.0);
+    float penumbra = max(outerRadius - innerRadius, froxelFootprint * 1.5);
+    float fadeStart = max(outerRadius - penumbra, 0.0);
+    float fadeEnd = outerRadius + max(froxelFootprint, 1.0e-4);
+    float cone = 1.0 - smoothstep(fadeStart, fadeEnd, radial);
+    return cone * cone * (3.0 - 2.0 * cone);
+}
+
+vec3 FogSafeAreaRight(vec3 normal, vec3 right)
+{
+    vec3 r = right - normal * dot(normal, right);
+    float len = length(r);
+    if (len < 1.0e-4)
+    {
+        r = abs(normal.y) < 0.99 ? cross(normal, vec3(0.0, 1.0, 0.0))
+                                 : cross(normal, vec3(1.0, 0.0, 0.0));
+        len = length(r);
+    }
+    return r / max(len, 1.0e-6);
+}
+
+// One representative point on an area emitter, treated as a point light for the
+// fog medium: distance attenuation + Henyey-Greenstein phase, with optional
+// one-sided emission. Mirrors the surface GE_EvaluateAreaLightSample so lit fog
+// and lit surfaces agree.
+vec3 FogEvaluateAreaSample(vec3 samplePos, vec3 emitterNormal, bool oneSided, vec3 worldPos,
+                           vec3 viewRay, float range, float decay, vec3 lightColor, float weight,
+                           float anisotropy)
+{
+    vec3 lightToFog = worldPos - samplePos;
+    float dist = length(lightToFog);
+    if (dist > range)
+        return vec3(0.0);
+    vec3 lightToFogN = lightToFog / max(dist, 1.0e-6);
+    float facing = 1.0;
+    if (oneSided)
+    {
+        facing = dot(lightToFogN, emitterNormal);
+        if (facing <= 0.0)
+            return vec3(0.0);
+    }
+    float attenuation = FogLocalLightAttenuation(dist, range, decay);
+    float phase = FogHenyeyGreenstein(dot(viewRay, -lightToFogN), anisotropy);
+    return lightColor * (attenuation * phase * facing * weight);
+}
+
+vec3 FogEvaluateAreaLight(FogLocalLightPacked light, vec3 worldPos, vec3 viewRay, float froxelFootprint)
+{
+    vec3 center = light.posRange.xyz;
+    float range = max(light.posRange.w, 0.001);
+    vec3 normal = normalize(light.dirIntensity.xyz);
+    vec3 right = FogSafeAreaRight(normal, light.areaRight.xyz);
+    vec3 up = normalize(cross(normal, right));
+
+    uint shape = light.meta.z; // 0=rect, 1=disc, 2=sphere, 3=cylinder
+    float width = max(light.colorAreaWidth.w, 0.001);
+    float height = max(light.areaParams.x, 0.001);
+    float radius = max(light.areaParams.y, 0.001);
+    float decay = max(light.areaParams.z, 0.0);
+    float anisotropy = clamp(light.areaRight.w, -0.95, 0.95);
+    float fogContribution = max(light.spotParams.y, 0.0);
+    float fogDensityBoost = max(light.spotParams.z, 0.0);
+    vec3 color = light.colorAreaWidth.rgb * light.dirIntensity.w * fogContribution * (1.0 + fogDensityBoost);
+
+    vec3 total = vec3(0.0);
+    if (shape == 0u)
+    {
+        float hx = 0.5 * width;
+        float hy = 0.5 * height;
+        const float q = 0.57735026919;
+        total += FogEvaluateAreaSample(center + right * (-hx * q) + up * (-hy * q), normal, true, worldPos, viewRay, range, decay, color, 0.25, anisotropy);
+        total += FogEvaluateAreaSample(center + right * ( hx * q) + up * (-hy * q), normal, true, worldPos, viewRay, range, decay, color, 0.25, anisotropy);
+        total += FogEvaluateAreaSample(center + right * (-hx * q) + up * ( hy * q), normal, true, worldPos, viewRay, range, decay, color, 0.25, anisotropy);
+        total += FogEvaluateAreaSample(center + right * ( hx * q) + up * ( hy * q), normal, true, worldPos, viewRay, range, decay, color, 0.25, anisotropy);
+    }
+    else if (shape == 1u)
+    {
+        float r = radius * 0.70710678118;
+        total += FogEvaluateAreaSample(center, normal, true, worldPos, viewRay, range, decay, color, 0.20, anisotropy);
+        total += FogEvaluateAreaSample(center + right * r, normal, true, worldPos, viewRay, range, decay, color, 0.20, anisotropy);
+        total += FogEvaluateAreaSample(center - right * r, normal, true, worldPos, viewRay, range, decay, color, 0.20, anisotropy);
+        total += FogEvaluateAreaSample(center + up * r, normal, true, worldPos, viewRay, range, decay, color, 0.20, anisotropy);
+        total += FogEvaluateAreaSample(center - up * r, normal, true, worldPos, viewRay, range, decay, color, 0.20, anisotropy);
+    }
+    else if (shape == 2u)
+    {
+        vec3 sideA = right * radius;
+        vec3 sideB = up * radius;
+        vec3 sideC = normal * radius;
+        const float w6 = 1.0 / 6.0;
+        total += FogEvaluateAreaSample(center + sideA, normal, false, worldPos, viewRay, range, decay, color, w6, anisotropy);
+        total += FogEvaluateAreaSample(center - sideA, normal, false, worldPos, viewRay, range, decay, color, w6, anisotropy);
+        total += FogEvaluateAreaSample(center + sideB, normal, false, worldPos, viewRay, range, decay, color, w6, anisotropy);
+        total += FogEvaluateAreaSample(center - sideB, normal, false, worldPos, viewRay, range, decay, color, w6, anisotropy);
+        total += FogEvaluateAreaSample(center + sideC, normal, false, worldPos, viewRay, range, decay, color, w6, anisotropy);
+        total += FogEvaluateAreaSample(center - sideC, normal, false, worldPos, viewRay, range, decay, color, w6, anisotropy);
+    }
+    else
+    {
+        float halfH = 0.5 * height;
+        total += FogEvaluateAreaSample(center + right * radius + up * (-halfH), normal, false, worldPos, viewRay, range, decay, color, 0.25, anisotropy);
+        total += FogEvaluateAreaSample(center - right * radius + up * (-halfH), normal, false, worldPos, viewRay, range, decay, color, 0.25, anisotropy);
+        total += FogEvaluateAreaSample(center + right * radius + up * ( halfH), normal, false, worldPos, viewRay, range, decay, color, 0.25, anisotropy);
+        total += FogEvaluateAreaSample(center - right * radius + up * ( halfH), normal, false, worldPos, viewRay, range, decay, color, 0.25, anisotropy);
+    }
+
+    float originFadeRadius = light.spotParams.w * range;
+    if (originFadeRadius > 1.0e-4)
+        total *= smoothstep(0.0, originFadeRadius, length(worldPos - center));
+    return total;
+}
+
+vec3 FogEvaluateLocalLight(FogLocalLightPacked light, uint lightIndex, vec3 worldPos,
+                           vec3 viewRay, float froxelFootprint, vec3 shadowStart, vec3 shadowStep)
+{
+    uint lightType = light.meta.x;
+    if (light.meta.w == 0u)
+        return vec3(0.0);
+    if (lightType == 4u)
+        return FogEvaluateAreaLight(light, worldPos, viewRay, froxelFootprint);
+    if (lightType != 1u && lightType != 2u)
+        return vec3(0.0);
+
+    vec3 lightToFog = worldPos - light.posRange.xyz;
+    float dist = length(lightToFog);
+    float range = max(light.posRange.w, 0.001);
+    if (dist > range)
+        return vec3(0.0);
+
+    vec3 lightToFogN = lightToFog / max(dist, 1.0e-6);
+    vec3 fogToLight = -lightToFogN;
+    float attenuation = FogLocalLightAttenuation(dist, range, max(light.areaParams.z, 0.0));
+    float originFadeRadius = max(light.spotParams.w * range, froxelFootprint * 1.5);
+    if (originFadeRadius > 1.0e-4)
+    {
+        float originFade = smoothstep(0.0, originFadeRadius, dist);
+        attenuation *= originFade * originFade * (3.0 - 2.0 * originFade);
+    }
+
+    if (lightType == 2u)
+    {
+        attenuation *= FogSpotConeAttenuation(light, lightToFog, lightToFogN, froxelFootprint);
+    }
+
+    float fogContribution = max(light.spotParams.y, 0.0);
+    float fogDensityBoost = max(light.spotParams.z, 0.0);
+    if (attenuation <= 0.0 || fogContribution <= 0.0)
+        return vec3(0.0);
+    if (light.meta.y != 0u)
+    {
+        float visibility = 0.0;
+        for (int sampleIndex = 0; sampleIndex < kFogShadowSamples; ++sampleIndex)
+            visibility += FogLocalShadow(light, lightIndex, shadowStart + shadowStep * float(sampleIndex));
+        attenuation *= visibility / float(kFogShadowSamples);
+    }
+    float phase = FogHenyeyGreenstein(dot(viewRay, fogToLight), clamp(light.areaRight.w, -0.95, 0.95));
+    return light.colorAreaWidth.rgb * light.dirIntensity.w * fogContribution * attenuation * phase * (1.0 + fogDensityBoost);
+}
+
+vec3 FogEvaluateLocalLights(vec3 worldPos, vec3 viewRay, ivec3 gid, float froxelFootprint,
+                            vec3 shadowStart, vec3 shadowStep)
+{
+    uint lightCount = fog_lightHeader.x;
+    if (lightCount == 0u)
+        return vec3(0.0);
+
+    uvec3 bricks = fog_clusterHeader.xyz;
+    uint first = 0u;
+    uint count = lightCount;
+    bool fullScan = any(equal(bricks, uvec3(0u)));
+    if (!fullScan)
+    {
+        uvec3 brick = min(uvec3(gid) / 8u, bricks - 1u);
+        uint clusterId = brick.x + bricks.x * (brick.y + bricks.y * brick.z);
+        uvec2 entry = fog_clusters[clusterId];
+        first = entry.x;
+        // Dense bricks keep every light. Their bounded list is a fast path,
+        // never a limit on how many lights may contribute to visible fog.
+        fullScan = entry.y > fog_clusterHeader.w;
+        if (!fullScan)
+            count = entry.y;
+    }
+
+    vec3 radiance = vec3(0.0);
+    for (uint i = 0u; i < count; ++i)
+    {
+        uint index = fullScan ? i : fog_lightIndices[first + i];
+        if (index < lightCount)
+            radiance += FogEvaluateLocalLight(fog_lights[index], index, worldPos, viewRay,
+                                              froxelFootprint, shadowStart, shadowStep);
+    }
+    return radiance;
+}
+
+float FogSampleShadow(vec3 worldPos, vec3 lightDir)
+{
+    int numCascades = int(ge_shadowParams.z + 0.5);
+    if (numCascades <= 0)
+        return 1.0;
+
+    vec4 viewPos = fog.uView * vec4(worldPos, 1.0);
+    float linearDepth = abs(viewPos.z);
+    if (linearDepth > ge_shadowParams.w)
+        return 1.0;
+
+    int cascadeIdx = numCascades - 1;
+    for (int i = 0; i < numCascades; ++i)
+    {
+        if (linearDepth < ge_shadowSplits[i])
+        {
+            cascadeIdx = i;
+            break;
+        }
+    }
+
+    vec3 normalBiasDir = -lightDir;
+    vec3 biasedPos = worldPos + normalBiasDir * (ge_shadowParams.y * 0.15 + fog.uFogExtraParams.y);
+    vec4 shadowClip = ge_shadowVP[cascadeIdx] * vec4(biasedPos, 1.0);
+    vec3 shadowNDC = shadowClip.xyz / max(shadowClip.w, 1.0e-6);
+    vec2 shadowUV = shadowNDC.xy * 0.5 + 0.5;
+    shadowUV.y = 1.0 - shadowUV.y;
+    float refDepth = shadowNDC.z + ge_shadowParams.x;
+
+    if (shadowUV.x < 0.0 || shadowUV.x > 1.0 ||
+        shadowUV.y < 0.0 || shadowUV.y > 1.0 ||
+        refDepth < 0.0 || refDepth > 1.0)
+        return 1.0;
+
+    vec2 texel = 1.0 / vec2(textureSize(ge_shadowMapArray, 0).xy);
+    float layer = float(cascadeIdx);
+    float visibility = 0.0;
+    visibility += texture(ge_shadowMapArray, vec4(shadowUV + texel * vec2(-1.0, -1.0), layer, refDepth));
+    visibility += texture(ge_shadowMapArray, vec4(shadowUV + texel * vec2( 1.0, -1.0), layer, refDepth));
+    visibility += texture(ge_shadowMapArray, vec4(shadowUV + texel * vec2(-1.0,  1.0), layer, refDepth));
+    visibility += texture(ge_shadowMapArray, vec4(shadowUV + texel * vec2( 1.0,  1.0), layer, refDepth));
+    visibility += texture(ge_shadowMapArray, vec4(shadowUV, layer, refDepth));
+    return visibility * 0.2;
+}
+
+void main()
+{
+    ivec3 gid = ivec3(gl_GlobalInvocationID.xyz);
+    ivec3 grid = ivec3(fog.uGridParams.xyz);
+    if (any(greaterThanEqual(gid, grid)))
+        return;
+
+    vec3 sampleCoord = (vec3(gid) + vec3(0.5)) / max(fog.uGridParams.xyz, vec3(1.0));
+    vec4 media = texture(uMedia, sampleCoord);
+    vec2 uv = sampleCoord.xy;
+    float slice01 = FogSliceCoord(gid.z, FogFrameJitter(gid));
+    float distanceToCamera = FogSliceDistance(slice01);
+    vec3 viewRay = FogWorldRayFromUv(uv);
+    vec3 worldPos = FogWorldFromUvDistance(uv, distanceToCamera);
+    vec2 uvStep = 1.0 / max(fog.uGridParams.xy, vec2(1.0));
+    vec3 viewRayDx = FogWorldRayFromUv(clamp(uv + vec2(uvStep.x, 0.0), vec2(0.0), vec2(1.0)));
+    vec3 viewRayDy = FogWorldRayFromUv(clamp(uv + vec2(0.0, uvStep.y), vec2(0.0), vec2(1.0)));
+    float prevSlice01 = clamp((float(gid.z) + 0.0) / max(fog.uGridParams.z, 1.0), 0.0, 1.0);
+    float nextSlice01 = clamp((float(gid.z) + 1.0) / max(fog.uGridParams.z, 1.0), 0.0, 1.0);
+    float zFootprint = abs(FogSliceDistance(nextSlice01) - FogSliceDistance(prevSlice01));
+    float xyFootprint = max(length((viewRayDx - viewRay) * distanceToCamera),
+                            length((viewRayDy - viewRay) * distanceToCamera));
+    float froxelFootprint = max(xyFootprint, zFootprint);
+
+    vec3 sunDir = normalize(fog.uSunDirection.xyz);
+    float phase = FogHenyeyGreenstein(dot(viewRay, sunDir), fog.uEmissionAnisotropy.w);
+    float nearDistance = FogSliceDistance(prevSlice01);
+    float farDistance = FogSliceDistance(nextSlice01);
+    vec3 shadowStep = viewRay * ((farDistance - nearDistance) / float(kFogShadowSamples));
+    vec3 shadowStart = FogRayOriginFromUv(uv) + viewRay * nearDistance +
+                       shadowStep * (0.5 + FogFrameJitter(gid));
+    vec3 direct = vec3(0.0);
+    // A black sun contributes nothing, so its cascade taps are pure cost. A
+    // dim sun still takes them: the test is exact zero, not a threshold.
+    if (any(greaterThan(fog.uSunColor.rgb, vec3(0.0))))
+    {
+        float shadowVisibility = 0.0;
+        for (int sampleIndex = 0; sampleIndex < kFogShadowSamples; ++sampleIndex)
+            shadowVisibility += FogSampleShadow(shadowStart + shadowStep * float(sampleIndex), sunDir);
+        shadowVisibility /= float(kFogShadowSamples);
+        direct = fog.uSunColor.rgb * phase * shadowVisibility;
+    }
+    direct += FogEvaluateLocalLights(worldPos, viewRay, gid, froxelFootprint, shadowStart, shadowStep);
+
+    // Indirect in-scatter. With IBL available (uDensityParams.w), sample the
+    // baked irradiance cube ground->zenith across the froxel height so fog in
+    // shadow picks up the scene's bounced/sky light with directional variation.
+    // Scaled by uAmbientColor.rgb (the AmbientScatteringTint) so it stays at the
+    // artist-calibrated magnitude rather than the raw, unnormalized irradiance
+    // (which blows the fog out in bright skies).
+    vec3 ambient;
+    if (fog.uDensityParams.w > 0.5)
+    {
+        vec3 skyIrr = texture(uFogIrradianceCube, vec3(0.0, 1.0, 0.0)).rgb;
+        vec3 groundIrr = texture(uFogIrradianceCube, vec3(0.0, -1.0, 0.0)).rgb;
+        float heightT = clamp((worldPos.y - fog.uHeightParams.x) / max(fog.uHeightParams.y, 0.001), 0.0, 1.0);
+        ambient = mix(groundIrr, skyIrr, heightT) * fog.uAmbientColor.rgb;
+    }
+    else
+    {
+        ambient = fog.uAmbientColor.rgb * 0.18;
+    }
+    // The grid is allocated only where a local volume changes emission; elsewhere
+    // every texel would equal the view's own emission, so read that instead.
+    vec3 emission = fog.uFogExtraParams.w > 0.5 ? texelFetch(uEmission, gid, 0).rgb
+                                                : fog.uEmissionAnisotropy.rgb;
+    vec3 radiance = media.rgb * (direct + ambient) + emission;
+    imageStore(uOutLighting, gid, vec4(max(radiance, vec3(0.0)), media.a));
+}

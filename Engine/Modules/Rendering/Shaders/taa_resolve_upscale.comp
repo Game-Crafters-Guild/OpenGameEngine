@@ -1,0 +1,347 @@
+#version 450
+
+// Temporal AA resolve — UPSCALE form (TAAU). The scene rasters at a reduced
+// INTERNAL extent (uExtent); history and output live at the DISPLAY extent
+// (uOutExtent) and the resolve reconstructs each display pixel from the
+// jitter-offset internal frame. Deliberately a separate shader from
+// taa_resolve.comp: the native path stays byte-identical at render scale 1.0
+// (the merge gate), and this file is the TAAU semantics in one place. Keep the
+// two in step when tuning — same pipeline stages, same rejection model:
+//   1. Motion: closest-depth 3x3 dilated movers MV or analytic camera
+//      reprojection from depth — all in INTERNAL space.
+//   2. Current: 5-tap Catmull-Rom resample of the internal frame at the
+//      display pixel's unjittered position (the jitter-aware reconstruction
+//      that makes temporal UPSCALING converge instead of just stretching).
+//   3. History: 5-tap Catmull-Rom at DISPLAY res.
+//   4. Rejection/clamp/blend: identical to the native resolve. Variance
+//      clipping applies to reprojected history and to uniform stale lighting
+//      at rest; depth mismatches reject unless scene and camera epochs
+//      certify unchanged coverage.
+// History layout: rgb = resolved color, a = this frame's raster depth.
+
+layout(local_size_x = 8, local_size_y = 8) in;
+
+layout(set = 0, binding = 0, rgba16f) uniform writeonly image2D uOutHistory;
+layout(set = 0, binding = 1, rgba16f) uniform writeonly image2D uOutColor;
+layout(set = 0, binding = 2) uniform sampler2D uSceneColor; // internal extent
+layout(set = 0, binding = 3) uniform sampler2D uDepth;      // internal extent
+layout(set = 0, binding = 4) uniform sampler2D uMV;         // internal extent
+layout(set = 0, binding = 5) uniform sampler2D uHistory;    // display extent
+
+layout(std140, set = 0, binding = 6) uniform TaaResolveParams
+{
+    // See taa_resolve.comp: both matrices UNJITTERED (phase-stable
+    // reprojection; history converges unjittered).
+    mat4 uInvViewProj;
+    mat4 uPrevViewProj;
+    vec4 uExtent;    // xy = INTERNAL size, zw = 1 / internal size
+    vec4 uOutExtent; // xy = DISPLAY size, zw = 1 / display size
+    // x = base history weight, y = history valid (0/1),
+    // z = debug mode (0 off, 1 MV, 2 rejection), w = velocity falloff / px.
+    vec4 uParams0;
+    // x = variance clip gamma, y = depth reject threshold, z = sharpen,
+    // w = disocclusion motion gate (px, internal).
+    vec4 uParams1;
+    // xy = current-frame jitter as a viewport-UV offset.
+    // z = sub-pixel correction toggle (0/1, Editor > Experimental).
+    // w = scene-history validation: -1 unchanged content/camera, 0 per-pixel
+    // validation, +1 changed content or movers (clip stale receiver lighting).
+    vec4 uParams2;
+} Taa;
+
+#include "Includes/screen_position.glsl"
+#include "Includes/taa_history.glsl"
+
+const float kMVSentinel = 50.0;
+
+// See taa_resolve.comp: weight subtracted from history trust at the
+// worst-case sub-texel phase.
+const float kSubpixelCorrectionWeight = 0.25;
+
+vec3 RGBToYCoCg(vec3 c)
+{
+    return vec3(0.25 * c.r + 0.5 * c.g + 0.25 * c.b,
+                0.5 * c.r - 0.5 * c.b,
+                -0.25 * c.r + 0.5 * c.g - 0.25 * c.b);
+}
+
+vec3 YCoCgToRGB(vec3 c)
+{
+    return max(vec3(c.x + c.y - c.z, c.x + c.z, c.x - c.y - c.z), vec3(0.0));
+}
+
+float Luma(vec3 rgb)
+{
+    return dot(rgb, vec3(0.2126, 0.7152, 0.0722));
+}
+
+vec3 ClipToAABB(vec3 q, vec3 aabbMin, vec3 aabbMax)
+{
+    vec3 center = 0.5 * (aabbMax + aabbMin);
+    vec3 extents = max(0.5 * (aabbMax - aabbMin), vec3(1e-5));
+    vec3 v = q - center;
+    vec3 unitV = abs(v / extents);
+    float maxUnit = max(unitV.x, max(unitV.y, unitV.z));
+    return maxUnit > 1.0 ? center + v / maxUnit : q;
+}
+
+// 5-tap optimized Catmull-Rom over an explicitly-sized texture (extent.xy =
+// size, extent.zw = 1/size) — the input and history live at different extents.
+vec4 SampleCatmullRomSized(sampler2D tex, vec2 uv, vec4 extent)
+{
+    vec2 texelSize = extent.zw;
+    vec2 samplePos = uv * extent.xy;
+    vec2 texPos1 = floor(samplePos - 0.5) + 0.5;
+    vec2 f = samplePos - texPos1;
+    vec2 w0 = f * (-0.5 + f * (1.0 - 0.5 * f));
+    vec2 w1 = 1.0 + f * f * (-2.5 + 1.5 * f);
+    vec2 w2 = f * (0.5 + f * (2.0 - 1.5 * f));
+    vec2 w3 = f * f * (-0.5 + 0.5 * f);
+    vec2 w12 = w1 + w2;
+    vec2 offset12 = w2 / max(w12, vec2(1e-5));
+    vec2 texPos0 = (texPos1 - 1.0) * texelSize;
+    vec2 texPos3 = (texPos1 + 2.0) * texelSize;
+    vec2 texPos12 = (texPos1 + offset12) * texelSize;
+    vec4 result = texture(tex, vec2(texPos12.x, texPos0.y)) * (w12.x * w0.y) +
+                  texture(tex, vec2(texPos0.x, texPos12.y)) * (w0.x * w12.y) +
+                  texture(tex, vec2(texPos12.x, texPos12.y)) * (w12.x * w12.y) +
+                  texture(tex, vec2(texPos3.x, texPos12.y)) * (w3.x * w12.y) +
+                  texture(tex, vec2(texPos12.x, texPos3.y)) * (w12.x * w3.y);
+    float weightSum = (w12.x * w0.y) + (w0.x * w12.y) + (w12.x * w12.y) +
+                      (w3.x * w12.y) + (w12.x * w3.y);
+    return max(result / max(weightSum, 1e-5), vec4(0.0));
+}
+
+// Motion at an INTERNAL pixel (see taa_resolve.comp MotionAt).
+vec2 MotionAt(ivec2 p, float depth, out float expectedPrevDepth)
+{
+    // The CPU compared unjittered camera bytes and scene epochs. Avoid the
+    // far-view matrix roundoff of reconstructing a provably zero velocity.
+    if (Taa.uParams2.w < -0.5)
+    {
+        expectedPrevDepth = depth;
+        return vec2(0.0);
+    }
+    expectedPrevDepth = -1.0;
+    vec2 mv = texelFetch(uMV, p, 0).rg;
+    if (mv.x < kMVSentinel)
+        return mv;
+    vec2 uv = (vec2(p) + 0.5) * Taa.uExtent.zw;
+    vec4 world = Taa.uInvViewProj * vec4(GE_ViewportUVToYUpNdc(uv), depth, 1.0);
+    if (abs(world.w) < 1e-9)
+        return vec2(0.0);
+    world /= world.w;
+    vec4 prevClip = Taa.uPrevViewProj * world;
+    if (prevClip.w <= 1e-6)
+        return vec2(0.0);
+    vec3 prevNdc = prevClip.xyz / prevClip.w;
+    expectedPrevDepth = prevNdc.z;
+    return uv - GE_YUpNdcToViewportUV(prevNdc.xy);
+}
+
+// See taa_resolve.comp.
+float SubpixelCorrection(vec2 velocityUv, vec2 textureSize)
+{
+    vec2 velocityTexel = velocityUv * textureSize;
+    vec2 phase = fract(abs(velocityTexel));
+    vec2 phaseWeight = max(phase, 1.0 - phase);
+    return (1.0 - phaseWeight.x * phaseWeight.y) / 0.75;
+}
+
+void main()
+{
+    ivec2 px = ivec2(gl_GlobalInvocationID.xy);
+    ivec2 outExtent = ivec2(Taa.uOutExtent.xy);
+    if (px.x >= outExtent.x || px.y >= outExtent.y)
+        return;
+
+    ivec2 inExtent = ivec2(Taa.uExtent.xy);
+    // Display pixel center in normalized viewport UV — the shared coordinate
+    // system of both extents.
+    vec2 uv = (vec2(px) + 0.5) * Taa.uOutExtent.zw;
+    // The internal texel containing this display pixel.
+    ivec2 pxIn = clamp(ivec2(uv * Taa.uExtent.xy), ivec2(0), inExtent - 1);
+    float depth = texelFetch(uDepth, pxIn, 0).r;
+
+    if (Taa.uParams0.y < 0.5)
+    {
+        // Seed history on the output grid even on reset; storing a jittered
+        // frame here otherwise causes a phase jump as accumulation resumes.
+        vec3 raw = texture(uSceneColor, uv + Taa.uParams2.xy).rgb;
+        imageStore(uOutHistory, px, vec4(raw, depth));
+        imageStore(uOutColor, px, vec4(raw, 1.0));
+        return;
+    }
+
+    // Current-frame estimate: Catmull-Rom resample of the INTERNAL frame at
+    // the display pixel's unjittered position. Each jitter phase lands the
+    // internal grid at a different sub-(display-)pixel offset, so successive
+    // reconstructions tap different source texels — that integration is what
+    // recovers display-res detail the single internal frame doesn't carry.
+    // Current reconstruction follows the depth-footprint gather below.
+
+    // Closest-depth 3x3 motion dilation, INTERNAL space (reverse-Z: max = closest).
+    ivec2 closestPx = pxIn;
+    float closestDepth = depth;
+    float farthestDepth = depth;
+    for (int y = -1; y <= 1; ++y)
+    {
+        for (int x = -1; x <= 1; ++x)
+        {
+            if (x == 0 && y == 0)
+                continue;
+            ivec2 q = clamp(pxIn + ivec2(x, y), ivec2(0), inExtent - 1);
+            float d = texelFetch(uDepth, q, 0).r;
+            farthestDepth = min(farthestDepth, d);
+            if (d > closestDepth)
+            {
+                closestDepth = d;
+                closestPx = q;
+            }
+        }
+    }
+    // Negative reconstruction lobes ring around depth silhouettes. Use a
+    // nonnegative bilinear kernel there, and suppress current-sample unsharp.
+    float depthRange = (closestDepth - farthestDepth) / max(closestDepth, 1e-5);
+    float interior = 1.0 - smoothstep(0.002, 0.02, depthRange);
+    vec3 current = texture(uSceneColor, uv + Taa.uParams2.xy).rgb;
+    if (interior > 0.0)
+        current = mix(current, SampleCatmullRomSized(uSceneColor, uv + Taa.uParams2.xy, Taa.uExtent).rgb, interior);
+    float expectedPrevDepth;
+    vec2 mv = MotionAt(closestPx, closestDepth, expectedPrevDepth);
+    bool isMoverMV = texelFetch(uMV, closestPx, 0).r < kMVSentinel;
+
+    vec2 prevUv = uv - mv;
+    bool offscreen = any(lessThan(prevUv, vec2(0.0))) || any(greaterThan(prevUv, vec2(1.0)));
+
+    // Match the unjittered reconstruction grid when gathering clip bounds.
+    // Raster-phase neighborhoods otherwise erase stable accumulated detail.
+    vec3 currYCoCg = RGBToYCoCg(current);
+    vec3 minCurrent = texture(uSceneColor, uv + Taa.uParams2.xy).rgb;
+    vec3 maxCurrent = minCurrent;
+    vec3 m1 = currYCoCg;
+    vec3 m2 = currYCoCg * currYCoCg;
+    for (int y = -1; y <= 1; ++y)
+    {
+        for (int x = -1; x <= 1; ++x)
+        {
+            if (x == 0 && y == 0)
+                continue;
+            vec3 neighbor = texture(uSceneColor, uv + Taa.uParams2.xy +
+                                    vec2(x, y) * Taa.uExtent.zw).rgb;
+            minCurrent = min(minCurrent, neighbor);
+            maxCurrent = max(maxCurrent, neighbor);
+            vec3 n = RGBToYCoCg(neighbor);
+            m1 += n;
+            m2 += n * n;
+        }
+    }
+    vec3 mu = m1 / 9.0;
+    vec3 sigma = sqrt(max(m2 / 9.0 - mu * mu, vec3(0.0)));
+    float gamma = Taa.uParams1.x;
+    vec3 aabbMin = mu - gamma * sigma;
+    vec3 aabbMax = mu + gamma * sigma;
+
+    // Unsharp the current sample against the internal 3x3 mean (see the
+    // native resolve). At reduced internal res this also counteracts the
+    // reconstruction filter's footprint.
+    float sharpen = Taa.uParams1.z * interior;
+    vec3 currSharpYCoCg = currYCoCg + (currYCoCg - mu) * sharpen;
+    // Negative-lobe/unsharp undershoot must not seed persistent dark trails.
+    // A lower bound preserves accumulated bright subpixel coverage.
+    current = max(YCoCgToRGB(currSharpYCoCg), minCurrent);
+
+    vec4 historySample = texture(uHistory, prevUv);
+    if (interior > 0.0)
+        historySample = mix(historySample, SampleCatmullRomSized(uHistory, prevUv, Taa.uOutExtent), interior);
+    vec3 historyYCoCg = RGBToYCoCg(historySample.rgb);
+    vec3 clampedYCoCg = ClipToAABB(historyYCoCg, aabbMin, aabbMax);
+    float clampAmount = length(clampedYCoCg - historyYCoCg);
+    // A world/camera epoch match certifies that an absent subpixel surface is
+    // missed raster coverage. Otherwise require the existing local depth proof.
+    bool stationaryScene = Taa.uParams2.w < -0.5;
+    ivec2 historyPx = ivec2(clamp(prevUv * Taa.uOutExtent.xy, vec2(0.0), Taa.uOutExtent.xy - 1.0));
+    float footprintHistoryDepth = texelFetch(uHistory, historyPx, 0).a;
+    bool stationaryFootprint = !offscreen && expectedPrevDepth >= 0.0 && length(mv * Taa.uExtent.xy) < 0.01 &&
+        (stationaryScene || TaaStaticHistoryMatches(uDepth, pxIn, inExtent, uHistory, historyPx,
+                                ivec2(Taa.uOutExtent.xy), footprintHistoryDepth));
+    // History lives on the output grid; cover the full reconstruction support
+    // in INPUT pixels at silhouettes (see the native resolve).
+    // When the scene is certified unchanged, even disjoint color bounds can
+    // be different phases of thin coverage. Keep the uniform stale-lighting
+    // check below for untracked shading changes on otherwise static surfaces.
+    bool shadingChanged = stationaryFootprint && !stationaryScene &&
+        TaaShadingChanged(uHistory, historyPx, ivec2(Taa.uOutExtent.xy), minCurrent, maxCurrent,
+                         interior < 0.999 ? ivec2(ceil(2.0 * Taa.uOutExtent.xy / Taa.uExtent.xy)) : ivec2(1));
+    float mvPixels = length(mv * Taa.uExtent.xy);
+    vec3 clippedHistory = clamp(YCoCgToRGB(clampedYCoCg), minCurrent, maxCurrent);
+    vec3 coverageHistory = max(historySample.rgb, vec3(0.0));
+    bool staleLighting = stationaryFootprint &&
+        TaaHistoryNeighborhoodUniform(uHistory, historyPx, ivec2(Taa.uOutExtent.xy)) &&
+        TaaSampleOutsideCurrent(historySample.rgb, minCurrent, maxCurrent);
+    // A moving caster changes lighting on zero-motion receivers. Preserve
+    // phase-missed coverage only without movers or evidence of stale lighting;
+    // normal color clipping still allows in-range history to accumulate.
+    bool retainUnclippedCoverage = stationaryFootprint && !shadingChanged &&
+        !staleLighting && Taa.uParams2.w < 0.5;
+    vec3 history = retainUnclippedCoverage ?
+        coverageHistory : clippedHistory;
+
+    float weight = Taa.uParams0.x;
+    bool depthReject = false;
+    if (offscreen || shadingChanged)
+        weight = 0.0;
+    // A static background revealed by a moving foreground object has zero
+    // motion but a stale surface: reject it.
+    else if (expectedPrevDepth >= 0.0 && mvPixels < 0.01 && !stationaryFootprint)
+    {
+        depthReject = true;
+        weight = 0.0;
+    }
+    else if (expectedPrevDepth >= 0.0 && mvPixels > Taa.uParams1.w)
+    {
+        // Point-sampled stored depth (display grid) vs the reprojected
+        // expectation — see the native resolve for why never the bicubic tap.
+        ivec2 histTexel =
+            ivec2(clamp(prevUv * Taa.uOutExtent.xy, vec2(0.0), Taa.uOutExtent.xy - vec2(1.0)));
+        float storedPrevDepth = texelFetch(uHistory, histTexel, 0).a;
+        float tolerance = Taa.uParams1.y * max(expectedPrevDepth, storedPrevDepth) + 1e-4;
+        if (abs(expectedPrevDepth - storedPrevDepth) > tolerance)
+        {
+            depthReject = true;
+            weight = 0.0;
+        }
+    }
+    // History resampling occurs on the DISPLAY grid. Its fractional phase
+    // differs from internal-raster motion whenever render scale is not one.
+    if (Taa.uParams2.z > 0.5)
+        weight = max(weight - SubpixelCorrection(mv, Taa.uOutExtent.xy) * kSubpixelCorrectionWeight, 0.0);
+    weight *= exp(-mvPixels * Taa.uParams0.w);
+
+    // Validated stationary history integrates coverage in linear light. Karis
+    // weighting here would give an old dark sample nearly all the weight when
+    // an HDR emitter appears, preserving a dark sun ring despite fresh input.
+    float wCurr = stationaryFootprint ? 1.0 : 1.0 / (1.0 + Luma(current));
+    float wHist = stationaryFootprint ? 1.0 : 1.0 / (1.0 + Luma(history));
+    vec3 blended = (current * wCurr * (1.0 - weight) + history * wHist * weight) /
+                   max(wCurr * (1.0 - weight) + wHist * weight, 1e-5);
+
+    imageStore(uOutHistory, px, vec4(blended, depth));
+
+    float debugMode = Taa.uParams0.z;
+    if (debugMode > 1.5)
+    {
+        vec3 dbg = vec3(depthReject ? 1.0 : 0.0, clamp(clampAmount * 8.0, 0.0, 1.0),
+                        offscreen || shadingChanged ? 1.0 : 0.0);
+        imageStore(uOutColor, px, vec4(dbg, 1.0));
+    }
+    else if (debugMode > 0.5)
+    {
+        imageStore(uOutColor, px,
+                   vec4(clamp(mv * 20.0 + 0.5, vec2(0.0), vec2(1.0)), isMoverMV ? 1.0 : 0.0, 1.0));
+    }
+    else
+    {
+        imageStore(uOutColor, px, vec4(blended, 1.0));
+    }
+}

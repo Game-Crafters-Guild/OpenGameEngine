@@ -1,0 +1,1381 @@
+/* Project picker (library + create/import) stylesheet.
+ *
+ * Attached via RequestSubtreeStyleAssetPath by ProjectFolderPickerModal, whose
+ * root carries .project-picker-modal. Every rule here is scoped to that root.
+ *
+ * The root fades in/out using opacity. On hide, the display transition delays
+ * switching to display:none until after the opacity fade completes, so the
+ * element remains visible during the animation
+ * (kNativeWebViewSuppressionAfterHideSeconds in ProjectFolderPickerModal.cpp
+ * must stay slightly longer than that opacity duration).
+ */
+
+.project-picker-modal {
+	/* Use the shipped theme face so the picker is unaffected by Editor UI font prefs. */
+	font-family: var(--ui_font_family_default);
+	transition: opacity 0.1s ease, display 0s ease 0.1s;
+
+	/* Picker palette. Declared on the root so every descendant scope inherits
+	   them; global tokens are reused wherever one matches exactly. */
+	--pp_color_text: #f3f4f6;
+	--pp_color_text_muted: #8d939e;
+	--pp_color_text_disabled: #9a9da4;
+	--pp_color_border: #555;
+	--pp_color_border_hover: #666;
+	--pp_color_border_strong: #777;
+	--pp_color_border_disabled: #444;
+	--pp_color_surface_sunken: #050506;
+	--pp_color_surface_import: #0d0e11;
+	--pp_color_surface_raised: #111316;
+	--pp_color_surface_preview: #17191d;
+	--pp_color_surface_card: #1f2126;
+	--pp_color_surface_tab_active: #2d2d2d;
+	--pp_color_band: #121315;
+	--pp_color_accent: #4d7ff5;
+	--pp_color_accent_bright: #6f98ff;
+	--pp_color_card_outline: #454a55;
+	--pp_color_card_outline_hover: #5b6270;
+	--pp_color_card_outline_dashed: #555b68;
+	--pp_color_card_hover_tint: #18233d;
+	--pp_color_hover_overlay: rgba(255, 255, 255, 0.192);
+	--pp_color_hover_overlay_soft: rgba(255, 255, 255, 0.2);
+	--pp_color_filled_secondary: #4b4b4b;
+	--pp_color_filled_secondary_hover: #5a5a5a;
+	--pp_color_filled_secondary_border: #696969;
+	--pp_color_filled_secondary_border_hover: #7a7a7a;
+	--pp_color_radio_idle: #505257;
+	--pp_color_radio_idle_border: #898b90;
+	--pp_color_surface_content: #191b1f;
+	--pp_color_surface_field: #0d0e11;
+	--pp_color_divider: #2c2f36;
+	--pp_color_text_label: #858b96;
+	--pp_color_text_field: #d5d8de;
+	--pp_color_text_placeholder: #777e8a;
+	--pp_color_text_error: #ff9b91;
+	--pp_color_offline_text: #e8c06a;
+	--pp_color_offline_surface: #e0a84521;
+	--pp_color_offline_border: #e0a84559;
+
+	position: absolute;
+	left: 0px;
+	top: 0px;
+	width: 100%;
+	height: 100%;
+	z-index: 10000;
+	/* Show()/Hide() drive display, opacity and pointer-events; these are the
+	   closed resting state the modal is constructed in. */
+	display: none;
+	pointer-events: none;
+	align-items: center;
+	justify-content: center;
+}
+
+/* Full-bleed header/footer bands. The window keeps 1px of padding so these
+   never paint over its outline. */
+.project-picker-modal .project-picker-band {
+	background-color: var(--pp_color_band);
+}
+
+/* The UI hit test compares z-index values across the modal subtree. Keep the
+   stacked window above its full-screen scrim so its controls receive input. */
+.project-picker-modal .project-picker-stacked-scrim {
+	z-index: 10003;
+}
+
+.project-picker-modal .project-picker-stacked-window {
+	z-index: 10004;
+}
+
+/* Single-line labels in fixed-height rows: pin the line box to the font's own
+   height so an inherited line-height cannot stretch the row.
+   Scoped to this modal only (pairs with vertical padding on buttons in ProjectFolderPickerModal.cpp). */
+.project-picker-modal .browse-button,
+.project-picker-modal .open-button {
+	line-height: normal;
+}
+
+.project-picker-modal .path-input {
+	line-height: normal;
+}
+
+/* Shared button contract for both project-picker pages. */
+.project-picker-modal .project-picker-button {
+	border-width: 1px;
+	border-style: solid;
+	border-radius: 4px;
+	cursor: pointer;
+	font-size: 13px;
+	font-weight: 500;
+	line-height: normal;
+	text-align: center;
+	transition: background-color 0.16s ease, border-color 0.16s ease, color 0.16s ease;
+}
+
+/* Padding/height shared by every compact action button; per-site widths and
+   any tighter padding stay with the call site. */
+.project-picker-modal .project-picker-button-compact {
+	height: 33px;
+	padding: 8px 20px;
+}
+
+/* Role rules repeat .project-picker-button so their specificity (0,3,0) clears
+   the shared Button.css `.button.primary` / `.button.secondary` pair (0,2,0),
+   which the picker buttons also carry. */
+.project-picker-modal .project-picker-button.project-picker-button-primary {
+	background-color: var(--ui_color_project_picker_button);
+	border-color: var(--ui_color_project_picker_button);
+	color: var(--ui_color_text_bright);
+	font-weight: 600;
+}
+
+.project-picker-modal .project-picker-button.project-picker-button-primary:hover {
+	background-color: var(--ui_color_project_picker_button_hover);
+	border-color: var(--ui_color_project_picker_button_hover);
+}
+
+.project-picker-modal .project-picker-button.project-picker-button-secondary {
+	background-color: transparent;
+	border-color: var(--pp_color_border);
+	color: var(--ui_color_text);
+}
+
+.project-picker-modal .project-picker-button.project-picker-button-secondary:hover {
+	background-color: var(--pp_color_hover_overlay);
+	border-color: var(--pp_color_border_strong);
+	color: var(--ui_color_text);
+}
+
+/* Every Cancel across the picker's pages is the filled variant. */
+.project-picker-modal .project-picker-button.project-picker-button-filled-secondary {
+	background-color: var(--pp_color_filled_secondary);
+	border-color: var(--pp_color_filled_secondary_border);
+	color: var(--pp_color_text);
+}
+
+.project-picker-modal .project-picker-button.project-picker-button-filled-secondary:hover {
+	background-color: var(--pp_color_filled_secondary_hover);
+	border-color: var(--pp_color_filled_secondary_border_hover);
+	color: var(--ui_color_text_bright);
+}
+
+/* Create-page tab strip: underline tabs sitting on the row's divider rule. */
+.project-picker-modal .project-picker-new-tab {
+	background-color: transparent;
+	border-width: 0;
+	border-bottom-width: 2px;
+	border-style: solid;
+	border-color: transparent;
+	border-radius: 0;
+	color: var(--pp_color_text_muted);
+	cursor: pointer;
+	font-size: 14px;
+	font-weight: 600;
+	height: 36px;
+	padding: 0px 14px;
+	transition: color 0.13s ease, border-color 0.13s ease;
+}
+
+.project-picker-modal .project-picker-new-tab .button-text {
+	color: var(--pp_color_text_muted);
+	transition: color 0.13s ease;
+}
+
+/* Selected tabs keep the accent underline without a background fill. */
+.project-picker-modal .project-picker-new-tab.active {
+	background-color: transparent;
+	color: var(--pp_color_text);
+	border-bottom-color: var(--pp_color_accent);
+}
+
+.project-picker-modal .project-picker-new-tab.active .button-text {
+	color: var(--pp_color_text);
+}
+
+/* Keep this after `.active` so hovering either tab always lifts its label to
+   full white while retaining only the accent underline. */
+.project-picker-modal .project-picker-new-tab:hover {
+	background-color: transparent;
+	color: var(--ui_color_text_bright);
+	border-bottom-color: var(--pp_color_accent);
+}
+
+.project-picker-modal .project-picker-new-tab:hover .button-text {
+	color: var(--ui_color_text_bright);
+}
+
+/* Import-page segmented tabs. */
+.project-picker-modal .project-import-tab {
+	background-color: transparent;
+	border-width: 1px;
+	border-style: solid;
+	border-color: transparent;
+	border-radius: 7px;
+	color: var(--pp_color_text_muted);
+	cursor: pointer;
+	font-size: 13px;
+	font-weight: 600;
+	flex-grow: 1;
+	flex-shrink: 1;
+	height: 100%;
+	padding: 0px 12px;
+	transition: background-color 0.14s ease, color 0.14s ease;
+}
+
+.project-picker-modal .project-import-tab:hover {
+	background-color: var(--pp_color_hover_overlay_soft);
+	color: var(--pp_color_text);
+}
+
+/* Ordering contract: same specificity as `:hover` above, so this rule must stay
+   AFTER it — that is what makes the active tab keep its filled look on hover. */
+.project-picker-modal .project-import-tab.active {
+	background-color: var(--pp_color_surface_tab_active);
+	border-color: var(--pp_color_border_hover);
+	color: var(--pp_color_text);
+}
+
+/* Dashed drop target that fills its panel; the inner Browse button is a
+   separate child so the whole zone stays clickable. */
+.project-picker-modal .project-import-dropzone {
+	width: 100%;
+	height: 150px;
+	flex-direction: column;
+	gap: 14px;
+	background-color: var(--pp_color_surface_field);
+	border: 1px dashed var(--pp_color_card_outline_dashed);
+	border-radius: 8px;
+	color: var(--pp_color_text_field);
+	cursor: pointer;
+	text-align: center;
+	font-size: 14px;
+	font-weight: 600;
+	transition: background-color 0.16s ease, border-color 0.16s ease, color 0.16s ease;
+}
+
+/* Only the folder zone is followed by the reference/copy radio rows, so it
+   alone needs the gap to them. */
+.project-picker-modal .project-import-dropzone-folder {
+	margin-bottom: 12px;
+}
+
+.project-picker-modal .project-import-dropzone:hover {
+	background-color: var(--pp_color_surface_preview);
+	border-color: var(--pp_color_accent_bright);
+	color: var(--pp_color_text);
+}
+
+.project-picker-modal .project-import-option {
+	display: flex;
+	flex-direction: row;
+	align-items: center;
+	justify-content: flex-start;
+	gap: 12px;
+	width: 100%;
+	height: 50px;
+	padding: 0px 14px;
+	border-width: 1px;
+	border-radius: 5px;
+	font-size: 13px;
+	cursor: pointer;
+	background-color: var(--pp_color_surface_import);
+	border-color: var(--pp_color_border);
+	color: var(--pp_color_text);
+	transition: background-color 0.16s ease, border-color 0.16s ease;
+}
+
+.project-picker-modal .project-import-option:hover {
+	background-color: var(--pp_color_surface_raised);
+	border-color: var(--pp_color_border_hover);
+}
+
+/* Ordering contract: same specificity as `:hover` above, so this rule must stay
+   AFTER it — a disabled option must not light up under the pointer. */
+.project-picker-modal .project-import-option.disabled {
+	background-color: var(--pp_color_surface_import);
+	border-color: var(--pp_color_border_disabled);
+	color: var(--pp_color_text_disabled);
+	cursor: auto;
+	pointer-events: none;
+}
+
+.project-picker-modal .project-import-option-label {
+	color: var(--pp_color_text);
+	font-size: 13px;
+	pointer-events: none;
+}
+
+.project-picker-modal .project-import-option.disabled .project-import-option-label {
+	color: var(--pp_color_text_disabled);
+}
+
+.project-picker-modal .project-import-option-indicator {
+	width: 20px;
+	height: 20px;
+	flex-shrink: 0;
+	border-width: 1px;
+	border-radius: 10px;
+	background-color: var(--pp_color_radio_idle);
+	border-color: var(--pp_color_radio_idle_border);
+}
+
+/* Selected radio: the shared editor check icon, as .dropdown-item.selected uses. */
+.project-picker-modal .project-import-option.selected .project-import-option-indicator {
+	background-color: var(--ui_color_picker_accent);
+	border-color: var(--ui_color_picker_accent);
+	background-image: url("editor:Icons/checked.png");
+	background-image-tint: rgba(255, 255, 255, 1.0);
+	background-repeat: no-repeat;
+	background-position: center;
+	background-size: 12px 12px;
+}
+
+/* Header title row: large display size; labels sit in flex-centered side bands (see ProjectFolderPickerModal.cpp). */
+.project-picker-modal #engine-label,
+.project-picker-modal #version-label {
+	color: #ffffff;
+	font-size: 25px;
+	font-weight: 300;
+	text-align: center;
+	white-space: nowrap;
+	line-height: normal;
+}
+
+/* Cards: the Button is an unstyled, STATIONARY hover/hit target; the
+   .project-card-lift wrapper carries every visual and is what :hover moves.
+   Lifting the hover target itself would shift the hit area under the pointer
+   and oscillate when the cursor rests on a card edge. Shadow alphas are tuned
+   for the dark surface (0.15 measures ~3 luminance levels - invisible). */
+.project-picker-modal .project-card,
+.project-picker-modal .project-template-card,
+.project-picker-modal .project-card:hover,
+.project-picker-modal .project-template-card:hover {
+	background-color: transparent;
+	border: 0 solid transparent;
+}
+
+/* Card frame. No border-radius here: a radius clips children to the rounded
+   rect, which would shave the lifted wrapper at the top. */
+.project-picker-modal .project-card,
+.project-picker-modal .project-template-card {
+	display: flex;
+	flex-direction: column;
+	width: 280px;
+	min-width: 280px;
+	max-width: 280px;
+	height: 190px;
+	flex-shrink: 0;
+	position: relative;
+	padding: 0px;
+}
+
+.project-picker-modal .project-card-preview,
+.project-picker-modal .project-card-preview-image,
+.project-picker-modal .project-card-empty-preview {
+	border-top-left-radius: 8px;
+	border-top-right-radius: 8px;
+}
+
+/* No overflow:hidden anywhere inside the lift: backgrounds already paint within
+   their own (rounded) rects, and a clip inside the hover-animated subtree lags
+   the lift offset on drain frames, shaving the card top.
+   131 declared = a 128px visible art window: the 2px card outline overlays the
+   top edge and the body's 1px divider takes the bottom. */
+.project-picker-modal .project-card-preview {
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	align-self: stretch;
+	width: 100%;
+	height: 131px;
+	flex-shrink: 0;
+}
+
+.project-picker-modal .project-card-preview-image {
+	width: 100%;
+	height: 100%;
+	align-self: stretch;
+	pointer-events: none;
+	background-repeat: no-repeat;
+	background-position: center;
+}
+
+.project-picker-modal .project-card-lift {
+	display: flex;
+	flex-direction: column;
+	position: relative;
+	top: 0;
+	width: 100%;
+	height: 100%;
+	border-radius: 8px;
+	background-color: var(--pp_color_surface_card);
+	box-shadow: 0 4px 10px rgba(0, 0, 0, 0.45);
+	transition: top 0.16s ease-out, background-color 0.16s ease-out, box-shadow 0.16s ease-out;
+}
+
+.project-picker-modal .project-card-animated:hover .project-card-lift {
+	top: -3px;
+	box-shadow: 0 7px 16px rgba(0, 0, 0, 0.55);
+}
+
+.project-picker-modal .project-card:hover .project-card-lift {
+	background-color: var(--pp_color_card_hover_tint);
+}
+
+/* New/Open cards: preview panel and glyph brighten with the card. Hover
+   styling lives here (not native handlers) so the .project-card transitions
+   drive the lift/color animation like the template cards. */
+.project-picker-modal .project-card-new:hover .project-card-empty-preview,
+.project-picker-modal .project-card-open:hover .project-card-empty-preview {
+	background-color: var(--pp_color_card_hover_tint);
+}
+
+.project-picker-modal .project-card-new .project-card-action-icon {
+	opacity: 0.175;
+}
+
+.project-picker-modal .project-card-open .project-card-action-icon {
+	opacity: 0.35;
+}
+
+.project-picker-modal .project-card-new:hover .project-card-action-icon,
+.project-picker-modal .project-card-open:hover .project-card-action-icon {
+	opacity: 1;
+}
+
+/* Overlay that draws the card's outline above the body's divider, so the
+   rounded border is never cut by a child's own background. */
+.project-picker-modal .project-card-outline {
+	position: absolute;
+	left: 0px;
+	top: 0px;
+	width: 100%;
+	height: 100%;
+	padding: 0px;
+	pointer-events: none;
+	z-index: 100;
+	background-color: transparent;
+	border: 2px solid var(--pp_color_card_outline);
+	border-radius: 8px;
+	transition: border-color 0.16s ease-out;
+}
+
+.project-picker-modal .project-card-new .project-card-outline {
+	border: 2px dashed var(--pp_color_card_outline_dashed);
+}
+
+.project-picker-modal .project-card:hover .project-card-outline {
+	border-color: var(--pp_color_accent_bright);
+}
+
+.project-picker-modal .project-card-new:hover .project-card-outline {
+	border-style: solid;
+}
+
+.project-picker-modal .project-card-body {
+	display: flex;
+	flex-direction: column;
+	align-self: stretch;
+	z-index: 1;
+	flex-grow: 1;
+	flex-shrink: 1;
+	min-height: 0px;
+	border-top: 1px solid var(--pp_color_card_outline);
+	padding: 9px 14px 10px;
+}
+
+.project-picker-modal .project-card-title {
+	color: var(--pp_color_text);
+	font-size: 14px;
+	font-weight: 600;
+	overflow: hidden;
+	white-space: nowrap;
+}
+
+.project-picker-modal .project-card-meta {
+	color: var(--pp_color_text_muted);
+	font-size: 12px;
+	font-weight: 400;
+	margin-top: 3px;
+	overflow: hidden;
+	white-space: nowrap;
+}
+
+.project-picker-modal .project-card-action-icon {
+	transition: opacity 0.16s ease-out;
+}
+
+/* Hover: accent outline + lift. Empty New/Open previews also tint; recent
+   project thumbs stay as-is (the image covers the lift). Selection is the
+   accent outline. All state styling is CSS-driven so every card animates
+   through the same 0.16s transitions. */
+.project-picker-modal .project-template-card:hover .project-card-outline {
+	border-color: var(--pp_color_card_outline_hover);
+}
+
+.project-picker-modal .project-template-card.selected .project-card-outline {
+	border-color: var(--pp_color_accent);
+}
+
+.project-picker-modal .project-template-card.selected:hover .project-card-outline {
+	border-color: var(--pp_color_accent_bright);
+}
+
+.project-picker-modal .project-card-empty-preview {
+	background-color: var(--pp_color_surface_preview);
+	transition: background-color 0.16s ease-out;
+}
+
+.project-picker-modal .project-picker-small-text {
+	font-size: var(--ui_font_size_small);
+}
+
+/* ---------------------------------------------------------------------------
+   Library window chrome.
+
+   These id rules are scoped under .project-picker-modal so they out-specify the
+   shared Modal.css class rules (.modal-window, .modal-content, ...) the same
+   elements carry. Only the properties the picker actually owns appear here:
+   anything omitted (the window's border colour, the footer's gap, the window's
+   max-width) is deliberately inherited from Modal.css.
+
+   Sizes that feed a value the stylesheet cannot express - the window's
+   centering margin (-width/2), the full-bleed rows' negative margins, and the
+   card-grid widths derived from the card metrics - stay in
+   ProjectFolderPickerModal.cpp next to the arithmetic that consumes them.
+   --------------------------------------------------------------------------- */
+
+.project-picker-modal #modal-backdrop {
+	position: absolute;
+	left: 0px;
+	top: 0px;
+	width: 100%;
+	height: 100%;
+	background-color: #00000099;
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	pointer-events: auto;
+}
+
+.project-picker-modal #modal-window {
+	display: flex;
+	flex-direction: column;
+	position: absolute;
+	left: 50%;
+	top: 40%;
+	background-color: var(--pp_color_surface_content);
+	border-width: 1px;
+	border-radius: 8px;
+	/* Children fill the border box, so the header and footer bands would paint
+	   over the window outline; one pixel of padding keeps it visible. */
+	padding: 1px;
+	z-index: 10001;
+	overflow: hidden;
+	box-shadow: 0 8px 24px #00000099;
+}
+
+/* The hero band doubles as the window's title bar. Top radii match the window
+   so the band can't square off its rounded corners. */
+.project-picker-modal #modal-header {
+	display: block;
+	padding: 16px 24px;
+	border-width: 0px 0px 1px 0px;
+	border-color: transparent transparent var(--pp_color_divider) transparent;
+	border-radius: 8px 8px 0px 0px;
+	width: 100%;
+	/* The card grid's natural height overflows the fixed window height, and a
+	   shrinkable band would give up its own pixels to that overflow. The scroll
+	   viewport is the only element allowed to absorb it. */
+	height: 178px;
+	min-height: 178px;
+	flex-shrink: 0;
+	position: relative;
+}
+
+.project-picker-modal #header-engine-region,
+.project-picker-modal #header-version-region {
+	position: absolute;
+	top: 0px;
+	bottom: 0px;
+	display: none;
+	flex-direction: row;
+	align-items: center;
+	justify-content: center;
+	z-index: 2;
+}
+
+.project-picker-modal #header-engine-region {
+	left: 0px;
+}
+
+.project-picker-modal #header-version-region {
+	right: 0px;
+}
+
+/* Absolute centre: left/top 50% plus half-size negative margins. The half must
+   stay exactly half the size - kProjectPickerCubeLogoHalfPx in
+   ProjectFolderPickerModal.cpp derives the header side bands from the same
+   pair. */
+.project-picker-modal #cube-container {
+	width: 128px;
+	height: 128px;
+	position: absolute;
+	left: 50%;
+	margin-left: -64px;
+	top: 50%;
+	margin-top: -64px;
+	z-index: 1;
+}
+
+.project-picker-modal #cube-icon {
+	width: 128px;
+	height: 128px;
+	background-size: contain;
+	background-repeat: no-repeat;
+	background-position: center;
+	position: absolute;
+	left: 0px;
+	top: 0px;
+}
+
+.project-picker-modal #modal-content {
+	display: flex;
+	flex-direction: column;
+	width: 100%;
+	min-height: 0px;
+	flex-grow: 1;
+	flex-shrink: 1;
+	flex-basis: auto;
+	position: relative;
+	background-color: var(--pp_color_surface_content);
+	overflow: hidden;
+}
+
+/* Full-bleed band: the rule runs edge to edge (negative margins applied in
+   code cancel the content padding) while the row's own height centres the
+   title between the hero band's rule above and this row's rule below. */
+.project-picker-modal #projects-header {
+	display: flex;
+	flex-direction: row;
+	align-items: center;
+	align-self: stretch;
+	height: 52px;
+	padding-bottom: 0px;
+	border-width: 0px 0px 1px 0px;
+	border-color: transparent transparent var(--pp_color_divider) transparent;
+	flex-shrink: 0;
+	margin-bottom: 0px;
+}
+
+.project-picker-modal #projects-title-row {
+	display: flex;
+	flex-direction: row;
+	flex-wrap: nowrap;
+	align-items: center;
+	height: 29px;
+	flex-shrink: 0;
+	white-space: nowrap;
+}
+
+.project-picker-modal #modal-title {
+	font-size: 19px;
+	font-weight: 600;
+	color: var(--pp_color_text);
+	text-align: left;
+	flex-shrink: 0;
+}
+
+.project-picker-modal #projects-header-spacer {
+	flex-grow: 1;
+	flex-shrink: 1;
+}
+
+/* Shared .panel-search-bar is absolutely pinned in side panes (bottom: 8px).
+   This bar is inline in the header flex row — same unset as .log-toolbar. */
+.project-picker-modal #project-search {
+	display: flex;
+	flex-direction: row;
+	position: relative;
+	top: unset;
+	right: unset;
+	bottom: unset;
+	left: unset;
+	align-self: center;
+	/* Match the Assets panel search bar width. */
+	width: 320px;
+	height: 29px;
+	flex-shrink: 0;
+	background-color: var(--pp_color_surface_field);
+	border-width: 1px;
+	border-color: var(--pp_color_divider);
+	border-radius: 4px;
+}
+
+.project-picker-modal #project-picker-search-field {
+	width: 100%;
+	height: 100%;
+	min-width: 0px;
+	flex-grow: 1;
+	flex-shrink: 1;
+	position: relative;
+	/* Above the modal window's 10001 — the hit test compares z-index flat. */
+	z-index: 10002;
+	pointer-events: auto;
+	color: var(--pp_color_text_field);
+}
+
+.project-picker-modal .project-picker-search-placeholder {
+	position: absolute;
+	/* Offsets are measured from the field's content box, i.e. inside
+	   #project-search's 1px border, so that the hint sits exactly on the text
+	   the field itself will draw. */
+	left: 23px;
+	top: 0px;
+	width: 145px;
+	height: 29px;
+	display: flex;
+	align-items: center;
+	color: var(--pp_color_text_placeholder);
+	pointer-events: none;
+	z-index: 1;
+}
+
+.project-picker-modal #recent-projects-scroll,
+.project-picker-modal #new-project-grid-scroll {
+	flex-grow: 1;
+	flex-shrink: 1;
+	flex-basis: auto;
+	min-height: 0px;
+	overflow: hidden;
+}
+
+/* The ScrollView clips this container; equal headroom top and bottom so a
+   first-row hover lift (top: -3px) and the last row's drop shadow both stay
+   inside the clip and the grid sits evenly in the viewport.
+   Left-aligned, not centered: the viewport widens by the scrollbar's thickness
+   when the bar hides, and a centered grid would slide (and fall out of line
+   with the header) as that happens. */
+.project-picker-modal #recent-projects-container {
+	display: flex;
+	flex-direction: row;
+	flex-wrap: wrap;
+	justify-content: flex-start;
+	align-self: flex-start;
+	padding: 16px 0px;
+}
+
+/* Always hidden: Browse goes straight to loading and each recent project card
+   opens itself, so the picker never shows the path/Open row. */
+.project-picker-modal #bottom-panel {
+	display: none;
+	flex-direction: column;
+	align-items: center;
+	justify-content: flex-start;
+	flex-shrink: 0;
+	gap: 16px;
+	margin-top: 16px;
+	margin-bottom: 0px;
+}
+
+.project-picker-modal #path-container {
+	display: flex;
+	flex-direction: row;
+	gap: 8px;
+	align-items: center;
+	justify-content: flex-end;
+	width: 100%;
+	padding-right: 70px;
+}
+
+.project-picker-modal #browse-button {
+	flex-shrink: 0;
+}
+
+.project-picker-modal #path-input {
+	padding: 8px 12px;
+	background-color: #1e1e1e;
+	border-width: 1px;
+	border-color: #555555;
+	border-radius: 4px;
+	color: #ffffff;
+	font-size: 18px;
+	font-weight: 600;
+	width: 450px;
+	min-width: 450px;
+	max-width: 450px;
+	height: 33px;
+	overflow: hidden;
+	display: flex;
+	align-items: center;
+	text-align: right;
+	direction: rtl;
+}
+
+.project-picker-modal #project-logo {
+	width: 33px;
+	height: 33px;
+	background-size: contain;
+	background-repeat: no-repeat;
+	background-position: center;
+	flex-shrink: 0;
+	display: none;
+}
+
+.project-picker-modal #button-container {
+	display: flex;
+	flex-direction: row;
+	gap: 8px;
+	justify-content: flex-end;
+	align-items: center;
+	width: 100%;
+	padding-right: 70px;
+}
+
+.project-picker-modal #open-button {
+	padding: 8px 20px;
+	min-width: 130px;
+	height: 33px;
+}
+
+.project-picker-modal #loading-label {
+	color: #ffffff;
+	background-color: var(--pp_color_surface_content);
+	font-size: 24px;
+	font-weight: 300;
+	display: none;
+	position: absolute;
+	left: 0px;
+	top: 0px;
+	width: 100%;
+	height: 100%;
+	align-items: center;
+	justify-content: center;
+	text-align: center;
+	flex-direction: column;
+	z-index: 1000;
+}
+
+.project-picker-modal #modal-footer {
+	display: flex;
+	flex-direction: row;
+	align-items: center;
+	justify-content: center;
+	padding: 16px 24px;
+	border-width: 1px 0px 0px 0px;
+	border-color: var(--pp_color_divider) transparent transparent transparent;
+	border-radius: 0px 0px 8px 8px;
+	flex-shrink: 0;
+	width: 100%;
+	height: 75px;
+	position: relative;
+}
+
+/* ---------------------------------------------------------------------------
+   Stacked create/import window.
+   --------------------------------------------------------------------------- */
+
+.project-picker-modal #project-picker-stacked-scrim {
+	display: none;
+	position: absolute;
+	left: 0px;
+	top: 0px;
+	width: 100%;
+	height: 100%;
+	background-color: #06070999;
+	pointer-events: auto;
+}
+
+/* Anchored to the same 40% vertical centre as the library window so the stacked
+   modal floats over it rather than screen-centred. */
+.project-picker-modal #project-picker-stacked-window {
+	display: flex;
+	flex-direction: column;
+	position: absolute;
+	left: 50%;
+	top: 40%;
+	background-color: var(--pp_color_surface_content);
+	border-width: 1px;
+	border-radius: 8px;
+	padding: 1px;
+	overflow: hidden;
+	box-shadow: 0 8px 24px #00000099;
+}
+
+/* The name/location strip below carries the footer band's background down to
+   the footer itself, so no bottom padding may separate them. The 20px sides are
+   cancelled by .project-picker-full-bleed's negative margins - change both. */
+.project-picker-modal #project-picker-stacked-content {
+	display: flex;
+	flex-direction: column;
+	flex-grow: 1;
+	flex-shrink: 1;
+	min-height: 0px;
+	padding-left: 20px;
+	padding-right: 20px;
+	padding-bottom: 0px;
+}
+
+.project-picker-modal .project-picker-full-bleed {
+	margin-left: -20px;
+	margin-right: -20px;
+	padding-left: 20px;
+	padding-right: 20px;
+}
+
+.project-picker-modal #project-picker-stacked-footer {
+	display: flex;
+	flex-direction: row;
+	align-items: center;
+	justify-content: center;
+	padding: 14px 24px;
+	border-width: 1px 0px 0px 0px;
+	border-color: var(--pp_color_divider) transparent transparent transparent;
+	border-radius: 0px 0px 8px 8px;
+	flex-shrink: 0;
+}
+
+/* Press-drag moves the stacked/library window; the handle rows carry it. */
+.project-picker-modal .project-picker-drag-handle {
+	cursor: move;
+}
+
+/* ---------------------------------------------------------------------------
+   Create page.
+   --------------------------------------------------------------------------- */
+
+.project-picker-modal #new-project-view,
+.project-picker-modal #import-project-view {
+	display: none;
+	flex-direction: column;
+	flex-grow: 1;
+	flex-shrink: 1;
+	min-height: 0px;
+	width: 100%;
+	padding-top: 18px;
+}
+
+.project-picker-modal #new-project-view {
+	padding-bottom: 0px;
+}
+
+/* Only the create view carries the bottom band down to the footer, so the
+   import view keeps its own breathing room above it. */
+.project-picker-modal #import-project-view {
+	padding-bottom: 24px;
+}
+
+/* 36px content row + 14px breathing room above the rule so the divider doesn't
+   hug the back button. The active tab's 2px accent underline overlaps the rule. */
+.project-picker-modal #new-project-top {
+	display: flex;
+	flex-direction: row;
+	align-items: center;
+	position: relative;
+	gap: 22px;
+	height: 50px;
+	padding-bottom: 14px;
+	flex-shrink: 0;
+	border-width: 0px 0px 1px 0px;
+	border-color: transparent transparent var(--pp_color_divider) transparent;
+	margin-bottom: 0px;
+}
+
+.project-picker-modal .project-picker-back-button {
+	width: 36px;
+	height: 36px;
+	min-width: 36px;
+	padding: 0px 0px 3px 0px;
+	font-size: 28px;
+	font-weight: 400;
+}
+
+.project-picker-modal .project-picker-page-title {
+	font-size: 19px;
+	font-weight: 600;
+	color: var(--pp_color_text);
+}
+
+/* Bottom-anchored so the active tab's accent underline sits on the row's
+   divider rule. The negative margin must stay half the width. */
+.project-picker-modal #new-project-tabs {
+	position: absolute;
+	left: 50%;
+	bottom: 0px;
+	margin-left: -110px;
+	width: 220px;
+	height: 36px;
+	display: flex;
+	flex-direction: row;
+	align-items: center;
+	justify-content: center;
+	gap: 4px;
+}
+
+/* Carries lift/shadow headroom so the hover animation stays inside the scroll
+   clip, and fills the viewport so the community status column can centre when
+   the grid is short. */
+.project-picker-modal .project-picker-grid-content {
+	display: flex;
+	flex-direction: column;
+	width: 100%;
+	min-height: 100%;
+	padding-top: 16px;
+	padding-bottom: 16px;
+}
+
+/* Fixed-width block centred in the modal so left/right margins stay even; cards
+   flow left-to-right, top-aligned. Grows to fill the tab area so the
+   name/location form below sits at the bottom in both tabs. */
+.project-picker-modal #project-templates {
+	display: flex;
+	flex-direction: row;
+	flex-wrap: wrap;
+	justify-content: flex-start;
+	align-items: flex-start;
+	align-self: center;
+	flex-grow: 1;
+	flex-shrink: 1;
+	min-height: 0px;
+}
+
+.project-picker-modal .project-templates-empty {
+	color: var(--pp_color_text_muted);
+	font-size: 12px;
+	align-self: center;
+}
+
+.project-picker-modal #project-community {
+	display: none;
+	flex-direction: column;
+	align-items: stretch;
+	justify-content: flex-start;
+	width: 100%;
+	min-height: 190px;
+	flex-grow: 1;
+	flex-shrink: 1;
+}
+
+/* Shown for the fetching / failed / empty states, centred in the tab area (it
+   grows; the card grid instead flows top-left). */
+.project-picker-modal .project-community-status {
+	display: flex;
+	flex-direction: column;
+	align-items: center;
+	justify-content: center;
+	flex-grow: 1;
+}
+
+.project-picker-modal .project-community-icon {
+	width: 40px;
+	height: 40px;
+	opacity: 0.45;
+	background-size: contain;
+	background-repeat: no-repeat;
+	background-position: center;
+	margin-bottom: 12px;
+}
+
+.project-picker-modal .project-community-title {
+	color: var(--pp_color_text);
+	font-size: 15px;
+	font-weight: 600;
+	margin-bottom: 5px;
+}
+
+.project-picker-modal .project-community-message {
+	color: var(--pp_color_text_muted);
+	font-size: 12px;
+	text-align: center;
+}
+
+.project-picker-modal #project-community-retry {
+	display: none;
+	margin-top: 14px;
+	padding: 6px 18px;
+}
+
+/* Shown above the grid when the catalog is a cached copy after a failed
+   refresh, with an explicit way to retry the live source. */
+.project-picker-modal #project-community-offline {
+	display: none;
+	flex-direction: row;
+	align-items: center;
+	gap: 12px;
+	background-color: var(--pp_color_offline_surface);
+	border-width: 1px;
+	border-color: var(--pp_color_offline_border);
+	border-radius: 4px;
+	padding: 6px 8px 6px 12px;
+	margin-bottom: 12px;
+}
+
+.project-picker-modal .project-community-offline-label {
+	color: var(--pp_color_offline_text);
+	font-size: 12px;
+	flex-shrink: 1;
+}
+
+.project-picker-modal #project-community-refresh {
+	padding: 4px 14px;
+}
+
+.project-picker-modal #project-community-grid {
+	display: none;
+	flex-direction: row;
+	flex-wrap: wrap;
+	justify-content: flex-start;
+	align-items: flex-start;
+	align-self: center;
+}
+
+/* Head of the bottom band, full-bleed to the window edges and sharing the
+   footer's background so name/location and the action buttons read as one
+   block. No top margin - the rule is the scroll viewport's bottom edge, so a
+   partially scrolled card row is cut by that line. */
+.project-picker-modal #new-project-form {
+	display: flex;
+	flex-direction: row;
+	gap: 12px;
+	flex-shrink: 0;
+	background-color: var(--pp_color_surface_content);
+	border-width: 1px 0px 0px 0px;
+	border-color: var(--pp_color_divider) transparent transparent transparent;
+	margin-top: 0px;
+	padding-top: 16px;
+	padding-bottom: 16px;
+}
+
+.project-picker-modal .project-picker-field-row {
+	display: flex;
+	flex-direction: column;
+	gap: 7px;
+	flex-grow: 1;
+	flex-basis: 0px;
+	min-width: 0px;
+}
+
+.project-picker-modal .project-picker-field-label {
+	font-size: 11.5px;
+	font-weight: 500;
+	color: var(--pp_color_text_label);
+}
+
+.project-picker-modal .project-picker-field-controls {
+	display: flex;
+	flex-direction: row;
+	gap: 8px;
+	align-items: center;
+	width: 100%;
+}
+
+.project-picker-modal .project-picker-text-field {
+	height: 36px;
+	background-color: var(--pp_color_surface_field);
+	border-width: 1px;
+	border-color: var(--pp_color_divider);
+	border-radius: 8px;
+	padding: 8px 12px;
+	font-size: 13px;
+	color: var(--pp_color_text);
+}
+
+.project-picker-modal .project-picker-text-field-fill {
+	width: 100%;
+}
+
+/* A long path is the field's problem, not the row's: the field absorbs the
+   spare width so the Browse button keeps its label. */
+.project-picker-modal .project-picker-text-field-grow {
+	flex-grow: 1;
+	flex-shrink: 1;
+	min-width: 0px;
+}
+
+.project-picker-modal #new-project-location-field {
+	font-size: 12.5px;
+}
+
+.project-picker-modal #import-git-url-field {
+	color: var(--pp_color_text_field);
+}
+
+.project-picker-modal #import-destination-field {
+	font-size: 12.5px;
+	color: var(--pp_color_text_field);
+}
+
+.project-picker-modal .project-picker-error {
+	display: none;
+	color: var(--pp_color_text_error);
+	font-size: 12px;
+	margin-top: 10px;
+}
+
+.project-picker-modal #import-error {
+	align-self: center;
+}
+
+.project-picker-modal #new-project-actions {
+	display: flex;
+	flex-direction: row;
+	justify-content: center;
+	align-items: center;
+	gap: 12px;
+	width: 100%;
+	flex-shrink: 0;
+	margin-top: 0px;
+}
+
+.project-picker-modal #import-project-actions {
+	display: none;
+	flex-direction: row;
+	justify-content: center;
+	align-items: center;
+	gap: 28px;
+	width: 100%;
+}
+
+/* ---------------------------------------------------------------------------
+   Import page.
+   --------------------------------------------------------------------------- */
+
+.project-picker-modal .project-import-header {
+	display: flex;
+	flex-direction: row;
+	align-items: center;
+	position: relative;
+	gap: 12px;
+	height: 58px;
+	flex-shrink: 0;
+	margin-bottom: 12px;
+}
+
+.project-picker-modal .project-import-heading {
+	display: flex;
+	flex-direction: row;
+	align-items: center;
+	gap: 14px;
+}
+
+/* Centred over the whole header row rather than after the title, so it stays
+   optically centred in the window; never a pointer target. */
+.project-picker-modal .project-import-subtitle {
+	color: var(--pp_color_text_muted);
+	font-size: 13.5px;
+	position: absolute;
+	left: 0px;
+	top: 0px;
+	width: 100%;
+	height: 58px;
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	text-align: center;
+	pointer-events: none;
+}
+
+.project-picker-modal .project-import-tabs {
+	display: flex;
+	flex-direction: row;
+	width: 720px;
+	height: 42px;
+	align-self: center;
+	padding: 3px;
+	gap: 3px;
+	background-color: var(--pp_color_surface_field);
+	border-width: 1px;
+	border-color: var(--pp_color_divider);
+	border-radius: 8px;
+	flex-shrink: 0;
+	margin-bottom: 0px;
+}
+
+.project-picker-modal .project-import-panel {
+	display: none;
+	flex-direction: column;
+	width: 720px;
+	align-self: center;
+	gap: 14px;
+	margin-top: 17px;
+}
+
+.project-picker-modal .project-import-panel-folder {
+	gap: 8px;
+}
+
+.project-picker-modal .project-import-panel-git {
+	width: 640px;
+	margin-top: 12px;
+}
+
+.project-picker-modal .project-import-git-hint {
+	color: var(--pp_color_text_muted);
+	font-size: 12px;
+}
+
+/* The archive/git flows create the project inside a chosen directory; the
+   folder flow picks the project directly. */
+.project-picker-modal #import-destination-row {
+	display: none;
+	flex-direction: column;
+	gap: 6px;
+	width: 640px;
+	align-self: center;
+	margin-top: 14px;
+}
+
+.project-picker-modal .project-picker-field-label-nudged {
+	position: relative;
+	top: 1px;
+}
+
+/* ---------------------------------------------------------------------------
+   Card glyphs.
+   --------------------------------------------------------------------------- */
+
+/* Matches the Add Layout button: a 24px hit area with a dim 16px plus glyph.
+   Optical centering: the visible art window loses 2px to the outline at the top
+   but only 1px to the divider at the bottom. */
+.project-picker-modal .project-card-plus-icon {
+	width: 24px;
+	height: 24px;
+	min-width: 24px;
+	min-height: 24px;
+	max-width: 24px;
+	max-height: 24px;
+	padding: 0px;
+	background-size: 16px 16px;
+	background-repeat: no-repeat;
+	background-position: center;
+	position: relative;
+	top: 1px;
+}
+
+.project-picker-modal .project-card-folder-icon {
+	width: 38px;
+	height: 38px;
+	background-size: contain;
+	background-repeat: no-repeat;
+	background-position: center;
+	position: relative;
+	top: 1px;
+}
+
+/* Per-site widths for the compact action buttons. */
+.project-picker-modal .project-picker-button-w130 {
+	width: 130px;
+	min-width: 130px;
+}
+
+.project-picker-modal .project-picker-button-w140 {
+	width: 140px;
+	min-width: 140px;
+}
+
+.project-picker-modal .project-picker-button-center {
+	align-self: center;
+}
+
+.project-picker-modal .project-picker-button-noshrink {
+	flex-shrink: 0;
+}

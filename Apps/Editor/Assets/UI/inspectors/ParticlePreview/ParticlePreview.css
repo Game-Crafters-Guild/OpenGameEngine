@@ -1,0 +1,15 @@
+/* The particle emitter's preview controls (Apps/Editor/Source/Inspectors/Particles/Controls/
+   ParticlePreviewControls.cpp). AddParticlePreview requests this sheet on the controls' row. */
+
+/* The preview's play controls sit in the value column, a gap below the section header. */
+.particle-preview-controls {
+    margin-top: 8px;
+}
+
+/* The controls side by side, wrapping onto a second line when the value column is too narrow. */
+.particle-preview-buttons {
+    flex-direction: row;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 8px;
+}

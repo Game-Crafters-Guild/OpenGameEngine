@@ -1,0 +1,156 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Project material shader warm-up</title>
+<style>
+  :root{
+    --bg:#0e1116; --panel:#161b22; --panel-light:#1c232c; --border:#2a323d;
+    --text:#d7dde5; --muted:#8b97a6; --accent:#5db0ff;
+    --danger:#ff6b6b; --bad:#ff6b6b; --ok:#5ad19b; --good:#5ad19b; --warn:#e8c468;
+    --mono:"SF Mono",ui-monospace,Menlo,Consolas,monospace;
+  }
+  *{box-sizing:border-box}
+  body{background:var(--bg);color:var(--text);font:15px/1.6 -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif;
+       margin:0;padding:0 0 80px}
+  .wrap{max-width:980px;margin:0 auto;padding:32px 24px}
+  h1{font-size:30px;margin:0 0 4px;letter-spacing:-.4px}
+  h2{font-size:22px;margin:42px 0 14px;padding-top:22px;border-top:1px solid var(--border)}
+  p,li{color:var(--text)}
+  .lede{color:var(--muted);font-size:13px;text-transform:uppercase;letter-spacing:.12em;margin:0 0 26px}
+  code{font-family:var(--mono);font-size:.88em;background:#11161d;border:1px solid var(--border);
+       border-radius:4px;padding:1px 5px}
+  .panel{border:1px solid var(--border);border-left-width:4px;border-radius:8px;background:var(--panel);
+         padding:14px 18px;margin:16px 0}
+  .panel.warn{border-left-color:var(--warn)}
+  .panel h4{margin:0 0 6px;font-size:14px;text-transform:uppercase;letter-spacing:.06em;color:var(--warn)}
+  ul{padding-left:22px} li{margin:4px 0}
+  footer{max-width:980px;margin:40px auto 0;padding:18px 24px 0;border-top:1px solid var(--border);color:var(--muted);font-size:12.5px}
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <h1>Project material shader warm-up</h1>
+  <p class="lede">Concept guide · material shaders / editor</p>
+
+  <p>A material's shaders compile the first time something draws with them, and that compile is a
+  visible hitch. After a project opens, the editor compiles the shaders of the project's materials in
+  the background, a little at a time, so that opening a scene or dropping a model into it finds them
+  ready. It is always on; there is nothing to configure.</p>
+
+  <h2>When it runs</h2>
+
+  <p>A couple of seconds after a project opens, the editor lists the project's materials and then
+  compiles them one material at a time on the background worker lane. It yields to everything else:
+  it waits while shaders a scene actually needs are compiling or other work is queued, and after
+  each material it pauses for nineteen times as long as that material took (at least 100 ms), so it
+  uses about a twentieth of one worker. It is background work and never shows the scene view's
+  compiling-shaders indicator, which counts only compiles something on screen is waiting for. The
+  project is listed once, after it has finished scanning its folder; a
+  material created or edited while the editor is open is warmed when the change arrives. An editor
+  sitting idle does no listing at all.</p>
+
+  <p>Opening a different project stops the warm-up of the previous one and starts over for the new
+  project. Nothing is warmed while the editor sits on its startup workspace before a project is
+  chosen.</p>
+
+  <h2>What is warmed</h2>
+
+  <ul>
+    <li>Every <code>.material</code> in the project.</li>
+    <li>The materials embedded in models the project has loaded before on this machine (see below).</li>
+  </ul>
+
+  <p>For each material the editor compiles the variants a draw asks for: the material's own keywords
+  and lighting model on static, normal-mapped and skinned meshes in the color pass, the glass
+  (transmission) pass for transmissive materials, the editor's material and model previews, and the
+  depth and shadow variants the material draws with. Opaque materials without a vertex modifier draw
+  depth and shadows with one shared pipeline, so they need none of their own; alpha-tested (Mask) materials, materials with a vertex
+  modifier and glass do. The dithered variants a mesh draws while it crossfades between levels of
+  detail are warmed in both. Warm-up only compiles shaders; it does not create runtime materials or
+  load textures.</p>
+
+  <div class="panel warn">
+    <h4>What can still compile on first use</h4>
+    <ul>
+      <li>Materials in models that have never been loaded on this machine.</li>
+      <li>Variants for meshes with extra vertex streams (vertex colors, a second UV set, eight bone
+      influences), asset previews with the preview's environment lighting turned on, and materials
+      created at runtime.</li>
+      <li>Variants a view adds for itself: ambient occlusion, screen-space reflections, global
+      illumination probes, screen-space shadows and ray-traced shadows from a volume or view setting,
+      and the motion-vector variants of materials with a vertex modifier.</li>
+      <li>Any variant after the active render pipeline changes its world-pass keywords.</li>
+    </ul>
+  </div>
+
+  <h2>Models</h2>
+
+  <p>The editor never imports a model just to find its materials. Each time a model loads, it records
+  its imported materials in the project's derived cache, <code>.Cache/ModelMaterials/</code>, and
+  rewrites that record only when the materials changed. The warm-up reads those records. Like the rest
+  of <code>.Cache</code> the folder is safe to delete; the records come back as models load. Nothing is
+  written to the project's <code>AssetDatabase.assetdb</code>.</p>
+
+  <h2>Players</h2>
+
+  <p>A packaged game's content is read-only. Loading one of its models records nothing, so its
+  install folder keeps exactly what was shipped, and the warm-up skips its materials. A
+  development Player running from a project folder warms that project the same way the editor does.</p>
+
+  <h2>Compiled shaders on disk</h2>
+
+  <p>Compiled shaders are kept as shader packages (<code>.shaderpkg</code>): the compiled stages
+  plus the reflection data that describes their bindings. The editor's compile cache holds one
+  package per compiled variant, and the built-in passes ship as packages next to the executable.
+  Packages are format version 2, which stores the reflection data in binary form.</p>
+
+  <div class="panel warn">
+    <h4>After upgrading from a build that wrote version 1 packages</h4>
+    <ul>
+      <li>The first run recompiles each cached shader once, as it is first needed, and writes it
+      back in the new format. Later runs load the cache without compiling.</li>
+      <li>Compile caches you cooked and shipped with a game (material variant cooks, the web
+      editor's material cache) must be cooked again. A runtime without a shader compiler cannot
+      rebuild a version 1 entry and treats it as missing.</li>
+      <li>The built-in packages are rebuilt by the build (target <code>CompileShaderPkgs</code>).
+      For a project or source-package shader, rerun its authoring script with this SDK's
+      <code>ShaderReflect</code>, found in the <code>Tools</code> folder next to the <code>Apps</code> folder
+      that holds the editor and player executables, supplying the compiled shader stages through
+      <code>--vs</code>, <code>--fs</code> or <code>--cs</code> and the package's resolved path
+      through <code>--out</code>. Where the failed load is reported, in a rejected render graph or in a
+      built-in pass's load warning, the error names that path and the relevant action.
+      Loading refuses the stale package; it does not rebuild or overwrite it. A graph rejected when
+      it is selected, or at startup, is replaced by the ForwardPlus graph, or by the built-in default
+      when ForwardPlus is rejected as well; a graph rejected after an edit leaves the pipeline that
+      was running in place. The log names each rejected graph and its failed package.</li>
+    </ul>
+  </div>
+
+  <h2>Changelog</h2>
+  <ul>
+    <li><b>2026-09-27</b> — Distinguished the engine build target from project/source package
+    cooking with ShaderReflect, and documented graph rejection diagnostics and read-only loading.</li>
+    <li><b>2026-09-24</b> — Added how compiled shaders are stored on disk and what an upgrade to
+    version 2 packages means for existing and shipped caches.</li>
+    <li><b>2026-09-24</b> — The editor's material and model previews are warmed again, so a
+    material's preview does not compile on first view.</li>
+    <li><b>2026-09-23</b> — A packaged game records nothing beside its content and warms
+    nothing. Depth and shadow variants follow the depth pass's own rules: alpha-tested materials
+    get their depth variants, opaque ones no longer compile variants the shared depth pipeline
+    replaces. Completed the list of what can still compile on first use. The project is listed once
+    and material changes are picked up as they happen, instead of relisting every 30 seconds. The
+    warm-up no longer shows the compiling-shaders indicator.</li>
+    <li><b>2026-09-23</b> — Model materials are recorded in <code>.Cache/ModelMaterials/</code>
+    instead of the asset database. The level-of-detail crossfade variants are warmed. Described
+    what can still compile on first use, and the Player behavior.</li>
+    <li><b>2026-09-23</b> — First version: one material at a time on the background lane, with a
+    quiet period after each proportional to the work it took; discovery on shared background jobs.</li>
+  </ul>
+
+</div>
+<footer>Project material shader warm-up · v6 · 2026-09-27</footer>
+</body>
+</html>

@@ -1,0 +1,4 @@
+#version 450
+// Spline ribbons into the seabed depth cascade.
+#define OCEAN_RIBBON_FIELD 0
+#include "Ocean/ocean_spline_raster.glsl"

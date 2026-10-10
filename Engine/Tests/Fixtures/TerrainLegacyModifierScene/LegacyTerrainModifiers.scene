@@ -1,0 +1,250 @@
+[scene name="LegacyTerrainModifiers" version=1]
+
+; The retired pre-volume terrain-modifier FILE FORMAT, one entity per block type.
+;
+; The five pre-volume modifier components are gone from the engine; their
+; property blocks are not, because scene files on disk still carry them. This
+; fixture is the on-disk half of that contract: a scene that names all five,
+; loaded through the registered schemas, must come back as modifier volumes plus
+; effects and must re-save with no legacy block left. Nothing else in the repo
+; carries these blocks, so without this file the load path they exist for has no
+; test that reads a real scene.
+;
+; DO NOT "modernise" it into volumes and effects — the legacy spelling IS the
+; fixture. Values are deliberately off their defaults (except on flat_middle,
+; below), so a migration that dropped a field would land on the default and be
+; caught rather than agree by coincidence.
+;
+; The modifiers here are never baked: this is a load/migration fixture, so the
+; spline volumes carry a spline for shape realism but no terrain bake reads them.
+
+
+[entity id="terrain"]
+HierarchyOrder.order = 0
+Name.value = "Terrain"
+Terrain.enabled = true
+Terrain.sizeX = 512
+Terrain.sizeZ = 512
+Terrain.heightScale = 100
+Terrain.samplesPerMeter = 1
+Terrain.renderLayerMask = 1
+Terrain.castShadows = true
+Terrain.receiveShadows = true
+Transform.position = (0, 0, 0)
+Transform.rotation = (0, 0, 0, 1)
+Transform.scale = (1, 1, 1)
+
+
+; Two pre-volume modifiers over ONE shared region on ONE entity — the shape the
+; Biggles landscape carried, transcribed field for field when that scene was
+; re-saved clean. Both blocks spell the same region, so the load migrates
+; them into a single volume with two stacked effects and reports no region
+; conflict. Its values are the authored ones, defaults and all; the entities
+; below are what pin the field carry-over.
+[entity id="flat_middle" parent="terrain"]
+HierarchyOrder.order = 0
+Name.value = "Flat Middle"
+TerrainFlattenModifier.shape = 0
+TerrainFlattenModifier.radius = 75
+TerrainFlattenModifier.rectHalfX = 50
+TerrainFlattenModifier.rectHalfZ = 50
+TerrainFlattenModifier.falloff = 100
+TerrainFlattenModifier.priority = 0
+TerrainFlattenModifier.enabled = true
+TerrainFlattenModifier.targetHeight = 0
+TerrainFlattenModifier.useEntityHeight = true
+TerrainNoiseModifier.shape = 0
+TerrainNoiseModifier.radius = 75
+TerrainNoiseModifier.rectHalfX = 50
+TerrainNoiseModifier.rectHalfZ = 50
+TerrainNoiseModifier.falloff = 100
+TerrainNoiseModifier.priority = 0
+TerrainNoiseModifier.enabled = true
+TerrainNoiseModifier.blend = 1
+TerrainNoiseModifier.frequency = 8
+TerrainNoiseModifier.amplitude = 5
+TerrainNoiseModifier.octaves = 4
+TerrainNoiseModifier.seed = 0
+TerrainNoiseModifier.lacunarity = 2
+TerrainNoiseModifier.persistence = 0.5
+Transform.position = (0, 29.9389, 0)
+Transform.rotation = (0, 0, 0, 1)
+Transform.scale = (1, 1, 1)
+
+
+; Flatten to an ABSOLUTE height: useEntityHeight false is the branch flat_middle
+; does not take, and the one where targetHeight survives the migration instead of
+; being mapped to a zero offset.
+[entity id="pad_absolute" parent="terrain"]
+HierarchyOrder.order = 10
+Name.value = "Landing Pad"
+TerrainFlattenModifier.shape = 1
+TerrainFlattenModifier.radius = 18
+TerrainFlattenModifier.rectHalfX = 34
+TerrainFlattenModifier.rectHalfZ = 22
+TerrainFlattenModifier.falloff = 7.5
+TerrainFlattenModifier.priority = 6
+TerrainFlattenModifier.enabled = true
+TerrainFlattenModifier.targetHeight = 42.5
+TerrainFlattenModifier.useEntityHeight = false
+Transform.position = (140, 12, -60)
+Transform.rotation = (0, 0, 0, 1)
+Transform.scale = (1, 1, 1)
+
+
+; Noise with every field off its default, including blendSmoothing — a scene
+; authored after that field appeared. Its absence on flat_middle covers the
+; older spelling.
+[entity id="noise_dunes" parent="terrain"]
+HierarchyOrder.order = 20
+Name.value = "Dunes"
+TerrainNoiseModifier.shape = 1
+TerrainNoiseModifier.radius = 40
+TerrainNoiseModifier.rectHalfX = 65
+TerrainNoiseModifier.rectHalfZ = 25
+TerrainNoiseModifier.falloff = 12.5
+TerrainNoiseModifier.priority = 3
+TerrainNoiseModifier.enabled = true
+TerrainNoiseModifier.blend = 2
+TerrainNoiseModifier.frequency = 6.5
+TerrainNoiseModifier.amplitude = 18
+TerrainNoiseModifier.octaves = 3
+TerrainNoiseModifier.seed = 91
+TerrainNoiseModifier.lacunarity = 2.1
+TerrainNoiseModifier.persistence = 0.45
+TerrainNoiseModifier.blendSmoothing = 1.75
+Transform.position = (-120, 4, 90)
+Transform.rotation = (0, 0, 0, 1)
+Transform.scale = (1, 1, 1)
+
+
+; Stamp, authored DISABLED: enabled is a shared base field whose carry-over onto
+; the effect is otherwise unexercised by any scene on disk.
+[entity id="stamp_crater" parent="terrain"]
+HierarchyOrder.order = 30
+Name.value = "Crater"
+TerrainStampModifier.shape = 0
+TerrainStampModifier.radius = 55
+TerrainStampModifier.rectHalfX = 30
+TerrainStampModifier.rectHalfZ = 30
+TerrainStampModifier.falloff = 8
+TerrainStampModifier.priority = 2
+TerrainStampModifier.enabled = false
+TerrainStampModifier.blend = 5
+TerrainStampModifier.heightScale = 22
+TerrainStampModifier.rotation = 37
+TerrainStampModifier.stampAsset = "3f7c1d20-95a4-4e6b-9a11-6c8d2b4f0e77"
+TerrainStampModifier.blendSmoothing = 2.5
+Transform.position = (60, 0, 175)
+Transform.rotation = (0, 0, 0, 1)
+Transform.scale = (1, 1, 1)
+
+
+[entity id="paint_scree" parent="terrain"]
+HierarchyOrder.order = 40
+Name.value = "Scree"
+TerrainPaintLayerModifier.shape = 1
+TerrainPaintLayerModifier.radius = 20
+TerrainPaintLayerModifier.rectHalfX = 45
+TerrainPaintLayerModifier.rectHalfZ = 18
+TerrainPaintLayerModifier.falloff = 6
+TerrainPaintLayerModifier.priority = 1
+TerrainPaintLayerModifier.enabled = true
+TerrainPaintLayerModifier.layerIndex = 2
+TerrainPaintLayerModifier.strength = 0.65
+TerrainPaintLayerModifier.replace = true
+Transform.position = (-40, 0, -150)
+Transform.rotation = (0, 0, 0, 1)
+Transform.scale = (1, 1, 1)
+
+
+; Spline modifier, FLATTEN branch with painting on: migrates to a SplineArea
+; volume plus a flatten effect whose target is the height offset, plus a paint
+; effect the pre-volume model always forced to Replace.
+[entity id="road_cut" parent="terrain"]
+HierarchyOrder.order = 50
+Name.value = "Road Cut"
+Spline.enabled = true
+Spline.defaultRadius = 12
+Spline.type = 0
+Spline.closed = false
+Spline.pointCount = 4
+Spline.point0.position = (-80, 6, 0)
+Spline.point0.rotation = (0, 0, 0)
+Spline.point0.scale = (1, 1, 1)
+Spline.point0.radius = 12
+Spline.point0.roll = 0
+Spline.point0.tangentIn = (0, 0, 0)
+Spline.point0.tangentOut = (0, 0, 0)
+Spline.point1.position = (-20, 6, 0)
+Spline.point1.rotation = (0, 0, 0)
+Spline.point1.scale = (1, 1, 1)
+Spline.point1.radius = 12
+Spline.point1.roll = 0
+Spline.point1.tangentIn = (0, 0, 0)
+Spline.point1.tangentOut = (0, 0, 0)
+Spline.point2.position = (20, 6, 0)
+Spline.point2.rotation = (0, 0, 0)
+Spline.point2.scale = (1, 1, 1)
+Spline.point2.radius = 12
+Spline.point2.roll = 0
+Spline.point2.tangentIn = (0, 0, 0)
+Spline.point2.tangentOut = (0, 0, 0)
+Spline.point3.position = (80, 6, 0)
+Spline.point3.rotation = (0, 0, 0)
+Spline.point3.scale = (1, 1, 1)
+Spline.point3.radius = 12
+Spline.point3.roll = 0
+Spline.point3.tangentIn = (0, 0, 0)
+Spline.point3.tangentOut = (0, 0, 0)
+TerrainSplineModifier.blend = 1
+TerrainSplineModifier.falloff = 7.5
+TerrainSplineModifier.priority = 4
+TerrainSplineModifier.heightOffset = 1.25
+TerrainSplineModifier.flatten = true
+TerrainSplineModifier.enabled = true
+TerrainSplineModifier.paintLayer = true
+TerrainSplineModifier.paintLayerIndex = 1
+TerrainSplineModifier.paintStrength = 0.45
+Transform.position = (0, 0, 0)
+Transform.rotation = (0, 0, 0, 1)
+Transform.scale = (1, 1, 1)
+
+
+; The same block's OFFSET branch: flatten false migrates to a height-offset
+; effect instead of a flatten, and the offset mode always accumulated whatever
+; blend said, so the effect is Add however this block is spelled.
+[entity id="road_berm" parent="terrain"]
+HierarchyOrder.order = 60
+Name.value = "Road Berm"
+Spline.enabled = true
+Spline.defaultRadius = 9
+Spline.type = 0
+Spline.closed = false
+Spline.pointCount = 2
+Spline.point0.position = (-60, 3, 40)
+Spline.point0.rotation = (0, 0, 0)
+Spline.point0.scale = (1, 1, 1)
+Spline.point0.radius = 9
+Spline.point0.roll = 0
+Spline.point0.tangentIn = (0, 0, 0)
+Spline.point0.tangentOut = (0, 0, 0)
+Spline.point1.position = (60, 3, 40)
+Spline.point1.rotation = (0, 0, 0)
+Spline.point1.scale = (1, 1, 1)
+Spline.point1.radius = 9
+Spline.point1.roll = 0
+Spline.point1.tangentIn = (0, 0, 0)
+Spline.point1.tangentOut = (0, 0, 0)
+TerrainSplineModifier.blend = 2
+TerrainSplineModifier.falloff = 3.5
+TerrainSplineModifier.priority = 5
+TerrainSplineModifier.heightOffset = -2.5
+TerrainSplineModifier.flatten = false
+TerrainSplineModifier.enabled = true
+TerrainSplineModifier.paintLayer = false
+TerrainSplineModifier.paintLayerIndex = 3
+TerrainSplineModifier.paintStrength = 0.9
+Transform.position = (0, 0, 0)
+Transform.rotation = (0, 0, 0, 1)
+Transform.scale = (1, 1, 1)

@@ -1,0 +1,45 @@
+# @openengine/web
+
+> A WebGPU engine on a web page: import it as an ES module, create an engine on a canvas, load glTF models, orbit a camera, light the scene with a physical sun and sky, and read or write any entity's components. Every object is a handle on an engine entity; every property reads and writes the engine directly.
+
+> Early access (alpha): the API changes between releases. Install with `npm install @openengine/web@alpha`.
+
+Write pages as one HTML file with a `<canvas>` and a `<script type="module">`. Use only the calls below; there are no `Mesh`, `Material`, `Object3D` or `WebGLRenderer` classes.
+
+## Rules
+
+- `await Engine.create({ canvas })` before anything else; `engine.scene` is the world.
+- `await scene.load(url)` returns the model's root entity; `entity.bounds.center` and `.size` frame it; its meshes are below it (`entity.transform.children`, each with a `MeshRenderer`).
+- Units: meters; degrees for `transform.rotation`, `rotateX/Y/Z` (own axes), `rotateWorldY` (world up through the entity's position; exact under parents of uniform scale; nothing under a parent scaled to zero or flattened), a positive turn taking +Y toward +Z, +Z toward +X (clockwise seen from above) and +X toward +Y, `OrbitControls`; lux for `scene.sun.intensity` (100000 = clear noon); hours for `scene.sky.timeOfDay`; seconds for `dt`.
+- Axes: left-handed, +X right, +Y up, +Z forward; cameras and lights look along their entity's +Z.
+- Components: `entity.set(Light, { type: 'Point', intensity: 800 })` adds or updates; `entity.get(Light)` returns a live view or `undefined`; `entity.add`, `entity.remove`, `entity.has`. Field names are camelCase (`intensity`, `fovY`, `timeOfDayHours`); enum fields take the enumerator name as a string; entity fields take an `Entity` or null; asset fields take `{ guid }`.
+- Built-in meshes: `scene.create({ name: 'Floor', mesh: 'plane' })` (also `'cube'`, `'sphere'`, `'capsule'`; 1 m, default material); scale and place it through `entity.transform`.
+- Global illumination: `scene.create('GI').set(DDGIVolume, {})`, the entity's transform sizing the probe box around the model and its floor (or `fit: 'FollowCamera'`); light bounces off the floor onto the model's underside. A preview on the web: no probe depth yet, so creases and contact shadows can darken.
+- Exposure: `scene.camera.set(Camera, { exposureCompensation: 2 })` brightens the picture by two stops (negative darkens), in every exposure mode. Emission: `scene.load(url, { emissiveStrength: 8 })` multiplies the model's emission (0 or more, default 1); every copy of a URL shows its latest load's strength.
+- Animate in `engine.onFrame(dt => { ... })`, then call `engine.run()`. `OrbitControls` updates itself every frame; `controls.pitch` is its elevation in degrees (negative looks down), `controls.distance` its range in meters.
+- Many entities every frame: make `const q = scene.query([MeshRenderer], { write: [Transform] })` once; in `onFrame`, `q.forEachChunk(chunk => { const m = chunk.floats(Transform, 'matrix'); for (let i = 0; i < chunk.count; ++i) m.values[m.offset + i * m.stride + 12] += 1; })` (column-major, translation at 12 to 14). `write` components are live engine memory; `read` ones are copies; `chunk.entity(i)` is the entity. Creating, destroying, adding or removing components inside `forEachChunk` throws.
+- A skinned model's clips: `model.animation.clips` (names), `model.animation.play('Run', { speed: 1 })` (loops; the clip already playing keeps its place), `model.animation.pause()`. The model rests in its bind pose until a clip plays. On a model without clips every `model.animation` member throws: `examples/model-viewer` reads `clips` in a `try` and lists none.
+- Assets from another origin need CORS headers (Access-Control-Allow-Origin) under either build.
+- Progress: `Engine.create({ canvas, onProgress })` and `scene.load(url, { onProgress })` call `onProgress({ phase, loaded, total })` in bytes (network bytes with Content-Length, else decompressed): show `loaded / total` as a percentage; `total` is 0 while unknown; phases `'wasm'` and `'pack'` (the engine, reported together from the first call: add them up) and `'model'`.
+
+## Example
+
+```js
+import { Engine, OrbitControls, Light } from '@openengine/web';
+const canvas = document.querySelector('canvas');
+if (!canvas) throw new Error('The page needs a <canvas> element.');
+const engine = await Engine.create({ canvas });
+const robot = await engine.scene.load('models/robot.glb');
+const controls = new OrbitControls(engine.scene.camera, canvas);
+controls.target.copy(robot.bounds.center);
+engine.scene.sky.timeOfDay = 9.5;
+engine.scene.create('lamp').set(Light, { type: 'Point', intensity: 800 });
+engine.onFrame(dt => robot.transform.rotateWorldY(20 * dt));
+engine.run();
+```
+
+## Reference
+
+- [README](README.md): the ten calls, adding components, threads and hosting.
+- [opengine.d.ts](ts/opengine.d.ts): Engine, Scene, Query, Entity, TransformView, AnimationView, OrbitControls, SunView, SkyView, OpenEngineError.
+- [components.d.ts](ts/components.d.ts): the reflected components and their fields, with units (the first seven today; the generated file names every component).

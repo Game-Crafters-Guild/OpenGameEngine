@@ -1,0 +1,47 @@
+{
+  "name": "repro_assets_dnd_multiselect_move",
+  "windowIndex": 0,
+  "minFrames": 600,
+  "sandboxAssets": "assets_dnd_multiselect_move",
+  "probe": {
+    "treeViewUnderId": "assets-tree",
+    "gridViewUnderId": "assets-grid",
+    "elementId": "assets-views-container",
+    "visualPatchElementIds": { "enabled": true, "max": 12 }
+  },
+  "asserts": [],
+  "events": [
+    { "frame": 2, "type": "mouseMove", "target": { "kind": "elementId", "id": "tab:Assets", "relX": 0.5, "relY": 0.5 } },
+    { "frame": 3, "type": "mouseDown", "button": 0 },
+    { "frame": 4, "type": "mouseUp", "button": 0 },
+
+    { "frame": 40, "type": "invokeCommand", "commandId": 4037083393 },
+
+    { "frame": 60, "type": "invokeCommand", "commandId": 4037083138 },
+    { "frame": 61, "type": "waitTextContains", "subtreeId": "assets-grid", "requiredClass": "grid-title", "needle": "A.txt", "timeoutFrames": 800 },
+    { "frame": 62, "type": "waitTextContains", "subtreeId": "assets-grid", "requiredClass": "grid-title", "needle": "B.txt", "timeoutFrames": 800 },
+
+    { "frame": 190, "type": "mouseMove", "target": { "kind": "ancestorOfLabelTextUnderId", "underId": "assets-grid", "labelClass": "grid-title", "ancestorClass": "grid-cell", "needle": "A.txt", "relX": 0.5, "relY": 0.5 } },
+    { "frame": 191, "type": "mouseDown", "button": 0 },
+    { "frame": 192, "type": "mouseUp", "button": 0 },
+
+    { "frame": 210, "type": "keyDown", "key": 341, "mods": 2 },
+    { "frame": 212, "type": "mouseMove", "target": { "kind": "ancestorOfLabelTextUnderId", "underId": "assets-grid", "labelClass": "grid-title", "ancestorClass": "grid-cell", "needle": "B.txt", "relX": 0.5, "relY": 0.5 } },
+    { "frame": 213, "type": "mouseDown", "button": 0 },
+    { "frame": 214, "type": "mouseUp", "button": 0 },
+    { "frame": 216, "type": "keyUp", "key": 341, "mods": 0 },
+    { "frame": 218, "type": "waitSelectedCount", "subtreeId": "assets-grid", "requiredClass": "grid-cell", "exact": 2, "timeoutFrames": 300 },
+
+    { "frame": 340, "type": "mouseMove", "target": { "kind": "ancestorOfLabelTextUnderId", "underId": "assets-grid", "labelClass": "grid-title", "ancestorClass": "grid-cell", "needle": "A.txt", "relX": 0.5, "relY": 0.5 } },
+    { "frame": 341, "type": "mouseDown", "button": 0 },
+    { "frame": 342, "type": "mouseMove", "dx": 0.0, "dy": 14.0 },
+
+    { "frame": 350, "type": "mouseMove", "target": { "kind": "ancestorOfLabelTextUnderId", "underId": "assets-tree", "labelClass": "tree-title", "ancestorClass": "tree-item", "needle": "Dst", "relX": 0.5, "relY": 0.5 } },
+    { "frame": 351, "type": "mouseUp", "button": 0 },
+
+    { "frame": 520, "type": "invokeCommand", "commandId": 4037083139 },
+    { "frame": 521, "type": "waitTextContains", "subtreeId": "assets-grid", "requiredClass": "grid-title", "needle": "A.txt", "timeoutFrames": 800 },
+    { "frame": 522, "type": "waitTextContains", "subtreeId": "assets-grid", "requiredClass": "grid-title", "needle": "B.txt", "timeoutFrames": 800 }
+  ]
+}
+

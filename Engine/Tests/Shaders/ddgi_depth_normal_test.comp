@@ -1,0 +1,27 @@
+#version 450
+// Runs the production DDGI normal reconstruction on a synthetic depth buffer.
+#include "Includes/ddgi_depth_normal.glsl"
+layout(local_size_x = 8, local_size_y = 8) in;
+layout(set = 0, binding = 0) uniform sampler2D uDepth;
+layout(std430, set = 0, binding = 1) readonly buffer Camera
+{
+    mat4 invProj;
+    mat4 invView;
+    vec4 cameraPosition;
+};
+layout(std430, set = 0, binding = 2) writeonly buffer Normals
+{
+    vec4 normals[];
+};
+void main()
+{
+    ivec2 pixel = ivec2(gl_GlobalInvocationID.xy);
+    ivec2 size = textureSize(uDepth, 0);
+    if (any(greaterThanEqual(pixel, size)))
+        return;
+    vec2 uv = (vec2(pixel) + 0.5) / vec2(size);
+    float depth = texelFetch(uDepth, pixel, 0).r;
+    vec3 position = GE_DDGIWorldPositionAt(uv, depth, invProj, invView);
+    normals[pixel.y * size.x + pixel.x] = vec4(GE_DDGINormalFromDepth(
+        uDepth, uv, depth, position, cameraPosition.xyz - position, invProj, invView), 1.0);
+}

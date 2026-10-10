@@ -1,0 +1,14 @@
+{
+  "schemaVersion": 3,
+  "materialName": "CornellWhite",
+  "lightingModel": "StandardPBR",
+  "alphaMode": "Opaque",
+  "doubleSided": false,
+  "surfaceShader": "Surfaces/standard_pbr.glsl",
+  "properties": {
+    "baseColor": [0.75, 0.75, 0.72, 1.0],
+    "metallic": 0.0,
+    "roughness": 0.9
+  },
+  "textures": {}
+}

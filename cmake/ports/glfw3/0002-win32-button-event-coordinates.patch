@@ -1,0 +1,30 @@
+diff --git a/src/win32_window.c b/src/win32_window.c
+--- a/src/win32_window.c
++++ b/src/win32_window.c
+@@ -837,6 +837,26 @@
+             if (i > GLFW_MOUSE_BUTTON_LAST)
+                 SetCapture(hWnd);
+ 
++            // Button messages carry their own client coordinates. Deliver them
++            // before the button instead of relying on a preceding WM_MOUSEMOVE
++            // or a later query of the OS cursor. Do not inject absolute points
++            // into disabled/raw relative cursor motion.
++            if (window->cursorMode != GLFW_CURSOR_DISABLED)
++            {
++                const int x = GET_X_LPARAM(lParam);
++                const int y = GET_Y_LPARAM(lParam);
++                const int unchanged = window->virtualCursorPosX == x &&
++                                      window->virtualCursorPosY == y;
++                window->win32.lastCursorPosX = x;
++                window->win32.lastCursorPosY = y;
++                _glfwInputCursorPos(window, x, y);
++                // A consumer may have cleared its position on leave/focus loss.
++                // _glfwInputCursorPos suppresses unchanged points, but a button
++                // must resynchronize that consumer even at the same position.
++                if (unchanged && window->callbacks.cursorPos)
++                    window->callbacks.cursorPos((GLFWwindow*) window, x, y);
++            }
++
+             _glfwInputMouseClick(window, button, action, getKeyMods());
+ 
+             for (i = 0;  i <= GLFW_MOUSE_BUTTON_LAST;  i++)

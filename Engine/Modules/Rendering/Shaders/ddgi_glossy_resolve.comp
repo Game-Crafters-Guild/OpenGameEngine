@@ -1,0 +1,207 @@
+#version 450
+
+// DDGI glossy-reflection resolve: evaluates the probe reflection gather
+// (Includes/ddgi_probes.glsl's GE_SampleDDGIReflectionBoth) once per RESOLVE
+// pixel — at DDGIVolume.GlossyResolveScale of the view's render extent —
+// instead of once per forward fragment. Two outputs, one per baked Phong
+// lobe: uResolveRough holds the gather at roughLobeMix 1 (broad power-8
+// lobe), uResolveGlossy at roughLobeMix 0 (sharp power-64 lobe), each
+// coverage-premultiplied radiance in rgb with directional coverage in a.
+// The forward consume (Includes/ibl.glsl) bilinear-taps both and crossfades
+// by its own per-pixel roughLobeMix, which is exact: the gather is linear in
+// roughLobeMix, so sample(p, d, m) == mix(sample(p, d, 0), sample(p, d, 1), m)
+// up to fp rounding.
+//
+// The reflection direction wants the SHADING normal, and this pass runs before
+// the world pass that shades this frame. It reads the previous frame's
+// forward-MRT normal instead (uPrevNormal, the SSR G-buffer slice the world
+// pass writes into the resolve's own per-view history), reprojected through
+// ge_prevViewProj and depth-tested against the previous resolve's stored
+// depth. A static reflector's normal is frame-invariant, so the one-frame
+// latency costs nothing there. Where no history is valid (first frame,
+// disocclusion, the previous world pass could not attach the slice) the
+// direction falls back to a depth-derived GEOMETRIC normal, which is exact
+// on flat surfaces and faceted along triangle edges on curved ones.
+
+layout(local_size_x = 8, local_size_y = 8, local_size_z = 1) in;
+
+#include "Includes/view_params.glsl"  // ViewParams UBO, set 0 binding 7
+#include "Includes/ddgi_probes.glsl"  // DDGI consume bindings, set 0 b29-b40
+
+// 1-sample view depth at render extent (the prepass depth, resolved when the
+// view is MSAA), reverse-Z: near=1, far/cleared=0.
+layout(set = 0, binding = 0) uniform sampler2D uViewDepth;
+layout(set = 0, binding = 1, rgba16f) uniform writeonly image2D uResolveRough;
+layout(set = 0, binding = 2, rgba16f) uniform writeonly image2D uResolveGlossy;
+// Diffuse irradiance for the same pixel. The probe loop it needs is the one
+// the reflection lobes already run, so resolving it here is close to free
+// next to a second full gather. It takes the same normal the reflection
+// uses, so normal-map detail steers indirect diffuse wherever the shading
+// normal history is valid.
+layout(set = 0, binding = 3, rgba16f) uniform writeonly image2D uResolveIrradiance;
+// Previous frame's forward-MRT normal slice at render extent: .rg =
+// octahedral normal in the PREVIOUS frame's view space (the encoding
+// Adapters/adapter_forward.glsl writes under GE_SSSR_NORMAL_ROUGHNESS).
+// Point-sampled: a bilinear mix of two octahedral codes is not a normal.
+layout(set = 0, binding = 4) uniform sampler2D uPrevNormal;
+// Previous frame's resolved irradiance at resolve extent; only its alpha is
+// read here — the raw reverse-Z depth that frame's resolve ran at, which is
+// the reprojection's "same surface" test.
+layout(set = 0, binding = 5) uniform sampler2D uPrevIrradiance;
+
+layout(push_constant) uniform ResolvePush
+{
+    // 1 / the view's static exposure scale. Debug overlays are display-
+    // referred [0,1] values written into a scene-linear target, so this lifts
+    // them to about one display white under whatever exposure the view uses.
+    float debugInvExposure;
+    // 1 when uPrevNormal holds the previous frame's world-pass write for this
+    // view (the host knows: it attached the slice and the pool kept the
+    // memory), 0 when the texture is unwritten or stale and must not be read.
+    uint prevNormalValid;
+};
+
+// Same relative tolerance as the resolve blur's DepthWeight: reverse-Z is
+// non-linear, so one relative constant behaves the same near and far.
+const float kReprojectDepthTolerance = 0.02;
+
+// Same uv->NDC and unproject math as Includes/sssr_common.glsl's
+// GE_UvToNdc/GE_ViewPosition (negative-viewport Y flip folded into the NDC
+// mapping), taken to world space through ge_invView.
+#include "Includes/ddgi_depth_normal.glsl"
+
+// The previous frame's shading normal at this surface, in world space, or
+// false when the history does not hold this surface. The slice stores the
+// normal in the previous VIEW's space; the previous view matrix is not in the
+// UBO, but proj * prevView == ge_prevViewProj (unjittered) and ge_invProj is
+// this frame's JITTERED inverse projection, so re-applying the current NDC
+// jitter (ge_taaJitter.xy, additive on x/y by w — AntiAliasing.h's
+// ApplyNdcJitter) between the two recovers prevView exactly; its rotation
+// is orthonormal, so the transpose takes the normal back to world space.
+bool PrevShadingNormalWS(vec3 posWS, out vec3 normalWS)
+{
+    vec4 prevClip = ge_prevViewProj * vec4(posWS, 1.0);
+    if (prevClip.w <= 1.0e-6)
+        return false;
+    vec3 prevNdc = prevClip.xyz / prevClip.w;
+    // The slice was rasterized on the previous frame's jittered grid.
+    vec2 prevUv = vec2((prevNdc.x + ge_taaJitter.z) * 0.5 + 0.5,
+                       0.5 - (prevNdc.y + ge_taaJitter.w) * 0.5);
+    if (any(lessThanEqual(prevUv, vec2(0.0))) || any(greaterThanEqual(prevUv, vec2(1.0))))
+        return false;
+    float prevDepth = textureLod(uPrevIrradiance, prevUv, 0.0).a;
+    if (prevDepth <= 0.0 ||
+        abs(prevDepth - prevNdc.z) > kReprojectDepthTolerance * max(prevNdc.z, 1.0e-6))
+        return false;
+    vec3 normalVSPrev = GE_OctDecode(textureLod(uPrevNormal, prevUv, 0.0).rg);
+    mat4 jitter = mat4(1.0);
+    jitter[3][0] = ge_taaJitter.x;
+    jitter[3][1] = ge_taaJitter.y;
+    mat3 prevViewRotation = mat3(ge_invProj * jitter * ge_prevViewProj);
+    normalWS = normalize(transpose(prevViewRotation) * normalVSPrev);
+    return true;
+}
+
+void main()
+{
+    ivec2 pixel = ivec2(gl_GlobalInvocationID.xy);
+    // Irradiance always spans the resolve. Inactive lobe bindings can be
+    // 1x1 placeholders on devices that prohibit writable texture aliases.
+    ivec2 outSize = imageSize(uResolveIrradiance);
+    if (pixel.x >= outSize.x || pixel.y >= outSize.y)
+        return;
+
+    vec2 texel = 1.0 / vec2(outSize);
+    // Reconstruction runs on the DEPTH texture's own grid, not the resolve's:
+    // at a reduced scale the resolve texel centre falls between depth texels,
+    // and a point-sampled neighbour pair can snap to the same texel — the
+    // normal then quantises into multi-texel plateaus that the reflection
+    // gather magnifies into visible facets on curved reflectors.
+    vec2 dtexel = 1.0 / vec2(textureSize(uViewDepth, 0));
+    vec2 uv = (floor((vec2(pixel) + 0.5) * texel / dtexel) + 0.5) * dtexel;
+    float rawDepth = textureLod(uViewDepth, uv, 0.0).r;
+    if (rawDepth <= 0.0)
+    {
+        // Reverse-Z far plane: sky / nothing rasterized. Zero coverage keeps
+        // the consumer's composite on the prefiltered environment cube.
+        if (DDGIVolume.uParams1.z > 0.5)
+        {
+            imageStore(uResolveRough, pixel, vec4(0.0));
+            imageStore(uResolveGlossy, pixel, vec4(0.0));
+        }
+        imageStore(uResolveIrradiance, pixel, vec4(0.0));
+        return;
+    }
+    vec3 posWS = GE_DDGIWorldPositionAt(uv, rawDepth, ge_invProj, ge_invView);
+
+    vec3 toCamera = ge_cameraPosWS.xyz - posWS;
+    vec3 N = GE_DDGINormalFromDepth(uViewDepth, uv, rawDepth, posWS, toCamera, ge_invProj, ge_invView);
+
+    // The shading normal wherever last frame's world pass wrote this surface;
+    // a normal-mapped or back-facing (grazing, normal-map tilted past the
+    // horizon) history sample keeps the geometric fallback, so the reflection
+    // never comes from behind the surface.
+    vec3 shadingN;
+    if (prevNormalValid != 0u && PrevShadingNormalWS(posWS, shadingN) &&
+        dot(shadingN, toCamera) > 0.0)
+        N = shadingN;
+
+    vec3 viewDir = normalize(toCamera);   // shaded point -> camera
+    vec3 reflectDir = reflect(-viewDir, N);
+
+    // One gather for both lobes: the per-probe work (state, depth tap,
+    // visibility, parallax) is what the loop costs, and it is identical for
+    // the two lobes — only the atlas fetched at the end differs.
+    vec4 roughLobe;
+    vec4 glossyLobe;
+    // Lift the grid lookup off the surface along the SURFACE normal. The
+    // gather's own bias runs along the reflection direction, which on a
+    // grazing floor lies almost in the surface plane and leaves the lookup
+    // sitting on the geometry it is testing visibility against — the
+    // Chebyshev test then reads the floor as its own occluder and stamps the
+    // probe lattice onto it as dark diamonds.
+    vec3 lookupPos = posWS + N * (DDGIVolume.uParams0.x * GE_DDGI_SURFACE_NORMAL_BIAS_CELL *
+                                  DDGIVolume.uParams0.y);
+    // The lobe gather is the expensive half of this kernel, and ibl.glsl reads
+    // its targets only when the specular composite is on (uParams1.z). This
+    // pass runs for the diffuse irradiance regardless, so with the composite
+    // off the lobes are neither gathered nor stored. The host may bind
+    // irradiance aliases or small placeholders; nothing samples them as lobes.
+    if (DDGIVolume.uParams1.z > 0.5)
+    {
+        GE_SampleDDGIReflectionBoth(lookupPos, reflectDir, roughLobe, glossyLobe);
+        imageStore(uResolveRough, pixel, roughLobe);
+        imageStore(uResolveGlossy, pixel, glossyLobe);
+    }
+    // GE_SampleDDGIIrradiance applies its own surface-normal bias, so it takes
+    // the raw shading position, not the lifted one the reflection gather wants.
+    // Alpha carries this pixel's raw depth, not coverage: the forward consume
+    // magnifies this target and needs a guide to reject taps that landed on
+    // other geometry, or a silhouette drags its neighbour's irradiance across
+    // the edge (a dark halo under anything that floats).
+    // Diagnostics ride the irradiance target: the forward consume already
+    // replaces its environment sample with whatever this holds, so a debug
+    // value lands on screen with no extra plumbing and no forward-shader cost.
+    // Alpha stays the depth guide either way, so the bilateral upsample keeps
+    // working and the overlay does not bleed across silhouettes.
+    vec3 irradiance;
+    switch (DDGIVolume.uParams3.x)
+    {
+        case 1:  irradiance = vec3(GE_DDGIDebugCoverage(posWS, N)); break;
+        case 2:  irradiance = GE_DDGIDebugProbeState(posWS); break;
+        case 3:  irradiance = GE_DDGIDebugCascadeWeight(posWS); break;
+        case 4:  irradiance = GE_DDGIDebugNearestIrradiance(posWS, N); break;
+        case 5:  irradiance = GE_DDGIDebugProbeStateFine(posWS); break;
+        case 6:  irradiance = GE_DDGIDebugNearestIrradianceFine(posWS, N); break;
+        case 7:  irradiance = GE_DDGIDebugFineProbeAddress(posWS, 0); break;
+        case 8:  irradiance = GE_DDGIDebugFineProbeAddress(posWS, 1); break;
+        default: irradiance = GE_SampleDDGIIrradiance(posWS, N); break;
+    }
+    // Debug colours are display-referred [0,1]; the scene is not. Lift them by
+    // the view's exposure so the overlay reads at about one display white
+    // (times the surface's base colour, which the consume still applies).
+    // Views 4 and 6 are scene-linear irradiance and stay at scene exposure.
+    if (DDGIVolume.uParams3.x != 0 && DDGIVolume.uParams3.x != 4 && DDGIVolume.uParams3.x != 6)
+        irradiance *= debugInvExposure;
+    imageStore(uResolveIrradiance, pixel, vec4(irradiance, rawDepth));
+}

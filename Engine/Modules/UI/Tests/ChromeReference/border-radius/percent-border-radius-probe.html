@@ -1,0 +1,23 @@
+<meta charset="utf-8">
+<title>border-radius used-value probe</title>
+<style>
+  html,body { margin:0; padding:0; background:#111; }
+  .stage { position:absolute; }
+  .box { position:absolute; left:0; top:0; background:#0f0; }
+  #s0 { left:20px;  top:20px;  width:200px; height:60px; }
+  #s1 { left:20px;  top:120px; width:200px; height:60px; }
+  #s2 { left:20px;  top:220px; width:200px; height:60px; }
+  #s3 { left:20px;  top:320px; width:200px; height:200px; }
+  /* control: no radius at all */
+  #b0 { width:200px; height:60px; border-radius:0; }
+  /* instrument check: a known 30px circular corner */
+  #b1 { width:200px; height:60px; border-radius:30px; }
+  /* the specimen: 50% on a 200x60 box */
+  #b2 { width:200px; height:60px; border-radius:50%; }
+  /* the square specimen the engine can express exactly: 10% of 200 */
+  #b3 { width:200px; height:200px; border-radius:10%; }
+</style>
+<div class="stage" id="s0"><div class="box" id="b0"></div></div>
+<div class="stage" id="s1"><div class="box" id="b1"></div></div>
+<div class="stage" id="s2"><div class="box" id="b2"></div></div>
+<div class="stage" id="s3"><div class="box" id="b3"></div></div>

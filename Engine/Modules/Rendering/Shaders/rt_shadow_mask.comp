@@ -1,0 +1,281 @@
+#version 460
+#extension GL_EXT_ray_query : require
+
+// RT shadow-mask pass (DirectionalShadowMode::RayTraced, G1): one ray-query shadow
+// ray per full-res pixel toward the primary shadow-casting directional light,
+// written to an R8 mask (1 = lit, 0 = occluded). Consumed by GE_SampleShadow
+// (shadow_sampling.glsl) under the RTShadowMask pass keyword in place of
+// cascade sampling.
+//
+// SOFT shadows via 1-ray + TAA (uRayParams.w = tan of the sun's angular
+// half-angle, the same slope the cascade PCSS path uses): the ray direction is
+// jittered per pixel inside that cone (tangent basis around uLightDirWS, uniform
+// concentric disk sample scaled by the tangent). One ray per pixel, so the
+// per-frame write is still binary; the FRACTIONAL penumbra emerges from temporal
+// accumulation — the jitter phase (uTemporal.x) advances only for a view whose
+// TAA history will integrate it, and stays 0 elsewhere so the spatial denoise
+// (rt_shadow_denoise.comp) sees a frame-stable stipple. Because the occluder is
+// intersected at its true distance, the penumbra widens with BOTH the angular
+// size AND the occluder->receiver gap — the RT advantage over the cascade PCSS
+// path, which only estimates the gap from a blocker search.
+// At tangent 0 the cone collapses and the traced direction is byte-identical to
+// the hard ray (the jitter block is skipped entirely).
+//
+// Position reconstruction follows gtao.comp exactly: reverse-Z raw depth
+// unprojected through uInvProj with the engine's negative-viewport convention
+// (ndc.y = 1 - 2*uv.y), left-handed view space (+Z forward). View-space
+// normals are reconstructed from best-of-neighbour depth differences (no
+// normal G-buffer in the depth-only Forward+ pipeline) and used only for the
+// self-intersection origin offset.
+//
+// The TLAS is a real descriptor binding (DescriptorType::AccelerationStructure),
+// not an accelerationStructureEXT(uvec2) address cast: MSL's
+// raytracing::acceleration_structure is always resource-bound, so SPIRV-Cross
+// cannot translate OpConvertUToAccelerationStructureKHR at all. A descriptor
+// binding is the one form both Vulkan and Metal can carry — the same choice the
+// DDGI ray-query kernels make. RTShadowMaskService binds the slot through
+// NamedDescriptorWriter::TryAddAccelerationStructure.
+//
+// Culling / watertightness choices (documented per the G1 brief):
+//  - No facing cull: TLAS instances set TriangleFacingCullDisable (a caster
+//    occludes regardless of winding), and the ray carries no cull flags.
+//  - gl_RayFlagsOpaqueEXT: every triangle is treated opaque — alpha-tested
+//    cutouts (foliage) cast SOLID shadows in v1 (enumerated residual; an
+//    any-hit alpha lane needs bindless material access in the query loop).
+//  - gl_RayFlagsTerminateOnFirstHitEXT: occlusion query — any hit ends it.
+//  - Traversal watertightness is the spec default (no water-tight opt-outs).
+//
+// The terrain is not in the TLAS. Where its clearance map is published for the
+// view (uTerrainSource.x), each pixel also reads it (terrain_shadow.glsl) and is
+// lit only where both see the sun; beyond the max shadow distance, where no ray
+// is traced, the map alone decides, as the raster path does. The terrain's
+// penumbra comes from the map's analytic term with the same tangent as the cone
+// (uRayParams.w) and, like the cone, no bound on its width.
+
+#include "Includes/shadow_distance_fade.glsl"
+
+layout(local_size_x = 8, local_size_y = 8, local_size_z = 1) in;
+
+layout(set = 0, binding = 0) uniform sampler2D uDepth;  // single-sample reverse-Z depth
+layout(set = 0, binding = 1, r8) uniform writeonly image2D uMask;
+
+layout(set = 0, binding = 2, std140) uniform RTShadowMaskParams
+{
+    mat4 uInvProj;      // clip -> view (reverse-Z, LH)
+    mat4 uInvView;      // view -> world (full world frame; TLAS instances are world-space)
+    vec4 uLightDirWS;   // xyz = normalized direction TOWARD the light, w = maxShadowDistance
+    vec4 uRayParams;    // x = tMin, y = tMax, z = normal-offset bias (world units),
+                        // w = tan(light angular half-angle); 0 = hard shadow
+    vec4 uTemporal;     // x = cone-jitter phase (a short frame cycle while TAA
+                        // resolves the jitter, else 0), y = rays per pixel,
+                        // z = authored distance fade fraction, w reserved
+    // The terrain's clearance map (terrain_shadow.glsl) in the full world frame, ShadowData's
+    // terrainShadowGrid* layout; uTerrainSource x = 1 when present, y = map side (texels).
+    vec4 uTerrainGrid0;
+    vec4 uTerrainGrid1;
+    vec4 uTerrainGrid2;
+    vec4 uTerrainGrid3;
+    uvec4 uTerrainSource;
+};
+
+layout(set = 0, binding = 3) uniform accelerationStructureEXT uTlas;
+// The terrain's clearance map and height texture; stand-ins when uTerrainSource.x is 0.
+layout(set = 0, binding = 4) uniform sampler2D uTerrainClearance;
+layout(set = 0, binding = 5) uniform sampler2D uTerrainHeight;
+
+vec2 GE_TerrainShadowReadClearance(vec2 gridCoord)
+{
+    return textureLod(uTerrainClearance, (gridCoord + 0.5) / float(uTerrainSource.y), 0.0).rg;
+}
+float GE_TerrainShadowReadGround(float x, float z)
+{
+    vec2 dim = vec2(textureSize(uTerrainHeight, 0));
+    vec2 terrainUV = clamp((vec2(x, z) - uTerrainGrid0.zw) / uTerrainGrid1.xy, 0.0, 1.0);
+    return textureLod(uTerrainHeight, (terrainUV * (dim - 1.0) + 0.5) / dim, 0.0).r * uTerrainGrid3.w;
+}
+#include "Includes/terrain_shadow.glsl"
+
+// The share of the sun the terrain lets reach the world position p (1 lit, 0 shadowed). The mask
+// cannot tell the terrain's pixels from the rest, so every receiver keeps its height, a base sunk
+// into the terrain counting as on the ground.
+float TerrainLit(vec3 p)
+{
+    if (uTerrainSource.x == 0u)
+        return 1.0;
+    GE_TerrainShadowGrid g;
+    g.CenterX = uTerrainGrid0.x;
+    g.CenterZ = uTerrainGrid0.y;
+    g.TerrainX = uTerrainGrid0.z;
+    g.TerrainZ = uTerrainGrid0.w;
+    g.TerrainSizeX = uTerrainGrid1.x;
+    g.TerrainSizeZ = uTerrainGrid1.y;
+    g.SunX = uTerrainGrid1.z;
+    g.SunZ = uTerrainGrid1.w;
+    g.TanElevation = uTerrainGrid2.x;
+    g.Texel = uTerrainGrid2.y;
+    g.UMin = uTerrainGrid2.z;
+    g.VMin = uTerrainGrid2.w;
+    g.SamplesU = uTerrainGrid3.x;
+    g.SamplesV = uTerrainGrid3.y;
+    return GE_TerrainShadowLit(g, p.x, p.y - uTerrainGrid3.z, p.z, 0.0, uRayParams.w,
+                               kGE_TerrainShadowUncappedPenumbra);
+}
+
+const float kPi = 3.14159265358979;
+// R2 low-discrepancy step (plastic constant): ray i of a pixel samples the disk
+// at fract(h + i * kR2), so a pixel's rays spread evenly over the light instead
+// of clumping the way independent hashes would.
+const vec2 kR2 = vec2(0.7548776662, 0.5698402910);
+
+// View-space position from a raw reverse-Z depth at uv (gtao.comp convention).
+vec3 ViewPosFromRaw(vec2 uv, float raw)
+{
+    vec2 ndc = vec2(uv.x * 2.0 - 1.0, 1.0 - 2.0 * uv.y);
+    vec4 vp  = uInvProj * vec4(ndc, raw, 1.0);
+    return vp.xyz / vp.w;
+}
+
+// Two decorrelated [0,1) hashes for one pixel (Dave Hoskins hash22). The seed is
+// offset by the jitter phase so the field advances each frame ONLY when the
+// caller passes a nonzero phase (TAA on) — phase 0 leaves it frame-stable, so a
+// non-TAA frame is spatially dithered but never shimmers. The caller keeps the
+// phase to a short cycle: the first fract() stage loses its low bits once the
+// seed reaches the tens of thousands, and neighbour pixels then share samples.
+vec2 SoftShadowHash(vec2 seed)
+{
+    vec3 p3 = fract(vec3(seed.xyx) * vec3(0.1031, 0.1030, 0.0973));
+    p3 += dot(p3, p3.yzx + 33.33);
+    return fract((p3.xx + p3.yz) * p3.zy);
+}
+
+// Shirley concentric mapping of a unit square [-1,1]^2 onto the unit disk:
+// equal-area, so the samples are uniform over the disk (and, for the small
+// angles here, over the light's solid angle).
+vec2 ConcentricDisk(vec2 u)
+{
+    if (u.x == 0.0 && u.y == 0.0)
+        return vec2(0.0);
+    float r;
+    float theta;
+    if (abs(u.x) > abs(u.y))
+    {
+        r     = u.x;
+        theta = (kPi * 0.25) * (u.y / u.x);
+    }
+    else
+    {
+        r     = u.y;
+        theta = (kPi * 0.5) - (kPi * 0.25) * (u.x / u.y);
+    }
+    return r * vec2(cos(theta), sin(theta));
+}
+
+void main()
+{
+    ivec2 size = imageSize(uMask);
+    ivec2 pix  = ivec2(gl_GlobalInvocationID.xy);
+    if (pix.x >= size.x || pix.y >= size.y)
+        return;
+
+    vec2 texel = 1.0 / vec2(size);
+    vec2 uv    = (vec2(pix) + 0.5) * texel;
+
+    float rawC = textureLod(uDepth, uv, 0.0).r;
+    if (rawC <= 0.0)
+    {
+        // Sky / cleared (reverse-Z far): lit.
+        imageStore(uMask, pix, vec4(1.0));
+        return;
+    }
+
+    vec3 posVS = ViewPosFromRaw(uv, rawC);
+
+    // Cascade parity: beyond the max shadow distance the raster path keeps only
+    // the terrain's term (shadow_sampling.glsl GE_SampleShadow), so the mask
+    // matches — and distant pixels pay no ray. Inside it the rays' term fades
+    // out over the same band as the cascades (GE_ShadowDistanceFade below); the
+    // terrain's term, which has no range, does not.
+    if (posVS.z > uLightDirWS.w)
+    {
+        imageStore(uMask, pix, vec4(TerrainLit((uInvView * vec4(posVS, 1.0)).xyz)));
+        return;
+    }
+
+    // Best-of-neighbour view-space normal (gtao.comp): pick the least
+    // depth-discontinuous side pair so silhouettes don't smear the normal.
+    vec3 Pr = ViewPosFromRaw(uv + vec2(texel.x, 0.0), textureLod(uDepth, uv + vec2(texel.x, 0.0), 0.0).r);
+    vec3 Pl = ViewPosFromRaw(uv - vec2(texel.x, 0.0), textureLod(uDepth, uv - vec2(texel.x, 0.0), 0.0).r);
+    vec3 Pd = ViewPosFromRaw(uv + vec2(0.0, texel.y), textureLod(uDepth, uv + vec2(0.0, texel.y), 0.0).r);
+    vec3 Pu = ViewPosFromRaw(uv - vec2(0.0, texel.y), textureLod(uDepth, uv - vec2(0.0, texel.y), 0.0).r);
+    vec3 dPdx = (abs(Pr.z - posVS.z) < abs(posVS.z - Pl.z)) ? (Pr - posVS) : (posVS - Pl);
+    vec3 dPdy = (abs(Pd.z - posVS.z) < abs(posVS.z - Pu.z)) ? (Pd - posVS) : (posVS - Pu);
+    vec3 nVS = cross(dPdx, dPdy);
+    float nLen = length(nVS);
+    // Degenerate derivative frame (grazing depth cliff): skip the offset
+    // rather than inject a NaN direction into traversal.
+    nVS = (nLen > 1e-8) ? nVS / nLen : vec3(0.0);
+    if (dot(nVS, -posVS) < 0.0)
+        nVS = -nVS;
+
+    vec3 posWS = (uInvView * vec4(posVS, 1.0)).xyz;
+    vec3 nWS   = mat3(uInvView) * nVS;  // rigid view: mat3(invView) is the rotation
+
+    // Normal-offset origin bias against self-intersection with the surface's
+    // own triangles (the receiver IS in the TLAS); tMin covers the rest.
+    vec3 origin = posWS + nWS * uRayParams.z;
+
+    // Soft shadow: perturb each ray inside the light's angular cone. At tangent
+    // 0 every ray is the same hard ray, so one is traced and the direction is
+    // left EXACTLY equal to uLightDirWS.xyz — byte-identical to the hard ray
+    // (no normalize, no basis, so no float drift).
+    const float tanHalfAngle = uRayParams.w;
+    const int   rayCount     = (tanHalfAngle > 0.0) ? max(int(uTemporal.y), 1) : 1;
+    vec2 h = vec2(0.0);
+    vec3 tangent   = vec3(0.0);
+    vec3 bitangent = vec3(0.0);
+    if (tanHalfAngle > 0.0)
+    {
+        h = SoftShadowHash(vec2(pix) + uTemporal.x * vec2(113.0, 71.7));
+        // Orthonormal frame around the light direction; guard the near-parallel
+        // up vector so the cross product never degenerates.
+        vec3 up   = (abs(uLightDirWS.y) < 0.999) ? vec3(0.0, 1.0, 0.0) : vec3(1.0, 0.0, 0.0);
+        tangent   = normalize(cross(up, uLightDirWS.xyz));
+        bitangent = cross(uLightDirWS.xyz, tangent);
+    }
+
+    float litSum = 0.0;
+    for (int i = 0; i < rayCount; ++i)
+    {
+        vec3 rayDir = uLightDirWS.xyz;
+        if (tanHalfAngle > 0.0)
+        {
+            vec2 disk = ConcentricDisk(fract(h + float(i) * kR2) * 2.0 - 1.0);
+            // Disk edge (|disk| = 1) maps to exactly the cone half-angle: the
+            // offset in the plane one unit along rayDir has radius tan(halfAngle).
+            rayDir = normalize(rayDir + (tangent * disk.x + bitangent * disk.y) * tanHalfAngle);
+        }
+
+        rayQueryEXT rq;
+        rayQueryInitializeEXT(rq, uTlas,
+                              gl_RayFlagsTerminateOnFirstHitEXT | gl_RayFlagsOpaqueEXT,
+                              0xFFu, origin, uRayParams.x, rayDir, uRayParams.y);
+        while (rayQueryProceedEXT(rq))
+        {
+            // Opaque-only rays auto-commit triangle hits; nothing to confirm.
+        }
+        litSum += (rayQueryGetIntersectionTypeEXT(rq, true) ==
+                   gl_RayQueryCommittedIntersectionNoneEXT)
+                      ? 1.0
+                      : 0.0;
+    }
+
+    // One ray: binary this frame, and successive frames' cone-jittered results
+    // accumulate through TAA into a fractional 0..1 occlusion. Four rays: the
+    // pixel already holds the fraction in steps of 1/4. Either way the consumer
+    // reads the R8_UNORM as a float — the soft penumbra.
+    // The distance fade ends the rays' term only; the terrain's term joins it
+    // unfaded, as in the raster path (GE_JoinTerrainAfterFade).
+    float visibility = litSum / float(rayCount);
+    imageStore(uMask, pix,
+               vec4(GE_JoinTerrainAfterFade(visibility, TerrainLit(posWS), posVS.z, uLightDirWS.w, uTemporal.z)));
+}

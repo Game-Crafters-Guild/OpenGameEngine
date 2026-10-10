@@ -1,0 +1,200 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>External GPU Profilers &amp; Capture Tooling</title>
+<style>
+:root{
+  --bg:#0f1115; --panel:#171a21; --panel-light:#1e2230; --border:#2a2f3d;
+  --text:#dfe3ec; --muted:#8d939e; --accent:#6ea8fe;
+  --danger:#e5484d; --bad:#e5484d; --ok:#46a758; --good:#46a758; --warn:#d5a021;
+}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--text);font:15px/1.55 "Segoe UI",system-ui,sans-serif;padding:0 0 90px}
+.wrap{max-width:1080px;margin:0 auto;padding:30px 26px}
+h1{font-size:26px;margin:0 0 3px}
+.lede{color:var(--muted);font-size:12.5px;letter-spacing:.06em;text-transform:uppercase;margin:0 0 22px}
+h2{font-size:20px;margin:34px 0 12px;padding-top:18px;border-top:1px solid var(--border)}
+h3{font-size:16px;margin:20px 0 8px}
+a{color:var(--accent);text-decoration:none} a:hover{text-decoration:underline}
+code{background:var(--panel-light);border:1px solid var(--border);border-radius:4px;padding:1px 5px;font:12.5px Consolas,monospace}
+pre{background:var(--panel-light);border:1px solid var(--border);border-radius:7px;padding:12px 14px;overflow-x:auto;font:12.5px/1.5 Consolas,monospace}
+pre code{background:none;border:0;padding:0}
+table{border-collapse:collapse;width:100%;margin:12px 0;font-size:13.5px}
+th{background:var(--panel-light);text-align:left;padding:8px 11px;border:1px solid var(--border);font-size:12px;letter-spacing:.05em;text-transform:uppercase;color:var(--muted)}
+td{padding:8px 11px;border:1px solid var(--border);vertical-align:top}
+tr:hover td{background:#1c2029}
+.panel{background:var(--panel);border:1px solid var(--border);border-left:4px solid var(--accent);border-radius:8px;padding:13px 16px;margin:14px 0}
+.panel.danger{border-left-color:var(--danger)}
+.panel.ok{border-left-color:var(--ok)}
+.panel.warn{border-left-color:var(--warn)}
+.pill{display:inline-block;font-size:10px;font-weight:700;letter-spacing:.06em;border-radius:9px;padding:2px 8px;margin-right:6px;vertical-align:1.5px;white-space:nowrap}
+.pill.ok{background:#1d3324;color:#7ee2a0;border:1px solid #2c5e3c}
+.pill.warn{background:#332b16;color:#ffd479;border:1px solid #6b5a26}
+.pill.bad{background:#3a2222;color:#ff9d9d;border:1px solid #7d3535}
+.muted{color:var(--muted)}
+.footer{color:var(--muted);font-size:12px;border-top:1px solid var(--border);margin-top:34px;padding-top:13px}
+</style>
+</head>
+<body><div class="wrap">
+
+<h1>External GPU Profilers &amp; Capture Tooling</h1>
+<p class="lede">CANONICAL · GPU profiling, capture and trace integrations · amend this file, do not fork a dated sibling</p>
+
+<p>The engine integrates four external GPU tools, all reachable from the debug server / <code>ge</code> CLI so
+agents and scripts drive them the same way a developer does. The shared substrate: <b>GPU debug labels
+(<code>VK_EXT_debug_utils</code>) are enabled in every config</b>, independent of the validation layer, so
+render-graph pass names are visible to every tool in DebugFast <i>and Release</i> — the config perf claims must
+come from. <code>get_gpu_tooling</code> is the preflight: vendor, whether labels actually resolved, whether the
+validation layer is on, and which tools the Vulkan runtime reports attached.</p>
+
+<table>
+<tr><th>Tool</th><th>What it answers</th><th>Trigger surface</th><th>State</th></tr>
+<tr><td><b>RenderDoc</b> ≥1.45</td><td>Frame capture: what did this draw read/write, pixel history, pass inspection</td>
+<td><code>launch_editor renderdoc:true</code> → <code>trigger_capture</code> / <code>get_capture_status</code>; panel button</td>
+<td><span class="pill ok">VERIFIED</span>end-to-end on RTX 4090, 2026-08-21</td></tr>
+<tr><td><b>Nsight Graphics</b> 2026.3</td><td>NVIDIA frame capture + GPU Trace profiling</td>
+<td><code>mcp/scripts/ngfx-capture-editor.mjs</code> → <code>nsight_capture</code></td>
+<td><span class="pill ok">VERIFIED</span>end-to-end on RTX 4090, 2026-08-21</td></tr>
+<tr><td><b>Nsight Systems</b> (NVTX)</td><td>CPU–GPU timeline with engine-named zones</td>
+<td><code>nsys profile</code> against any staged editor; always on, <code>GE_NVTX=0</code> kills</td>
+<td><span class="pill ok">VERIFIED</span>nvtx_sum shows Frame + engine scopes</td></tr>
+<tr><td><b>Radeon GPU Profiler</b></td><td>AMD wavefront-level GPU profiling</td>
+<td><code>rgp_capture</code> (vendor-gated orchestration of the RDP CLIs)</td>
+<td><span class="pill bad">UNVERIFIED ON AMD</span>refusal path verified; no AMD hardware</td></tr>
+</table>
+
+<h2>The substrate: labels + tooling report</h2>
+
+<p><code>VK_EXT_debug_utils</code> is probed and enabled at instance creation in every config
+(<code>VulkanDevice.cpp</code>, instance-extension enumeration); the label entry points are cached per device,
+all-or-none, and cleared at device teardown. Every scheduled render-graph pass is bracketed
+(<code>RGRecord.cpp</code>), so captures read as a named pass tree. Cost with no tool attached is a null-check
+plus one ICD call per pass boundary.</p>
+
+<table>
+<tr><th>Env toggle</th><th>Effect</th></tr>
+<tr><td><code>GE_VK_NO_DEBUG_UTILS=1</code></td><td>Drops the extension for non-debug instances (a validation-layer
+instance keeps it — the debug messenger is built on it). Read once, process-memoized.</td></tr>
+<tr><td><code>GE_VK_CAPTURE_COMPAT=1</code></td><td>Drops <code>VK_EXT_descriptor_buffer</code> + ray-query
+extensions so captures replay. <b>Set by default by the RenderDoc/Nsight launch paths.</b> See the warning below.</td></tr>
+<tr><td><code>GE_NVTX=0</code></td><td>Silences NVTX ranges (compiled in when <code>ENABLE_NVTX</code>, default on
+with profiling).</td></tr>
+</table>
+
+<pre><code>node mcp/ge.mjs get_gpu_tooling
+{ "vendor": "NVIDIA", "vendorId": 4318, "hardware": "NVIDIA GeForce RTX 4090 ...",
+  "debugUtilsEnabled": true,          // label entry points actually resolved on THIS device
+  "validationLayerEnabled": false,    // request-derived; injected layers appear in attachedTools
+  "toolingInfoAvailable": true,       // false = could not ask; distinct from "asked, none attached"
+  "attachedTools": [ { "name", "version", "purposes", "purposeBits", "layer", "description" } ] }</code></pre>
+
+<div class="panel warn"><b>attachedTools does not see Nsight.</b> Nsight Graphics injects via loader interception,
+not a Vulkan layer, so <code>VK_EXT_tooling_info</code> reports it absent even mid-capture. RenderDoc and
+validation layers do appear. Nsight availability is answered by the error <code>nsight_capture</code> fails with
+(and, forensically, the process module list).</div>
+
+<h2>RenderDoc</h2>
+
+<pre><code># launch under RenderDoc (sets GE_VK_CAPTURE_COMPAT=1; captureCompat:false opts out)
+node mcp/ge.mjs launch_editor --config DebugFast --renderdoc true
+node mcp/ge.mjs trigger_capture          # → {captured, captureIndex, filePath}
+node mcp/ge.mjs get_capture_status       # recovers a capture that outlived the poll budget</code></pre>
+
+<ul>
+<li>Captures land in <code>&lt;exeDir&gt;/Captures/</code> (<code>GE_RENDERDOC_CAPTURE_DIR</code> overrides).
+A launcher-set <code>--capture-file</code> template is <b>kept</b>; only RenderDoc's own
+<code>%TEMP%\RenderDoc\</code> default is replaced.</li>
+<li>The in-app API attaches passively (<code>GetModuleHandleA</code>) — the editor must be <i>launched under</i>
+RenderDoc (renderdoccmd, qrenderdoc, or <code>launch_editor renderdoc:true</code>); nothing injects at runtime.</li>
+<li>Headless analysis: qrenderdoc <code>--python</code> scripts. First run of a fresh
+RenderDoc install shows an analytics dialog that blocks <code>--python</code> — pre-seed
+<code>%APPDATA%\qrenderdoc\UI.config</code> with <code>"Analytics_TotalOptOut": true</code>.</li>
+</ul>
+
+<div class="panel danger"><b>Do not draw occlusion or perf conclusions from a compat capture.</b> The engine logs it
+too: HZB occlusion culling has been observed inert (0 culled) under <code>GE_VK_CAPTURE_COMPAT</code>, cause
+unidentified. Captures are for correctness inspection; numbers come from Release with no capture layer attached
+(prove that with <code>get_gpu_tooling</code>).</div>
+
+<h2>Nsight Graphics</h2>
+
+<pre><code># launch with the capture libraries injected (sets GE_VK_CAPTURE_COMPAT=1; --no-capture-compat opts out)
+node mcp/scripts/ngfx-capture-editor.mjs --config DebugFast -- --debug-port 9999
+node mcp/ge.mjs nsight_capture --frames 3   # → {captured, captureIndex, filePath} (.ngfx-capture)</code></pre>
+
+<ul>
+<li>CLI-launched mode only: <code>ngfx-capture.exe</code> injects; the in-app SDK (header-only, ships in the
+Nsight Graphics install under <code>SDKs/NsightGraphicsSDK/</code>) triggers and reports. Self-injection before
+device creation is a recorded follow-up, not implemented.</li>
+<li>Build wiring is optional: <code>find_path</code> → <code>GE_HAVE_NGFX_SDK</code>; machines without the install
+compile clean no-op stubs. <code>NSIGHT_GRAPHICS_SDK</code> env overrides discovery.</li>
+<li>Two gotchas encoded in the launcher: <code>ngfx-capture --args</code> <b>silently truncates</b>
+space-separated values (the launcher emits <code>--args=&lt;token&gt;</code> per argument), and the SDK's default
+library-load callback <b>aborts the process</b> — the wrapper installs an already-loaded-modules-only loader
+before anything can hit it.</li>
+</ul>
+
+<h2>Nsight Systems (NVTX)</h2>
+
+<pre><code>&amp; "C:\Program Files\NVIDIA Corporation\Nsight Systems 2025.5.2\target-windows-x64\nsys.exe" `
+    profile --trace=nvtx --duration=30 -o editor-trace &lt;staged&gt;\Editor.exe
+nsys stats --report nvtx_sum editor-trace.nsys-rep   # GameEngine:Frame + engine scopes</code></pre>
+
+<ul>
+<li>Every <code>GE_CPU_PROFILE_SCOPE</code> is an NVTX range in the <code>GameEngine</code> domain, plus a
+top-level <code>Frame</code> range that closes before the frame-rate limiter (throttle sleep shows as the gap).
+Emission is independent of the in-engine CPU profiler being armed.</li>
+<li>Headers come from the <code>nvtx3-upstream</code> overlay port; the declaration
+(<code>Core/NvtxRange.h</code>) is gate-free so <code>ScopedCpuProfile</code> keeps one layout in every target
+that compiles it — targets embedding it must link <code>Engine</code> (the ctor is an exported symbol).</li>
+<li><span class="muted">Coverage note: CPU scopes are dense in UI/Editor/Terrain and absent in
+<code>Modules/Rendering</code> and ECS internals — those show through the render-thread brackets, not scopes.
+Widening coverage is optimization-arc work, not tooling work.</span></li>
+</ul>
+
+<h2>Radeon GPU Profiler</h2>
+
+<div class="panel danger"><b>UNVERIFIED ON AMD HARDWARE.</b> Written and refusal-path-tested on an NVIDIA machine.
+The AMD-side flow — service handshake, panel CLI flags, trace resolution, whether engine labels surface as RGP
+user markers &mdash; has never executed. Verify each of those on AMD hardware before relying on it.</div>
+
+<ul>
+<li><code>rgp_capture</code> refuses on non-AMD hardware, naming the detected GPU (gate reads
+<code>get_gpu_tooling</code>; fail-closed, red-green tested by gate inversion). On AMD it orchestrates
+<code>RadeonDeveloperServiceCLI</code> + <code>RadeonDeveloperPanelCLI</code> (resolution:
+<code>RDP_PATH</code> → Program Files → PATH) and returns the newest <code>.rgp</code> newer than the trigger.</li>
+<li>RGP has no in-app SDK; the engine-side prerequisites are exactly the substrate above (labels in Release,
+vendor detection). Gate test: <code>McpRgpCaptureGate</code> ctest.</li>
+</ul>
+
+<h2>Measurement discipline</h2>
+
+<div class="panel ok">Numbers come from <b>Release, both arms, no capture layer attached</b> — prove the last part
+with <code>get_gpu_tooling</code> in the same session as the measurement. Frame times come from the
+<code>get_monitors</code> ring (600 samples), not eyeballed FPS. Any claim measured through
+<code>GE_VK_CAPTURE_COMPAT</code>, a capture layer, or DebugFast is a different measurement, not a caveated one.</div>
+
+<h2>Known limitations &amp; follow-ups</h2>
+<ul>
+<li>Nsight self-inject mode (pre-device hook): capture without <code>ngfx-capture.exe</code>.</li>
+<li>RGP AMD verification: nothing in the RGP section has run on AMD hardware.</li>
+<li>Nsight Perf SDK in-engine metrics HUD (periodic sampler → <code>DebugMetrics</code>/Monitors): sketched, its
+own slice; SDK is a developer-login download and its runtime DLLs engage staging.</li>
+<li>Deferred-response poll budgets are frames, not seconds; capture serialization stalls the loop (measured
+~28 frames for a ~120 MB capture), so budgets are generous (300) and <code>get_capture_status</code> recovers
+late captures. A time-based budget is a recorded backlog item.</li>
+<li>Pipeline-statistics and occlusion query pools are implemented but unused by production code; the per-pass
+timestamp path (<code>get_gpu_profiler</code>) is the only in-engine GPU timing consumer today.</li>
+</ul>
+
+<h2>Changelog</h2>
+<ul>
+<li><b>2026-08-21</b> — Initial canonical version: debug-utils decoupling, <code>get_gpu_tooling</code>,
+RenderDoc determinism/recovery/launch automation, NVTX ranges, Nsight Graphics capture, RGP orchestration
+(unverified-on-AMD). Complements
+<code>docs/Rendering/gpu-debugging-guide.md</code>, which covers the debugging (not profiling) workflow.</li>
+</ul>
+
+<div class="footer">external-gpu-profilers.html · v1 · 2026-08-21 · optimization-and-profiling arc</div>
+</div></body></html>

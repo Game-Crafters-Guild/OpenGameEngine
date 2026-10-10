@@ -1,0 +1,193 @@
+{
+  "_example": "Entry → wait 1s → playSound (slot) → Continue (Enter / Space / click on canvas) → playRandomSounds. Hover the Node Graph canvas in play mode for keys. Replace GUIDs with your project audio assets.",
+  "kind": "game_logic",
+  "viewport": {
+    "panX": 0.0,
+    "panY": 0.0,
+    "zoom": 1.0
+  },
+  "nodes": [
+    {
+      "id": "n_entry",
+      "typeId": "Entry",
+      "positionX": 60.0,
+      "positionY": 140.0,
+      "pins": [
+        {
+          "id": "out",
+          "direction": "out",
+          "dataType": "flow",
+          "displayName": "Out"
+        }
+      ]
+    },
+    {
+      "id": "n_wait",
+      "typeId": "State",
+      "positionX": 320.0,
+      "positionY": 120.0,
+      "pins": [
+        {
+          "id": "in",
+          "direction": "in",
+          "dataType": "flow",
+          "displayName": "In"
+        },
+        {
+          "id": "out",
+          "direction": "out",
+          "dataType": "flow",
+          "displayName": "Out"
+        }
+      ],
+      "parameters": {
+        "title": "Wait 1 second"
+      }
+    },
+    {
+      "id": "n_t_wait",
+      "typeId": "Transition",
+      "positionX": 580.0,
+      "positionY": 110.0,
+      "pins": [
+        {
+          "id": "in",
+          "direction": "in",
+          "dataType": "flow",
+          "displayName": "In"
+        },
+        {
+          "id": "out",
+          "direction": "out",
+          "dataType": "flow",
+          "displayName": "Out"
+        },
+        {
+          "id": "condition",
+          "direction": "in",
+          "dataType": "bool",
+          "displayName": "Condition"
+        }
+      ],
+      "parameters": {
+        "mode": "timer",
+        "seconds": "1.0"
+      }
+    },
+    {
+      "id": "n_play_slot",
+      "typeId": "State",
+      "positionX": 840.0,
+      "positionY": 120.0,
+      "pins": [
+        {
+          "id": "in",
+          "direction": "in",
+          "dataType": "flow",
+          "displayName": "In"
+        },
+        {
+          "id": "out",
+          "direction": "out",
+          "dataType": "flow",
+          "displayName": "Out"
+        }
+      ],
+      "parameters": {
+        "title": "Play slotted sound",
+        "playSound": "00000000-0000-4000-8000-000000000001"
+      }
+    },
+    {
+      "id": "n_t_continue",
+      "typeId": "Transition",
+      "positionX": 1100.0,
+      "positionY": 110.0,
+      "pins": [
+        {
+          "id": "in",
+          "direction": "in",
+          "dataType": "flow",
+          "displayName": "In"
+        },
+        {
+          "id": "out",
+          "direction": "out",
+          "dataType": "flow",
+          "displayName": "Out"
+        },
+        {
+          "id": "condition",
+          "direction": "in",
+          "dataType": "bool",
+          "displayName": "Condition"
+        }
+      ],
+      "parameters": {
+        "mode": "event",
+        "event": "Continue"
+      }
+    },
+    {
+      "id": "n_play_random",
+      "typeId": "State",
+      "positionX": 1360.0,
+      "positionY": 120.0,
+      "pins": [
+        {
+          "id": "in",
+          "direction": "in",
+          "dataType": "flow",
+          "displayName": "In"
+        },
+        {
+          "id": "out",
+          "direction": "out",
+          "dataType": "flow",
+          "displayName": "Out"
+        }
+      ],
+      "parameters": {
+        "title": "Play random sound",
+        "playRandomSounds": "00000000-0000-4000-8000-000000000001;00000000-0000-4000-8000-000000000002"
+      }
+    }
+  ],
+  "links": [
+    {
+      "id": "l_0",
+      "sourceNodeId": "n_entry",
+      "sourcePinId": "out",
+      "targetNodeId": "n_wait",
+      "targetPinId": "in"
+    },
+    {
+      "id": "l_1",
+      "sourceNodeId": "n_wait",
+      "sourcePinId": "out",
+      "targetNodeId": "n_t_wait",
+      "targetPinId": "in"
+    },
+    {
+      "id": "l_2",
+      "sourceNodeId": "n_t_wait",
+      "sourcePinId": "out",
+      "targetNodeId": "n_play_slot",
+      "targetPinId": "in"
+    },
+    {
+      "id": "l_3",
+      "sourceNodeId": "n_play_slot",
+      "sourcePinId": "out",
+      "targetNodeId": "n_t_continue",
+      "targetPinId": "in"
+    },
+    {
+      "id": "l_4",
+      "sourceNodeId": "n_t_continue",
+      "sourcePinId": "out",
+      "targetNodeId": "n_play_random",
+      "targetPinId": "in"
+    }
+  ]
+}

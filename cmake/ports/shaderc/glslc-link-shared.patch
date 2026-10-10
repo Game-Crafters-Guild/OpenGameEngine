@@ -1,0 +1,22 @@
+diff --git a/glslc/CMakeLists.txt b/glslc/CMakeLists.txt
+index 692eac5..8641bfe 100644
+--- a/glslc/CMakeLists.txt
++++ b/glslc/CMakeLists.txt
+@@ -45,7 +45,7 @@ endif(SHADERC_ENABLE_WGSL_OUTPUT)
+ target_link_libraries(glslc PRIVATE
+   glslang SPIRV    # Glslang libraries
+   $<$<BOOL:${SHADERC_ENABLE_WGSL_OUTPUT}>:libtint>      # Tint libraries, optional
+-  shaderc_util shaderc                                  # internal Shaderc libraries
++  shaderc_util $<IF:$<BOOL:${BUILD_SHARED_LIBS}>,shaderc_shared,shaderc> # internal Shaderc libraries
+   ${CMAKE_THREAD_LIBS_INIT})
+ 
+ if(SHADERC_ENABLE_EXECUTABLES)
+@@ -53,7 +53,7 @@ if(SHADERC_ENABLE_EXECUTABLES)
+   shaderc_default_compile_options(glslc_exe)
+   target_include_directories(glslc_exe PRIVATE ${CMAKE_CURRENT_BINARY_DIR}/.. ${spirv-tools_SOURCE_DIR}/include)
+   set_target_properties(glslc_exe PROPERTIES OUTPUT_NAME glslc)
+-  target_link_libraries(glslc_exe PRIVATE glslc shaderc_util shaderc)
++  target_link_libraries(glslc_exe PRIVATE glslc shaderc_util $<IF:$<BOOL:${BUILD_SHARED_LIBS}>,shaderc_shared,shaderc>)
+ endif(SHADERC_ENABLE_EXECUTABLES)
+ 
+ shaderc_add_tests(

@@ -1,0 +1,14 @@
+{
+  "mcpServers": {
+    "gameengine": {
+      "type": "stdio",
+      "command": "node",
+      "args": [
+        "mcp/dist/index.js"
+      ],
+      "env": {
+        "PATH": "${PATH};${NVM_SYMLINK:-c:\\nvm4w\\nodejs}"
+      }
+    }
+  }
+}

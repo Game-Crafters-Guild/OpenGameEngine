@@ -1,0 +1,303 @@
+#version 450
+
+// Fused HZB downsample, finalize pass (2 of 2) — companion to
+// hzb_spd_minmax.comp. ONE workgroup, dispatched only when mipCount >= 3.
+//
+// Repairs the trailing odd-extent folds the tile pass skipped for mips 2..6
+// (confined to each level's global last row/column) and builds mips 7..12, for
+// BOTH pyramids: MIN (occlusion, reverse-Z farthest) and MAX (SSR traversal,
+// nearest surface). The fold rule and operation order are
+// hzb_spd_finalize.comp's verbatim; only the reduce op and the destination
+// images vary per pyramid.
+//
+// LDS is REUSED across the two pyramids, not doubled: the whole body runs
+// twice over the same eCol/eRow/tA/tB, separated by a barrier. Shared memory
+// therefore stays at hzb_spd_finalize.comp's 22016 bytes, which is what
+// HZBBuildNode gates against maxComputeSharedMemorySize — doubling it to 44032
+// would push past the 32768-byte floor on MoltenVK and disable the SPD path
+// there entirely. This pass is a single workgroup, so running it twice costs
+// sequential time on a tiny dispatch and saves a whole per-mip chain.
+//
+// Memory model: NO coherent anywhere. Values this dispatch itself produced are
+// never re-read through images — a level's fixed edges ride the eCol/eRow LDS
+// overlay (read via EdgeAwareLoad), mip 7 rides a whole-level LDS tile, and
+// deeper levels ping-pong LDS tiles. Image loads only ever touch tile-pass
+// output (made visible by the render-graph barrier between the two dispatches);
+// image stores are never loaded back.
+
+layout(local_size_x = 16, local_size_y = 16, local_size_z = 1) in;
+
+// Mips 1..12 of each pyramid as single-mip views (slot i = mip i+1). Reads
+// mips 1..6 (interior texels only), writes mips 2..12. No texel is both read
+// and written in this dispatch, so no access qualifier and no coherent.
+layout(set = 0, binding = 0, r32f) uniform image2D uMipsMin[12];
+layout(set = 0, binding = 1, r32f) uniform image2D uMipsMax[12];
+
+layout(push_constant) uniform PushConstants
+{
+    uint width;    // depth / mip 0 extent
+    uint height;
+    uint mipCount; // full chain length incl. mip 0 (CPU guards mip7 <= 32^2)
+};
+
+// Edge overlay: level m's fixed last column/row live at parity slot [m & 1].
+// Sized for mip 2 of the largest supported depth extent (4223 >> 2 = 1055).
+const int kMaxEdge = 1056;
+shared float eCol[2][kMaxEdge];
+shared float eRow[2][kMaxEdge];
+// Whole-level tiles for mips 7+ (mip 7 capped at 32x32 by the CPU guard).
+shared float tA[32][32];
+shared float tB[16][16];
+
+// Pyramid selector: index 0 = MIN (occlusion), 1 = MAX (SSR traversal).
+const uint kPyramidMin = 0u;
+const uint kPyramidMax = 1u;
+const uint kPyramidCount = 2u;
+
+// The reduce op. `pyr` is uniform across the workgroup (a constant-bound loop
+// counter), so this predicates rather than diverges; the MIN arm emits the
+// same min() hzb_spd_finalize.comp does, which keeps the pyramids bit-equal.
+float Fold(uint pyr, float a, float b)
+{
+    return (pyr == kPyramidMax) ? max(a, b) : min(a, b);
+}
+
+ivec2 LevelExtent(uint m)
+{
+    return ivec2(int(max(1u, width >> m)), int(max(1u, height >> m)));
+}
+
+float LoadMip(uint pyr, uint m, ivec2 c) // m in 1..12 -> uMips*[m-1]
+{
+    if (pyr == kPyramidMax)
+    {
+        switch (m)
+        {
+            case 1u: return imageLoad(uMipsMax[0], c).r;
+            case 2u: return imageLoad(uMipsMax[1], c).r;
+            case 3u: return imageLoad(uMipsMax[2], c).r;
+            case 4u: return imageLoad(uMipsMax[3], c).r;
+            case 5u: return imageLoad(uMipsMax[4], c).r;
+            default: return imageLoad(uMipsMax[5], c).r;
+        }
+    }
+    switch (m)
+    {
+        case 1u: return imageLoad(uMipsMin[0], c).r;
+        case 2u: return imageLoad(uMipsMin[1], c).r;
+        case 3u: return imageLoad(uMipsMin[2], c).r;
+        case 4u: return imageLoad(uMipsMin[3], c).r;
+        case 5u: return imageLoad(uMipsMin[4], c).r;
+        default: return imageLoad(uMipsMin[5], c).r;
+    }
+}
+
+void StoreMip(uint pyr, uint m, ivec2 c, float v) // m in 2..12 -> uMips*[m-1]
+{
+    const vec4 t = vec4(v, 0.0, 0.0, 0.0);
+    if (pyr == kPyramidMax)
+    {
+        switch (m)
+        {
+            case 2u:  imageStore(uMipsMax[1], c, t); break;
+            case 3u:  imageStore(uMipsMax[2], c, t); break;
+            case 4u:  imageStore(uMipsMax[3], c, t); break;
+            case 5u:  imageStore(uMipsMax[4], c, t); break;
+            case 6u:  imageStore(uMipsMax[5], c, t); break;
+            case 7u:  imageStore(uMipsMax[6], c, t); break;
+            case 8u:  imageStore(uMipsMax[7], c, t); break;
+            case 9u:  imageStore(uMipsMax[8], c, t); break;
+            case 10u: imageStore(uMipsMax[9], c, t); break;
+            case 11u: imageStore(uMipsMax[10], c, t); break;
+            default:  imageStore(uMipsMax[11], c, t); break;
+        }
+        return;
+    }
+    switch (m)
+    {
+        case 2u:  imageStore(uMipsMin[1], c, t); break;
+        case 3u:  imageStore(uMipsMin[2], c, t); break;
+        case 4u:  imageStore(uMipsMin[3], c, t); break;
+        case 5u:  imageStore(uMipsMin[4], c, t); break;
+        case 6u:  imageStore(uMipsMin[5], c, t); break;
+        case 7u:  imageStore(uMipsMin[6], c, t); break;
+        case 8u:  imageStore(uMipsMin[7], c, t); break;
+        case 9u:  imageStore(uMipsMin[8], c, t); break;
+        case 10u: imageStore(uMipsMin[9], c, t); break;
+        case 11u: imageStore(uMipsMin[10], c, t); break;
+        default:  imageStore(uMipsMin[11], c, t); break;
+    }
+}
+
+// Source load for the exact rule: interior texels come from the tile-pass
+// image; a fixed level's (srcMip >= 2) last column/row come from the LDS
+// overlay written by the previous fixup iteration. `c` is pre-clamped.
+float EdgeAwareLoad(uint pyr, uint srcMip, ivec2 c, ivec2 srcExt)
+{
+    if (srcMip >= 2u)
+    {
+        if (c.x == srcExt.x - 1)
+            return eCol[srcMip & 1u][c.y];
+        if (c.y == srcExt.y - 1)
+            return eRow[srcMip & 1u][c.x];
+    }
+    return LoadMip(pyr, srcMip, c);
+}
+
+// hzb_build.comp's mode-1/2 rule verbatim (same operation order — bit parity):
+// clamped 2x2 reduce plus the trailing fold on the last row/column when the
+// source extent is odd. Sources via EdgeAwareLoad.
+float ReduceExact(uint pyr, uint srcMip, ivec2 d, ivec2 dstExt, ivec2 srcExt)
+{
+    const ivec2 maxSrc = srcExt - ivec2(1);
+    const ivec2 base = d * 2;
+    float acc = EdgeAwareLoad(pyr, srcMip, clamp(base, ivec2(0), maxSrc), srcExt);
+    acc = Fold(pyr, acc,
+               EdgeAwareLoad(pyr, srcMip, clamp(base + ivec2(1, 0), ivec2(0), maxSrc), srcExt));
+    acc = Fold(pyr, acc,
+               EdgeAwareLoad(pyr, srcMip, clamp(base + ivec2(0, 1), ivec2(0), maxSrc), srcExt));
+    acc = Fold(pyr, acc,
+               EdgeAwareLoad(pyr, srcMip, clamp(base + ivec2(1, 1), ivec2(0), maxSrc), srcExt));
+
+    const bool oddW = (uint(srcExt.x) & 1u) != 0u;
+    const bool oddH = (uint(srcExt.y) & 1u) != 0u;
+    const bool lastCol = d.x == dstExt.x - 1;
+    const bool lastRow = d.y == dstExt.y - 1;
+    if (oddW && lastCol)
+    {
+        acc = Fold(pyr, acc,
+                   EdgeAwareLoad(pyr, srcMip, clamp(base + ivec2(2, 0), ivec2(0), maxSrc), srcExt));
+        acc = Fold(pyr, acc,
+                   EdgeAwareLoad(pyr, srcMip, clamp(base + ivec2(2, 1), ivec2(0), maxSrc), srcExt));
+    }
+    if (oddH && lastRow)
+    {
+        acc = Fold(pyr, acc,
+                   EdgeAwareLoad(pyr, srcMip, clamp(base + ivec2(0, 2), ivec2(0), maxSrc), srcExt));
+        acc = Fold(pyr, acc,
+                   EdgeAwareLoad(pyr, srcMip, clamp(base + ivec2(1, 2), ivec2(0), maxSrc), srcExt));
+    }
+    if (oddW && oddH && lastCol && lastRow)
+        acc = Fold(pyr, acc,
+                   EdgeAwareLoad(pyr, srcMip, clamp(base + ivec2(2, 2), ivec2(0), maxSrc), srcExt));
+    return acc;
+}
+
+void main()
+{
+    const uint flatIdx = gl_LocalInvocationIndex;
+
+    // Both pyramids share the LDS overlay and tail tiles, so they run as two
+    // sequential phases. `pyr` is uniform, keeping every barrier below in
+    // uniform control flow.
+    for (uint pyr = 0u; pyr < kPyramidCount; ++pyr)
+    {
+        // Separates this phase's eCol/eRow/tA writes from the previous phase's
+        // reads. Harmless on the first iteration.
+        barrier();
+
+        // ── Fold fixup for mips 2..6: recompute each level's global last
+        // column + last row. The column arm covers the full height (incl. the
+        // corner, mirrored into eRow); the row arm covers x in [0, dstW-1) so
+        // no texel is written twice.
+        for (uint m = 2u; m < mipCount && m <= 6u; ++m)
+        {
+            const ivec2 dstExt = LevelExtent(m);
+            const ivec2 srcExt = LevelExtent(m - 1u);
+            const uint edgeItems = uint(dstExt.y) + uint(dstExt.x) - 1u;
+            for (uint i = flatIdx; i < edgeItems; i += 256u)
+            {
+                const bool isCol = i < uint(dstExt.y);
+                const ivec2 d = isCol ? ivec2(dstExt.x - 1, int(i))
+                                      : ivec2(int(i) - dstExt.y, dstExt.y - 1);
+                const float v = ReduceExact(pyr, m - 1u, d, dstExt, srcExt);
+                StoreMip(pyr, m, d, v);
+                if (isCol)
+                {
+                    eCol[m & 1u][d.y] = v;
+                    if (d.y == dstExt.y - 1)
+                        eRow[m & 1u][d.x] = v; // corner mirror
+                }
+                else
+                {
+                    eRow[m & 1u][d.x] = v;
+                }
+            }
+            barrier();
+        }
+
+        if (mipCount > 7u)
+        {
+            // ── Mip 7: whole level (<= 32x32) via EdgeAwareLoad over mip 6.
+            {
+                const ivec2 dstExt = LevelExtent(7u);
+                const ivec2 srcExt = LevelExtent(6u);
+                const uint texels = uint(dstExt.x) * uint(dstExt.y);
+                for (uint i = flatIdx; i < texels; i += 256u)
+                {
+                    const ivec2 d = ivec2(int(i % uint(dstExt.x)), int(i / uint(dstExt.x)));
+                    const float v = ReduceExact(pyr, 6u, d, dstExt, srcExt);
+                    StoreMip(pyr, 7u, d, v);
+                    tA[d.y][d.x] = v;
+                }
+            }
+
+            // ── Mips 8..12: whole level from the LDS tile ping-pong; the exact
+            // rule (incl. folds) reads only the previous level's tile.
+#define GE_SPD_TAIL_LEVEL(dstMip, SRC, DST)                                                    \
+            barrier();                                                                         \
+            if (mipCount > uint(dstMip))                                                       \
+            {                                                                                  \
+                const ivec2 dstExt = LevelExtent(uint(dstMip));                                \
+                const ivec2 srcExt = LevelExtent(uint(dstMip) - 1u);                           \
+                const ivec2 maxS = srcExt - ivec2(1);                                          \
+                const uint texels = uint(dstExt.x) * uint(dstExt.y);                           \
+                for (uint i = flatIdx; i < texels; i += 256u)                                  \
+                {                                                                              \
+                    const ivec2 d = ivec2(int(i % uint(dstExt.x)), int(i / uint(dstExt.x)));   \
+                    const ivec2 b = d * 2;                                                     \
+                    ivec2 c0 = clamp(b, ivec2(0), maxS);                                       \
+                    ivec2 c1 = clamp(b + ivec2(1, 0), ivec2(0), maxS);                         \
+                    ivec2 c2 = clamp(b + ivec2(0, 1), ivec2(0), maxS);                         \
+                    ivec2 c3 = clamp(b + ivec2(1, 1), ivec2(0), maxS);                         \
+                    float acc = SRC[c0.y][c0.x];                                               \
+                    acc = Fold(pyr, acc, SRC[c1.y][c1.x]);                                     \
+                    acc = Fold(pyr, acc, SRC[c2.y][c2.x]);                                     \
+                    acc = Fold(pyr, acc, SRC[c3.y][c3.x]);                                     \
+                    const bool oddW = (uint(srcExt.x) & 1u) != 0u;                             \
+                    const bool oddH = (uint(srcExt.y) & 1u) != 0u;                             \
+                    const bool lastCol = d.x == dstExt.x - 1;                                  \
+                    const bool lastRow = d.y == dstExt.y - 1;                                  \
+                    if (oddW && lastCol)                                                       \
+                    {                                                                          \
+                        ivec2 f0 = clamp(b + ivec2(2, 0), ivec2(0), maxS);                     \
+                        ivec2 f1 = clamp(b + ivec2(2, 1), ivec2(0), maxS);                     \
+                        acc = Fold(pyr, acc, SRC[f0.y][f0.x]);                                 \
+                        acc = Fold(pyr, acc, SRC[f1.y][f1.x]);                                 \
+                    }                                                                          \
+                    if (oddH && lastRow)                                                       \
+                    {                                                                          \
+                        ivec2 f2 = clamp(b + ivec2(0, 2), ivec2(0), maxS);                     \
+                        ivec2 f3 = clamp(b + ivec2(1, 2), ivec2(0), maxS);                     \
+                        acc = Fold(pyr, acc, SRC[f2.y][f2.x]);                                 \
+                        acc = Fold(pyr, acc, SRC[f3.y][f3.x]);                                 \
+                    }                                                                          \
+                    if (oddW && oddH && lastCol && lastRow)                                    \
+                    {                                                                          \
+                        ivec2 f4 = clamp(b + ivec2(2, 2), ivec2(0), maxS);                     \
+                        acc = Fold(pyr, acc, SRC[f4.y][f4.x]);                                 \
+                    }                                                                          \
+                    StoreMip(pyr, uint(dstMip), d, acc);                                       \
+                    DST[d.y][d.x] = acc;                                                       \
+                }                                                                              \
+            }
+
+            GE_SPD_TAIL_LEVEL(8, tA, tB)
+            GE_SPD_TAIL_LEVEL(9, tB, tA)
+            GE_SPD_TAIL_LEVEL(10, tA, tB)
+            GE_SPD_TAIL_LEVEL(11, tB, tA)
+            GE_SPD_TAIL_LEVEL(12, tA, tB)
+#undef GE_SPD_TAIL_LEVEL
+        }
+    }
+}

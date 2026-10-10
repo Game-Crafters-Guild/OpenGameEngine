@@ -1,0 +1,140 @@
+/* DiffPanel styles */
+
+.diff-panel-container {
+    width: 100%;
+    height: 100%;
+    display: flex;
+    flex-direction: column;
+    margin: 0;
+    padding: 0;
+}
+
+.diff-split-container {
+    display: flex;
+    flex-direction: row;
+    width: 100%;
+    height: 100%;
+    margin: 0;
+    padding: 0;
+    flex-grow: 1;
+}
+
+.diff-left-panel {
+    width: 50%;
+    flex: 0 0 50%;
+    display: flex;
+    flex-direction: column;
+    margin: 0;
+    padding: 0;
+    min-width: 0;
+}
+
+.diff-right-panel {
+    width: 50%;
+    flex: 0 0 50%;
+    display: flex;
+    flex-direction: column;
+    margin: 0;
+    padding: 0;
+    min-width: 0;
+}
+
+.diff-panel-label {
+    padding: 4px 8px;
+    background-color: #2a2a2a;
+}
+
+.diff-scroll-view {
+    flex: 1;
+    min-height: 0;
+    width: 100%;
+}
+
+.diff-textarea {
+    /* Textarea base styles can be inherited */
+}
+
+/* Scene files are aligned by stable entity/section and property identity.
+   Changed rows use an underline so the signal remains legible without
+   replacing the Inspector-like neutral row background. */
+.diff-scene-list {
+    display: flex;
+    flex-direction: column;
+    width: 100%;
+    padding: 4px 8px 12px 8px;
+}
+
+.diff-scene-row {
+    display: flex;
+    flex-direction: row;
+    align-items: center;
+    width: 100%;
+    height: 26px;
+    min-height: 26px;
+    max-height: 26px;
+    border-bottom-width: 1px;
+    border-bottom-style: solid;
+    border-bottom-color: transparent;
+}
+
+.diff-scene-object-row {
+    height: 30px;
+    min-height: 30px;
+    max-height: 30px;
+    margin-top: 5px;
+    padding: 0 6px;
+    background-color: var(--ui_color_bg_hover_alt);
+}
+
+.diff-scene-property-row {
+    padding-left: 22px;
+    padding-right: 6px;
+}
+
+.diff-scene-key {
+    width: 42%;
+    flex: 0 0 42%;
+    color: var(--ui_color_text_dim);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.diff-scene-object-row .diff-scene-key {
+    width: 100%;
+    flex: 1 1 auto;
+    color: var(--ui_color_text_muted);
+}
+
+.diff-scene-entity-key {
+    font-weight: 600;
+}
+
+.diff-scene-section-key {
+    color: var(--ui_color_text_dim);
+}
+
+.diff-scene-value {
+    min-width: 0;
+    flex: 1 1 auto;
+    color: var(--ui_color_text);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.diff-scene-added {
+    border-bottom-color: var(--ui_color_vcs_added);
+}
+
+.diff-scene-removed {
+    border-bottom-color: var(--ui_color_vcs_removed);
+}
+
+.diff-scene-modified {
+    border-bottom-color: var(--ui_color_vcs_modified);
+}
+
+.diff-scene-placeholder {
+    opacity: 0;
+}

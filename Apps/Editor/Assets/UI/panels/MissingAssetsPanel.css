@@ -1,0 +1,102 @@
+/* Missing Assets panel — header strip (status + Refresh) above a scrolling
+   list of unresolved scene references. */
+
+.missing-assets-panel {
+    display: flex;
+    flex-direction: column;
+    height: 100%;
+    background-color: var(--ui_color_bg_panel);
+}
+
+.missing-assets-root {
+    display: flex;
+    flex-direction: column;
+    height: 100%;
+    min-height: 0;
+}
+
+.missing-assets-header {
+    display: flex;
+    flex-direction: row;
+    align-items: center;
+    gap: 8px;
+    padding: 10px 12px;
+    flex-shrink: 0;
+}
+
+.missing-assets-status {
+    flex: 1 1 0%;
+    min-width: 0;
+    font-size: var(--ui_font_size_base);
+    color: var(--ui_color_text_secondary);
+}
+
+/* Descendant-qualified: Button.css's `button.small` outranks a bare class
+   here and would otherwise win the padding. */
+.missing-assets-panel .missing-assets-refresh {
+    gap: 6px;
+    padding-left: 8px;
+    padding-right: 10px;
+    flex-grow: 0;
+    flex-shrink: 0;
+}
+
+.missing-assets-refresh-icon {
+    background-image: url("editor:Icons/ResetReload.png");
+    background-image-tint: rgba(200, 200, 200, 1.0);
+    background-size: 16px 16px;
+    background-repeat: no-repeat;
+    background-position: center;
+    width: 16px;
+    height: 16px;
+    min-width: 16px;
+    flex-grow: 0;
+    flex-shrink: 0;
+}
+
+.missing-assets-panel .missing-assets-refresh:hover .missing-assets-refresh-icon {
+    background-image-tint: var(--ui_color_accent);
+}
+
+.missing-assets-scroll {
+    flex: 1 1 0%;
+    min-height: 0;
+}
+
+.missing-assets-list {
+    display: flex;
+    flex-direction: column;
+    width: 100%;
+}
+
+.missing-assets-row {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    padding: 6px 12px;
+    width: 100%;
+    border-top-width: 1px;
+    border-top-color: var(--ui_color_border);
+}
+
+.missing-assets-row:hover {
+    background-color: var(--ui_color_bg_item_hover);
+}
+
+.missing-assets-row-title {
+    font-size: var(--ui_font_size_base);
+    font-weight: 600;
+    color: var(--ui_color_text);
+}
+
+.missing-assets-row-path {
+    font-size: var(--ui_font_size_list);
+    color: var(--ui_color_text_secondary);
+    white-space: nowrap;
+    overflow: hidden;
+}
+
+.missing-assets-row-guid {
+    font-size: var(--ui_font_size_list);
+    color: var(--ui_color_text_disabled);
+}

@@ -1,0 +1,13 @@
+{
+  "schemaVersion": 3,
+  "materialName": "World Debug",
+  "lightingModel": "Unlit",
+  "alphaMode": "Opaque",
+  "doubleSided": false,
+  "surfaceShader": "Surfaces/unlit_solid.glsl",
+  "properties": {
+    "baseColor": [1.0, 0.0, 1.0, 1.0],
+    "opacity": 1.0
+  },
+  "textures": {}
+}

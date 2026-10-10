@@ -1,0 +1,150 @@
+#version 450
+
+// Software-lane skinned refit: writes one skinned instance's POSED vertex
+// records into its range of the pooled ThreadedBvh VertexData (the posed
+// buffer shares the exact 8-float [pos|normal|uv] record, so this is a
+// verbatim copy) and re-tightens that range's node bounds bottom-up. The GPU
+// twin of SceneBvh::ThreadedBvhRefit, over the same layout contract
+// (SceneBvh/ThreadedBvh.h): pre-order nodes, miss link at word +6 (pool
+// space), leaf word at +7, bounds as float bits in words +0..+5. Reverse
+// pre-order visits every child before its parent; the left child is i+1 and
+// the right child is the left child's miss link.
+//
+// One workgroup per skinned instance. Phase A parallel-copies the vertex
+// range; phase B runs the reverse walk on thread 0 — a character-sized range
+// (thousands of nodes) is microseconds of serial work at solve cadence, and
+// the serial form keeps the walk byte-faithful to the CPU refit it mirrors.
+//
+// Topology is frozen at build (bind pose), only bounds move — the partition
+// quality costs a little traversal efficiency on extreme poses and never
+// correctness, exactly the CPU refit's contract.
+
+layout(local_size_x = 64, local_size_y = 1, local_size_z = 1) in;
+
+layout(std140, set = 0, binding = 0) uniform DDGIRefitParams
+{
+    uvec4 uRange0;  // x=nodeBegin (pool), y=nodeCount, z=vertexBegin (pool), w=vertexCount
+} RefitParams;
+
+layout(std430, set = 0, binding = 1) readonly buffer SkinnedVerts
+{
+    float ge_refitPosedVerts[];  // 8 floats per vertex, dense [0, vertexCount)
+};
+
+layout(std430, set = 0, binding = 2) buffer BvhNodes
+{
+    uint ge_refitNodes[];  // 8 words per node, pool space
+};
+
+layout(std430, set = 0, binding = 3) readonly buffer BvhTriangleIndices
+{
+    uint ge_refitTriIndices[];  // pool-space vertex indices, 3 per triangle
+};
+
+// coherent: phase B (thread 0) reads records phase A's OTHER invocations
+// wrote; memoryBarrierBuffer() only guarantees visibility for coherent
+// variables — without it those reads are stale-cache UB that happens to
+// pass on unified-memory GPUs.
+// WGSL has no `coherent` qualifier: naga emits it as `@coherent`, which tint rejects. A
+// storage buffer declared read_write is already coherent across a workgroup there, and the
+// cross-invocation visibility this needs rides storageBarrier(), so the keyword is simply
+// dropped on the compat cook.
+#if defined(GE_COMPAT_PROFILE)
+#define GE_COHERENT
+#else
+#define GE_COHERENT coherent
+#endif
+layout(std430, set = 0, binding = 4) GE_COHERENT buffer BvhVertexData
+{
+    float ge_refitVertexData[];  // 8 floats per vertex, pool space
+};
+
+const uint kNodeStride = 8u;
+const uint kVertexStride = 8u;
+const uint kInteriorLeafWord = 0xFFFFFFFFu;
+const uint kTriangleCountShift = 24u;
+const uint kTriangleOffsetMask = 0x00FFFFFFu;
+
+vec3 FetchPosition(uint poolVertexIndex)
+{
+    uint base = poolVertexIndex * kVertexStride;
+    return vec3(ge_refitVertexData[base + 0u], ge_refitVertexData[base + 1u],
+                ge_refitVertexData[base + 2u]);
+}
+
+void StoreBounds(uint nodeWordBase, vec3 mn, vec3 mx)
+{
+    ge_refitNodes[nodeWordBase + 0u] = floatBitsToUint(mn.x);
+    ge_refitNodes[nodeWordBase + 1u] = floatBitsToUint(mn.y);
+    ge_refitNodes[nodeWordBase + 2u] = floatBitsToUint(mn.z);
+    ge_refitNodes[nodeWordBase + 3u] = floatBitsToUint(mx.x);
+    ge_refitNodes[nodeWordBase + 4u] = floatBitsToUint(mx.y);
+    ge_refitNodes[nodeWordBase + 5u] = floatBitsToUint(mx.z);
+}
+
+void LoadBounds(uint nodeWordBase, out vec3 mn, out vec3 mx)
+{
+    mn = vec3(uintBitsToFloat(ge_refitNodes[nodeWordBase + 0u]),
+              uintBitsToFloat(ge_refitNodes[nodeWordBase + 1u]),
+              uintBitsToFloat(ge_refitNodes[nodeWordBase + 2u]));
+    mx = vec3(uintBitsToFloat(ge_refitNodes[nodeWordBase + 3u]),
+              uintBitsToFloat(ge_refitNodes[nodeWordBase + 4u]),
+              uintBitsToFloat(ge_refitNodes[nodeWordBase + 5u]));
+}
+
+void main()
+{
+    uint nodeBegin = RefitParams.uRange0.x;
+    uint nodeCount = RefitParams.uRange0.y;
+    uint vertexBegin = RefitParams.uRange0.z;
+    uint vertexCount = RefitParams.uRange0.w;
+
+    // Phase A: posed records into the pooled vertex range, strided across the
+    // workgroup. Same 8-float layout on both sides — verbatim copy.
+    uint totalFloats = vertexCount * kVertexStride;
+    for (uint f = gl_LocalInvocationID.x; f < totalFloats; f += 64u)
+        ge_refitVertexData[vertexBegin * kVertexStride + f] = ge_refitPosedVerts[f];
+
+    memoryBarrierBuffer();
+    barrier();
+
+    if (gl_LocalInvocationID.x != 0u)
+        return;
+
+    // Phase B: reverse pre-order bounds walk (child indices are always greater
+    // than their parent's, so every child is final before its parent reads it).
+    for (uint r = 0u; r < nodeCount; ++r)
+    {
+        uint i = nodeCount - 1u - r;               // local index
+        uint node = nodeBegin + i;                 // pool index
+        uint wordBase = node * kNodeStride;
+        uint leafWord = ge_refitNodes[wordBase + 7u];
+        if (leafWord != kInteriorLeafWord)
+        {
+            uint triOffset = leafWord & kTriangleOffsetMask;   // pool-space triangles
+            uint triCount = leafWord >> kTriangleCountShift;
+            vec3 mn = vec3(3.402823e38);
+            vec3 mx = vec3(-3.402823e38);
+            for (uint t = 0u; t < triCount; ++t)
+            {
+                uint triBase = (triOffset + t) * 3u;
+                for (uint k = 0u; k < 3u; ++k)
+                {
+                    vec3 p = FetchPosition(ge_refitTriIndices[triBase + k]);
+                    mn = min(mn, p);
+                    mx = max(mx, p);
+                }
+            }
+            StoreBounds(wordBase, mn, mx);
+        }
+        else
+        {
+            uint left = node + 1u;                             // pool index
+            uint right = ge_refitNodes[left * kNodeStride + 6u]; // left's miss link, pool space
+            vec3 lmn, lmx, rmn, rmx;
+            LoadBounds(left * kNodeStride, lmn, lmx);
+            LoadBounds(right * kNodeStride, rmn, rmx);
+            StoreBounds(wordBase, min(lmn, rmn), max(lmx, rmx));
+        }
+    }
+}

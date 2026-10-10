@@ -1,0 +1,53 @@
+#version 450
+
+// DDGI convergence reduction: sums one cascade's per-texel steady-tick
+// counts (ddgi_blend.comp's DDGITemporalState) into per-workgroup partial
+// sums the CPU reads back and finishes. The mean count over the grid, against
+// the running mean's history cap, is the volume's convergence measure: at the
+// cap every texel has seen only noise-sized deltas for a full history, so the
+// field is a fixed point and the solve can throttle (DDGISolveBudget). A real
+// lighting change resets the counts of the probes it reaches, the mean drops,
+// and the budget is restored — the readback IS the change detector.
+//
+// Partial sums rather than one atomic total: no clear pass is needed ahead of
+// the reduction, and a few dozen uints per cascade is a trivial readback.
+// Counts are whole numbers below GE_DDGI_TEMPORAL_MAX_HISTORY, so summing them
+// as uints is exact.
+
+layout(local_size_x = 256, local_size_y = 1, local_size_z = 1) in;
+
+layout(std140, set = 0, binding = 0) uniform DDGIVariabilityParams
+{
+    uvec4 uParams0;  // x = texel count, y = first output slot for this dispatch, zw unused
+} DDGIParams;
+
+layout(std430, set = 0, binding = 1) readonly buffer DDGITemporalStateRO
+{
+    float ge_ddgiTemporalState[];
+};
+
+layout(std430, set = 0, binding = 2) writeonly buffer DDGIVariabilityOut
+{
+    uint ge_ddgiPartialSums[];
+};
+
+shared uint sPartial[256];
+
+void main()
+{
+    uint texelCount = DDGIParams.uParams0.x;
+    uint stride = gl_NumWorkGroups.x * 256u;
+    uint acc = 0u;
+    for (uint i = gl_GlobalInvocationID.x; i < texelCount; i += stride)
+        acc += uint(max(ge_ddgiTemporalState[i], 0.0) + 0.5);
+    sPartial[gl_LocalInvocationID.x] = acc;
+    barrier();
+    for (uint span = 128u; span > 0u; span >>= 1u)
+    {
+        if (gl_LocalInvocationID.x < span)
+            sPartial[gl_LocalInvocationID.x] += sPartial[gl_LocalInvocationID.x + span];
+        barrier();
+    }
+    if (gl_LocalInvocationID.x == 0u)
+        ge_ddgiPartialSums[DDGIParams.uParams0.y + gl_WorkGroupID.x] = sPartial[0];
+}

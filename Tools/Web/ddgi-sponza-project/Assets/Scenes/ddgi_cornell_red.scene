@@ -1,0 +1,131 @@
+[scene name="DdgiCornellRed" version=1]
+; DDGI reference-parity standard instrument. Closed 6x4x6 box, interior spans
+; x:[-3,3]
+; y:[0,4] z:[-3,3], red LEFT wall (-X), white everywhere else. Sky suppressed
+; (IblIntensity 0.02, GradientSkyIntensity 40) and no sun — the interior point
+; light is the only source, so any indirect light on the floor/ceiling/right
+; wall is DDGI's doing. Chromaticity asymmetry between mirror-symmetric floor
+; sample points either side of the box's Z axis is the exposure-invariant
+; colour-bleed metric this scene exists for. Walls are thin (0.2) Cube slabs,
+; each oversized by 0.2 in its in-plane axes so adjoining walls overlap at the
+; seam instead of leaving a light-leaking gap.
+
+[entity id="e_cam"]
+Camera.enabled = true
+Camera.fovY = 60
+Camera.nearZ = 0.05
+Camera.farZ = 100
+; Fixed, not the Auto (metered) default: auto-exposure absorbed ~20x of a 60x
+; deliberate light-intensity swing during this scene's own construction and
+; made two genuinely different renders look near-identical for several
+; seconds of adaptation. Any before/after capture on this scene needs
+; exposure held constant, not metered per-shot.
+Camera.exposureControl = 0
+Camera.exposure = 1
+Name.value = "Main Camera"
+Transform.position = (0, 2, -2.6)
+Transform.rotation = (0, 0, 0, 1)
+Transform.scale = (1, 1, 1)
+
+[entity id="e_sky"]
+SkyEnvironment.IblIntensity = 0.02
+SkyEnvironment.GradientSkyIntensity = 40
+SkyEnvironment.AutoSunMoon = false
+Name.value = "Sky"
+Transform.position = (0, 0, 0)
+Transform.rotation = (0, 0, 0, 1)
+Transform.scale = (1, 1, 1)
+
+[entity id="e_light"]
+Light.type = 1
+Light.color = (1, 0.98, 0.92)
+Light.intensity = 18
+Light.range = 12
+Light.castsShadows = true
+Name.value = "InteriorPointLight"
+Transform.position = (0, 3.6, 0)
+Transform.rotation = (0, 0, 0, 1)
+Transform.scale = (1, 1, 1)
+
+[entity id="e_wall_left"]
+; Plane, not Cube: the DDGI software ray-trace lane (DDGISceneService) bakes ONE
+; uber-material per GPU MESH, not per instance (DDGISceneService.cpp's plan-slot
+; cache keys on meshIndex and only bakes on the first instance seen) - every
+; other wall below is also a Cube, so if this one were a Cube too, all six
+; would collapse onto whichever instance's material happened to resolve first
+; and the whole box would render as one flat colour under DDGI. Giving the red
+; wall its own primitive type keeps it a distinct mesh identity. A real fix
+; (per-instance material slot on the SW lane's TlasInstance) is out of scope
+; here - tracked separately.
+MeshRenderer.meshPrimitive = Plane
+MeshRenderer.material = [path="Materials/CornellRed.material"]
+MeshRenderer.renderLayerMask = 1
+MeshRenderer.receiveShadows = true
+Name.value = "WallLeftRed"
+Transform.position = (-3, 2, 0)
+Transform.rotation = (0, 0, -0.70710678, 0.70710678)
+Transform.scale = (4.4, 1, 6.4)
+
+[entity id="e_wall_right"]
+MeshRenderer.meshPrimitive = Cube
+MeshRenderer.material = [path="Materials/CornellWhite.material"]
+MeshRenderer.renderLayerMask = 1
+MeshRenderer.receiveShadows = true
+Name.value = "WallRight"
+Transform.position = (3.1, 2, 0)
+Transform.rotation = (0, 0, 0, 1)
+Transform.scale = (0.2, 4.4, 6.4)
+
+[entity id="e_wall_floor"]
+MeshRenderer.meshPrimitive = Cube
+MeshRenderer.material = [path="Materials/CornellWhite.material"]
+MeshRenderer.renderLayerMask = 1
+MeshRenderer.receiveShadows = true
+Name.value = "WallFloor"
+Transform.position = (0, -0.1, 0)
+Transform.rotation = (0, 0, 0, 1)
+Transform.scale = (6.4, 0.2, 6.4)
+
+[entity id="e_wall_ceiling"]
+MeshRenderer.meshPrimitive = Cube
+MeshRenderer.material = [path="Materials/CornellWhite.material"]
+MeshRenderer.renderLayerMask = 1
+MeshRenderer.receiveShadows = true
+Name.value = "WallCeiling"
+Transform.position = (0, 4.1, 0)
+Transform.rotation = (0, 0, 0, 1)
+Transform.scale = (6.4, 0.2, 6.4)
+
+[entity id="e_wall_back"]
+MeshRenderer.meshPrimitive = Cube
+MeshRenderer.material = [path="Materials/CornellWhite.material"]
+MeshRenderer.renderLayerMask = 1
+MeshRenderer.receiveShadows = true
+Name.value = "WallBack"
+Transform.position = (0, 2, 3.1)
+Transform.rotation = (0, 0, 0, 1)
+Transform.scale = (6.4, 4.4, 0.2)
+
+[entity id="e_wall_front"]
+MeshRenderer.meshPrimitive = Cube
+MeshRenderer.material = [path="Materials/CornellWhite.material"]
+MeshRenderer.renderLayerMask = 1
+MeshRenderer.receiveShadows = true
+Name.value = "WallFront"
+Transform.position = (0, 2, -3.1)
+Transform.rotation = (0, 0, 0, 1)
+Transform.scale = (6.4, 4.4, 0.2)
+
+[entity id="e_ddgi"]
+DDGIVolume.Enabled = true
+DDGIVolume.ProbePlacement = 0
+DDGIVolume.ProbesLongAxis = 12
+DDGIVolume.RaysPerProbe = 128
+DDGIVolume.Intensity = 1.0
+DDGIVolume.BounceIntensity = 1.0
+DDGIVolume.RadianceClamp = 8.0
+DDGIVolume.Hysteresis = 0.6
+Name.value = "DDGIVolume"
+Transform.position = (0, 2, 0)
+Transform.rotation = (0, 0, 0, 1)
+Transform.scale = (5.6, 3.6, 5.6)

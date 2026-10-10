@@ -1,0 +1,143 @@
+#version 450
+
+#include "Includes/compat_profile.glsl"
+
+layout(local_size_x = 8, local_size_y = 8, local_size_z = 1) in;
+
+layout(set = 0, binding = 0) uniform samplerCube uEnvMap;
+layout(set = 0, binding = 1, rgba16f) writeonly uniform image2DArray uSpecEnv;
+
+const float PI = 3.14159265359;
+// Karis mip-based prefilter: each GGX sample reads a SOURCE MIP chosen from the
+// solid-angle ratio (pdf), so the env cube's pre-blurred chain pre-filters every
+// sample. That kills GGX fireflies / banding from the thin high-frequency horizon
+// glow, so a low sample count suffices (was 1024 with point-sampling at mip 0).
+const uint  SAMPLE_COUNT = 128u;
+// Specialization constants 0/1, bound from the active C++ prefilter size / mip count
+// at pipeline-intern time, so the roughness->mip mapping stays tied to the actual GPU
+// target dimensions and cannot drift from them. Declared uint to match the injected
+// values; main() reads them as float (a global const float can't init from a spec const).
+layout(constant_id = 0) const uint kSpecBaseSizeBits = 256u;
+layout(constant_id = 1) const uint kSpecMipCountBits = 5u;
+
+float RadicalInverse_VdC(uint bits)
+{
+    bits = (bits << 16u) | (bits >> 16u);
+    bits = ((bits & 0x55555555u) << 1u) | ((bits & 0xAAAAAAAAu) >> 1u);
+    bits = ((bits & 0x33333333u) << 2u) | ((bits & 0xCCCCCCCCu) >> 2u);
+    bits = ((bits & 0x0F0F0F0Fu) << 4u) | ((bits & 0xF0F0F0F0u) >> 4u);
+    bits = ((bits & 0x00FF00FFu) << 8u) | ((bits & 0xFF00FF00u) >> 8u);
+    return float(bits) * 2.3283064365386963e-10; // / 0x100000000
+}
+
+vec2 Hammersley(uint i, uint N)
+{
+    return vec2(float(i) / float(N), RadicalInverse_VdC(i));
+}
+
+vec3 CubemapDirection(int face, vec2 uv)
+{
+    float u = uv.x * 2.0 - 1.0;
+    float v = (1.0 - uv.y) * 2.0 - 1.0; // flip Y to match sky cube rendering
+
+    if (face == 0) return normalize(vec3( 1.0,  v, -u)); // +X
+    if (face == 1) return normalize(vec3(-1.0,  v,  u)); // -X
+    if (face == 2) return normalize(vec3( u,  1.0, -v)); // +Y
+    if (face == 3) return normalize(vec3( u, -1.0,  v)); // -Y
+    if (face == 4) return normalize(vec3( u,  v,  1.0)); // +Z
+    return             normalize(vec3(-u,  v, -1.0));    // -Z
+}
+
+void BuildTangentBasis(vec3 N, out vec3 T, out vec3 B)
+{
+    vec3 up = (abs(N.z) < 0.999) ? vec3(0.0, 0.0, 1.0) : vec3(1.0, 0.0, 0.0);
+    T = normalize(cross(up, N));
+    B = cross(N, T);
+}
+
+vec3 ImportanceSampleGGX(vec2 Xi, float roughness, vec3 N)
+{
+    float a = roughness * roughness;
+    float phi = 2.0 * PI * Xi.x;
+    float cosTheta = sqrt((1.0 - Xi.y) / (1.0 + (a * a - 1.0) * Xi.y));
+    float sinTheta = sqrt(max(0.0, 1.0 - cosTheta * cosTheta));
+
+    vec3 H = vec3(cos(phi) * sinTheta, sin(phi) * sinTheta, cosTheta);
+    vec3 T, B;
+    BuildTangentBasis(N, T, B);
+    return normalize(H.x * T + H.y * B + H.z * N);
+}
+
+// Radiance sanitize: NaN -> 0, clamp to the fp16 finite maximum so a diverged
+// or infinite source (e.g. a reflection-probe capture that fed its own env in a
+// closed room) cannot poison the bake into all-black. A no-op for real sky/HDRI
+// values, which are finite and far below the cap.
+vec3 GE_SanitizeRadiance(vec3 c)
+{
+    c = mix(vec3(0.0), c, equal(c, c));           // NaN != NaN -> 0
+    return clamp(c, vec3(0.0), vec3(65504.0));    // -Inf -> 0, +Inf -> fp16 max
+}
+
+void main()
+{
+    ivec3 size = GE_ARRAY_IMAGE_SIZE(uSpecEnv, 6);
+    ivec3 gid  = ivec3(gl_GlobalInvocationID);
+    if (gid.x >= size.x || gid.y >= size.y || gid.z >= size.z) return;
+
+    vec2 uv   = (vec2(gid.xy) + vec2(0.5)) / vec2(size.xy);
+    int  face = gid.z;
+
+    vec3 R = CubemapDirection(face, uv);
+    vec3 N = normalize(R);
+    vec3 V = N;
+
+    // Spec constants are uint; read them as float for the LOD math here (a global const
+    // float cannot be initialized from a spec constant).
+    float specBaseSize = float(kSpecBaseSizeBits);
+    float mipLevel  = log2(specBaseSize / float(size.x));
+    float roughness = clamp(mipLevel / (float(kSpecMipCountBits) - 1.0), 0.0, 1.0);
+
+    float a = roughness * roughness;
+
+    // Base-mip texel solid angle (one of 6*size*size texels over the 4*PI sphere).
+    // The env cube the prefilter samples is specBaseSize wide.
+    float saTexel = 4.0 * PI / (6.0 * specBaseSize * specBaseSize);
+
+    vec3 prefilteredColor = vec3(0.0);
+    float totalWeight = 0.0;
+
+    for (uint i = 0u; i < SAMPLE_COUNT; ++i)
+    {
+        vec2 Xi = Hammersley(i, SAMPLE_COUNT);
+        vec3 H  = ImportanceSampleGGX(Xi, roughness, N);
+        vec3 L  = normalize(2.0 * dot(V, H) * H - V);
+
+        float NdotL = max(dot(N, L), 0.0);
+        if (NdotL > 0.0)
+        {
+            // Karis: pick the source mip from the ratio of this sample's solid
+            // angle (1/(N*pdf)) to a base texel's. A wide lobe / low sample density
+            // reads a coarser, pre-blurred mip so each tap is already filtered.
+            // D uses the SAME alpha (a = roughness^2, distribution arg a*a-1) as
+            // ImportanceSampleGGX above, so the pdf matches the sampled directions.
+            float NdotH = max(dot(N, H), 0.0);
+            float VdotH = max(dot(V, H), 0.0);
+            float denom = NdotH * NdotH * (a * a - 1.0) + 1.0;
+            float D     = (a * a) / (PI * denom * denom);
+            float pdf   = D * NdotH / (4.0 * VdotH) + 1e-4;
+            float saSample = 1.0 / (float(SAMPLE_COUNT) * pdf + 1e-4);
+            float mip = (roughness == 0.0) ? 0.0 : max(0.0, 0.5 * log2(saSample / saTexel));
+
+            vec3 c = GE_SanitizeRadiance(textureLod(uEnvMap, L, mip).rgb);
+            prefilteredColor += c * NdotL;
+            totalWeight += NdotL;
+        }
+    }
+
+    if (totalWeight > 0.0)
+    {
+        prefilteredColor /= totalWeight;
+    }
+
+    imageStore(uSpecEnv, gid, vec4(prefilteredColor, 1.0));
+}

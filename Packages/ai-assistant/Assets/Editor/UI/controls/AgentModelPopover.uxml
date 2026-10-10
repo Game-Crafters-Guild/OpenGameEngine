@@ -1,0 +1,23 @@
+<UIElement class="agent-model-popover hidden">
+  <UIElement id="AgentModelPopoverPanel" class="popover-panel agent-model-popover-panel">
+    <Label class="popover-section-header agent-model-header" text="Model and effort" />
+    <UIElement id="AgentModelRow" class="popover-row">
+      <Label class="popover-row-label agent-model-row-label" text="Model" />
+      <Dropdown id="AgentModelDropdown" class="agent-model-dropdown" />
+    </UIElement>
+    <UIElement id="AgentEffortRow" class="popover-row">
+      <Label class="popover-row-label agent-model-row-label" text="Effort" />
+      <Slider id="AgentEffortSlider" class="property-slider popover-row-slider" min="0" step="1" />
+      <Label id="AgentEffortValue" class="agent-model-effort-value" />
+    </UIElement>
+    <UIElement id="AgentEffortEnds" class="popover-tick-row">
+      <UIElement class="popover-row-label agent-model-row-label" />
+      <UIElement class="popover-row-slider agent-model-effort-ends">
+        <Label id="AgentEffortLowest" class="popover-tick-label" />
+        <Label id="AgentEffortHighest" class="popover-tick-label" />
+      </UIElement>
+      <UIElement class="agent-model-effort-value" />
+    </UIElement>
+    <Label class="agent-model-caption" text="Applies from the next prompt." />
+  </UIElement>
+</UIElement>

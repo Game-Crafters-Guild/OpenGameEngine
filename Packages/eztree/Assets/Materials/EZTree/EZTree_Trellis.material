@@ -1,0 +1,23 @@
+{
+  "schemaVersion": 3,
+  "materialName": "Tree Generator Trellis",
+  "lightingModel": "StandardPBR",
+  "alphaMode": "Opaque",
+  "doubleSided": true,
+  "textureFilter": "Trilinear",
+  "surfaceShader": "Surfaces/standard_pbr.glsl",
+  "properties": {
+    "baseColor": [0.55, 0.27, 0.07, 1.0],
+    "roughness": 0.76,
+    "metallic": 0.0,
+    "emissive": [0.0, 0.0, 0.0],
+    "emissionLuminance": 203.0,
+    "ao": 1.0,
+    "opacity": 1.0
+  },
+  "textures": {
+    "albedoMap": "",
+    "normalMap": "",
+    "metallicRoughnessMap": ""
+  }
+}

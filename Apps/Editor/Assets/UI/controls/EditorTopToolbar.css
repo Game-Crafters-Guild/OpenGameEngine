@@ -1,0 +1,185 @@
+.editor-top-toolbar {
+	display: flex;
+	flex-direction: row;
+	align-items: center;
+	/* No gap between the sections: their own flex slack already separates the
+	   icon runs, and a gap here would be bar background wedged between two
+	   icons once a narrow window leaves a section no slack -- right-clickable
+	   space in the middle of the icon row. */
+	gap: 0px;
+	height: 40px;
+	padding: 2px 8px;
+	background-color: #222222;
+	border-color: var(--ui_color_border);
+	border-width: 0px;
+	border-bottom-width: 1px;
+	flex-shrink: 0;
+	font-size: var(--ui_font_size_base);
+	font-family: var(--ui_font_family);
+	color: var(--ui_color_text);
+	justify-content: flex-start;
+	position: relative;
+}
+
+.play-fullscreen-gameview .editor-top-toolbar {
+	display: none;
+}
+
+/* Three flex children share the row so they can never overlap when the window
+   narrows: left and right each get half the free space (flex: 1), center keeps
+   its natural width and stays roughly centered. All three sections allow shrink
+   (min-width: 0) and clip overflowing icons rather than letting them spill
+   across neighboring sections. */
+.top-toolbar-left,
+.top-toolbar-center,
+.top-toolbar-right {
+	display: flex;
+	flex-direction: row;
+	align-items: center;
+	min-height: 32px;
+	min-width: 0;
+	overflow: hidden;
+}
+
+/* Two hit surfaces, deliberately. The stretched section above is the toolbar's
+   own: background for the right-click menu, and the drop zone that lets a
+   dragged icon land anywhere in the empty bar. This element is the icons' own:
+   flex: 0 0 auto so it hugs the run, holding the inter-icon gaps inside a plain
+   UIElement. Gaps are therefore inert for every interaction -- no hover, no
+   activation, no menu -- and the code that opens the menu only asks which
+   element the event came from (EditorTopToolbar.cpp), never how wide the gap
+   is. */
+.toolbar-icons {
+	display: flex;
+	flex-direction: row;
+	align-items: center;
+	gap: 8px;
+	flex: 0 0 auto;
+}
+
+/* The clip above is what the sections exist for, and it also erases an outward
+   focus ring: the ring occupies [+2,+4]px outside the border box, and a section
+   is only as tall as the button it holds. There is no vertical room to give it
+   either -- the toolbar's 40px, less its 1px bottom border and 2px of vertical
+   padding, leaves 35px against a 32px button, and an outward ring needs 40px.
+   So the ring is drawn INSIDE the button here: outline-offset -4px against
+   outline-width 2px puts its outer edge 2px within the border box, whole and
+   unclipped, without giving up the horizontal containment. */
+.top-toolbar-left .button:focus-visible,
+.top-toolbar-center .button:focus-visible,
+.top-toolbar-right .button:focus-visible {
+	outline-offset: -4px;
+}
+
+.top-toolbar-left {
+	flex: 1 1 0;
+}
+
+.top-toolbar-center {
+	flex: 0 0 auto;
+	justify-content: center;
+}
+
+.top-toolbar-center .button.icon-button {
+	width: 32px;
+	height: 32px;
+	min-width: 32px;
+	min-height: 32px;
+}
+
+.top-toolbar-right {
+	flex: 1 1 0;
+	justify-content: flex-end;
+}
+
+/* Use opaque icon colors so the top toolbar matches Scene View and does not
+   change apparent weight with the UI blend space. Container specificity
+   intentionally replaces legacy per-icon opacity rules from core.css. */
+.editor-top-toolbar .button.icon-button {
+	background-image-tint: var(--ui_icon_tint_standard);
+	opacity: 1.0;
+}
+
+.editor-top-toolbar .button.icon-button.active,
+.editor-top-toolbar .button.icon-button.pressed {
+	background-image-tint: var(--ui_icon_tint_active);
+}
+
+.editor-top-toolbar .button.icon-button:hover {
+	background-image-tint: var(--ui_icon_tint_hover);
+}
+
+/* Match the resting brightness of the reference playback controls without
+   changing their geometry, assets, or interaction states. */
+.top-toolbar-center .button.icon-button {
+	background-image-tint: #9E9E9E;
+}
+
+.top-toolbar-center .button.icon-button.active,
+.top-toolbar-center .button.icon-button.pressed {
+	background-image-tint: var(--ui_icon_tint_active);
+}
+
+.top-toolbar-center .button.icon-button:hover {
+	background-image-tint: var(--ui_icon_tint_hover);
+}
+
+.top-toolbar-help-icon {
+	background-image: url("editor:Icons/help.png");
+	background-size: contain;
+	background-repeat: no-repeat;
+	background-position: center;
+	opacity: 0.35;
+}
+
+.top-toolbar-search-icon {
+	background-image: url("editor:Icons/usearch.png");
+	background-size: contain;
+	background-repeat: no-repeat;
+	background-position: center;
+}
+
+.top-toolbar-help-icon:hover {
+	opacity: 1.0;
+	background-color: transparent !important;
+}
+
+.toolbar-record-icon {
+	background-image: url("editor:Icons/recording_off_button.png");
+	background-size: contain;
+	background-repeat: no-repeat;
+	background-position: center;
+	background-color: transparent !important;
+	opacity: 0.35;
+}
+
+/* Preview the recording color while the control is hovered or pressed. */
+.toolbar-record-icon:hover {
+	opacity: 1.0;
+	background-color: transparent !important;
+	border-color: transparent !important;
+	background-image: url("editor:Icons/recording_on_button.png");
+	background-image-tint: var(--ui_icon_tint_standard);
+}
+
+.toolbar-record-icon:active {
+	opacity: 1.0;
+	background-color: transparent !important;
+	border-color: transparent !important;
+	background-image: url("editor:Icons/recording_on_button.png");
+}
+
+.toolbar-record-icon.pressed {
+	opacity: 1.0;
+	background-color: transparent !important;
+	border-color: transparent !important;
+	background-image: url("editor:Icons/recording_on_button.png");
+}
+
+/* Live recording keeps the red icon when the pointer leaves. */
+.toolbar-record-icon.active {
+	opacity: 1.0;
+	background-color: transparent !important;
+	border-color: transparent !important;
+	background-image: url("editor:Icons/recording_on_button.png");
+}

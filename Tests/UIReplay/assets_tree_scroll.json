@@ -1,0 +1,84 @@
+{
+  "name": "assets_tree_scroll",
+  "windowIndex": 0,
+  "minFrames": 900,
+  "probe": {
+    "dumpIdsContaining": { "needle": "assets", "frame": 20 },
+    "scrollViewUnderId": "assets-tree",
+    "scrollbarVUnderId": "assets-tree",
+    "scrollbarHUnderId": "assets-tree",
+    "visualPatchElementIds": { "enabled": true, "max": 12 }
+  },
+  "asserts": [
+    {
+      "kind": "visibleTextNotFullyClipped",
+      "subtreeId": "assets-tree",
+      "scrollViewUnderId": "assets-tree",
+      "requiredClasses": ["tree-title"],
+      "frameStart": 45,
+      "frameEnd": 360,
+      "minVisiblePx": 2.0,
+      "maxChecks": 1500
+    },
+    {
+      "kind": "visibleTextNotFullyClipped",
+      "subtreeId": "assets-tree",
+      "scrollViewUnderId": "assets-tree",
+      "requiredClasses": ["tree-item"],
+      "frameStart": 45,
+      "frameEnd": 360,
+      "minVisiblePx": 2.0,
+      "maxChecks": 1500
+    }
+  ],
+  "events": [
+    { "frame": 2, "type": "mouseMove", "target": { "kind": "elementId", "id": "tab:Assets", "relX": 0.5, "relY": 0.5 } },
+    { "frame": 3, "type": "mouseDown", "button": 0 },
+    { "frame": 4, "type": "mouseUp", "button": 0 },
+
+    { "frame": 40, "type": "mouseMove", "target": { "kind": "elementId", "id": "assets-tree", "relX": 0.5, "relY": 0.5 } },
+    { "frame": 50, "type": "scroll", "dx": 0.0, "dy": -8.0 },
+    { "frame": 55, "type": "scroll", "dx": 0.0, "dy": -8.0 },
+    { "frame": 60, "type": "scroll", "dx": 0.0, "dy": -8.0 },
+    { "frame": 65, "type": "scroll", "dx": 0.0, "dy": -8.0 },
+    { "frame": 70, "type": "scroll", "dx": 0.0, "dy": -8.0 },
+    { "frame": 75, "type": "scroll", "dx": 0.0, "dy": -8.0 },
+    { "frame": 80, "type": "scroll", "dx": 0.0, "dy": -8.0 },
+    { "frame": 85, "type": "scroll", "dx": 0.0, "dy": -8.0 },
+    { "frame": 90, "type": "scroll", "dx": 0.0, "dy": -8.0 },
+    { "frame": 95, "type": "scroll", "dx": 0.0, "dy": -8.0 },
+
+    { "frame": 130, "type": "scroll", "dx": 0.0, "dy": 8.0 },
+    { "frame": 135, "type": "scroll", "dx": 0.0, "dy": 8.0 },
+    { "frame": 140, "type": "scroll", "dx": 0.0, "dy": 8.0 },
+    { "frame": 145, "type": "scroll", "dx": 0.0, "dy": 8.0 },
+    { "frame": 150, "type": "scroll", "dx": 0.0, "dy": 8.0 },
+    { "frame": 155, "type": "scroll", "dx": 0.0, "dy": 8.0 },
+    { "frame": 160, "type": "scroll", "dx": 0.0, "dy": 8.0 },
+    { "frame": 165, "type": "scroll", "dx": 0.0, "dy": 8.0 },
+    { "frame": 170, "type": "scroll", "dx": 0.0, "dy": 8.0 },
+    { "frame": 175, "type": "scroll", "dx": 0.0, "dy": 8.0 },
+
+    { "frame": 210, "type": "scroll", "dx": 0.0, "dy": -8.0 },
+    { "frame": 215, "type": "scroll", "dx": 0.0, "dy": -8.0 },
+    { "frame": 220, "type": "scroll", "dx": 0.0, "dy": -8.0 },
+    { "frame": 225, "type": "scroll", "dx": 0.0, "dy": -8.0 },
+    { "frame": 230, "type": "scroll", "dx": 0.0, "dy": -8.0 },
+    { "frame": 235, "type": "scroll", "dx": 0.0, "dy": -8.0 },
+    { "frame": 240, "type": "scroll", "dx": 0.0, "dy": -8.0 },
+    { "frame": 245, "type": "scroll", "dx": 0.0, "dy": -8.0 },
+    { "frame": 250, "type": "scroll", "dx": 0.0, "dy": -8.0 },
+    { "frame": 255, "type": "scroll", "dx": 0.0, "dy": -8.0 },
+
+    { "frame": 290, "type": "scroll", "dx": 0.0, "dy": 8.0 },
+    { "frame": 295, "type": "scroll", "dx": 0.0, "dy": 8.0 },
+    { "frame": 300, "type": "scroll", "dx": 0.0, "dy": 8.0 },
+    { "frame": 305, "type": "scroll", "dx": 0.0, "dy": 8.0 },
+    { "frame": 310, "type": "scroll", "dx": 0.0, "dy": 8.0 },
+    { "frame": 315, "type": "scroll", "dx": 0.0, "dy": 8.0 },
+    { "frame": 320, "type": "scroll", "dx": 0.0, "dy": 8.0 },
+    { "frame": 325, "type": "scroll", "dx": 0.0, "dy": 8.0 },
+    { "frame": 330, "type": "scroll", "dx": 0.0, "dy": 8.0 },
+    { "frame": 335, "type": "scroll", "dx": 0.0, "dy": 8.0 }
+  ]
+}

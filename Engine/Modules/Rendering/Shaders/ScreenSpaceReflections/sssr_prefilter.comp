@@ -1,0 +1,363 @@
+#version 450
+
+// Edge-aware spatial reconstruction of the traced reflection.
+//
+// Adapted from AMD FidelityFX Denoiser (MIT, see ThirdParty/FidelityFX-Denoiser,
+// ffx_denoiser_reflections_prefilter.h): the groupshared neighbourhood tile
+// loaded once and sampled from LDS, the block-average radiance reference used as
+// a firefly gate, and variance-driven neighbour weighting with a bias floor.
+//
+// What is deliberately NOT taken from upstream. Each of these was measured on the
+// grazing-contact fringe rather than reasoned about:
+//  * The footprint is DENSE, not upstream's 15 sparse Halton taps. The LDS tile
+//    is the part of that structure that pays: it turns a tap from three texture
+//    fetches into an LDS read, which is what makes a wide dense footprint
+//    affordable at all. The sparse tap set is the part that cannot do this job —
+//    a subsampled kernel does not low-pass a static alias, it re-samples it. Two
+//    variants were built and measured (offsets rotated per pixel, and rotated
+//    per frame) and both made the band AND the clean floor worse than the dense
+//    filter they replaced.
+//  * The drive is max(temporal, spatial) coefficient of variation, plus sample
+//    scarcity — not temporal variance alone. Read off this pipeline's own moments
+//    at the fringe, the temporal term reaches at most 0.07 of full engagement and
+//    is nearly as high on clean floor as on the artifact, so it discriminates
+//    nothing here; the spatial term is what acts. Scarcity is the third term
+//    because a rate-limited lobe's variance reads ~zero for want of samples
+//    rather than for want of noise.
+//  * The edge stops are ours: a depth sigma proportional to linear Z
+//    (scale-invariant) and a normal exponent that survives normal maps. FFX's
+//    exp(-|dz|*z*4) sigma shrinks as 1/z and would shut this filter at grazing
+//    incidence, which is exactly where it has to work.
+//
+// Radiance confidence (.a) is carried through: it weights every tap, so an
+// untraced or missed neighbour contributes nothing, and the filtered alpha the
+// temporal hold and the composite key on stays meaningful. FFX has no
+// equivalent channel and its weight expression no slot for one.
+
+layout(local_size_x = 8, local_size_y = 8, local_size_z = 1) in;
+layout(set = 0, binding = 0) uniform sampler2D uRadiance;
+layout(set = 0, binding = 1) uniform sampler2D uDepth;
+layout(set = 0, binding = 2) uniform sampler2D uNormalRoughness;
+layout(set = 0, binding = 3, rgba16f) uniform writeonly image2D uFiltered;
+// Denoise tiles emitted by sssr_classify.comp: one 8x8 tile per entry, one
+// workgroup per entry. This pass is dispatched indirectly over the list, so a
+// tile with no reflective pixel is never launched at all.
+layout(std430, set = 0, binding = 4) readonly buffer TileListBuffer { uint tiles[]; } TileList;
+// Block-scale radiance reference, w/8 x h/8, built by the FULL-SCREEN reproject
+// pass and stored premultiplied by confidence (.rgb = mean radiance*confidence,
+// .a = mean confidence). Sampled with a linear sampler, so a pixel reads a
+// bilinear blend of its own block and its neighbours' — the widest support in the
+// chain, and the scale the firefly gate needs to judge an outlier against.
+layout(set = 0, binding = 5) uniform sampler2D uAvgRadiance;
+// (m1, m2) of the accumulated luminance, reprojected into this frame. On a
+// converged static pose m2 == m1*m1 and the temporal term is zero by
+// construction; it rises on transients and under motion.
+layout(set = 0, binding = 8) uniform sampler2D uReprojectedMoments;
+
+#include "ScreenSpaceReflections/sssr_common.glsl"
+#define GE_SSSR_ARGS_BINDING 6
+#define GE_SSSR_ARGS_READONLY
+#include "ScreenSpaceReflections/sssr_dispatch.glsl"
+
+// Footprint radii, in texels. The narrow end is what this pass used on a
+// near-mirror; the wide end is the reach a dense-box prototype measured against
+// the contact fringe (radius 6, -43.5% on the final image).
+const int kRadiusNarrow = 2;
+const int kRadiusAliased = 6;
+
+// LDS reach beyond the workgroup. The widest tap must land inside the tile, so
+// this IS the footprint cap and the two are tied rather than tuned apart.
+const int kTileApron = kRadiusAliased;
+const int kTileSpan = 8 + 2 * kTileApron;
+const int kTileTexels = kTileSpan * kTileSpan;
+
+// The G-buffer's own channels, packed two halves per word: the tile holds what
+// the textures hold and decoding stays in the shared helpers, so no re-encoded
+// copy can drift from GE_DecodeNormalVS.
+shared uint sTileRadianceRG[kTileTexels];
+shared uint sTileRadianceBA[kTileTexels];
+shared uint sTileNormalOct[kTileTexels];
+shared uint sTileRoughDepth[kTileTexels];
+
+// Drive calibration, in coefficient of variation. These are the two points a
+// dense-box prototype measured on this fringe: engagement at cv 0.03, saturation
+// at cv 0.15. The drive is compared in cv and NOT in cv squared — squaring both
+// thresholds looks like the same curve and is not one, because a smoothstep is
+// not invariant under squaring its argument and its bounds. At the band's
+// measured cv of 0.128 the squared form engages 0.80 where this one engages 0.91,
+// which is the difference between filtering at radius 5 and at radius 6.
+//
+// Both drive terms are relative, so one calibration covers any exposure — an
+// absolute variance threshold would be tied to one scene's brightness in a
+// pipeline carrying physical light units.
+const float kDriveOnset = 0.03;
+const float kDriveSaturation = 0.15;
+const float kDriveEpsilon = 1e-8;
+const float kDriveMax = 2.0;
+// Half-width of the window the spatial term is estimated over. The prototype
+// calibrated the two thresholds above on a dense 5x5 of the traced radiance, so
+// the estimator has to stay that window: a wider one reads systematically higher
+// on legitimately detailed reflections and would engage on the clean floor.
+const int kDriveWindow = 2;
+const float kDriveSamples = float((2 * kDriveWindow + 1) * (2 * kDriveWindow + 1));
+// Confidence below this means the pixel carries no traced sample. Matches the
+// gate sssr_temporal.comp applies to its own neighbourhood moments.
+const float kConfidenceEpsilon = 1e-5;
+
+// Neighbour amplitude at zero drive (FFX_DNSR_REFLECTIONS_PREFILTER_VARIANCE_BIAS).
+// The centre tap carries no amplitude factor, so a converged mirror reflection
+// keeps most of its weight on itself and stays sharp, while the neighbours still
+// carry enough to reconstruct an untraced centre.
+const float kNeighborWeightFloor = 0.1;
+
+// Edge stops. Depth: neighbours within ~5% of the centre's linear depth pass,
+// uniformly near and far. Normal: 32 keeps an 8-degree deviation at 0.72, which
+// normal-mapped surfaces need (FFX's 512 puts it at 0.006).
+const float kDepthSigmaRelative = 0.05;
+const float kDepthSigmaFloor = 0.01;
+const float kNormalSigma = 32.0;
+const float kRoughnessSigma = 16.0;
+
+// Firefly gate against the block mean (FFX_DNSR_REFLECTIONS_RADIANCE_WEIGHT_BIAS
+// and its 1e-2 floor). Upstream compares absolute radiance distance, which is
+// calibrated for LDR; this pipeline carries physical light units, where that
+// expression saturates to the floor on anything bright. The distance is
+// therefore taken relative to the reference's own luminance — the same
+// scale-invariance rule the depth stop follows.
+const float kRadianceWeightBias = 0.6;
+const float kRadianceWeightFloor = 1e-2;
+const float kRadianceSigmaFloor = 1e-4;
+
+// An untraced centre still anchors the result slightly, so a filtered value
+// never drifts entirely off the pixel it belongs to.
+const float kCenterConfidenceFloor = 0.05;
+const float kMinWeightSum = 1e-5;
+
+struct TileSample
+{
+    vec3 Radiance;
+    float Confidence;
+    vec3 NormalVS;
+    float Roughness;
+    float LinearZ;
+};
+
+TileSample LoadTileSample(int index)
+{
+    vec2 rg = unpackHalf2x16(sTileRadianceRG[index]);
+    vec2 ba = unpackHalf2x16(sTileRadianceBA[index]);
+    vec2 oct = unpackHalf2x16(sTileNormalOct[index]);
+    vec2 roughDepth = unpackHalf2x16(sTileRoughDepth[index]);
+    TileSample s;
+    s.Radiance = vec3(rg, ba.x);
+    s.Confidence = ba.y;
+    s.NormalVS = GE_OctDecode(oct);
+    s.Roughness = roughDepth.x;
+    s.LinearZ = GE_LinearZ(roughDepth.y);
+    return s;
+}
+
+float RadianceWeight(vec3 reference, float referenceLuminance, vec3 sampleRadiance)
+{
+    float sigma = max(referenceLuminance, kRadianceSigmaFloor);
+    return max(exp(-kRadianceWeightBias * length(sampleRadiance - reference) / sigma),
+               kRadianceWeightFloor);
+}
+
+void main()
+{
+    ivec2 size = imageSize(uFiltered);
+    // The workgroup's screen position comes from the tile list, not from
+    // gl_GlobalInvocationID. The list index is the workgroup's LINEAR position:
+    // the grid spills into Y once the tile count outgrows one dispatch row, and
+    // equals gl_WorkGroupID.x for every grid that does not.
+    uint tileIndex = GE_SssrLinearGroupIndex(gl_WorkGroupID.xy);
+#if defined(GE_COMPAT_PROFILE)
+    // A spilled grid is wider than the list. The condition is uniform across
+    // the workgroup, but WGSL's analysis cannot prove that for a return ahead
+    // of the tile barrier — so it is a flag: invalid tiles load zero texels,
+    // reach the barrier with everyone else, and exit at the post-barrier gate.
+    const bool tileValid = tileIndex < Args.tileCount;
+    uint packedTile = tileValid ? TileList.tiles[tileIndex] : 0u;
+#else
+    // A spilled grid is wider than the list. Uniform across the workgroup, so
+    // returning here is uniform control flow and safe ahead of the tile barriers.
+    if (tileIndex >= Args.tileCount)
+        return;
+    uint packedTile = TileList.tiles[tileIndex];
+#endif
+    ivec2 tile = ivec2(packedTile & 0xFFFFu, packedTile >> 16u);
+    ivec2 tileOrigin = tile * ivec2(gl_WorkGroupSize.xy);
+    ivec2 pixel = tileOrigin + ivec2(gl_LocalInvocationID.xy);
+
+    // Cooperative tile load. Every thread of the group must reach the barrier
+    // below, so nothing above it may return — an edge tile's out-of-image
+    // threads load clamped texels and are dropped at the store instead.
+    //
+    // The apron reaches into neighbouring tiles, including tiles the list does
+    // not contain. That is safe because every input this pass reads is defined
+    // over the WHOLE image by a full-screen writer: classify zeroes uRadiance
+    // everywhere before intersect fills the traced subset, depth and
+    // normal-roughness come from the world pass, and uAvgRadiance is produced by
+    // the full-screen reproject dispatch. The tile list gates only which pixels
+    // this pass WRITES; classify's clear defines the complement.
+    const uint kThreadsPerGroup = gl_WorkGroupSize.x * gl_WorkGroupSize.y;
+#if defined(GE_COMPAT_PROFILE)
+    const uint tileTexelsToLoad = tileValid ? uint(kTileTexels) : 0u;
+#else
+    const uint tileTexelsToLoad = uint(kTileTexels);
+#endif
+    for (uint i = gl_LocalInvocationIndex; i < tileTexelsToLoad; i += kThreadsPerGroup)
+    {
+        ivec2 local = ivec2(int(i) % kTileSpan, int(i) / kTileSpan);
+        ivec2 q = clamp(tileOrigin - ivec2(kTileApron) + local, ivec2(0), size - 1);
+        vec4 radiance = texelFetch(uRadiance, q, 0);
+        vec4 normalRoughness = texelFetch(uNormalRoughness, q, 0);
+        float rawDepth = texelFetch(uDepth, q, 0).r;
+        sTileRadianceRG[i] = packHalf2x16(radiance.rg);
+        sTileRadianceBA[i] = packHalf2x16(radiance.ba);
+        sTileNormalOct[i] = packHalf2x16(normalRoughness.rg);
+        sTileRoughDepth[i] = packHalf2x16(vec2(GE_Roughness(normalRoughness), rawDepth));
+    }
+    barrier();
+
+    // An edge tile's out-of-image threads have done their share of the load and
+    // are finished. Past this point every thread owns a real pixel.
+#if defined(GE_COMPAT_PROFILE)
+    if (!tileValid || any(greaterThanEqual(pixel, size)))
+#else
+    if (any(greaterThanEqual(pixel, size)))
+#endif
+        return;
+
+    // Centre surface data is read at full precision rather than out of the
+    // half-packed tile: the eligibility predicate and the depth sigma are both
+    // keyed on it, and a reverse-Z raw depth quantised to half near the far
+    // plane could flip the predicate against classify's decision.
+    vec4 centerNR = texelFetch(uNormalRoughness, pixel, 0);
+    float centerRawZ = texelFetch(uDepth, pixel, 0).r;
+    // A tile is listed when ANY of its pixels is reflective, so a listed tile
+    // still contains sky and roughness-rejected pixels. Their filtered value is
+    // multiplied by zero downstream (the composite bypasses sky outright and its
+    // roughness fade reaches zero at kSssrMaxRoughness), so resolving them would
+    // produce a value nothing reads. sssr_classify.comp has already written zero
+    // to every pixel of this target, so leaving without storing is what the
+    // composite would see anyway.
+    //
+    // The predicate is deliberately on the SURFACE, never on the centre pixel's
+    // radiance alpha: a centre whose own ray missed, surrounded by neighbours
+    // that hit, is precisely the reconstruction case this filter exists for.
+    if (!GE_SssrIsReflective(centerRawZ, GE_Roughness(centerNR)))
+        return;
+
+    int centerIndex = (int(gl_LocalInvocationID.y) + kTileApron) * kTileSpan +
+                      int(gl_LocalInvocationID.x) + kTileApron;
+    TileSample center = LoadTileSample(centerIndex);
+    float centerRoughness = GE_Roughness(centerNR);
+    vec3 centerNormal = GE_DecodeNormalVS(centerNR);
+    float centerLinZ = GE_LinearZ(centerRawZ);
+
+    // Block reference for the firefly gate. Sampling at
+    // (pixel + 0.5) / (block * blocks) puts the bilinear tap between this block's
+    // texel and its neighbours', so the reference varies smoothly across a block
+    // boundary instead of stepping, and the premultiplied store makes that
+    // interpolation a correctly confidence-weighted mean.
+    vec2 avgUv = (vec2(pixel) + 0.5) /
+                 (float(kSssrAvgRadianceBlock) * vec2(textureSize(uAvgRadiance, 0)));
+    vec4 avg = textureLod(uAvgRadiance, avgUv, 0.0);
+    vec3 avgRadiance = avg.rgb / max(avg.a, kConfidenceEpsilon);
+    // A block with no traced sample has no reference of its own. Falling back to
+    // the centre's own scale only ever loosens the gate, which is the safe
+    // direction for an outlier test.
+    float avgLuminance = max(GE_Luminance(avgRadiance), GE_Luminance(center.Radiance));
+
+    // Hybrid drive. The spatial term is what engages at a static alias, where
+    // adjacent grazing rays straddle a silhouette; the temporal term is what
+    // engages on transients and under motion, where one frame's spatial
+    // statistics can look converged.
+    //
+    // Spatial: coefficient of variation of the traced luminance over a dense
+    // window, confidence-gated. Untraced pixels read zero radiance, and counting
+    // those as "dark" would report every rate-limited rough surface as aliased.
+    float localSum = 0.0;
+    float localSumSq = 0.0;
+    float localWeight = 0.0;
+    for (int y = -kDriveWindow; y <= kDriveWindow; ++y)
+    for (int x = -kDriveWindow; x <= kDriveWindow; ++x)
+    {
+        int index = centerIndex + y * kTileSpan + x;
+        vec2 rg = unpackHalf2x16(sTileRadianceRG[index]);
+        vec2 ba = unpackHalf2x16(sTileRadianceBA[index]);
+        float valid = step(kConfidenceEpsilon, ba.y);
+        float luminance = GE_Luminance(vec3(rg, ba.x));
+        localSum += luminance * valid;
+        localSumSq += luminance * luminance * valid;
+        localWeight += valid;
+    }
+    float localMean = localSum / max(localWeight, 1.0);
+    float localMeanSq = localSumSq / max(localWeight, 1.0);
+    float spatialCoV = min(sqrt(max(localMeanSq - localMean * localMean, 0.0)) /
+                               max(localMean, kDriveEpsilon),
+                           kDriveMax);
+
+    // Temporal: variance of the accumulated luminance, reprojected into this
+    // frame. Zero on a converged static pose by construction.
+    vec2 moments = texelFetch(uReprojectedMoments, pixel, 0).rg;
+    float temporalVariance = max(moments.g - moments.r * moments.r, 0.0);
+    float temporalCoV =
+        min(sqrt(temporalVariance) / max(moments.r, kDriveEpsilon), kDriveMax);
+
+    // The comparison is also the non-finite trap. A NaN reaching `aliasing` would
+    // reach the tap scale, and from there the rounded offsets that index
+    // groupshared memory directly — so it is stopped here, where `NaN > x` is
+    // false and the filter falls back to its narrow footprint.
+    float drive = max(temporalCoV, spatialCoV);
+    float variation = drive > kDriveOnset ? smoothstep(kDriveOnset, kDriveSaturation, drive) : 0.0;
+
+    // Scarcity is the second, independent reason to spend footprint, and it is
+    // what a variance estimate cannot see: where the rate control traced 1 pixel
+    // in 16, the window holds one or two samples, their variance is ~0 by
+    // construction, and a narrow low-amplitude filter would leave the untraced
+    // centre's zero radiance carrying a third of the result. Measuring the
+    // tracing lattice directly is also what the roughness threshold this pass
+    // used to branch on was standing in for.
+    float coverage = localWeight / kDriveSamples;
+    float aliasing = max(variation, 1.0 - coverage);
+
+    // Footprint radius, in texels. The narrow end is what this pass already used
+    // on a near-mirror; the wide end is the reach a dense-box prototype measured
+    // against this fringe. Rounded so the loop bound is exact.
+    int radius = int(mix(float(kRadiusNarrow), float(kRadiusAliased), aliasing) + 0.5);
+    float neighborAmplitude = mix(kNeighborWeightFloor, 1.0, aliasing);
+    // Normalises the spatial falloff to the current footprint, so the outermost
+    // tap always lands at exp(-1) whatever the radius.
+    float reachSq = max(float(radius * radius), 1.0);
+
+    float centerWeight = RadianceWeight(avgRadiance, avgLuminance, center.Radiance) *
+                         max(center.Confidence, kCenterConfidenceFloor);
+    vec4 sum = vec4(center.Radiance, center.Confidence) * centerWeight;
+    float weightSum = centerWeight;
+
+    for (int y = -kRadiusAliased; y <= kRadiusAliased; ++y)
+    for (int x = -kRadiusAliased; x <= kRadiusAliased; ++x)
+    {
+        if (abs(x) > radius || abs(y) > radius || (x == 0 && y == 0))
+            continue;
+        TileSample q = LoadTileSample(centerIndex + y * kTileSpan + x);
+        // Three exponential edge stops share one exp(): depth, roughness and the
+        // spatial falloff are all e^-x, and folding them saves two
+        // transcendentals per tap across the footprint.
+        float depthTerm = abs(centerLinZ - q.LinearZ) /
+                          max(centerLinZ * kDepthSigmaRelative, kDepthSigmaFloor);
+        float roughnessTerm = abs(centerRoughness - q.Roughness) * kRoughnessSigma;
+        float spatialTerm = float(x * x + y * y) / reachSq;
+        float normalWeight = pow(max(dot(centerNormal, q.NormalVS), 0.0), kNormalSigma);
+        float w = exp(-(depthTerm + roughnessTerm + spatialTerm)) * normalWeight *
+                  RadianceWeight(avgRadiance, avgLuminance, q.Radiance) * neighborAmplitude *
+                  q.Confidence;
+        sum += vec4(q.Radiance, q.Confidence) * w;
+        weightSum += w;
+    }
+
+    imageStore(uFiltered, pixel, weightSum > kMinWeightSum ? sum / weightSum : vec4(0.0));
+}

@@ -1,0 +1,38 @@
+#version 450
+
+#define GE_VOLUMETRIC_FOG_BIND_JITTER_ATLAS 1
+#include "volumetric_fog_common.glsl"
+
+layout(local_size_x = 8, local_size_y = 8, local_size_z = 1) in;
+layout(rgba16f, set = 0, binding = 0) uniform writeonly image3D uOutIntegrated;
+layout(set = 0, binding = 1) uniform sampler3D uLighting;
+
+void main()
+{
+    ivec2 gid = ivec2(gl_GlobalInvocationID.xy);
+    ivec3 grid = ivec3(fog.uGridParams.xyz);
+    if (gid.x >= grid.x || gid.y >= grid.y)
+        return;
+
+    vec3 accum = vec3(0.0);
+    float transmittance = 1.0;
+    float previousDistance = 0.0;
+
+    for (int z = 0; z < grid.z; ++z)
+    {
+        float slice01 = (float(z) + 0.5) / max(fog.uGridParams.z, 1.0);
+        float distanceToCamera = FogSliceDistance(slice01);
+        float stepLength = max(distanceToCamera - previousDistance, 0.001);
+        previousDistance = distanceToCamera;
+
+        vec3 coord = vec3((vec2(gid) + vec2(0.5)) / max(fog.uGridParams.xy, vec2(1.0)), slice01);
+        vec4 lighting = texture(uLighting, coord);
+        float extinction = max(lighting.a, 0.0);
+        float stepT = exp(-extinction * stepLength);
+        float scatterWeight = 1.0 - stepT;
+
+        accum += transmittance * lighting.rgb * scatterWeight;
+        transmittance *= stepT;
+        imageStore(uOutIntegrated, ivec3(gid, z), vec4(accum, transmittance));
+    }
+}

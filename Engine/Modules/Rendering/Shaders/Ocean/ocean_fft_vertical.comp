@@ -1,0 +1,51 @@
+#version 450
+// Ocean FFT: vertical (per-column) butterfly pass + pack. the reference ComputeFFT FINAL.
+// One workgroup per column; GE_FFT_SIZE threads transform that column across rows.
+// Reads the horizontal-pass temp arrays, runs the second 1D FFT, and packs the
+// real parts into the displacement cascade: (displaceX, height, displaceZ).
+
+#include "Ocean/ocean_fft_butterfly.glsl"
+
+layout(local_size_x = 1, local_size_y = 256, local_size_z = 1) in;
+
+layout(set = 0, binding = 1, rgba32f)   uniform readonly  image2DArray uInH;
+layout(set = 0, binding = 2, rgba32f)   uniform readonly  image2DArray uInX;
+layout(set = 0, binding = 3, rgba32f)   uniform readonly  image2DArray uInZ;
+layout(set = 0, binding = 5, rgba16f) uniform writeonly image2DArray uDisplacement;
+
+void main()
+{
+    const ivec3 id = ivec3(gl_GlobalInvocationID); // x=column, y=row, z=cascade
+#if defined(GE_COMPAT_PROFILE)
+    // Cascade bound as a flag, not a return: the butterfly loop's barriers
+    // must be reached in uniform control flow (WGSL enforces it), so
+    // out-of-range cascades run the loop with stores masked off.
+    const bool cascadeActive = id.z < int(uCascadeCount);
+#else
+    if (id.z >= int(uCascadeCount))
+        return;
+#endif
+
+    const uint coord = uint(id.y);
+
+    sIntH[coord] = imageLoad(uInH, id).xy;
+    sIntX[coord] = imageLoad(uInX, id).xy;
+    sIntZ[coord] = imageLoad(uInZ, id).xy;
+
+    OceanRunFFT(coord);
+
+    // FFT centering sign flip (equivalent to fftshift).
+    const float sign = (((id.x + id.y) % 2) == 1) ? -1.0 : 1.0;
+    const float dispX  = sign * OceanFFTResultX(coord).x;
+    const float height = sign * OceanFFTResultH(coord).x;
+    const float dispZ  = sign * OceanFFTResultZ(coord).x;
+
+#if defined(GE_COMPAT_PROFILE)
+    if (cascadeActive)
+    {
+        imageStore(uDisplacement, id, vec4(dispX, height, dispZ, 0.0));
+    }
+#else
+    imageStore(uDisplacement, id, vec4(dispX, height, dispZ, 0.0));
+#endif
+}

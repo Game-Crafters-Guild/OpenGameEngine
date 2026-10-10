@@ -1,0 +1,10 @@
+{
+  "charCount": 100,
+  "medianFrameMs": 28.6568,
+  "p95FrameMs": 29.206,
+  "meanPerCharUs": 286.568,
+  "residentRamBytes": 1622960,
+  "hardware": "modern desktop CPU 8+ cores AVX2 (per plan §6)",
+  "buildConfig": "Debug",
+  "toleranceFrac": 0.2
+}

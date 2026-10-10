@@ -1,0 +1,38 @@
+/* The suffix label a text field shows after its value (TextFieldBase::SetSuffix). The field
+ * requests this sheet for the label when it creates it.
+ *
+ * Every suffix sits in the same slot beside the value; its role decides how it reads. A unit
+ * ("%", "px") is a faint glyph. A caption ("(north)", "(21 June)", SuffixRole::Caption) carries
+ * information, so it is drawn at full opacity, at the brightness of the value it annotates and
+ * never brighter.
+ *
+ * A caption stays on one line inside the field: where the field is too narrow it is cut with an
+ * ellipsis, and it gives up its width before the value gives up more than a fraction of a pixel.
+ * It takes the pointer, so resting on a cut caption shows its whole text as the tooltip, unless the
+ * field or an element above it carries a tooltip of its own, which answers first
+ * (TooltipOverlay::FindTooltipText); a press on it bubbles to the field, which handles it as a press
+ * on itself.
+ */
+.field-suffix-slot {
+    flex-grow: 0;
+    flex-shrink: 0;
+    margin-left: 4px;
+    pointer-events: none;
+}
+
+.field-suffix {
+    opacity: 0.4;
+}
+
+.field-caption {
+    color: var(--ui_color_text_dim);
+    /* A ratio, not a size. Flexbox takes a row's overflow from each item in proportion to its
+       flex-shrink times its width, and the value's is 1 (theme/core.css): at 1000 the value gives up
+       under a pixel while the caption still has width, and the rest only once the caption is gone. */
+    flex-shrink: 1000;
+    min-width: 0;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    pointer-events: auto;
+}

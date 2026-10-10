@@ -1,0 +1,15 @@
+#version 450
+
+// Compute writes a constant color to a storage image
+layout(local_size_x = 8, local_size_y = 8, local_size_z = 1) in;
+
+layout(rgba8, set = 0, binding = 0) writeonly uniform image2D uOut;
+
+void main()
+{
+    ivec2 coord = ivec2(gl_GlobalInvocationID.xy);
+    // Constant but distinctive color to verify end-to-end path
+    vec4 color = vec4(0.25, 0.5, 0.75, 1.0);
+    imageStore(uOut, coord, color);
+}
+

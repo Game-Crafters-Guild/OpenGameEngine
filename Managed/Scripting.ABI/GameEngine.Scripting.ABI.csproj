@@ -1,0 +1,27 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
+    <GenerateDocumentationFile>false</GenerateDocumentationFile>
+    <GenerateAssemblyInfo>true</GenerateAssemblyInfo>
+    <AppendTargetFrameworkToOutputPath>false</AppendTargetFrameworkToOutputPath>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <InternalsVisibleTo Include="GameEngine.Scripting.Runtime" />
+    <!-- The element-type lifecycle (staging, the window, the unload seam) is internal and is
+         where the ALC ordering bugs live; InteropTests drives it against the NativeShim double. -->
+    <InternalsVisibleTo Include="InteropTests" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\ECS.ABI\GameEngine.ECS.ABI.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <Compile Include="..\Common\StringIds.cs" Link="StringIds.cs" />
+  </ItemGroup>
+</Project>
+

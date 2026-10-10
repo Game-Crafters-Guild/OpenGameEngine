@@ -1,0 +1,165 @@
+#version 450
+
+// GTAO with finite-thickness visibility sectors. Scalar visibility and bent
+// normals integrate the SAME sector mask; both include distance falloff.
+// Original sweep ported from SpartanEngine (license below). The depth guide,
+// filtered mip sampling, sector moment integration and temporal path are engine code.
+// Output: rgba16f, rgb = world bent normal, a = visibility (1 = unoccluded).
+// References: Jimenez et al. 2016; Therrien et al. 2023 visibility bitmasks.
+//
+// -----------------------------------------------------------------------------
+// Copyright(c) 2015-2026 Panos Karabelas
+//
+// Permission is hereby granted, free of charge, to any person obtaining a copy
+// of this software and associated documentation files (the "Software"), to deal
+// in the Software without restriction, including without limitation the rights
+// to use, copy, modify, merge, publish, distribute, sublicense, and / or sell
+// copies of the Software, and to permit persons to whom the Software is furnished
+// to do so, subject to the following conditions :
+//
+// The above copyright notice and this permission notice shall be included in
+// all copies or substantial portions of the Software.
+//
+// THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+// IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY, FITNESS
+// FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE AUTHORS OR
+// COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER
+// IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN
+// CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
+// -----------------------------------------------------------------------------
+
+layout(local_size_x = 8, local_size_y = 8) in;
+layout(set = 0, binding = 0) uniform sampler2D uDepth;
+layout(set = 0, binding = 1, rgba16f) uniform writeonly image2D uAO;
+layout(set = 0, binding = 2) uniform sampler2D uGuide;
+layout(set = 0, binding = 3) uniform sampler2D uDepthMips;
+#include "AmbientOcclusion/gtao_geometry.glsl"
+#include "AmbientOcclusion/gtao_sectors.glsl"
+
+layout(push_constant) uniform PC {
+    float aoIntensity;
+    float aoRadius;
+    float aoThickness;
+    uint directions;
+    uint steps;
+    uint noiseFrame; // zero with temporal off; eight phases when accumulating
+} pc;
+
+float interleaved_gradient_noise(vec2 p)
+{
+    return fract(52.9829189 * fract(0.06711056 * p.x + 0.00583715 * p.y));
+}
+
+vec2 get_front_back_horizons(float side, vec3 delta, vec3 v, float n)
+{
+    vec3 back = delta - v * max(pc.aoThickness, 0.0);
+    float backLength = length(back);
+    if (backLength <= 1e-6) return vec2(0.0);
+    vec2 angles = acos(clamp(vec2(dot(normalize(delta), v), dot(back / backLength, v)), -1.0, 1.0));
+    vec2 span = clamp((side * angles - n + GE_GTAO_PI_HALF) / GE_GTAO_PI, 0.0, 1.0);
+    return side < 0.0 ? span.yx : span.xy;
+}
+
+void main()
+{
+    ivec2 pix = ivec2(gl_GlobalInvocationID.xy);
+    if (any(greaterThanEqual(pix, imageSize(uAO)))) return;
+    ivec2 fullSize = textureSize(uDepth, 0);
+    vec3 guide = GE_GtaoGuide(uGuide, pix, fullSize);
+    vec2 uv = guide.xy;
+    float raw = guide.z;
+    if (raw <= 0.0 || pc.aoRadius <= 0.0)
+    {
+        imageStore(uAO, pix, vec4(0.0, 0.0, 0.0, 1.0));
+        return;
+    }
+    vec3 position = GE_GtaoPosition(uv, raw);
+    vec3 normal = GE_GtaoNormal(uDepth, uv, position);
+    vec3 v = GE_GtaoViewVector(position);
+    vec2 texel = 1.0 / vec2(fullSize);
+    // At centre depth, independent of silhouette neighbours and valid for
+    // perspective/orthographic projection and non-square pixel footprints.
+    vec2 pixelSize = vec2(length(GE_GtaoPosition(uv + vec2(texel.x, 0.0), raw) - position),
+                          length(GE_GtaoPosition(uv + vec2(0.0, texel.y), raw) - position));
+    vec2 radiusPixels = pc.aoRadius / max(pixelSize, vec2(1e-5));
+    float rotation = interleaved_gradient_noise(vec2(pix) + float(pc.noiseFrame) * vec2(5.588238));
+    float jitter = fract(rotation * 1.6180339887);
+    float visibleIntegral = 0.0;
+    float totalIntegral = 0.0;
+    vec3 bent = vec3(0.0);
+    bool anyOcclusion = false;
+
+    for (uint slice = 0u; slice < pc.directions; ++slice)
+    {
+        float phi = (float(slice) + rotation) * GE_GTAO_PI / float(pc.directions);
+        vec3 direction = vec3(cos(phi), sin(phi), 0.0);
+        vec3 tangent = normalize(direction - dot(direction, v) * v);
+        vec3 axis = cross(tangent, v);
+        vec3 projected = normal - axis * dot(normal, axis);
+        float projectedLength = length(projected);
+        if (projectedLength < 1e-6) continue;
+        float sn = clamp(dot(projected, tangent) / projectedLength, -1.0, 1.0);
+        float cn = clamp(dot(projected, v) / projectedLength, 0.0, 1.0);
+        float n = atan(sn, cn);
+        vec2 omega = vec2(direction.x, -direction.y) * radiusPixels;
+        float minS = min(1.0, 1.0 / max(length(omega), 1.0));
+        uint mask = 0u;
+        for (uint step = 0u; step < pc.steps; ++step)
+        {
+            float t = (float(step) + jitter) / float(pc.steps);
+            vec2 offsetPixels = round(mix(minS, 1.0, t * t) * omega);
+            // Keep fine contact taps at mip zero; distant taps use a filtered
+            // footprint rather than unrelated full-res point samples.
+            float lod = clamp(floor(log2(max(length(offsetPixels), 1.0))) - 3.0,
+                              0.0, float(textureQueryLevels(uDepthMips) - 1));
+            vec2 mipSize = vec2(textureSize(uDepthMips, int(lod)));
+            for (int sideIndex = 0; sideIndex < 2; ++sideIndex)
+            {
+                float side = sideIndex == 0 ? 1.0 : -1.0;
+                vec2 tapUV = uv + side * offsetPixels * texel;
+                if (!GE_GtaoInside(tapUV)) continue;
+                tapUV = (floor(tapUV * mipSize) + 0.5) / mipSize;
+                float z = textureLod(uDepthMips, tapUV, lod).r;
+                if (z <= 0.0) continue;
+                vec3 delta = GE_GtaoPosition(tapUV, GE_GtaoRawDepth(z)) - position;
+                float distance = length(delta);
+                if (distance <= 1e-6 || distance >= pc.aoRadius) continue;
+                // Coplanar/below-surface samples cannot block this hemisphere.
+                // A small relative bias absorbs depth reconstruction roundoff.
+                if (dot(normal, delta) <= max(1e-5, distance * 1e-4)) continue;
+                // Pixel/mip snapping perturbs the requested direction. Project
+                // back into this slice before interpreting its horizon angles.
+                delta -= axis * dot(delta, axis);
+                if (dot(delta, delta) <= 1e-12) continue;
+                float weight = 1.0 - smoothstep(0.4 * pc.aoRadius, pc.aoRadius, distance);
+                vec2 span = get_front_back_horizons(side, delta, v, n);
+                // Angular shrink preserves union semantics. Resolution of the
+                // distance fade is bounded by the 32-sector representation.
+                span = mix(vec2(0.5 * (span.x + span.y)), span, weight);
+                mask |= GE_GtaoSectorMask(span);
+            }
+        }
+        anyOcclusion = anyOcclusion || mask != 0u;
+        vec3 moments = GE_GtaoVisibleMoments(mask, n, sn, cn);
+        visibleIntegral += projectedLength * moments.x;
+        totalIntegral += projectedLength * GE_GtaoVisibleMoments(0u, n, sn, cn).x;
+        bent += projectedLength * (tangent * moments.y + v * moments.z);
+    }
+    float visibility = totalIntegral > 1e-6 ? clamp(visibleIntegral / totalIntegral, 0.0, 1.0) : 1.0;
+    visibility = pow(visibility, pc.aoIntensity);
+    vec3 bentView = anyOcclusion && dot(bent, bent) > 1e-8 ? normalize(bent) : normal;
+    // Numerical quadrature must not point below the receiving hemisphere.
+    bentView = normalize(bentView - normal * min(dot(bentView, normal), 0.0) + normal * 1e-5);
+    vec3 bent_world = normalize(transpose(mat3(ge_view)) * bentView);
+#if defined(GE_COMPAT_PROFILE)
+    if (any(notEqual(bent_world, bent_world)) || any(greaterThan(abs(bent_world), vec3(3.402823e38))) ||
+        (visibility != visibility))
+#else
+    if (any(isnan(bent_world)) || any(isinf(bent_world)) || isnan(visibility))
+#endif
+    {
+        imageStore(uAO, pix, vec4(0.0, 0.0, 0.0, 1.0));
+        return;
+    }
+    imageStore(uAO, pix, vec4(bent_world, visibility));
+}

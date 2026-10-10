@@ -1,0 +1,39 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Instancing</title>
+<!-- Cross-origin isolation for the threaded build on hosts that cannot set headers: the
+     service worker adds COOP and COEP require-corp; the first visit reloads once. -->
+<script>window.coi = { coepCredentialless: () => false };</script>
+<script src="../../coi-serviceworker.js"></script>
+<!-- Where the library is served from; the package build sets this. -->
+<script type="importmap">{ "imports": { "@openengine/web": "../../ts/dist/src/index.js" } }</script>
+<link rel="stylesheet" href="panel.css">
+</head>
+<body>
+<!-- The download bar along the top edge, and the status over the canvas until the first frame
+     draws: both show whatever the viewport and whether the panel is open. -->
+<progress class="download" hidden></progress>
+<canvas></canvas>
+<p class="canvas-status">Loading the engine...</p>
+<details class="panel" open>
+<summary>Instancing <span class="summary-progress"></span></summary>
+<p class="hint">Early access (alpha): the engine and its API change between releases.</p>
+<!-- The controls stay disabled until the engine starts (panel.js enables them). -->
+<label>Copies <output name="shown"></output><input type="range" name="count" min="100" max="100000" step="100" disabled></label>
+<label class="check turntable"><input type="checkbox" name="turn" disabled> Turning</label>
+<button type="button" name="fps" disabled>Frame rate <kbd>F</kbd></button>
+<output name="status">Loading the engine...</output>
+<p class="hint turntable">Turning: one query walks every copy's Transform each frame, a chunk of copies per engine call. It starts off: every turned copy is moved again in the engine's transforms and upload, about 45 ms a frame at 100,000 copies.</p>
+</details>
+<div class="fps" hidden></div>
+<!-- The turning switch and its hint are on the page only with ?turntable=1, while the per-frame cost of
+     100,000 moving copies is brought down; without it the copies stay at rest. -->
+<script>if (new URLSearchParams(location.search).get('turntable') !== '1') for (const part of document.querySelectorAll('.turntable')) part.remove();</script>
+<!-- On a narrow page the panel is a strip over the lower canvas: it starts collapsed there. -->
+<script>if (matchMedia('(max-width: 600px)').matches) document.querySelector('.panel').open = false;</script>
+<script type="module" src="main.js"></script>
+</body>
+</html>

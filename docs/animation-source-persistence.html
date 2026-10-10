@@ -1,0 +1,237 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Animation source persistence</title>
+<style>
+  :root {
+    --bg: #0f1115; --panel: #171a21; --panel-light: #1f232c; --border: #2a2f3a;
+    --text: #d7dae0; --muted: #8b919c; --accent: #6ea8fe; --danger: #ff6b6b;
+    --bad: #ff6b6b; --ok: #4cd18a; --good: #4cd18a; --warn: #f2c94c;
+  }
+  body { margin: 0; padding: 2rem 3rem; background: var(--bg); color: var(--text);
+         font: 15px/1.55 system-ui, -apple-system, "Segoe UI", sans-serif; max-width: 1100px; }
+  h1 { margin: 0 0 .25rem; font-size: 1.9rem; }
+  h2 { margin-top: 2.2rem; padding: .35rem .6rem; border: 1px solid var(--border);
+       border-left: 4px solid var(--accent); background: var(--panel); font-size: 1.25rem; }
+  h3 { margin: 1.4rem 0 .4rem; color: var(--accent); font-size: 1.05rem; }
+  .lede { color: var(--muted); margin: 0 0 1.5rem; letter-spacing: .04em; text-transform: uppercase; font-size: .8rem; }
+  hr { border: 0; border-top: 1px solid var(--border); margin: 2rem 0; }
+  code, pre { font: 13px/1.5 ui-monospace, "Cascadia Mono", Consolas, monospace;
+              background: var(--panel-light); border-radius: 4px; }
+  code { padding: .05rem .35rem; }
+  pre { padding: .8rem 1rem; overflow-x: auto; border: 1px solid var(--border); }
+  .panel { border: 1px solid var(--border); background: var(--panel); border-radius: 6px; padding: .9rem 1.1rem; margin: 1rem 0; }
+  .panel.danger { border-left: 4px solid var(--danger); }
+  .panel.ok { border-left: 4px solid var(--ok); }
+  .panel.warn { border-left: 4px solid var(--warn); }
+  .two-col { display: grid; grid-template-columns: 1fr 1fr; gap: 1rem; }
+  table { border-collapse: collapse; width: 100%; margin: 1rem 0; }
+  th, td { border: 1px solid var(--border); padding: .45rem .7rem; text-align: left; vertical-align: top; }
+  th { background: var(--panel-light); color: var(--muted); font-weight: 600; font-size: .85rem; }
+  tr:hover td { background: var(--panel); }
+  .pill { display: inline-block; padding: .05rem .5rem; border-radius: 999px; font-size: .75rem; font-weight: 600; }
+  .pill.new { background: #1e3a2a; color: var(--ok); }
+  .pill.keep { background: #1f2a3f; color: var(--accent); }
+  .pill.del { background: #3a1e1e; color: var(--bad); }
+  footer { margin-top: 3rem; color: var(--muted); font-size: .85rem; }
+</style>
+</head>
+<body>
+
+<h1>Animation source persistence</h1>
+<p class="lede">CONCEPT · animation / scene serialization · what a saved scene remembers about an animation source</p>
+<p>One rule for every animation source a scene names: the durable identity is the container asset the artist assigned (a model GUID, plus a selector where the container holds several), and every numeric store index derived from it is a per-session cache the scene file never carries. Three consumers follow it: the Animator&rsquo;s embedded clip, a skinned entity&rsquo;s rig, and the retarget system&rsquo;s source skeleton.</p>
+
+<div class="panel danger">
+  <strong>The problem, as the artist meets it.</strong> An Animator is pointed at an animation that lives
+  inside a model file (an animation-only FBX, or a clip embedded in a character model). The scene is saved,
+  the editor restarts, the scene is loaded. The character plays its own model's first animation, or nothing,
+  instead of the animation that was assigned. Nothing in the scene file names the model that holds the clip,
+  so nothing loads it.
+</div>
+
+<h2>Identity of an embedded clip</h2>
+<p>
+  Embedded clips have no asset-registry record of their own. Their identity is derived
+  (<code>GUID::Derive(modelGuid, "embedded:&lt;i&gt;")</code>, see <code>AssetCore/SubassetDeriveKeys.h</code>
+  and <code>ModelAsset::DeriveEmbeddedClipGuid</code>) and the container journals its derive keys only so
+  a container rename can cascade redirects. The journal is written after a successful load and never for
+  read-only mounts, so it cannot serve as a reverse lookup from a derived GUID to its container.
+</p>
+<p>
+  The Animator therefore carries the container itself, the same shape <code>MeshRenderer</code> uses for
+  embedded meshes (a <code>ModelRef</code> plus a selector):
+</p>
+<pre>ModelRef clipSourceModelGuid;          // container
+uint32   clipSourceAnimationIndex;     // embedded index; UINT32_MAX = no pair
+AssetRef&lt;Animation&gt; clipGuid;          // runtime identity the ClipStore keys on</pre>
+<p>
+  A pair is either complete or absent. When present, <code>clipGuid</code> is the GUID derived from it.
+  A standalone <code>.anim</code> keeps its plain <code>clipGuid</code> and no pair.
+</p>
+
+<h2>Writers keep the pair consistent</h2>
+<table>
+  <tr><th>Writer</th><th>Call</th><th>Effect on the pair</th></tr>
+  <tr><td>Inspector asset row, embedded dropdown, default assignment; model spawn</td>
+      <td><code>Animator::SelectEmbeddedClip(model, index)</code></td><td>sets pair and derived <code>clipGuid</code></td></tr>
+  <tr><td>Inspector standalone pick or "(None)"; debug-server spawn</td>
+      <td><code>Animator::SelectClip(guid)</code></td><td>clears pair, sets <code>clipGuid</code></td></tr>
+  <tr><td>Scripting: <code>PlayState</code>, <code>CrossFadeSeconds</code>, <code>PlaySection</code></td>
+      <td>by name or GUID</td><td>clears pair</td></tr>
+</table>
+<p>Do not assign <code>clipGuid</code> directly from new code; a stale pair next to a changed or cleared clip
+   is exactly the state these calls exist to prevent.</p>
+
+<h2>Scene file</h2>
+<div class="two-col">
+  <div class="panel ok">
+    <strong>Embedded clip</strong>
+<pre>Animator.clipSourceModelGuid = [path="..." guid="..."]
+Animator.clipSourceAnimationIndex = 0</pre>
+    Emitted when the pair is present, or when it can be recovered from the resident clip's source path and
+    index (<code>AnimationClip::GetSourcePath</code> / <code>GetSourceAnimationIndex</code>, recorded by the
+    FBX, Blend and glTF loaders) and the resolver identifies that path as a model producing the selected GUID.
+  </div>
+  <div class="panel ok">
+    <strong>Standalone clip</strong>
+<pre>Animator.clipGuid = [path="..." guid="..."]</pre>
+    Unchanged representation. A clip whose container cannot be recovered is also saved this way, and a
+    load reports it as an unresolved reference rather than substituting another animation.
+  </div>
+</div>
+<p>
+  Loading parses the two fields as a group (<code>AnimatorSchema::ApplyProperties</code>). A pair with a
+  missing half, a non-model source, or a <code>clipGuid</code> that contradicts the pair fails the group;
+  SceneIO's per-property fallback then records the halves as degradation skips instead of installing half a
+  pair. Redirected model GUIDs resolve through the normal scene resolver before the clip GUID is derived.
+  Dependency enumeration reports the model container so packaging includes it.
+</p>
+
+<h2>Playback resolution</h2>
+<p>
+  Runtime bootstrap, the per-tick command owner and Editor enter-Play share
+  <code>Engine::Renderer::ResolveAnimatorClipIndex</code>:
+</p>
+<ol>
+  <li>A complete pair whose derived GUID matches the selected clip loads that model (non-blocking) and
+      verifies the index exists and derives the expected GUID; a bad index resolves to nothing.</li>
+  <li>Otherwise an explicit <code>clipGuid</code> resolves as a standalone clip, or as a model-as-clip hint
+      (first embedded clip of that model).</li>
+  <li>Only an Animator with no explicit clip falls back to the entity's own model's first embedded clip.</li>
+</ol>
+<div class="panel warn">
+  <strong>Source still loading.</strong> Resolution reports <em>pending</em> and the Animator is left with the
+  internal <code>AnimatorPlaybackCommand::Autoplay</code>, which <code>ProcessClipAnimatorCommands</code>
+  retries each animation tick until the model lands. Autoplay applies the authored seek or section, blend,
+  speed and loop settings exactly once; an explicit <code>Pause</code> or <code>Stop</code> issued meanwhile
+  replaces it. A model that can never load resolves as <em>not pending</em> and logs one warning.
+  <code>Autoplay</code> is never serialized.
+</div>
+
+
+<h2>Rig source: model skeleton persistence</h2>
+<div class="panel danger">
+  <strong>The problem, as the artist meets it.</strong> A skinned character is placed, the scene is saved, the
+  editor restarts. The character now wears another model&rsquo;s rig, or its submeshes and the helper nodes
+  parented to its bones (weapon sockets, props) each rebuild their own pose and drift apart while the
+  animation plays. The scene file had stored <code>SkeletonStore</code> indices, which are per-process, and
+  nothing recorded which entities were one instance.
+</div>
+<p>
+  <code>SkeletonRef</code> carries the durable source and the instance grouping; its store handles are
+  <code>[DoNotSerialize]</code> caches rebuilt every session:
+</p>
+<pre>ModelRef              sourceModelGuid;   // the model whose skeleton this rig is (empty: procedural, in-memory)
+SkeletonInstanceOwner ownerMode;         // Self: an independent instance; Entity: share instanceOwner's pose
+EntityHandle          instanceOwner;     // the model root the group belongs to (SceneIO remaps it on additive load)
+uint32 skeletonId, runtimeId; uint64 runtimeGeneration;   // [DoNotSerialize] per-session caches</pre>
+<div class="two-col">
+  <div class="panel ok">
+    <strong>Model instance (factory spawn)</strong>
+<pre>SkeletonRef.sourceModelGuid = [path="..." guid="..."]
+SkeletonRef.ownerMode = Entity
+SkeletonRef.instanceOwner = "root-entity-id"</pre>
+    Every submesh and every animated helper node of one <code>ModelEntityFactory</code> spawn names the
+    same owner, so they resolve to one runtime and one pose. A <code>MeshRenderer.modelAssetGuid</code> on the
+    same entity selects the rig as well and follows model reassignment; helper nodes have no mesh and rely on
+    their own saved source.
+  </div>
+  <div class="panel warn">
+    <strong>Legacy scene (numeric ids only)</strong>
+<pre>SkeletonRef.skeletonId = 7            # consumed, ignored
+SkinnedMeshRenderer.skeletonId = 7    # consumed, ignored</pre>
+    A mesh recovers its rig from its model GUID (as an independent <code>Self</code> instance). A helper node
+    with neither a source nor a mesh has nothing to rebuild from: the resolver reports it once, naming the
+    entity and the fix (re-spawn the model, or author <code>sourceModelGuid</code> and <code>instanceOwner</code>),
+    and leaves it unresolved rather than animating nothing silently.
+  </div>
+</div>
+<h3>Reconstruction</h3>
+<p>
+  <code>RenderingLoop::Update</code> calls <code>BindChangedSkinnedMeshAnimation</code> on the main thread
+  before the animation and extraction waves, on both hosts; direct SceneIO loads, additive loads (owner
+  remapped by the reflected entity-reference codec), helper-only source readiness and model reassignment all
+  flow through the one resolver in <code>ModelRenderSetup.cpp</code>. The binder never waits for a model: one
+  that is not resident is requested and the entity binds once it lands. An entity the engine&rsquo;s
+  <code>SceneResolveService</code> still holds (its model loading) is skipped, not bound to a placeholder, and
+  binds on the first tick after the service completes it. While the editor&rsquo;s scene-open build
+  (<code>SceneBuildPump</code>) is active the binder leaves its gates unconsumed so the first tick after the
+  build sees the complete instance.
+  Steady frames do one cache-only asset lookup per distinct referenced model and no component writes;
+  resolution runs on <code>Changed&lt;&gt;</code> of <code>SkeletonRef</code>, <code>SkinnedMeshRenderer</code>
+  and <code>MeshRenderer</code>, on a structural change that invalidated an owner, and when a referenced
+  model&rsquo;s residency or skeleton index changes.
+</p>
+<h3>Ownership and lifetime</h3>
+<ul>
+  <li>Every published non-zero <code>runtimeId</code> owns one <code>SkeletonStore</code> reference; the
+      <code>OnRemove</code> hook (<code>ReleaseSkeletonRuntime</code>) drops it.</li>
+  <li>The store stamps each allocation with a generation (the create epoch). A component whose
+      <code>runtimeGeneration</code> no longer matches its slot is a stale snapshot &mdash; a raw
+      <code>DeserializeWorld</code> (play-mode exit, undo) or a byte-copied clone &mdash; and neither reuses nor
+      releases the slot&rsquo;s current occupant. Generation zero with no model source is the explicit procedural
+      contract and releases as before.</li>
+  <li>The runtime records its <code>SkeletonRuntimeSource</code> (model, owner, World id and reset generation);
+      a cache joins an existing runtime only when that identity matches exactly.</li>
+  <li>The editor&rsquo;s duplicate path (<code>CopiedEntityRuntimeRefs</code>) hands the clone its own runtime,
+      remaps <code>instanceOwner</code> to the cloned owner and stamps the new generation and source, so the
+      resolver keeps that runtime instead of regrouping the clone under the original.</li>
+  <li>Store mutation (create, retain, release) never overlaps the animation and extraction waves; the
+      generation read is lock-free behind the same publish/acquire pair the other runtime readers use.</li>
+</ul>
+<p>The <code>SkinnedMeshRenderer</code> inspector shows the rig source (model file), the rig owner (entity)
+   and whether the runtime is resolved; the per-session ids are not shown.</p>
+
+<h2>Retarget source: the animation&rsquo;s own model</h2>
+<p>
+  <code>HumanoidRetargetSystem</code> resolves an embedded clip&rsquo;s declared source model through the asset
+  manager before sampling, building the CPU node or publishing GPU rig data; the loaded model supplies the
+  source <code>SkeletonStore</code> id. A pending, missing, wrong-type or skeleton-less explicit source stays
+  unresolved and never falls back to the target skeleton (that fallback seeded the shared GPU rig table with
+  the wrong layout, so which actor evaluated first affected the others). Missing resident assets request the
+  asynchronous load and retry on later updates without blocking the animation wave. Standalone
+  <code>.anim</code> and procedural clips with an empty source path keep the in-memory contract and the
+  intentional same-rig fallback. Each distinct explicit clip is memoized once per update in a small vector
+  whose capacity is reused; a source that can never resolve is reported once per character and cleared when
+  it resolves, while a load in flight stays quiet.
+</p>
+
+<h2>Changelog</h2>
+<table>
+  <tr><th>Date</th><th>Change</th></tr>
+  <tr><td>2026-09-15</td><td>Initial version: Animator-owned source pair, grouped schema apply, shared
+      resolver with deferred Autoplay, selection API on Animator, glTF clips carry source info.</td></tr>
+  <tr><td>2026-09-16</td><td>Renamed from <code>embedded-animation-persistence.html</code> to cover every
+      animation source. Folded in the rig source (model skeleton persistence: durable
+      <code>SkeletonRef</code> source and owner, generation-stamped runtimes, shared binder, duplicate repair,
+      inspector) and the retarget source resolution note, replacing
+      <code>animation-model-skeleton-persistence.md</code> and <code>retarget-source-resolution.md</code>.</td></tr>
+  <tr><td>2026-10-05</td><td>The binder never waits for a model and skips the entities the engine&rsquo;s
+      resolve service still holds; they bind on the first tick after the service completes them.</td></tr>
+</table>
+
+<footer>v3 · 2026-10-05 · Engine/Include/Components/Animation/{Animator,SkeletonRef}.h, Engine/Source/Scene/BuiltInSceneSchemas.cpp, Engine/Source/Engine/Rendering/{AnimatorScenePlayback,ModelRenderSetup,SceneResolveService,SkeletonStore}.cpp, Engine/Source/Engine/Rendering/Systems/HumanoidRetargetSystem.cpp</footer>
+</body>
+</html>

@@ -1,0 +1,25 @@
+{
+  "schemaVersion": 3,
+  "materialName": "OpenPBR - Lacquered Walnut (Coat over Diffuse)",
+  "lightingModel": "StandardPBR",
+  "alphaMode": "Opaque",
+  "doubleSided": false,
+  "surfaceShader": "Surfaces/standard_pbr.glsl",
+  "properties": {
+    "baseColor": [
+      0.21,
+      0.105,
+      0.055,
+      1.0
+    ],
+    "metallic": 0.0,
+    "roughness": 0.62,
+    "diffuseRoughness": 0.4,
+    "enableClearCoat": true,
+    "clearCoat": 1.0,
+    "clearCoatRoughness": 0.045,
+    "clearCoatIor": 1.52,
+    "coatDarkening": 1.0
+  },
+  "textures": {}
+}

@@ -1,0 +1,169 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Your first project</title>
+<style>
+  :root{
+    --bg:#0e1116; --panel:#161b22; --panel-light:#1c232c; --border:#2a323d;
+    --text:#d7dde5; --muted:#8b97a6; --accent:#5db0ff;
+    --danger:#ff6b6b; --bad:#ff6b6b; --ok:#5ad19b; --good:#5ad19b; --warn:#e8c468;
+    --mono:"SF Mono",ui-monospace,Menlo,Consolas,monospace;
+  }
+  *{box-sizing:border-box}
+  body{background:var(--bg);color:var(--text);font:15px/1.6 -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif;
+       margin:0;padding:0 0 80px}
+  .wrap{max-width:980px;margin:0 auto;padding:32px 24px}
+  h1{font-size:30px;margin:0 0 4px;letter-spacing:-.4px}
+  h2{font-size:22px;margin:42px 0 14px;padding-top:22px;border-top:1px solid var(--border)}
+  h3{font-size:17px;margin:26px 0 8px;color:#e9eef4}
+  p,li{color:var(--text)}
+  .lede{color:var(--muted);font-size:13px;text-transform:uppercase;letter-spacing:.12em;margin:0 0 26px}
+  a{color:var(--accent);text-decoration:none}
+  code{font-family:var(--mono);font-size:.88em;background:#11161d;border:1px solid var(--border);
+       border-radius:4px;padding:1px 5px}
+  pre{font-family:var(--mono);font-size:12.5px;line-height:1.5;background:#0b0f14;border:1px solid var(--border);
+      border-radius:8px;padding:14px 16px;overflow:auto}
+  pre code{background:none;border:none;padding:0}
+  .panel{border:1px solid var(--border);border-left-width:4px;border-radius:8px;background:var(--panel);
+         padding:14px 18px;margin:16px 0}
+  .panel.ok{border-left-color:var(--ok)} .panel.warn{border-left-color:var(--warn)}
+  .panel h4{margin:0 0 6px;font-size:14px;text-transform:uppercase;letter-spacing:.06em}
+  .panel.ok h4{color:var(--ok)} .panel.warn h4{color:var(--warn)}
+  table{border-collapse:collapse;width:100%;margin:16px 0;font-size:13.5px}
+  th,td{border:1px solid var(--border);padding:8px 11px;text-align:left;vertical-align:top}
+  th{background:var(--panel-light);color:#e9eef4}
+  tr:hover td{background:#12171e}
+  .muted{color:var(--muted)}
+  ul,ol{padding-left:22px} li{margin:4px 0}
+  .step{border:1px solid var(--border);border-radius:8px;background:var(--panel);padding:12px 16px;margin:10px 0}
+  .step b{color:var(--accent)}
+  footer{max-width:980px;margin:40px auto 0;padding:18px 24px 0;border-top:1px solid var(--border);color:var(--muted);font-size:12.5px}
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <h1>Your first project</h1>
+  <p class="lede">Usage guide · editor / projects / export</p>
+
+  <p>A project is a folder: its content lives under <code>Assets/</code>, and the editor keeps
+  its own data beside it (<code>.Editor/</code> for project settings, <code>.Cache/</code> and
+  <code>AssetDatabase.assetdb</code> for derived data). This page takes a project from the
+  editor's first launch to a game you can run. Build the editor first, as
+  <a href="../BUILD.md">BUILD.md</a> describes.</p>
+
+  <h2 id="first-launch">First launch</h2>
+
+  <p>Started without a project, the editor opens the last project you used. On the first
+  launch there is none, so it shows the project picker. Hold <b>Shift</b> while the editor
+  starts to get the picker instead of the last project.</p>
+
+  <p>The picker's home screen has a <b>New project</b> card, an <b>Open project</b> card
+  and the list of recent projects. Behind the picker the editor holds an empty placeholder
+  project, the default project; it cannot become one of your projects, so the picker stays
+  open until you create or open one.</p>
+
+  <table>
+    <tr><th>Platform</th><th>Default project folder</th></tr>
+    <tr><td>macOS</td><td><code>~/Library/Application Support/GameEngine/Editor/DefaultProject</code></td></tr>
+    <tr><td>Windows</td><td><code>%APPDATA%\GameEngine\Editor\DefaultProject</code></td></tr>
+    <tr><td>Linux</td><td><code>$XDG_DATA_HOME/GameEngine/Editor/DefaultProject</code>, or <code>~/.local/share/...</code> when <code>XDG_DATA_HOME</code> is unset</td></tr>
+  </table>
+
+  <h2 id="create">Create a project</h2>
+
+  <div class="step"><b>1.</b> In the picker, choose <b>New project</b>. The <b>Templates</b> tab lists the built-in templates.</div>
+  <div class="step"><b>2.</b> Pick a template. <b>Basic 3D</b> starts with a lit scene, <code>Assets/Scenes/Main.scene</code>. <b>Blank</b> starts with an empty <code>Assets/</code> folder. <b>Open World</b> currently creates an empty project, like Blank.</div>
+  <div class="step"><b>3.</b> Type a name under <b>PROJECT NAME</b> and choose a folder under <b>LOCATION</b> with <b>Browse</b>. The location must be an existing folder; the editor creates <code>&lt;location&gt;/&lt;name&gt;</code> and refuses a name that already exists there. Keep projects outside the engine checkout and its <code>build/</code> folder.</div>
+  <div class="step"><b>4.</b> Choose <b>Create project</b>. The editor opens the new project.</div>
+
+  <h2 id="open">Open a project</h2>
+
+  <ul>
+    <li><b>From the picker:</b> choose a project in the recent list, or choose <b>Open project</b>
+    and then <b>Browse</b> to pick a folder. The editor opens the folder where it is; it does not
+    copy it. The same view can also import a project from a <code>.zip</code> archive or a Git URL.</li>
+    <li><b>From a running editor:</b> the <b>Open Project Folder</b> button in the top toolbar,
+    or the <b>Open Project</b> command in the search (<b>Cmd+K</b> on macOS, <b>Ctrl+K</b>
+    on Windows and Linux), shows the picker. The editor switches
+    projects without restarting.</li>
+    <li><b>From the command line:</b> pass <code>--project &lt;folder&gt;</code>. The editor
+    skips the picker and opens that folder, creating it if it does not exist.</li>
+  </ul>
+
+<pre><code># macOS
+build/macos-arm64-local/bin/Debug/Apps/Editor/Editor.app/Contents/MacOS/Editor --project ~/GameProjects/MyGame
+
+# Windows
+build\vs2026-x64-local\bin\DebugFast\Apps\Editor\Editor.exe --project C:\GameProjects\MyGame
+
+# Linux
+./build/linux-x64-local/bin/Debug/Apps/Editor/Editor --project ~/GameProjects/MyGame</code></pre>
+
+  <p>Any folder can be opened as a project: the editor creates <code>Assets/</code> if it is
+  missing.</p>
+
+  <h2 id="scripts-project">The C# project for your IDE</h2>
+
+  <p>Each time it opens a project, the editor writes <code>GameEngine.Scripts.csproj</code> at the
+  project root, beside <code>Assets/</code>. Open that file in your IDE to edit the project's C#
+  scripts: it compiles every <code>.cs</code> file under <code>Assets/</code> against the engine.
+  A new file the IDE creates at the project's top level lands at the project root, outside
+  <code>Assets/</code>, where nothing compiles it, so create script files inside
+  <code>Assets/</code>. The file is regenerated on every open and holds paths specific to your
+  machine: do not edit it and do not commit it. A copy left inside <code>Assets/</code> by an
+  older editor is deleted when the project opens, and the Log panel says so.</p>
+
+  <h2 id="save">Save a scene</h2>
+
+  <p>Press <b>Cmd+S</b> on macOS or <b>Ctrl+S</b> on Windows and Linux, or use the
+  <b>Save Scene</b> button in the top toolbar. A scene that has never been saved asks for a
+  <b>Scene name</b> and a <b>Folder</b>, starting at the project's <code>Assets/</code> folder;
+  scenes are <code>.scene</code> files. <b>Cmd+Shift+S</b> or <b>Ctrl+Shift+S</b> saves
+  under a new name.</p>
+
+  <h2 id="export">Export your game</h2>
+
+  <p>The editor exports a game for the platform it runs on: the macOS editor builds macOS games,
+  the Windows editor Windows games. A native export from the Linux editor does not work yet: it
+  looks only for <code>Player.exe</code>. For Linux, build
+  a Steam Deck runtime with <code>build_deck.py</code>, as
+  <a href="GamePublishing.html#steam-deck">Steam Deck iteration</a> describes. Publishing to
+  Steam is in <a href="GamePublishing.html">Game builds and Steam publishing</a>.</p>
+
+  <div class="step"><b>1.</b> Open the Build panel with the <b>Build</b> button in the top toolbar (the game-controller icon), or <b>Window &gt; Build</b>.</div>
+  <div class="step"><b>2.</b> Choose <b>Settings</b> in the panel. Under <b>Global scene list</b>, drop the scenes to ship from the asset browser onto the list; the first one is the startup scene. A build with no scenes stops with <code>No scenes configured</code>. <b>Game name</b> sets the name of the exported game; without it the game takes the project folder's name.</div>
+  <div class="step"><b>3.</b> In the platform table, turn <b>On</b> your platform only: <b>Mac</b> or <b>Windows</b>. Windows is on by default. The panel builds one platform at a time, the first one turned on in the table's order.</div>
+  <div class="step"><b>4.</b> Choose <b>Build</b>. The <b>Progress</b> and <b>Done</b> columns follow the build; the button becomes <b>Cancel</b> while it runs.</div>
+
+  <p>The game goes to <code>Build Folder/&lt;Platform&gt;</code> inside the project, for example
+  <code>Build Folder/Mac</code>. <b>Build path</b> in the panel, or <b>Build folder</b> in the
+  platform's settings, chooses another folder; an absolute path still gets the platform
+  folder appended.</p>
+
+  <table>
+    <tr><th>Platform</th><th>Output</th><th>Run it</th></tr>
+    <tr><td>macOS</td><td><code>&lt;Game name&gt;.app</code>, with the game's content inside the bundle</td><td>Open the <code>.app</code> from Finder, or <code>open "Build Folder/Mac/&lt;Game name&gt;.app"</code></td></tr>
+    <tr><td>Windows</td><td><code>&lt;Game name&gt;.exe</code>, <code>game.config</code> and the game's content</td><td>Run the <code>.exe</code></td></tr>
+  </table>
+
+  <p>A build replaces the previous output folder only when it has succeeded; until then the
+  previous output is kept. When the folder cannot be replaced, for example because the previous
+  game is still running, the build stops with an error that names the folder.
+  <a href="GamePublishing.html">Game builds and Steam publishing</a> explains how the output is
+  replaced, and how to prepare, verify and upload a release.</p>
+
+  <h2 id="changelog">Changelog</h2>
+  <ul>
+    <li><b>2026-10-06</b> — The C# project for your IDE: <code>GameEngine.Scripts.csproj</code>
+    at the project root.</li>
+    <li><b>2026-10-04</b> — First version: first launch, creating, opening and saving, and a
+    plain game export.</li>
+  </ul>
+
+</div>
+<footer>Your first project · v2 · 2026-10-06</footer>
+</body>
+</html>

@@ -1,0 +1,158 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Package System — Where Every Piece of Data Lives</title>
+<style>
+  :root { --bg:#1a1d23; --panel:#232831; --panel-light:#2c323d; --border:#3a414d; --text:#d8dde6; --muted:#8a93a3; --accent:#6db4ff; --danger:#ff8a6e; --ok:#7bd88f; --warn:#f6c177; }
+  * { box-sizing:border-box; }
+  html,body { background:var(--bg); color:var(--text); font-family:-apple-system,"Segoe UI",system-ui,sans-serif; line-height:1.55; margin:0; }
+  .container { max-width:1180px; margin:0 auto; padding:40px 32px 80px; }
+  h1 { font-size:25px; margin:0 0 8px; }
+  h2 { font-size:19px; margin:34px 0 12px; padding-top:10px; border-top:1px solid var(--border); }
+  h3 { font-size:15px; margin:20px 0 8px; color:var(--accent); }
+  p { margin:8px 0 12px; }
+  code { font-family:"JetBrains Mono",Consolas,monospace; font-size:0.85em; background:var(--panel-light); padding:1px 6px; border-radius:3px; }
+  pre { background:var(--panel); border:1px solid var(--border); border-radius:8px; padding:14px 18px; overflow-x:auto; font-size:12.5px; line-height:1.45; }
+  .panel { background:var(--panel); border:1px solid var(--border); border-radius:8px; padding:16px 20px; margin:14px 0; }
+  .panel.warn { border-color:var(--warn); } .panel.ok { border-color:var(--ok); }
+  .panel-title { font-weight:600; font-size:13px; margin:0 0 6px; text-transform:uppercase; letter-spacing:0.06em; color:var(--muted); }
+  .panel.warn .panel-title { color:var(--warn); } .panel.ok .panel-title { color:var(--ok); }
+  table { border-collapse:collapse; width:100%; margin:10px 0 18px; font-size:13.5px; }
+  th,td { text-align:left; padding:8px 12px; border-bottom:1px solid var(--border); vertical-align:top; }
+  th { color:var(--muted); font-weight:600; font-size:12px; text-transform:uppercase; letter-spacing:0.05em; }
+  tbody tr:hover { background:var(--panel); }
+  ul { margin:8px 0 14px; padding-left:22px; } li { margin:4px 0; }
+  .footer { text-align:center; color:var(--muted); font-size:12px; margin-top:48px; }
+</style>
+</head>
+<body>
+<div class="container">
+
+<p style="color:var(--muted);font-size:14px;margin-bottom:4px">CONCEPT · package system · where package data lives and which copy owns it</p>
+<h1>Where Every Piece of Package Data Lives</h1>
+<p>Three storage worlds exist: <strong>the package itself</strong>, <strong>the consuming project</strong>, and <strong>the global machine cache</strong> (git packages only). The rule that makes everything work: <em>a package's asset identity and metadata live with the package; everything derived or project-specific lives outside it.</em></p>
+
+<h2>1 · The three worlds, on disk</h2>
+
+<h3>An embedded / local (<code>file:</code>) package — mutable, watched</h3>
+<pre>&lt;project&gt;/Packages/my-pack/            ← or any file: path; THE PACKAGE (author-owned, committed by its creator)
+  package.json                          manifest: name, version, deps, modules, defines, assets root
+  Assets/                               the package's asset tree — MOUNTED as its own source (alias = pkg name)
+    Textures/water.png                  GUID = hash(alias + "textures/water.png") — derived, deterministic
+  AssetDatabase.assetdb                 the package's OWN metadata store (types, KV) — writes land HERE, never in the project DB
+  .Cache/AssetDatabase/                 the package's derived cache (SQLite: fingerprints, dep edges) — safe to delete
+  .Cache/NativeScripts/                 native module builds for file:/embedded packages (build + active DLLs)
+  Runtime/ Editor/ Native/              module source roots per package.json "modules"</pre>
+
+<h3>A git package — immutable, read-only, unwatched</h3>
+<pre>%LOCALAPPDATA%/GameEngine/PackageCache/
+  my-pack@1.2.0-a1b2c3d4e5f6/           pristine checkout at the pinned commit (.git stripped), NEVER mutated
+    package.json, Assets/, ...          payload only
+  .native/my-pack@-&lt;hash&gt;/&lt;build&gt;/     native module builds, OUTSIDE the payload so the entry stays pristine
+
+&lt;project&gt;/.Cache/AssetDatabase/Packages/my-pack/
+                                        the package's derived asset cache for this project (a package that
+                                        publishes an .assetmanifest; one without keeps its metadata in memory)</pre>
+
+<h3>The consuming project</h3>
+<pre>&lt;project&gt;/
+  Packages/manifest.json                what you depend on: {"my-pack": "file:../shared/my-pack" | "embedded" | "git+https://...#v1.2.0"}
+  Packages/packages-lock.json           pins: url, ref, exact commit, integrity — committed for reproducibility
+  Packages/&lt;name&gt;/                      embedded packages live inline here
+  AssetDatabase.assetdb                 PROJECT assets only — no package records leak in
+  .Cache/                               project-derived data
+  GameEngine.Scripts.csproj             generated; bakes &lt;Reference&gt; items to package assemblies
+  ScriptAssemblies/                     compiled project scripts
+    Packages/MyPack.dll                 compiled PACKAGE C# assemblies — project-side because compilation is
+                                        per-project context (defines, engine version); pruned automatically
+                                        when a package leaves the manifest</pre>
+
+<h3>A packaged (shipped) game</h3>
+<pre>&lt;game&gt;/
+  Assets/ + .assetmanifest              project content + its GUID↔path manifest
+  Packages/packages.index               the mount list (the staged layout IS the resolution — no re-resolve at boot)
+  Packages/&lt;alias&gt;/Assets/ + .assetmanifest   per-package content, each an independent GUID namespace
+  Packages/&lt;alias&gt;/NativeScripts/       native module DLL + relative record + engine-ABI marker
+  Managed/Packages/&lt;Asm&gt;.dll            package C# (managed builds; AOT compiles sources into the single lib)</pre>
+<p>A Mac game is a <code>.app</code> bundle whose <code>Contents/Resources</code> is this <code>&lt;game&gt;/</code> folder. Its code lives in <code>Contents/Frameworks</code>, where the bundle's signature covers it: each package's native module is in <code>Contents/Frameworks/Packages/&lt;alias&gt;/</code>, and the record in <code>Packages/&lt;alias&gt;/NativeScripts/</code> points there. The export stages no package Editor module.</p>
+
+<h2>2 · Adding an asset to a package outside the editor</h2>
+<div class="panel ok">
+<p class="panel-title">Embedded and <code>file:</code> packages — yes, it just works</p>
+<p style="margin-bottom:0">Drop <code>coral.png</code> into <code>my-pack/Assets/Textures/</code> with Explorer while the editor runs (or before opening it): the package mount is <strong>watched</strong>, the watcher registers the file, the GUID derives deterministically from <code>hash(package-alias + relative-path)</code> — no editor round-trip needed to "assign" it, because derived identity means the GUID is a pure function of where the file sits. The metadata record (type, KV) is written to <strong>the package's own <code>AssetDatabase.assetdb</code></strong>, never the consuming project's, so when the package author commits their package folder, the metadata travels with it. There are no <code>.meta</code> sidecar files anywhere in this engine — identity needs no per-file sidecar, which is exactly why out-of-editor adds are safe. Same story for edits and deletes (watched → re-fingerprinted / tombstoned in the package DB).</p>
+</div>
+<div class="panel warn">
+<p class="panel-title">Git packages — by design, you don't add files on the consumer side</p>
+<p style="margin-bottom:0">The cache entry is immutable and unwatched; a consumer adding files there would be editing a checkout that re-resolving replaces. The authoring flow is: the package author works on the package as a file:/embedded package (everything above applies — out-of-editor adds included), then publishes by pushing + tagging. Consumers bump the ref in their manifest → new cache entry → the new asset appears, with the <em>same GUID everywhere</em> because derived GUIDs are deterministic from alias+path. Optional at publish: freeze a <code>.assetmanifest</code> into the package to switch it to stored identity (GUIDs read verbatim — this is what makes GUIDs survive even a package <em>rename</em>, and it is how an existing project folder is extracted into a package with its original GUIDs intact).</p>
+</div>
+<div class="panel ok">
+<p class="panel-title">Editing a package's C# code — recompiles live in embedded and <code>file:</code> packages</p>
+<p style="margin-bottom:0">While hot reload is on, saving a <code>.cs</code> (or <code>.csproj</code>) under the C# module root of an embedded or <code>file:</code> package starts the same reload a project script edit starts: every package module recompiles in dependency order, then the editor and project scripts, and the editor swaps them all at once. The Log panel prints <code>[Packages] compiled package assembly &lt;Name&gt;.dll (N ms)</code> for each module, where N is the compile server's round trip. If the module fails to compile, its errors stay in the Script Errors panel next to any project script errors until that module compiles again, and the previous build keeps running in the meantime. Git and engine packages are not watched, because the cache never changes in place: to edit one, add a checkout of it by <code>file:</code> path, which takes precedence over the engine copy with the same name.</p>
+</div>
+
+<div class="panel ok">
+<p class="panel-title">Shipping a prebuilt C# assembly — loads without a compile</p>
+<p>A package can ship a C# module as a compiled assembly instead of sources. Declare it in <code>package.json</code>: a <code>modules[]</code> entry with <code>"lang": "CSharp"</code>, the <code>kind</code> (<code>"Runtime"</code>, or <code>"Editor"</code> for the editor half), a <code>root</code>, and <code>"prebuilt": "Binaries/"</code>. Then put <code>&lt;Assembly&gt;.dll</code> (and its <code>.pdb</code> if you have one) in that directory. The assembly name is the one the package name derives (<code>closed-pack</code> → <code>ClosedPack</code>, or <code>ClosedPack.Editor</code> for the editor half). When the module has no <code>.cs</code> sources, the editor copies the declared DLL into <code>ScriptAssemblies/Packages/</code>, the same place a compiled module lands, and loads it with the other script assemblies. Nothing is compiled, so no compile server is needed for that module, and the Log panel prints <code>[Packages] using prebuilt assembly &lt;Assembly&gt;.dll from &lt;dir&gt;</code>. Project scripts can use its types just as they use a compiled package's, and a shipping (NativeAOT) build links the assembly in by reference.</p>
+<p style="margin-bottom:0"><strong>Sources win.</strong> If the module has any <code>.cs</code> sources, it compiles from them and the declared DLL is not used (the Log panel says so). A module that gains sources switches to compiling when the project is reopened, and until then the Package Manager shows the change as pending. The declaration is the instruction: a DLL anywhere else in the package is a plain file and is never loaded. If the declared DLL is missing, the module is not loaded, and an error names the path the editor expected and the <code>modules[]</code> entry to fix.</p>
+</div>
+
+<div class="panel ok" id="runtime-assets">
+<p class="panel-title">What a game ships from a package: <code>runtimeAssets</code></p>
+<p>A game ships these package assets:</p>
+<ul>
+  <li>the assets its scenes reference;</li>
+  <li>the package's <code>Shaders/</code> folder;</li>
+  <li>its code modules.</li>
+</ul>
+<p>Code loads assets by path, and the export cannot see that. If the package's code loads assets
+that way, list them in <code>package.json</code>, keyed by the component whose code loads them.
+Each entry is a file or a folder, relative to the package's assets folder:</p>
+<pre>"runtimeAssets": {
+  "EZTree": ["Textures/EZTree/"]
+}</pre>
+<p style="margin-bottom:0">A game ships the listed files, and what they reference, only when one of
+its scenes uses that component. A game without trees bakes none of the Tree Generator's textures. If
+a listed path matches no asset in the package, the export warns. If a game asks for an asset it does
+not have, the log shows <code>asset &lt;id&gt; is not in this build</code>, followed by the fix.</p>
+</div>
+
+<h2>3 · GUID identity — the two modes, and when each applies</h2>
+<table>
+<thead><tr><th>Mode</th><th>How the GUID is determined</th><th>Used by</th><th>Survives</th></tr></thead>
+<tbody>
+<tr><td><strong>Derived</strong> (default)</td><td><code>hash(alias + canonical-relative-path)</code> — deterministic, no stored state needed at all</td><td>project mount, embedded/file: packages, manifest-less git packages</td><td>fresh checkouts, machine moves, cache wipes — anything except renaming the package or moving the file</td></tr>
+<tr><td><strong>Stored</strong></td><td>read verbatim from a shipped <code>.assetmanifest</code> (JSONL, committed/published with the package)</td><td>packaged games (always), git packages that publish a manifest, the extraction route above</td><td>everything, including package renames and file moves — the manifest IS the identity</td></tr>
+</tbody>
+</table>
+<p>Cross-package references are plain GUID references and work in both modes because every mount is an <strong>independent GUID namespace</strong> (per-alias namespace hash — collisions between sources are impossible by construction).</p>
+
+<h2>4 · What compiles or derives where — quick reference</h2>
+<table>
+<thead><tr><th>Data</th><th>Package</th><th>Project</th><th>Global cache</th><th>Why there</th></tr></thead>
+<tbody>
+<tr><td>Asset files + identity metadata</td><td>✔ (its Assets/ + its .assetdb)</td><td>—</td><td>✔ pristine copy (git)</td><td>identity travels with the package</td></tr>
+<tr><td>Derived asset data (fingerprints, dep edges, import cache)</td><td>✔ .Cache (mutable pkgs)</td><td>✔ .Cache (project assets; git and engine packages under .Cache/AssetDatabase/Packages/&lt;alias&gt;)</td><td>—</td><td>always regenerable, never committed, safe to delete</td></tr>
+<tr><td>Compiled C# assemblies</td><td>—</td><td>✔ ScriptAssemblies/Packages/</td><td>—</td><td>compilation is per-project context (defines, engine build); auto-pruned on package removal</td></tr>
+<tr><td>Native module builds</td><td>✔ .Cache/NativeScripts (mutable)</td><td>—</td><td>✔ .native/&lt;entry&gt; (git)</td><td>per-package caching without touching pristine payloads</td></tr>
+<tr><td>Dependency pins</td><td>package.json declares ranges</td><td>✔ manifest + lock (committed)</td><td>—</td><td>the project owns what it depends on</td></tr>
+<tr><td>Prebuilt C# assemblies</td><td>✔ the declared <code>prebuilt</code> dir</td><td>✔ copied to ScriptAssemblies/Packages/</td><td>✔ (inside the entry)</td><td>used only when the module has no sources; ship-without-compile</td></tr>
+<tr><td>Prebuilt native binaries (P3)</td><td>✔ Binaries/&lt;platform-fingerprint&gt;/</td><td>—</td><td>✔ (inside the entry)</td><td>ship-without-toolchain; fingerprint-gated</td></tr>
+</tbody>
+</table>
+
+<h2>Changelog</h2>
+<ul>
+  <li>2026-10-06: a Mac game ships each enabled package's runtime native module in <code>Contents/Frameworks/Packages/&lt;alias&gt;</code>, signed with the bundle.</li>
+  <li>2026-10-06: a game ships only the package assets its scenes reference, the <code>Shaders/</code> folder and the <code>runtimeAssets</code> listed for the components it uses.</li>
+  <li>2026-10-06: the generated <code>GameEngine.Scripts.csproj</code> sits at the project root, not in <code>Assets/</code>.</li>
+  <li>2026-10-06: a C# module can ship a prebuilt assembly: declared in <code>modules[]</code> with <code>prebuilt</code>, used only when the module has no sources, and linked into shipping (NativeAOT) builds by reference.</li>
+  <li>2026-10-06: editing a package's C# code in an embedded or <code>file:</code> package recompiles it live.</li>
+  <li>2026-09-23: where the Player's log and derived package caches live.</li>
+  <li>2026-09-21: rewritten as a concept page.</li>
+</ul>
+
+<p class="footer">Package data model · the code behind it is <code>PackageResolver</code>, <code>PackageMounts</code> and <code>PackageGitSource</code>.</p>
+</div>
+</body>
+</html>

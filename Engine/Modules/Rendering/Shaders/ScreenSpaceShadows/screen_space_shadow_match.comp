@@ -1,0 +1,135 @@
+#version 460
+#extension GL_GOOGLE_include_directive : require
+#include "Includes/screen_position.glsl"
+#include "Includes/shadow_cascade_blend.glsl"
+
+// Project the active grid-PCF kernel onto this depth receiver. Using the same
+// light-space footprint keeps the contact/map handoff's softness consistent
+// as camera distance, rotation, render scale and cascade selection change.
+layout(local_size_x = 8, local_size_y = 8) in;
+layout(set = 0, binding = 0) uniform sampler2D uDepth;
+layout(set = 0, binding = 1) uniform usampler2D uResolved;
+layout(set = 0, binding = 2, std430) readonly buffer Visibility { uint visibility[]; };
+layout(set = 0, binding = 3, r32ui) uniform writeonly uimage2D uOutput;
+layout(set = 0, binding = 4, std140) uniform MatchParams
+{
+    mat4 uInverse;
+    vec4 uProjection; // projection z scale, z translation, map resolution
+} Params;
+// Layout matches ShadowDataGPU, shared with the directional lighting upload.
+layout(set = 0, binding = 5, std140) uniform ShadowData
+{
+    mat4 shadowVP[4];
+    vec4 shadowSplits;
+    vec4 shadowParams;
+    vec4 shadowDebug;
+    vec4 shadowPcss;
+    vec4 shadowPcssCascades[4];
+    vec4 shadowPcssPyramid[4];
+    vec4 shadowFilterParams;
+} Shadow;
+
+float Slope(float a, float d, float b)
+{
+    float da = a > 0.0 ? d - a : 1e10;
+    float db = b > 0.0 ? b - d : 1e10;
+    return a <= 0.0 && b <= 0.0 ? 0.0 : abs(da) < abs(db) ? da : db;
+}
+
+float SampleReceiver(vec2 samplePixel, ivec2 center, ivec2 size, float depth, vec2 slope, float fallback)
+{
+    ivec2 base = ivec2(floor(samplePixel));
+    vec2 f = fract(samplePixel);
+    float sum = 0, weights = 0;
+    for (int y = 0; y < 2; ++y)
+        for (int x = 0; x < 2; ++x)
+        {
+            ivec2 p = base + ivec2(x, y);
+            if (any(lessThan(p, ivec2(0))) || any(greaterThanEqual(p, size))) continue;
+            float d = texelFetch(uDepth, p, 0).r;
+            float expected = depth + dot(slope, vec2(p - center));
+            float tolerance = max(depth * 0.001, 1e-7);
+            float agreement = 1.0 - smoothstep(tolerance, tolerance * 2, abs(d - expected));
+            float weight = (x == 0 ? 1 - f.x : f.x) * (y == 0 ? 1 - f.y : f.y);
+            weight *= d > 0.0 ? agreement : 0.0;
+            sum += float(min(visibility[p.y * size.x + p.x], 255u)) * weight;
+            weights += weight;
+        }
+    return weights > 0.1 ? sum / weights : fallback;
+}
+
+float MatchCascade(int cascade, ivec2 pixel, ivec2 size, float depth, vec2 slope,
+                   vec4 world, vec4 worldDx, vec4 worldDy, float fallback)
+{
+    vec4 clip = Shadow.shadowVP[cascade] * world;
+    vec4 clipDx = Shadow.shadowVP[cascade] * worldDx;
+    vec4 clipDy = Shadow.shadowVP[cascade] * worldDy;
+    vec3 ndc = clip.xyz / clip.w;
+    vec2 dx = (clipDx.xy - ndc.xy * clipDx.w) / clip.w;
+    vec2 dy = (clipDy.xy - ndc.xy * clipDy.w) / clip.w;
+    mat2 pixelToTexel = mat2(dx, dy) * (0.5 * Params.uProjection.z);
+    // Reflection of map Y does not affect a symmetric grid footprint.
+    if (abs(determinant(pixelToTexel)) < 1e-6) return fallback;
+    mat2 texelToPixel = inverse(pixelToTexel);
+    float radius = max(length(texelToPixel[0]), length(texelToPixel[1]));
+    // Degenerate/grazing receiver projections must not create enormous fetch
+    // footprints. Keep their existing depth-aware local reconstruction.
+    if (radius <= 0.75 || radius > 24 || (floatBitsToUint(radius) & 0x7f800000u) == 0x7f800000u) return fallback;
+    int halfSize = int(Shadow.shadowDebug.w + 0.5) == 1 ? 1 : 2;
+    float sum = 0;
+    for (int y = -halfSize; y <= halfSize; ++y)
+        for (int x = -halfSize; x <= halfSize; ++x)
+        {
+            vec2 offset = texelToPixel * vec2(x, y);
+            sum += SampleReceiver(vec2(pixel) + offset, pixel, size, depth, slope, fallback);
+        }
+    float matched = sum / float((2 * halfSize + 1) * (2 * halfSize + 1));
+    // At subpixel map footprints the local reconstruction provides the AA.
+    float matchWeight = smoothstep(0.75, 1.5, radius) * (1.0 - smoothstep(16.0, 24.0, radius));
+    return mix(fallback, matched, matchWeight);
+}
+
+void main()
+{
+    ivec2 pixel = ivec2(gl_GlobalInvocationID.xy);
+    ivec2 size = imageSize(uOutput);
+    if (any(greaterThanEqual(pixel, size))) return;
+    uint packed = texelFetch(uResolved, pixel, 0).r;
+    float depth = texelFetch(uDepth, pixel, 0).r;
+    float result = float(packed & 255u);
+    int quality = int(Shadow.shadowDebug.w + 0.5);
+    int cascades = clamp(int(Shadow.shadowParams.z), 0, 4);
+    // PCSS/DPCF/MSM have blocker-dependent footprints. Do not pretend their
+    // penumbra can be derived from cascade constants without shadow-map reads.
+    if (depth > 0 && cascades > 0 && (quality == 0 || quality == 1))
+    {
+        vec2 slope = vec2(
+            Slope(texelFetch(uDepth, clamp(pixel - ivec2(1,0), ivec2(0), size - 1), 0).r,
+                  depth, texelFetch(uDepth, clamp(pixel + ivec2(1,0), ivec2(0), size - 1), 0).r),
+            Slope(texelFetch(uDepth, clamp(pixel - ivec2(0,1), ivec2(0), size - 1), 0).r,
+                  depth, texelFetch(uDepth, clamp(pixel + ivec2(0,1), ivec2(0), size - 1), 0).r));
+        vec2 uv = (vec2(pixel) + 0.5) / vec2(size);
+        vec4 world = Params.uInverse * vec4(GE_ViewportUVToYUpNdc(uv), depth, 1);
+        vec4 dx = Params.uInverse * vec4(2.0 / float(size.x), 0, slope.x, 0);
+        vec4 dy = Params.uInverse * vec4(0, -2.0 / float(size.y), slope.y, 0);
+        float linearDepth = Params.uProjection.y / (depth - Params.uProjection.x);
+        int cascade = cascades - 1;
+        for (int i = 0; i < cascades; ++i)
+            if (linearDepth < Shadow.shadowSplits[i]) { cascade = i; break; }
+        result = MatchCascade(cascade, pixel, size, depth, slope, world, dx, dy, result);
+        if (cascade < cascades - 1)
+        {
+            float end = Shadow.shadowSplits[cascade];
+            float start = cascade == 0 ? 0 : Shadow.shadowSplits[cascade - 1];
+            float band = GE_CascadeBlendBand(end - start);
+            float distance = end - linearDepth;
+            if (distance < band)
+            {
+                float next = MatchCascade(cascade + 1, pixel, size, depth, slope, world, dx, dy,
+                                          float(packed & 255u));
+                result = mix(next, result, smoothstep(0.0, 1.0, distance / band));
+            }
+        }
+    }
+    imageStore(uOutput, pixel, uvec4((packed & 0xffffff00u) | uint(round(clamp(result, 0.0, 255.0)))));
+}

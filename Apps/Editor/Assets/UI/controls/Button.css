@@ -1,0 +1,553 @@
+/* Button Control Styles (Editor app asset)
+ *
+ * Keep control styles in `Apps/Editor/Assets/UI/controls/` so they can be
+ * loaded locally by the control (Button.cpp -> RequestSubtreeStyleAssetPath).
+ */
+
+button,
+.button {
+	display: flex;
+	flex-direction: row;
+	align-items: center;
+	justify-content: center;
+	padding: 8px 16px;
+	min-height: 32px;
+	border-radius: var(--ui_radius_sm);
+	border-width: 1px;
+	border-color: var(--ui_color_border_subtle);
+	background-color: var(--ui_color_border_subtle);
+	color: var(--ui_color_text);
+	cursor: pointer;
+	font-size: var(--ui_font_size_base);
+	transition: background-color 0.15s ease, border-color 0.15s ease;
+}
+
+button:hover,
+.button:hover {
+	background-color: #505050;
+	border-color: #4A4A4A;
+}
+
+button:active,
+button.active,
+button.pressed,
+.button:active,
+.button.active,
+.button.pressed {
+	background-color: var(--ui_color_bg_hover);
+	border-color: var(--ui_color_border_subtle);
+}
+
+/* Keyboard focus only. A ring on every mouse click is what :focus-visible
+   exists to avoid; clicking a button already tells you which one you hit. */
+button:focus-visible,
+.button:focus-visible {
+	outline: 2px solid var(--ui_color_accent_blue);
+	outline-offset: 2px;
+}
+
+button.cancel-button,
+.button.cancel-button {
+	background-color: #555555;
+	color: var(--ui_color_text_bright);
+	border-width: 0px;
+}
+
+button.cancel-button:hover,
+.button.cancel-button:hover {
+	background-color: #777777;
+}
+
+button.cancel-button:active,
+.button.cancel-button:active {
+	background-color: #404040;
+}
+
+button.layout-button:focus,
+.layout-button:focus {
+	outline: none;
+	outline-offset: 0px;
+}
+
+/* Layout buttons opt out of generic button styling */
+button.layout-button,
+.button.layout-button,
+.layout-button {
+	display: flex;
+	flex-direction: row;
+	align-items: center;
+	gap: 8px;
+	padding: 4px 12px;
+	height: 28px;
+	min-height: 28px;
+	border-radius: 4px;
+	border-width: 0px;
+	border-style: none;
+	border-color: transparent;
+	background-color: #333333;
+	color: #BDBDBD;
+	font-size: var(--ui_font_size_base);
+	cursor: pointer;
+	transition: none;
+	outline: none;
+	outline-offset: 0px;
+}
+
+/* Override layout-button state classes from core.css */
+button.layout-button.layout-button-base,
+.button.layout-button.layout-button-base,
+.layout-button.layout-button-base,
+button.layout-button.layout-button-hover,
+.button.layout-button.layout-button-hover,
+.layout-button.layout-button-hover,
+button.layout-button.layout-button-pressed,
+.button.layout-button.layout-button-pressed,
+.layout-button.layout-button-pressed,
+button.layout-button.layout-button-selected,
+.button.layout-button.layout-button-selected,
+.layout-button.layout-button-selected {
+	background-color: #333333;
+	border-color: transparent;
+	color: #BDBDBD;
+}
+
+button.layout-button.layout-button-hover,
+.button.layout-button.layout-button-hover,
+.layout-button.layout-button-hover,
+button.layout-button.layout-button-selected,
+.button.layout-button.layout-button-selected,
+.layout-button.layout-button-selected {
+	background-color: #242424;
+	color: #F2F2F2;
+}
+
+button.layout-button.layout-button-selected:hover,
+.button.layout-button.layout-button-selected:hover,
+.layout-button.layout-button-selected:hover {
+	background-color: #121212;
+	color: #F2F2F2;
+}
+
+/* Final overrides: ensure layout buttons ignore generic + secondary variants */
+button.layout-button.secondary,
+.button.layout-button.secondary,
+.layout-button.secondary {
+	background-color: #333333;
+	border-color: transparent;
+	color: #BDBDBD;
+}
+
+button.layout-button.secondary:hover,
+.button.layout-button.secondary:hover,
+.layout-button.secondary:hover {
+	background-color: #242424;
+	border-color: transparent;
+	color: #F2F2F2;
+}
+
+button.layout-button.secondary:active,
+button.layout-button.secondary.active,
+button.layout-button.secondary.pressed,
+.button.layout-button.secondary:active,
+.button.layout-button.secondary.active,
+.button.layout-button.secondary.pressed,
+.layout-button.secondary:active,
+.layout-button.secondary.active,
+.layout-button.secondary.pressed {
+	background-color: #121212;
+	border-color: transparent;
+	color: #F2F2F2;
+}
+
+button.layout-button.secondary.active:hover,
+.button.layout-button.secondary.active:hover,
+.layout-button.secondary.active:hover {
+	background-color: #121212;
+	color: #F2F2F2;
+	border-color: transparent;
+}
+
+button.layout-button.secondary:focus,
+.button.layout-button.secondary:focus,
+.layout-button.secondary:focus {
+	outline: none;
+	outline-offset: 0px;
+}
+
+button.layout-button:hover,
+.button.layout-button:hover,
+.layout-button:hover,
+button.layout-button:active,
+.button.layout-button:active,
+.layout-button:active,
+button.layout-button.pressed,
+.button.layout-button.pressed,
+.layout-button.pressed,
+button.layout-button.active,
+.button.layout-button.active,
+.layout-button.active,
+button.layout-button.active:hover,
+.button.layout-button.active:hover,
+.layout-button.active:hover,
+button.layout-button.active:active,
+.button.layout-button.active:active,
+.layout-button.active:active,
+button.layout-button.active.pressed,
+.button.layout-button.active.pressed,
+.layout-button.active.pressed,
+button.layout-button:focus,
+.button.layout-button:focus,
+.layout-button:focus {
+	outline: none;
+	outline-offset: 0px;
+	border-width: 0px;
+	border-style: none;
+	border-color: transparent;
+}
+
+button.layout-button:hover,
+.button.layout-button:hover,
+.layout-button:hover,
+button.layout-button.active,
+.button.layout-button.active,
+.layout-button.active,
+button.layout-button.active:hover,
+.button.layout-button.active:hover,
+.layout-button.active:hover {
+	background-color: #242424;
+	border-color: transparent;
+	color: #F2F2F2;
+}
+
+button.layout-button.active:hover,
+.button.layout-button.active:hover,
+.layout-button.active:hover {
+	background-color: #121212;
+}
+
+button.layout-button:active,
+.button.layout-button:active,
+.layout-button:active,
+button.layout-button.pressed,
+.button.layout-button.pressed,
+.layout-button.pressed,
+button.layout-button.active:active,
+.button.layout-button.active:active,
+.layout-button.active:active,
+button.layout-button.active.pressed,
+.button.layout-button.active.pressed,
+.layout-button.active.pressed {
+	background-color: #121212;
+	border-color: transparent;
+	color: #F2F2F2;
+}
+
+button:disabled,
+.button:disabled,
+.button.disabled {
+	background-color: var(--ui_color_bg_hover);
+	border-color: var(--ui_color_bg_selected);
+	color: var(--ui_color_text_disabled);
+	cursor: not-allowed;
+}
+
+/* Button text child */
+.button-text {
+	color: inherit;
+	font-size: inherit;
+	pointer-events: none;
+}
+
+/* Primary variant */
+button.primary,
+.button.primary {
+	background-color: var(--ui_color_accent_blue);
+	border-color: var(--ui_color_accent_blue);
+	color: var(--ui_color_text_bright);
+}
+
+button.primary:hover,
+.button.primary:hover {
+	background-color: var(--ui_color_accent_blue_hover);
+	border-color: var(--ui_color_accent_blue_hover);
+}
+
+button.primary:active,
+button.primary.active,
+button.primary.pressed,
+.button.primary:active,
+.button.primary.active,
+.button.primary.pressed {
+	background-color: var(--ui_color_accent_blue_pressed);
+	border-color: var(--ui_color_accent_blue_pressed);
+}
+
+/* Secondary variant */
+button.secondary,
+.button.secondary {
+	background-color: transparent;
+	border-color: var(--ui_color_border_subtle);
+	color: var(--ui_color_text);
+}
+
+button.secondary:hover,
+.button.secondary:hover {
+	background-color: rgba(255, 255, 255, 0.192);
+	border-color: #4A4A4A;
+}
+
+button.secondary:active,
+button.secondary.active,
+button.secondary.pressed,
+.button.secondary:active,
+.button.secondary.active,
+.button.secondary.pressed {
+	background-color: rgba(255, 255, 255, 0.31);
+	border-color: var(--ui_color_border_subtle);
+}
+
+/* A disabled button looks disabled under the pointer and in the primary and secondary
+   variants: the variant and hover rules above outrank the disabled rule (by specificity at
+   rest, by order on hover), so each case gets a rule after them. */
+.button:disabled:hover {
+	background-color: var(--ui_color_bg_hover);
+	border-color: var(--ui_color_bg_selected);
+	color: var(--ui_color_text_disabled);
+}
+
+.button.secondary:disabled {
+	background-color: var(--ui_color_bg_hover);
+	border-color: var(--ui_color_bg_selected);
+	color: var(--ui_color_text_disabled);
+}
+
+.button.primary:disabled {
+	background-color: var(--ui_color_bg_hover);
+	border-color: var(--ui_color_bg_selected);
+	color: var(--ui_color_text_disabled);
+}
+
+/* Icon buttons
+ *
+ * Important: this must come AFTER the generic button variants (notably
+ * `.secondary:hover`) so icon buttons don't pick up the light hover fill.
+ *
+ * Note: our UI CSS subset does not currently implement `!important`, so we
+ * rely on selector specificity + source order here.
+ */
+.icon-button,
+button.icon-button,
+.button.icon-button {
+	width: 24px;
+	height: 24px;
+	padding: 4px;
+	min-width: 24px;
+	min-height: 24px;
+	background-color: transparent;
+	border-width: 0px;
+	border-style: none;
+	border-color: transparent;
+}
+
+.icon-button:hover,
+.icon-button:active,
+.icon-button.pressed,
+button.icon-button:hover,
+button.icon-button:active,
+button.icon-button.pressed,
+.button.icon-button:hover,
+.button.icon-button:active,
+.button.icon-button.pressed,
+.icon-button.secondary:hover,
+.icon-button.secondary:active,
+.icon-button.secondary.pressed,
+button.icon-button.secondary:hover,
+button.icon-button.secondary:active,
+button.icon-button.secondary.pressed,
+.button.icon-button.secondary:hover,
+.button.icon-button.secondary:active,
+.button.icon-button.secondary.pressed {
+	background-color: transparent;
+	border-color: transparent;
+	border-width: 0px;
+}
+
+/* Scene-view toolbar controls that mount before the panel stylesheet has fully
+ * won the cascade. Keep them out of the generic button skin from first paint. */
+.toolbar-spacer-btn,
+button.toolbar-spacer-btn,
+.button.toolbar-spacer-btn {
+	width: 24px;
+	height: 24px;
+	min-width: 24px;
+	min-height: 24px;
+	padding: 0px;
+	background-color: transparent;
+	border-width: 0px;
+	border-style: none;
+	border-color: transparent;
+	opacity: 0;
+}
+
+.camera-bookmarks-slot,
+button.camera-bookmarks-slot,
+.button.camera-bookmarks-slot {
+	background-color: transparent;
+	border-width: 0px;
+	border-style: none;
+	border-color: transparent;
+	padding: 0px;
+	opacity: 0.24;
+}
+
+.camera-bookmarks-slot.cambookmark-icon,
+button.camera-bookmarks-slot.cambookmark-icon,
+.button.camera-bookmarks-slot.cambookmark-icon {
+	width: 26px;
+	height: 26px;
+	min-width: 26px;
+	min-height: 26px;
+	background-image: url("editor:Icons/cambookmark.png");
+	background-size: 26px 26px;
+	background-repeat: no-repeat;
+	background-position: center;
+	opacity: 0.155;
+}
+
+.camera-bookmarks-slot.cambookmark-icon.active,
+button.camera-bookmarks-slot.cambookmark-icon.active,
+.button.camera-bookmarks-slot.cambookmark-icon.active {
+	opacity: 0.40;
+}
+
+.scene-tool-btn,
+button.scene-tool-btn,
+.button.scene-tool-btn {
+	width: 28px;
+	height: 28px;
+	min-width: 28px;
+	min-height: 28px;
+	padding: 4px;
+	background-color: transparent;
+	border-width: 0px;
+	border-style: none;
+	border-color: transparent;
+	border-radius: var(--ui_radius_sm);
+	background-size: 18px 18px;
+	background-repeat: no-repeat;
+	background-position: center;
+	opacity: 0.50;
+}
+
+.inline-tool-buttons .scene-tool-btn,
+.inline-tool-buttons button.scene-tool-btn,
+.inline-tool-buttons .button.scene-tool-btn {
+	width: 24px;
+	height: 24px;
+	min-width: 24px;
+	min-height: 24px;
+	padding: 4px;
+	background-size: 16px 16px;
+}
+
+.scene-tool-btn.icon-active,
+button.scene-tool-btn.icon-active,
+.button.scene-tool-btn.icon-active {
+	background-color: var(--ui_color_scene_tool_active, var(--ui_color_accent_blue));
+	border-color: transparent;
+	opacity: 0.50;
+}
+
+.scene-tool-btn:hover,
+button.scene-tool-btn:hover,
+.button.scene-tool-btn:hover,
+.scene-tool-btn:active,
+button.scene-tool-btn:active,
+.button.scene-tool-btn:active {
+	background-color: rgba(255, 255, 255, 0.28);
+	border-color: transparent;
+	opacity: 0.85;
+}
+
+.scene-tool-btn.icon-active:hover,
+button.scene-tool-btn.icon-active:hover,
+.button.scene-tool-btn.icon-active:hover,
+.scene-tool-btn.icon-active:active,
+button.scene-tool-btn.icon-active:active,
+.button.scene-tool-btn.icon-active:active {
+	background-color: var(--ui_color_scene_tool_active_hover, var(--ui_color_accent_blue_hover));
+	border-color: transparent;
+	opacity: 1.0;
+}
+
+/* Success variant */
+button.success,
+.button.success {
+	background-color: #28A745;
+	border-color: #28A745;
+	color: var(--ui_color_text_bright);
+}
+
+button.success:hover,
+.button.success:hover {
+	background-color: #34CE57;
+	border-color: #34CE57;
+}
+
+/* Danger variant */
+button.danger,
+.button.danger {
+	background-color: #DC3545;
+	border-color: #DC3545;
+	color: var(--ui_color_text_bright);
+}
+
+button.danger:hover,
+.button.danger:hover {
+	background-color: #E04555;
+	border-color: #E04555;
+}
+
+/* Small size variant */
+button.small,
+.button.small {
+	padding: 4px 8px;
+	min-height: 24px;
+	font-size: var(--ui_font_size_small);
+}
+
+/* Large size variant */
+button.large,
+.button.large {
+	padding: 12px 24px;
+	min-height: 40px;
+	font-size: var(--ui_font_size_header);
+}
+
+/* Bookmark/Todo remove (X) – no background, text-only. Must come after generic button so it overrides. */
+.bookmark-remove,
+button.bookmark-remove,
+.button.bookmark-remove,
+.todo-delete,
+button.todo-delete,
+.button.todo-delete {
+	background-color: transparent;
+	border-color: transparent;
+	border-width: 0;
+}
+
+.bookmark-remove:hover,
+button.bookmark-remove:hover,
+.button.bookmark-remove:hover,
+.bookmark-remove:active,
+button.bookmark-remove:active,
+.button.bookmark-remove:active,
+.todo-delete:hover,
+button.todo-delete:hover,
+.button.todo-delete:hover,
+.todo-delete:active,
+button.todo-delete:active,
+.button.todo-delete:active {
+	background-color: transparent;
+	border-color: transparent;
+}

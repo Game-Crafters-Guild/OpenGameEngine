@@ -1,0 +1,590 @@
+/* SearchDialog Control Styles (Editor app asset)
+ *
+ * Modal search popup with text field, virtualized result list, and status bar.
+ * Loaded by SearchDialog.cpp via RequestSubtreeStyleAssetPath.
+ */
+
+/* ---- Root overlay (fullscreen, hidden by default) ---- */
+.search-dialog {
+	display: none;
+	position: absolute;
+	left: 0;
+	top: 0;
+	width: 100%;
+	height: 100%;
+}
+
+.search-dialog.open {
+	display: block;
+}
+
+/* ---- Backdrop: invisible fullscreen layer; click still dismisses the dialog ---- */
+.search-dialog-backdrop {
+	position: absolute;
+	left: 0;
+	top: 0;
+	width: 100%;
+	height: 100%;
+	background-color: transparent;
+	z-index: 0;
+}
+
+/* ---- Dialog panel (anchored below invoking element by code) ---- */
+/* Position and size are driven by C++ overrides (SetAnchorPosition / UpdatePanelHeight). */
+.search-dialog-panel {
+	position: absolute;
+	z-index: 1;
+	background-color: var(--ui_color_bg_panel);
+	border: 1px solid var(--ui_color_border_panel);
+	border-radius: var(--ui_radius_md);
+	padding: 0;
+	display: flex;
+	flex-direction: column;
+	overflow: hidden;
+	isolation: isolate;
+	/* Drop shadow lives in the global theme (widgets.css) so it can be toggled
+	   via the `no-picker-shadow` root class from User Settings ▸ Appearance. */
+}
+
+.search-dialog-drag-handle {
+	display: none;
+	height: 18px;
+	min-height: 18px;
+	flex-shrink: 0;
+	align-items: center;
+	justify-content: center;
+	color: var(--ui_color_text_dim);
+	background-color: var(--ui_color_bg_tabbar);
+	cursor: move;
+	user-select: none;
+}
+
+.search-dialog-result-view-toggle,
+button.search-dialog-result-view-toggle,
+.button.search-dialog-result-view-toggle {
+	width: 16px;
+	height: 16px;
+	min-width: 16px;
+	min-height: 16px;
+	max-width: 16px;
+	max-height: 16px;
+	flex-shrink: 0;
+	padding: 0;
+	border-width: 0;
+	background-color: transparent;
+	background-size: contain;
+	background-repeat: no-repeat;
+	background-position: center;
+	background-image-tint: rgba(175, 175, 175, 1.0);
+	opacity: 0.55;
+}
+
+.search-dialog-result-view-toggle.grid-view-icon {
+	background-image: url("editor:Icons/grid.png");
+}
+
+.search-dialog-result-view-toggle.list-view-icon {
+	background-image: url("editor:Icons/column-horizontal.png");
+}
+
+.search-dialog-result-view-toggle:hover,
+.search-dialog-result-view-toggle.active {
+	opacity: 1.0;
+	background-color: transparent;
+}
+
+.search-dialog-result-size-controls {
+	display: none;
+	flex-direction: row;
+	align-items: center;
+	gap: 4px;
+	flex-shrink: 0;
+}
+
+.search-dialog-panel.draggable-resizable .search-dialog-result-size-controls {
+	display: flex;
+}
+
+/* The raw hex values in this dialog's chrome (slider greys below, the
+   search-bar #1a1a1a, the #666 focus border) are DELIBERATE bespoke values,
+   not missing theme tokens — none of them has an equal --ui_color_* token,
+   and snapping to the nearest one would change the shipped look. Promote
+   them to named tokens only when a theme variant or a second deep-field
+   surface needs to share them. */
+.search-dialog-result-size-slider {
+	margin-left: 4px;
+	width: 102px;
+	min-width: 102px;
+	height: 16px;
+	background-color: transparent;
+	--slider-track-fill: #6e6e6e;
+	cursor: pointer;
+}
+
+.search-dialog-result-size-slider .slider-thumb {
+	border-width: 0;
+	border-style: none;
+	glow: 2px #626262;
+	background-color: #aeaeae;
+}
+
+.search-dialog-result-size-slider:hover .slider-thumb,
+.search-dialog-result-size-slider:focus .slider-thumb {
+	glow: 2px #767676;
+	background-color: #bcbcbc;
+}
+
+.search-dialog-panel.draggable-resizable .search-dialog-drag-handle {
+	display: flex;
+}
+
+.search-dialog-panel.draggable-resizable .search-dialog-status {
+	cursor: move;
+	padding-right: 20px;
+}
+
+.search-dialog-resize-handle {
+	display: none;
+	position: absolute;
+	right: 0;
+	bottom: 0;
+	width: 14px;
+	height: 14px;
+	z-index: 5;
+	cursor: nwse-resize;
+}
+
+.search-dialog-panel.draggable-resizable .search-dialog-resize-handle {
+	display: block;
+}
+
+/* ---- Shared search field chrome placement ---- */
+.search-dialog-search-bar {
+	position: relative;
+	width: auto;
+	max-width: none;
+	align-self: stretch;
+	height: 22px;
+	flex-shrink: 0;
+	margin: 8px 12px 6px 10px;
+	background-color: #1a1a1a;
+}
+
+/* ---- Results list ---- */
+.search-dialog-results {
+	position: relative;
+	z-index: 0;
+	flex: 1;
+	min-height: 0;
+}
+
+.search-dialog-results.view-hidden {
+	display: none;
+}
+
+.search-dialog-grid-results {
+	display: none;
+	position: relative;
+	flex: 1;
+	min-height: 0;
+}
+
+.search-dialog-grid-results.active {
+	display: block;
+}
+
+.search-dialog-grid-results .grid-cell.search-result-grid-card {
+	border-radius: var(--ui_radius_sm);
+	cursor: pointer;
+}
+
+.search-dialog-grid-results .grid-cell.search-result-grid-card:hover {
+	background-color: var(--ui_color_bg_item_hover);
+}
+
+.search-dialog-grid-results .grid-cell.search-result-grid-card.selected {
+	background-color: var(--ui_color_accent_highlight);
+}
+
+.search-result-grid-thumbnail {
+	border-radius: var(--ui_radius_sm);
+	background-size: contain;
+	background-repeat: no-repeat;
+	background-position: center;
+}
+
+/* Wraps like every other .grid-title: the cell is only as wide as the icon
+   (32px floor), so an ellipsis here would leave two characters. */
+.search-result-grid-label {
+	color: var(--ui_color_text_bright);
+	font-size: var(--ui_font_size_small);
+	text-align: center;
+}
+
+/* ---- Individual result row ---- */
+.search-result-row {
+	display: flex;
+	flex-direction: row;
+	align-items: center;
+	gap: 8px;
+	padding: 4px 12px;
+	cursor: pointer;
+	border-bottom: 1px solid transparent;
+}
+
+.search-result-row:hover {
+	background-color: var(--ui_color_bg_item_hover);
+}
+
+.search-result-row.selected {
+	background-color: var(--ui_color_accent_pressed);
+}
+
+/* The selected row paints an accent-blue background, but only the LABEL had a
+   colour bright enough to survive it - the detail kept its dim grey and landed
+   at roughly 2.5:1 on blue, the lowest contrast in the dialog. Every picker
+   built on SearchDialog shares this, not just the one that surfaced it. */
+.search-result-row.selected .search-result-detail {
+	color: var(--ui_color_text_bright);
+}
+
+/* ---- Result icon ---- */
+.search-result-icon {
+	width: 24px;
+	height: 24px;
+	min-width: 24px;
+	min-height: 24px;
+	flex-shrink: 0;
+	border-radius: var(--ui_radius_sm);
+	background-size: contain;
+	background-repeat: no-repeat;
+	background-position: 50% 50%;
+}
+
+.search-result-icon.has-thumb {
+	background-color: transparent;
+}
+
+.search-result-icon.hidden {
+	display: none;
+}
+
+/* ---- Component picker icons ---- */
+.search-result-icon.inspector-section-icon-transform,
+.search-result-icon.inspector-section-icon-mesh-renderer,
+.search-result-icon.inspector-section-icon-skinned-mesh,
+.search-result-icon.inspector-section-icon-material,
+.search-result-icon.inspector-section-icon-camera,
+.search-result-icon.inspector-section-icon-light-ambient,
+.search-result-icon.inspector-section-icon-light-directional,
+.search-result-icon.inspector-section-icon-light-spot,
+.search-result-icon.inspector-section-icon-light-point,
+.search-result-icon.inspector-section-icon-light-area,
+.search-result-icon.inspector-section-icon-light-volume,
+.search-result-icon.inspector-section-icon-sky,
+.search-result-icon.inspector-section-icon-post-process,
+.search-result-icon.inspector-section-icon-post-process-volume,
+.search-result-icon.inspector-section-icon-wind-volume,
+.search-result-icon.inspector-section-icon-terrain,
+.search-result-icon.inspector-section-icon-grass,
+.search-result-icon.inspector-section-icon-ocean,
+.search-result-icon.inspector-section-icon-particles,
+.search-result-icon.inspector-section-icon-video-texture,
+.search-result-icon.inspector-section-icon-lens-flare,
+.search-result-icon.inspector-section-icon-spline,
+.search-result-icon.inspector-section-icon-measure,
+.search-result-icon.inspector-section-icon-physics,
+.search-result-icon.inspector-section-icon-physics-settings,
+.search-result-icon.inspector-section-icon-shape-cube,
+.search-result-icon.inspector-section-icon-shape-sphere,
+.search-result-icon.inspector-section-icon-shape-capsule,
+.search-result-icon.inspector-section-icon-shape-plane,
+.search-result-icon.inspector-section-icon-audio-emitter,
+.search-result-icon.inspector-section-icon-audio-listener,
+.search-result-icon.inspector-section-icon-animator,
+.search-result-icon.inspector-section-icon-animated-node,
+.search-result-icon.inspector-section-icon-lod-group,
+.search-result-icon.inspector-section-icon-render-layer,
+.search-result-icon.inspector-section-icon-default {
+	background-size: 16px 16px;
+	background-image-tint: rgba(200, 200, 200, 1.0);
+	background-image-saturation: 1.0;
+}
+
+/* Post-process effect picker: the image comes from the effect registry's
+   IconPath, so only the shared sizing/tint lives here. */
+.search-result-icon.search-result-icon-postfx {
+	background-size: 16px 16px;
+	background-image-tint: rgba(200, 200, 200, 1.0);
+	background-image-saturation: 1.0;
+}
+
+.search-result-icon.inspector-section-icon-transform {
+	background-image: url("editor:Icons/vector.png");
+}
+.search-result-icon.inspector-section-icon-mesh-renderer {
+	background-image: url("editor:Icons/Sphere.png");
+}
+.search-result-icon.inspector-section-icon-skinned-mesh {
+	background-image: url("editor:Icons/person.png");
+}
+.search-result-icon.inspector-section-icon-material {
+	background-image: url("editor:Icons/material.png");
+}
+.search-result-icon.inspector-section-icon-camera {
+	background-image: url("editor:Icons/videocam.png");
+}
+.search-result-icon.inspector-section-icon-light-ambient {
+	background-image: url("editor:Icons/AmbientLight.png");
+}
+.search-result-icon.inspector-section-icon-light-directional {
+	background-image: url("editor:Icons/DirectionalLight.png");
+}
+.search-result-icon.inspector-section-icon-light-spot {
+	background-image: url("editor:Icons/SpotLight.png");
+}
+.search-result-icon.inspector-section-icon-light-point {
+	background-image: url("editor:Icons/PointLight.png");
+}
+.search-result-icon.inspector-section-icon-light-area {
+	background-image: url("editor:Icons/arealight.png");
+}
+.search-result-icon.inspector-section-icon-light-volume {
+	background-image: url("editor:Icons/PointLight.png");
+}
+.search-result-icon.inspector-section-icon-sky {
+	background-image: url("editor:Icons/skyenvironment.png");
+}
+.search-result-icon.inspector-section-icon-post-process {
+	background-image: url("editor:Icons/postfx.png");
+}
+.search-result-icon.inspector-section-icon-post-process-volume {
+	background-image: url("editor:Icons/color-filter.svg");
+}
+.search-result-icon.inspector-section-icon-wind-volume {
+	background-image: url("editor:Icons/wind.svg");
+}
+.search-result-icon.inspector-section-icon-terrain {
+	background-image: url("editor:Icons/terrain.png");
+}
+.search-result-icon.inspector-section-icon-grass {
+	background-image: url("editor:Icons/grass.png");
+}
+.search-result-icon.inspector-section-icon-ocean {
+	background-image: url("editor:Icons/ocean.svg");
+}
+.search-result-icon.inspector-section-icon-particles {
+	background-image: url("editor:Icons/sparkles.png");
+}
+.search-result-icon.inspector-section-icon-video-texture {
+	background-image: url("editor:Icons/film.png");
+}
+.search-result-icon.inspector-section-icon-lens-flare {
+	background-image: url("editor:Icons/flame.png");
+}
+.search-result-icon.inspector-section-icon-spline {
+	background-image: url("editor:Icons/GizmoSpline.png");
+}
+.search-result-icon.inspector-section-icon-measure {
+	background-image: url("editor:Icons/Ruler.png");
+}
+.search-result-icon.inspector-section-icon-physics,
+.search-result-icon.inspector-section-icon-physics-settings {
+	background-image: url("editor:Icons/PhysicsSettings.png");
+}
+.search-result-icon.inspector-section-icon-shape-cube {
+	background-image: url("editor:Icons/Cube.png");
+}
+.search-result-icon.inspector-section-icon-shape-sphere {
+	background-image: url("editor:Icons/Sphere.png");
+}
+.search-result-icon.inspector-section-icon-shape-capsule {
+	background-image: url("editor:Icons/Capsule.png");
+}
+.search-result-icon.inspector-section-icon-shape-plane {
+	background-image: url("editor:Icons/Plane.png");
+}
+.search-result-icon.inspector-section-icon-audio-emitter,
+.search-result-icon.inspector-section-icon-audio-listener {
+	background-image: url("editor:Icons/music-note-icon@32px.png");
+}
+.search-result-icon.inspector-section-icon-animator,
+.search-result-icon.inspector-section-icon-animated-node {
+	background-image: url("editor:Icons/film.png");
+}
+.search-result-icon.inspector-section-icon-lod-group {
+	background-image: url("editor:Icons/layout3split.png");
+}
+.search-result-icon.inspector-section-icon-render-layer {
+	background-image: url("editor:Icons/list.png");
+}
+.search-result-icon.inspector-section-icon-default {
+	background-image: url("editor:Icons/node.png");
+}
+
+/* ---- Text wrapper (label + detail stacked) ---- */
+.search-result-text {
+	display: flex;
+	flex-direction: column;
+	flex: 1;
+	min-width: 0;
+	gap: 1px;
+}
+
+.search-result-label {
+	color: var(--ui_color_text_bright);
+	font-size: var(--ui_font_size_list);
+	min-width: 0;
+	white-space: nowrap;
+	overflow: hidden;
+	text-overflow: ellipsis;
+}
+
+.search-result-detail {
+	color: var(--ui_color_text_dim);
+	font-size: var(--ui_font_size_small);
+	min-width: 0;
+	white-space: nowrap;
+	overflow: hidden;
+	text-overflow: ellipsis;
+}
+
+/* ---- Status bar ---- */
+.search-dialog-status {
+	height: 28px;
+	min-height: 28px;
+	max-height: 28px;
+	padding: 0 12px;
+	background-color: var(--ui_color_bg_tabbar);
+	flex-shrink: 0;
+	display: flex;
+	flex-direction: row;
+	align-items: center;
+	justify-content: space-between;
+}
+
+.search-dialog-status-text {
+	font-size: var(--ui_font_size_small);
+	color: var(--ui_color_text_dim);
+	text-align: right;
+	min-width: 0;
+}
+
+/* ---- Asset type icon classes ---- */
+/* Colored indicators for common asset types. These can be replaced with
+   actual icon textures later; for now a small colored square suffices.
+   The hues are CATEGORICAL identity colors (deliberately literal, never
+   theme tokens): an asset kind keeps its hue even if the theme is retinted,
+   so do not swap e.g. #4CAF50 for --ui_color_accent_green. */
+
+.icon-texture {
+	background-color: #4CAF50;
+}
+
+.icon-material {
+	background-color: #FF9800;
+}
+
+.icon-shader {
+	background-color: #9C27B0;
+}
+
+.icon-model {
+	background-color: #2196F3;
+}
+
+.icon-script {
+	background-color: #00BCD4;
+}
+
+.icon-audio {
+	background-color: #E91E63;
+}
+
+.icon-scene {
+	background-color: #CDDC39;
+}
+
+.icon-animation {
+	background-color: #FF5722;
+}
+
+.icon-font {
+	background-color: #795548;
+}
+
+.icon-folder {
+	background-color: #FFC107;
+}
+
+.icon-command {
+	background-color: var(--ui_color_accent_blue);
+}
+
+.icon-command-save {
+	background-image: url("editor:Icons/save.png");
+}
+
+.icon-command-new-scene {
+	background-image: url("editor:Icons/sceneicon.png");
+}
+
+.icon-command-open-project {
+	background-image: url("editor:Icons/folder_open.png");
+}
+
+.icon-command-undo {
+	background-image: url("editor:Icons/undo.png");
+}
+
+.icon-command-redo {
+	background-image: url("editor:Icons/ResetReload.png");
+}
+
+.icon-command-play {
+	background-image: url("editor:Icons/play.png");
+}
+
+.icon-command-pause {
+	background-image: url("editor:Icons/pause.png");
+}
+
+.icon-command-stop {
+	background-image: url("editor:Icons/stop.png");
+}
+
+.icon-command-reset-layout {
+	background-image: url("editor:Icons/layout3split.png");
+}
+
+.icon-command-reindex {
+	background-image: url("editor:Icons/search.png");
+}
+
+.icon-panel {
+	background-image: url("editor:Icons/layout3split.png");
+}
+
+.icon-settings {
+	background-image: url("editor:Icons/settings.png");
+}
+
+.icon-unknown {
+	background-color: var(--ui_color_border_subtle);
+}
+
+/* ---- Global command palette presentation ---- */
+.universal-command-palette .search-dialog-query-field TextInput {
+	font-size: var(--ui_font_size_list);
+	padding-top: 0;
+	padding-bottom: 0;
+}
+
+.universal-command-palette .search-field-with-filter-placeholder {
+	left: 9px;
+}
+
+.universal-command-palette .search-result-row {
+	padding-left: 14px;
+	padding-right: 14px;
+}

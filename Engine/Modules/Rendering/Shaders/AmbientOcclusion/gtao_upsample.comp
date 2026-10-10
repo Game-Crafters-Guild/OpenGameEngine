@@ -1,0 +1,95 @@
+#version 450
+
+// Depth-aware 4-tap (2x2 bilinear-gather) upsample of the half-res GTAO denoise to
+// full resolution. Reads the half-res denoised AO + full-res depth; each of the four
+// nearest half-res taps is weighted by its bilinear footprint AND a depth-edge weight,
+// and taps that describe another surface are dropped rather than blended, so occlusion
+// and bent normals stay on their own side of a silhouette. At most 13 fetches per pixel
+// (5 guidance depths + 4 guides + up to 4 AO taps), against ~50 for a full-res 5x5 bilateral.
+//
+// The GTAO buffer this upsamples is produced by gtao.comp + gtao_blur.comp (the sweep
+// is a port of SpartanEngine's MIT-licensed ssao.hlsl — see gtao.comp's header).
+
+layout(local_size_x = 8, local_size_y = 8, local_size_z = 1) in;
+
+layout(set = 0, binding = 0) uniform sampler2D uAOIn;   // half-res denoised GTAO (rgba16f)
+layout(set = 0, binding = 1) uniform sampler2D uDepth;  // resolved reverse-Z depth (full-res)
+layout(set = 0, binding = 3) uniform sampler2D uGuide;
+layout(set = 0, binding = 2, rgba16f) uniform writeonly image2D uAOOut; // full-res
+
+#include "AmbientOcclusion/gtao_denoise_common.glsl"  // depth reconstruction and plane-aware weights
+
+// A tap is blended only while it fits the full-resolution plane about as well as
+// the best of the four does, and the whole pixel falls back to "unoccluded, use
+// the geometric normal" when even the best tap describes another surface.
+const float kGtaoUpsampleAgreement = 0.75;
+const float kGtaoUpsampleConfidence = 0.05;
+
+void main()
+{
+    ivec2 outSize = imageSize(uAOOut);
+    ivec2 pix     = ivec2(gl_GlobalInvocationID.xy);
+    if (pix.x >= outSize.x || pix.y >= outSize.y)
+        return;
+
+    vec2 uv = (vec2(pix) + 0.5) / vec2(outSize);
+
+    float rawC = textureLod(uDepth, uv, 0.0).r;
+    if (rawC <= 0.0) // sky: no occlusion
+    {
+        imageStore(uAOOut, pix, vec4(0.0, 0.0, 0.0, 1.0));
+        return;
+    }
+    float linC = GE_LinearizeDepth(rawC);
+    vec2 depthUV = GE_GtaoDepthUV(uDepth, uv);
+    vec2 depthSlope = GE_GtaoDepthSlope(uDepth, depthUV, rawC);
+
+    // The four nearest half-res texel centres around uv. The sampler is PointClamp, so
+    // each textureLod snaps to an exact texel and we apply the bilinear weight manually.
+    vec2 aoSize = vec2(textureSize(uAOIn, 0));
+    // AO footprints are exact 2x2 source blocks, including odd extents.
+    vec2 f      = (vec2(pix) + 0.5) * 0.5 - 0.5;
+    vec2 base   = floor(f);
+    vec2 frac   = f - base;
+
+    vec4 planeWeights = vec4(0.0);
+    for (int k = 0; k < 4; ++k)
+    {
+        ivec2 tap = clamp(ivec2(base) + ivec2(k & 1, k >> 1), ivec2(0), ivec2(aoSize) - 1);
+        vec3 guide = GE_GtaoGuide(uGuide, tap, outSize);
+        if (guide.z <= 0.0)
+            continue;
+        float predictedRaw = rawC + dot(depthSlope, GE_GtaoDepthUV(uDepth, guide.xy) - depthUV);
+        planeWeights[k] = GE_GtaoDepthWeight(guide.z, predictedRaw, linC);
+    }
+    float best = max(max(planeWeights.x, planeWeights.y), max(planeWeights.z, planeWeights.w));
+    if (best < kGtaoUpsampleConfidence) // no half-res tap describes this surface
+    {
+        imageStore(uAOOut, pix, vec4(0.0, 0.0, 0.0, 1.0));
+        return;
+    }
+
+    // A tap across a depth edge carries another surface's occlusion AND its bent
+    // normal; blended in, it reads as a one-pixel rim that can brighten the pixel
+    // past its ambient-occlusion-off value. Keep only taps that fit this pixel's
+    // plane about as well as the best one does: a smooth surface still blends all
+    // four, an edge keeps its own side instead of a mixture of both.
+    vec4  sum  = vec4(0.0);
+    float wsum = 0.0;
+    for (int k = 0; k < 4; ++k)
+    {
+        if (planeWeights[k] < best * kGtaoUpsampleAgreement)
+            continue;
+        ivec2 tap = clamp(ivec2(base) + ivec2(k & 1, k >> 1), ivec2(0), ivec2(aoSize) - 1);
+        float wb = ((k & 1) == 0 ? 1.0 - frac.x : frac.x) * ((k >> 1) == 0 ? 1.0 - frac.y : frac.y);
+        float w = wb * planeWeights[k];
+        sum  += texelFetch(uAOIn, tap, 0) * w;
+        wsum += w;
+    }
+
+    vec4 result = wsum > 0.0 ? sum / wsum : vec4(0.0, 0.0, 0.0, 1.0);
+    // Re-normalise the averaged bent normal; keep the (0,0,0) sentinel if it collapsed
+    // (the consumer then falls back to the geometric normal).
+    result.rgb = dot(result.rgb, result.rgb) > 1e-8 ? normalize(result.rgb) : vec3(0.0);
+    imageStore(uAOOut, pix, result);
+}

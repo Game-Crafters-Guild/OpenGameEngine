@@ -1,0 +1,22 @@
+<Project>
+  <PropertyGroup>
+    <!-- Suppress CS1668 (invalid LIB search path) for managed projects.
+         The offending path comes from the host LIB environment variable
+         and is irrelevant for these pure managed assemblies, but causes
+         noisy warnings on some ARM64 Windows setups. -->
+    <NoWarn>$(NoWarn);CS1668</NoWarn>
+
+    <!-- The engine hosts one runtime: .NET 10. "Minor" (baked into each generated
+         *.runtimeconfig.json) runs the newest installed 10.0 patch and refuses a
+         machine without a .NET 10 runtime rather than running the editor, the
+         build-time tools (e.g. `dotnet ComponentScanner.dll`) and the scripts on
+         another major. -->
+    <RollForward>Minor</RollForward>
+
+    <!-- The engine version, from the repository root's VERSION file: the informational
+         version carries the full string ("2026.10.0-alpha.4"), the assembly and file
+         versions its numeric part. -->
+    <Version>$([System.IO.File]::ReadAllText('$(MSBuildThisFileDirectory)../VERSION').Trim())</Version>
+  </PropertyGroup>
+</Project>
+

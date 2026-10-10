@@ -1,0 +1,85 @@
+#version 450
+
+#include "Includes/storage_access.glsl"
+// Bake a CPU-readable ocean height field over a camera-snapped world tile so the
+// buoyancy system can float bodies on the *FFT* surface instead of the analytic
+// Gerstner approximation. Each texel inverts the FFT horizontal displacement (a
+// few fixed-point iterations) so the stored height matches the displaced surface
+// the camera renders — the point that renders AT q originated at p where
+// p + disp.xz(p) = q — then writes the clamped displacement plus SeaLevel +
+// displacement.y into a host-visible storage buffer that OceanHeightField reads
+// back (a few frames latent).
+//
+// Mirrors the surface's OceanShapeDisplacement (overall Weight + horizontal /
+// vertical clamps) so physics agrees with what renders. Shallow-water
+// attenuation is intentionally omitted (it needs the seabed cascade and is off
+// by default); near a tagged shoreline the field slightly overestimates height.
+
+layout(local_size_x = 8, local_size_y = 8, local_size_z = 1) in;
+
+// std140 — must match OceanHeightQueryParamsGPU in OceanHeightField.cpp.
+layout(std140, set = 0, binding = 0) uniform OceanHeightQueryParams
+{
+    uint  uResolution;      // N texels per axis
+    uint  uFFTCascadeCount; // active FFT cascades to sum
+    float uOriginX;         // tile min-corner world X
+    float uOriginZ;         // tile min-corner world Z
+
+    float uTexelSize;       // meters per texel
+    float uSeaLevel;
+    float uWeight;          // OceanShapeDisplacement overall weight
+    float uMaxHorizontal;   // |disp.xz| clamp (meters)
+
+    float uMaxVertical;     // |disp.y| clamp (meters)
+    float uWaveOriginOffsetX;
+    float uWaveOriginOffsetZ;
+    float uPad2;
+};
+
+layout(set = 0, binding = 1) uniform sampler2DArray uOceanDisplacement; // FFT displacement (tileable)
+layout(std430, set = 0, binding = 2) GE_STORAGE_WRITEONLY buffer Displacements { vec4 uDisplacements[]; };
+
+// FFT cascade count cap (mirror of ocean_common.glsl GE_OCEAN_FFT_CASCADES).
+const int GE_HEIGHT_FFT_CASCADES = 16;
+
+// Sum the FFT displacement cascades at a world XZ point (tileable / Repeat wrap).
+// Mirrors OceanSampleDisplacement's world-space direct FFT sum.
+vec3 SampleDisplacement(vec2 worldXZ, uint count)
+{
+    worldXZ += vec2(uWaveOriginOffsetX, uWaveOriginOffsetZ);
+    vec3 disp = vec3(0.0);
+    uint n = min(count, uint(GE_HEIGHT_FFT_CASCADES));
+    for (uint c = 0u; c < n; ++c)
+    {
+        float worldSize = 0.5 * float(1u << c);
+        disp += textureLod(uOceanDisplacement, vec3(worldXZ / worldSize, float(c)), 0.0).xyz;
+    }
+    return disp;
+}
+
+void main()
+{
+    const uvec2 id = gl_GlobalInvocationID.xy;
+    if (id.x >= uResolution || id.y >= uResolution)
+        return;
+
+    // World XZ this texel queries (its center).
+    const vec2 q = vec2(uOriginX, uOriginZ) + (vec2(id) + 0.5) * uTexelSize;
+
+    // Invert the horizontal displacement: find p such that p + disp.xz(p) = q so
+    // buoyancy floats on the same displaced crest the camera sees, not the
+    // undisplaced footprint. Fixed-point iteration converges for the moderate
+    // chop the FFT produces.
+    vec2 p = q;
+    for (int it = 0; it < 3; ++it)
+    {
+        vec3 d = SampleDisplacement(p, uFFTCascadeCount) * uWeight;
+        d.xz = clamp(d.xz, vec2(-uMaxHorizontal), vec2(uMaxHorizontal));
+        p = q - d.xz;
+    }
+
+    vec3 d = SampleDisplacement(p, uFFTCascadeCount) * uWeight;
+    d.xz = clamp(d.xz, vec2(-uMaxHorizontal), vec2(uMaxHorizontal));
+    d.y = clamp(d.y, -uMaxVertical, uMaxVertical);
+    uDisplacements[id.y * uResolution + id.x] = vec4(d.x, d.y, d.z, uSeaLevel + d.y);
+}

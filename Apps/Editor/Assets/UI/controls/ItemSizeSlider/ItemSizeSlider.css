@@ -1,0 +1,21 @@
+/* ItemSizeSlider (Apps/Editor/Include/UI/Controls/ItemSizeSlider.h).
+ *
+ * A neutral slider for sizing a view's items: it adjusts chrome rather than a value, so it
+ * stays grey instead of taking the accent. The base slider look is theme/slider.css; this sheet
+ * sets the colours that base reads and the size every item size slider shares. The control
+ * requests it for its own subtree.
+ */
+.item-size-slider {
+    width: 102px;
+    min-width: 102px;
+    flex-shrink: 0;
+    height: 16px;
+    --slider-track-fill: var(--ui_color_slider_neutral_track_fill);
+    --slider-track: var(--ui_color_slider_neutral_track);
+    --slider-thumb-fill: var(--ui_color_slider_neutral_thumb);
+    --slider-thumb-fill-hover: var(--ui_color_slider_neutral_thumb_hover);
+    --slider-thumb-fill-focus: var(--ui_color_slider_neutral_thumb_focus);
+    --slider-thumb-glow: var(--ui_color_slider_neutral_thumb_glow);
+    --slider-thumb-glow-hover: var(--ui_color_slider_neutral_thumb_glow_hover);
+    --slider-thumb-glow-focus: var(--ui_color_slider_neutral_thumb_glow_focus);
+}

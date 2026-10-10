@@ -1,0 +1,547 @@
+#version 450
+
+// DDGI SOFTWARE ray-traversal trace kernel (M7) — the portable twin of
+// ddgi_trace_hw.comp. Same probe/ray dispatch grid, same spherical-Fibonacci
+// ray set with the same per-tick basis rotation, same NEE-at-hit + previous-atlas
+// infinite bounce + sky-miss shading, same DDGIRayBuffer output layout that
+// ddgi_blend.comp consumes. The ONLY difference is how a ray finds its hit:
+// this kernel walks a CPU-built threaded BVH (Engine/Modules/SceneBvh, packed
+// and uploaded by DDGISceneService) with an explicit cursor loop instead of
+// GL_EXT_ray_query against a hardware acceleration structure.
+//
+// Plain compute, deliberately: no ray_query, no buffer_reference, no int64,
+// no subgroup ops — nothing beyond GLSL 450 / SPIR-V 1.0. That is the whole
+// point of this lane (MoltenVK and other non-ray-query targets), so adding an
+// extension here would defeat it.
+//
+// SCENE DATA LAYOUT — the authoritative documentation lives in
+// SceneBvh/ThreadedBvh.h (BLAS nodes, leaf word, triangle indirection, vertex
+// record) and SceneBvh/TlasPacker.h (packed material/instance/TLAS float
+// buffer). The strides below mirror those headers' constants; the two must
+// change together.
+//
+// BINDINGS (set 0). b2/b3/b5..b8 are identical to ddgi_trace_hw.comp so the
+// two kernels' descriptor writes stay interchangeable; b0/b1/b4 (GPUScene
+// instances, MaterialParams SSBO, per-mesh device-address geometry) have no
+// software-lane counterpart — this kernel reads materials from the packed
+// uber-material table and geometry from its own pooled vertex SSBO — and
+// b9..b13 are this kernel's own.
+//
+//   b2  DDGILightBuffer        (shared, ddgi_hit_shade.glsl)
+//   b3  ge_ddgiSkyIrradiance   (shared, ddgi_hit_shade.glsl)
+//   b5  DDGIVolumeParams       (UBO; one uvec4 longer than the HW kernel's)
+//   b6  uPrevIrradianceAtlas   (shared, ddgi_hit_shade.glsl)
+//   b7  DDGIRayBuffer
+//   b8  DDGIProbeStateRO       (shared, ddgi_hit_shade.glsl)
+//   b9  DDGISwPackedScene      (float: uber materials | instances | TLAS)
+//   b10 DDGISwNodes            (uint:  pooled BLAS nodes)
+//   b11 DDGISwTriangleIndices  (uint:  pooled triangle -> vertex indices)
+//   b12 DDGISwTriangleMaterials(uint:  pooled triangle -> mesh-default material
+//                               slot; used only where an instance record
+//                               declares no per-instance material of its own)
+//   b13 DDGISwVertexData       (float: pooled vertex records)
+//   b14 ge_ddgiMapAtlas        (shared, ddgi_hit_shade.glsl)
+//   b16 uPrevDepthAtlas        (shared, ddgi_hit_shade.glsl)
+//
+// SSBO COUNT: 8 (b2, b7, b8, b9, b10, b11, b12, b13) — one over the documented
+// web/compat budget of 7 per pass, which the M8 audit already recorded against
+// this kernel; b14/b16 are sampled textures, not storage buffers, so neither
+// the material maps nor the Chebyshev-weighted bounce fetch moves that number
+// (base colour and emissive share the one b14 atlas for exactly this reason).
+// The costed fix (pooling nodes/triangle indices/triangle materials into one
+// uint buffer with base offsets, 8 -> 6) remains open.
+
+#define GE_DDGI_SOFTWARE_TRACE 1
+#include "Includes/ddgi_hit_shade.glsl"
+
+const uint GE_DDGI_TRACE_THREADS = 64u;
+layout(local_size_x = 64, local_size_y = 1, local_size_z = 1) in;
+
+// Mirrors of the C++ wire-format strides. SceneBvh/ThreadedBvh.h:
+// kThreadedBvhNodeStrideU32, kTriangleIndexStride, kVertexDataStrideFloats,
+// kThreadedBvhInteriorLeafWord, kThreadedBvhTriangleOffsetMask,
+// kThreadedBvhTriangleCountShift. SceneBvh/TlasPacker.h:
+// kUberMaterialStrideFloats, kTlasNodeStrideFloats.
+const uint GE_DDGI_SW_NODE_STRIDE = 8u;
+const uint GE_DDGI_SW_TRI_STRIDE = 3u;
+const uint GE_DDGI_SW_VERTEX_STRIDE = 8u;
+const uint GE_DDGI_SW_RECORD_STRIDE = 28u;   // uber material AND instance record
+const uint GE_DDGI_SW_TLAS_STRIDE = 12u;
+const uint GE_DDGI_SW_INTERIOR_LEAF = 0xFFFFFFFFu;
+const uint GE_DDGI_SW_TRI_OFFSET_MASK = 0x00FFFFFFu;
+const uint GE_DDGI_SW_TRI_COUNT_SHIFT = 24u;
+
+// Degenerate-triangle rejection on the Moller-Trumbore determinant. Absolute,
+// not relative: the local-space ray direction is left UNNORMALIZED (see the
+// instance record below), so the determinant already carries the instance's
+// scale and a relative epsilon would reject differently per instance.
+const float GE_DDGI_SW_DET_EPS = 1.0e-12;
+
+// Same layout as ddgi_trace_hw.comp's DDGIVolumeParams plus one trailing
+// uvec4, so both kernels' std140 offsets agree up to that point and the C++
+// fill can stay one shared struct with a software-only tail.
+layout(std140, set = 0, binding = 5) uniform DDGIVolumeParams
+{
+    vec4 uGridMinWS;      // xyz; w = depth atlas interior tile resolution (GE_DDGIDepthTexelUV)
+    vec4 uGridSizeWS;     // xyz; w = bounceIntensity
+    ivec4 uProbeCount;    // xyz = resX,resY,resZ; w = probeTotal
+    vec4 uParams0;        // x=minCellWS, y=normalBiasScale, z=hysteresis(unused here), w=intensity(unused here)
+    uvec4 uDispatch0;     // x=probeBase, y=raysPerProbe, z=frameIndex, w=lightCount
+    vec4 uParams1;        // x=radianceClamp, y=chebyshevStrength, z=skyScale, w=classifyStrength
+    uvec4 uSwScene;       // x=tlasNodeCount, y=instanceBase, z=tlasBase (both float-element offsets), w=unused
+} DDGIParams;
+
+layout(std430, set = 0, binding = 7) buffer DDGIRayBuffer
+{
+    // xyz = radiance, w = hitT. Negative w encodes a true miss (-1, sky
+    // already resolved into rgb) — identical to ddgi_trace_hw.comp, because
+    // ddgi_blend.comp decodes both kernels' output with the same rule.
+    vec4 ge_ddgiRays[];
+};
+
+layout(std430, set = 0, binding = 9) readonly buffer DDGISwPackedScene
+{
+    float ge_ddgiSwPacked[];
+};
+
+layout(std430, set = 0, binding = 10) readonly buffer DDGISwNodes
+{
+    uint ge_ddgiSwNodes[];
+};
+
+layout(std430, set = 0, binding = 11) readonly buffer DDGISwTriangleIndices
+{
+    uint ge_ddgiSwTriangleIndices[];
+};
+
+layout(std430, set = 0, binding = 12) readonly buffer DDGISwTriangleMaterials
+{
+    uint ge_ddgiSwTriangleMaterials[];
+};
+
+layout(std430, set = 0, binding = 13) readonly buffer DDGISwVertexData
+{
+    float ge_ddgiSwVertexData[];
+};
+
+GE_DDGIGridInfo GE_DDGIBuildGridInfo()
+{
+    GE_DDGIGridInfo g;
+    g.gridMinWS = DDGIParams.uGridMinWS.xyz;
+    g.gridSizeWS = DDGIParams.uGridSizeWS.xyz;
+    g.probeCount = DDGIParams.uProbeCount.xyz;
+    g.probeTotal = DDGIParams.uProbeCount.w;
+    g.minCellWS = DDGIParams.uParams0.x;
+    g.normalBiasScale = DDGIParams.uParams0.y;
+    g.hysteresis = DDGIParams.uParams0.z;
+    g.intensity = DDGIParams.uParams0.w;
+    return g;
+}
+
+// Reciprocal direction for the slab test, with exact zeros nudged to a signed
+// tiny value. A raw 1.0/0.0 gives +-inf, which the slab min/max handles, but
+// only until the ray origin sits exactly on a slab plane — then inf*0 is NaN
+// and the comparison silently drops the node.
+vec3 GE_DDGISwSafeInvDir(vec3 d)
+{
+    const float kTiny = 1.0e-20;
+    vec3 signs = vec3(d.x < 0.0 ? -1.0 : 1.0, d.y < 0.0 ? -1.0 : 1.0, d.z < 0.0 ? -1.0 : 1.0);
+    vec3 safe = mix(d, signs * kTiny, lessThan(abs(d), vec3(kTiny)));
+    return 1.0 / safe;
+}
+
+// Slab test that also rejects boxes entered beyond the current best hit —
+// the "closer than bestT" half of the traversal contract, without which the
+// walk degenerates to visiting every node.
+bool GE_DDGISwSlabHit(vec3 boundsMin, vec3 boundsMax, vec3 origin, vec3 invDir, float bestT)
+{
+    vec3 t0 = (boundsMin - origin) * invDir;
+    vec3 t1 = (boundsMax - origin) * invDir;
+    vec3 tSmall = min(t0, t1);
+    vec3 tLarge = max(t0, t1);
+    float tNear = max(max(tSmall.x, tSmall.y), tSmall.z);
+    float tFar = min(min(tLarge.x, tLarge.y), tLarge.z);
+    return tFar >= max(tNear, 0.0) && tNear < bestT;
+}
+
+vec3 GE_DDGISwVertexPosition(uint vertexIndex)
+{
+    uint base = vertexIndex * GE_DDGI_SW_VERTEX_STRIDE;
+    return vec3(ge_ddgiSwVertexData[base + 0u],
+                ge_ddgiSwVertexData[base + 1u],
+                ge_ddgiSwVertexData[base + 2u]);
+}
+
+// UV0 lives at floats 6..7 of the pooled vertex record (pos3 + normal3 + uv2 —
+// SceneBvh/ThreadedBvh.h's kVertexDataStrideFloats layout). A mesh built
+// without texcoords has zeros here, which is harmless: its material's atlas
+// layer is -1, so the value is never sampled.
+vec2 GE_DDGISwVertexUV(uint vertexIndex)
+{
+    uint base = vertexIndex * GE_DDGI_SW_VERTEX_STRIDE;
+    return vec2(ge_ddgiSwVertexData[base + 6u], ge_ddgiSwVertexData[base + 7u]);
+}
+
+struct GE_DDGISwHit
+{
+    bool Hit;
+    float T;              // ray parameter in WORLD units (see the unnormalized local direction below)
+    vec3 NormalWS;        // geometric (flat) triangle normal, world space, unit length
+    vec2 UV;              // barycentric-interpolated UV0, before the material's uv scale/offset
+    uint MaterialSlot;    // index into the packed uber-material table
+    bool GIEmitter;       // instance record slot 16: emissive already published
+                          // as a sphere-proxy light, exclude it at hit
+};
+
+// Closest-hit (or any-hit, when `anyHit`) traversal of the pooled TLAS/BLAS.
+//
+// Written as one function with the TLAS walk, the per-leaf instance loop and
+// the BLAS walk inlined, rather than three: GLSL storage blocks are not opaque
+// types the way sampler2D is, so an SSBO cannot be passed as a function
+// parameter and every level needs direct access to a different buffer. Same
+// constraint, same resolution as GE_DDGISampleC0/GE_DDGISampleC1 in
+// Includes/ddgi_probes.glsl.
+//
+// The traversal contract is ThreadedBvh.h's, applied at both levels: nodes are
+// pre-order, an interior node's left child is cursor + 1, and a node's miss
+// link is the first node past its whole subtree — so a miss, and a leaf that
+// has finished its payload, both jump to the miss link. The TLAS's leaf test
+// is `instanceCount > 0` (plain floats, no sentinel); the BLAS's is the leaf
+// word's 0xFFFFFFFF sentinel (bit-cast uints).
+//
+// The per-instance guard counters cost one increment per node visit and turn a
+// corrupt link (which would otherwise spin a GPU thread forever and take the
+// device with it) into a dropped ray.
+GE_DDGISwHit GE_DDGISwTrace(vec3 originWS, vec3 dirWS, float tMin, float tMax, bool anyHit)
+{
+    GE_DDGISwHit best;
+    best.Hit = false;
+    best.T = tMax;
+    best.NormalWS = vec3(0.0, 1.0, 0.0);
+    best.UV = vec2(0.0);
+    best.MaterialSlot = 0u;
+    best.GIEmitter = false;
+
+    uint tlasNodeCount = DDGIParams.uSwScene.x;
+    if (tlasNodeCount == 0u)
+        return best;
+
+    uint instanceBase = DDGIParams.uSwScene.y;
+    uint tlasBase = DDGIParams.uSwScene.z;
+    vec3 invDirWS = GE_DDGISwSafeInvDir(dirWS);
+
+    uint cursor = 0u;
+    uint visits = 0u;
+    uint visitLimit = tlasNodeCount * 2u + 8u;
+
+    while (cursor < tlasNodeCount)
+    {
+        if (visits++ >= visitLimit)
+            break;
+
+        uint node = tlasBase + cursor * GE_DDGI_SW_TLAS_STRIDE;
+        vec3 boundsMin = vec3(ge_ddgiSwPacked[node + 0u], ge_ddgiSwPacked[node + 1u],
+                              ge_ddgiSwPacked[node + 2u]);
+        vec3 boundsMax = vec3(ge_ddgiSwPacked[node + 3u], ge_ddgiSwPacked[node + 4u],
+                              ge_ddgiSwPacked[node + 5u]);
+        uint missLink = uint(ge_ddgiSwPacked[node + 6u]);
+        uint instanceOffset = uint(ge_ddgiSwPacked[node + 7u]);
+        uint instanceCount = uint(ge_ddgiSwPacked[node + 8u]);
+
+        if (!GE_DDGISwSlabHit(boundsMin, boundsMax, originWS, invDirWS, best.T))
+        {
+            cursor = missLink;
+            continue;
+        }
+        if (instanceCount == 0u)
+        {
+            cursor += 1u;  // interior: descend into the left child
+            continue;
+        }
+
+        for (uint slot = 0u; slot < instanceCount; ++slot)
+        {
+            uint record = instanceBase + (instanceOffset + slot) * GE_DDGI_SW_RECORD_STRIDE;
+            // Three ROWS of the inverse world matrix. The local direction is
+            // deliberately NOT renormalized, so `t` stays identical in local
+            // and world space and best-t comparisons remain valid across
+            // instances with different (even non-uniform) scale.
+            vec4 row0 = vec4(ge_ddgiSwPacked[record + 0u], ge_ddgiSwPacked[record + 1u],
+                             ge_ddgiSwPacked[record + 2u], ge_ddgiSwPacked[record + 3u]);
+            vec4 row1 = vec4(ge_ddgiSwPacked[record + 4u], ge_ddgiSwPacked[record + 5u],
+                             ge_ddgiSwPacked[record + 6u], ge_ddgiSwPacked[record + 7u]);
+            vec4 row2 = vec4(ge_ddgiSwPacked[record + 8u], ge_ddgiSwPacked[record + 9u],
+                             ge_ddgiSwPacked[record + 10u], ge_ddgiSwPacked[record + 11u]);
+            uint blasRoot = uint(ge_ddgiSwPacked[record + 12u]);
+            uint blasEnd = uint(ge_ddgiSwPacked[record + 13u]);
+            if (blasEnd <= blasRoot)
+                continue;
+            // Per-instance material override (TlasPacker.h slot 15), negative
+            // when the instance defers to its geometry. A BLAS is shared across
+            // every instance of a mesh, so its triangle material table holds one
+            // answer for all of them; without this the hardware lane's
+            // per-instance ge_ddgiMaterials[inst.materialIndex] would shade two
+            // instances of one mesh differently and this lane would not.
+            float instanceMaterial = ge_ddgiSwPacked[record + 15u];
+
+            vec3 originLS = vec3(dot(row0.xyz, originWS) + row0.w,
+                                 dot(row1.xyz, originWS) + row1.w,
+                                 dot(row2.xyz, originWS) + row2.w);
+            vec3 dirLS = vec3(dot(row0.xyz, dirWS), dot(row1.xyz, dirWS), dot(row2.xyz, dirWS));
+            vec3 invDirLS = GE_DDGISwSafeInvDir(dirLS);
+
+            uint blasCursor = blasRoot;
+            uint blasVisits = 0u;
+            uint blasVisitLimit = (blasEnd - blasRoot) * 2u + 8u;
+
+            while (blasCursor < blasEnd)
+            {
+                if (blasVisits++ >= blasVisitLimit)
+                    break;
+
+                uint bnode = blasCursor * GE_DDGI_SW_NODE_STRIDE;
+                vec3 bMin = vec3(uintBitsToFloat(ge_ddgiSwNodes[bnode + 0u]),
+                                 uintBitsToFloat(ge_ddgiSwNodes[bnode + 1u]),
+                                 uintBitsToFloat(ge_ddgiSwNodes[bnode + 2u]));
+                vec3 bMax = vec3(uintBitsToFloat(ge_ddgiSwNodes[bnode + 3u]),
+                                 uintBitsToFloat(ge_ddgiSwNodes[bnode + 4u]),
+                                 uintBitsToFloat(ge_ddgiSwNodes[bnode + 5u]));
+                uint bMiss = ge_ddgiSwNodes[bnode + 6u];
+                uint leafWord = ge_ddgiSwNodes[bnode + 7u];
+
+                if (!GE_DDGISwSlabHit(bMin, bMax, originLS, invDirLS, best.T))
+                {
+                    blasCursor = bMiss;
+                    continue;
+                }
+                if (leafWord == GE_DDGI_SW_INTERIOR_LEAF)
+                {
+                    blasCursor += 1u;
+                    continue;
+                }
+
+                uint triangleOffset = leafWord & GE_DDGI_SW_TRI_OFFSET_MASK;
+                uint triangleCount = leafWord >> GE_DDGI_SW_TRI_COUNT_SHIFT;
+                for (uint i = 0u; i < triangleCount; ++i)
+                {
+                    uint triangle = triangleOffset + i;
+                    uint indexBase = triangle * GE_DDGI_SW_TRI_STRIDE;
+                    uint vi0 = ge_ddgiSwTriangleIndices[indexBase + 0u];
+                    uint vi1 = ge_ddgiSwTriangleIndices[indexBase + 1u];
+                    uint vi2 = ge_ddgiSwTriangleIndices[indexBase + 2u];
+                    vec3 p0 = GE_DDGISwVertexPosition(vi0);
+                    vec3 p1 = GE_DDGISwVertexPosition(vi1);
+                    vec3 p2 = GE_DDGISwVertexPosition(vi2);
+
+                    // Moller-Trumbore, two-sided: this trace shades front and
+                    // back faces alike (the hit normal is flipped toward the
+                    // incoming ray afterwards), exactly like the HW kernel's
+                    // GE_TriangleFacingCullDisable instances — so the packed
+                    // record's winding sign is not consulted here.
+                    vec3 edge1 = p1 - p0;
+                    vec3 edge2 = p2 - p0;
+                    vec3 pvec = cross(dirLS, edge2);
+                    float det = dot(edge1, pvec);
+                    if (abs(det) < GE_DDGI_SW_DET_EPS)
+                        continue;
+                    float invDet = 1.0 / det;
+                    vec3 tvec = originLS - p0;
+                    float u = dot(tvec, pvec) * invDet;
+                    if (u < 0.0 || u > 1.0)
+                        continue;
+                    vec3 qvec = cross(tvec, edge1);
+                    float v = dot(dirLS, qvec) * invDet;
+                    if (v < 0.0 || u + v > 1.0)
+                        continue;
+                    float t = dot(edge2, qvec) * invDet;
+                    if (t <= tMin || t >= best.T)
+                        continue;
+
+                    // Local geometric normal to world: the instance record's
+                    // rows ARE the inverse matrix's rows, so summing them
+                    // weighted by the local normal's components applies the
+                    // inverse transpose without ever forming it.
+                    vec3 nLS = cross(edge1, edge2);
+                    vec3 nWS = nLS.x * row0.xyz + nLS.y * row1.xyz + nLS.z * row2.xyz;
+                    float nLen = length(nWS);
+
+                    best.Hit = true;
+                    best.T = t;
+                    best.NormalWS = nLen > 1.0e-20 ? nWS / nLen : vec3(0.0, 1.0, 0.0);
+                    // Möller-Trumbore's u/v ARE the barycentric weights of
+                    // vertices 1 and 2, so the hit UV costs three loads and no
+                    // second intersection solve (the reference re-runs the
+                    // solve after traversal because its traversal discards
+                    // them; here the winning candidate is right there).
+                    best.UV = GE_DDGISwVertexUV(vi0) * (1.0 - u - v) +
+                              GE_DDGISwVertexUV(vi1) * u + GE_DDGISwVertexUV(vi2) * v;
+                    best.MaterialSlot = instanceMaterial >= 0.0
+                                            ? uint(instanceMaterial)
+                                            : ge_ddgiSwTriangleMaterials[triangle];
+                    // Instance record slot 16 (TlasPacker.h): this instance's
+                    // emissive is already published as a sphere-proxy light.
+                    best.GIEmitter = ge_ddgiSwPacked[record + 16u] > 0.5;
+                    if (anyHit)
+                        return best;
+                }
+                blasCursor = bMiss;
+            }
+        }
+        cursor = missLink;  // leaf finished: skip past its own subtree
+    }
+    return best;
+}
+
+// NEE direct lighting at a hit point — the software twin of
+// GE_DDGIEvaluateDirectNEE (Includes/ddgi_hit_shade.glsl). The light loop,
+// the per-type geometry, the spot cutoff, the attenuation call and the
+// Lambertian accumulation are intentionally identical; only the occlusion
+// test differs (software any-hit traversal instead of a ray query), and that
+// is exactly the part GLSL cannot factor out — the shadow test needs direct
+// access to this kernel's BVH storage blocks, which cannot cross a function
+// boundary. Keep the two bodies in sync; ddgi_hit_shade.glsl's copy is the
+// reference.
+vec3 GE_DDGISwEvaluateDirectNEE(vec3 hitPosWS, vec3 hitNormalWS, vec3 albedo, uint lightCount,
+                                float traceBiasWS)
+{
+    vec3 origin = hitPosWS + hitNormalWS * traceBiasWS;
+    vec3 result = vec3(0.0);
+    for (uint i = 0u; i < lightCount; ++i)
+    {
+        GE_DDGILightPacked lp = ge_ddgiLights[i];
+        if (lp.meta.w == 0u)  // castsLight
+            continue;
+        uint type = lp.meta.x;  // 0=dir,1=point,2=spot,4=area
+        vec3 toLight;
+        float dist = GE_DDGI_T_MAX;
+        if (type == 0u)
+        {
+            toLight = normalize(-lp.dirIntensity.xyz);
+        }
+        else
+        {
+            vec3 delta = lp.posRange.xyz - hitPosWS;
+            dist = length(delta);
+            if (dist < 1e-5 || dist > lp.posRange.w)
+                continue;
+            toLight = delta / dist;
+        }
+        float ndotl = dot(hitNormalWS, toLight);
+        if (ndotl <= 0.0)
+            continue;
+        if (type == 2u)  // spot cone — hard cutoff at the outer cone, same as the HW lane
+        {
+            float cosAngle = dot(normalize(lp.dirIntensity.xyz), -toLight);
+            if (cosAngle < lp.spotParams.x)
+                continue;
+        }
+
+        // Same emitter-proxy rule the hardware lane applies: a type-3 proxy's
+        // centre is inside its own geometry, so aim the occlusion ray at the
+        // proxy SURFACE or the emitter shadows itself into blackness.
+        float shadowTMax = type == 0u ? GE_DDGI_T_MAX : (dist - traceBiasWS * 2.0);
+        if (type == 3u)
+            shadowTMax = max(dist - lp.areaParams.z - traceBiasWS * 2.0, GE_DDGI_RAY_EPS);
+        if (GE_DDGISwTrace(origin, toLight, GE_DDGI_RAY_EPS, shadowTMax, true).Hit)
+            continue;  // occluded
+
+        float atten = (type == 0u)
+            ? 1.0
+            : GE_DDGILocalLightAttenuation(dist, lp.posRange.w, lp.areaParams.z, lp.areaUp.w);
+        vec3 radiance = lp.colorAreaWidth.rgb * lp.dirIntensity.w * atten;
+        result += (albedo / GE_DDGI_PI) * radiance * ndotl;
+    }
+    return result;
+}
+
+// Shades one ray of one probe and writes its slot of the ray buffer — the
+// software twin of ddgi_trace_hw.comp's GE_DDGITraceRay.
+void GE_DDGITraceRay(GE_DDGIGridInfo grid, int probeIdx, vec3 probePosWS, uint rayIdx,
+                     uint raysPerProbe, mat3 basis)
+{
+    vec3 dir = GE_DDGIRayDirection(rayIdx, raysPerProbe, basis);
+    int depthOctRes = int(DDGIParams.uGridMinWS.w);
+
+    GE_DDGISwHit hit = GE_DDGISwTrace(probePosWS, dir, GE_DDGI_RAY_EPS, GE_DDGI_T_MAX, false);
+
+    uint outIdx = uint(probeIdx) * raysPerProbe + rayIdx;
+    if (!hit.Hit)
+    {
+        ge_ddgiRays[outIdx] = vec4(GE_DDGISampleSkyMiss(dir, DDGIParams.uParams1.z), -1.0);
+        return;
+    }
+
+    vec3 hitNormalWS = hit.NormalWS;
+    if (dot(hitNormalWS, dir) > 0.0)
+        hitNormalWS = -hitNormalWS;
+    vec3 hitPosWS = probePosWS + dir * hit.T;
+
+    // Uber-material record (SceneBvh/UberMaterial.h): [0..2] base colour,
+    // [4] metallic factor (Lambert bounce is albedo * (1 - metalness)),
+    // [7..9] SCENE-LINEAR emissive — colour x nits / referenceWhite, folded CPU-side
+    // by ComputeDDGIEmissive so this lane and the hardware lane emit the same
+    // energy the raster surface shows; a bound emissive map multiplies it.
+    // [12] is the albedo atlas layer, [15] the metallic-
+    // roughness one and [16] the emissive one (-1 = none), [18..21] the one
+    // shared uv scale/offset. Normal, roughness and alpha map layers stay -1
+    // (spectral path tracer only).
+    uint materialRecord = hit.MaterialSlot * GE_DDGI_SW_RECORD_STRIDE;
+    vec3 albedo = vec3(ge_ddgiSwPacked[materialRecord + 0u], ge_ddgiSwPacked[materialRecord + 1u],
+                       ge_ddgiSwPacked[materialRecord + 2u]);
+    vec3 emissive = vec3(ge_ddgiSwPacked[materialRecord + 7u], ge_ddgiSwPacked[materialRecord + 8u],
+                         ge_ddgiSwPacked[materialRecord + 9u]);
+
+    vec2 mapUV = hit.UV * vec2(ge_ddgiSwPacked[materialRecord + 18u],
+                               ge_ddgiSwPacked[materialRecord + 19u]) +
+                 vec2(ge_ddgiSwPacked[materialRecord + 20u],
+                      ge_ddgiSwPacked[materialRecord + 21u]);
+    albedo = GE_DDGIApplyAlbedoMap(albedo, ge_ddgiSwPacked[materialRecord + 12u], mapUV);
+    emissive = GE_DDGIApplyEmissiveMap(emissive, ge_ddgiSwPacked[materialRecord + 16u], mapUV);
+    // Same exclusion the hardware lane applies from GPUInstance flag bit 6 — a
+    // lane that skipped it would render brighter, which reads as success.
+    if (hit.GIEmitter)
+        emissive = vec3(0.0);
+    albedo = GE_DDGIDiffuseAlbedo(albedo,
+                                  GE_DDGIApplyMetallicMap(ge_ddgiSwPacked[materialRecord + 4u],
+                                                          ge_ddgiSwPacked[materialRecord + 15u], mapUV));
+
+    float traceBias = grid.minCellWS * GE_DDGI_TRACE_SURFACE_BIAS_CELL;
+    vec3 direct = GE_DDGISwEvaluateDirectNEE(hitPosWS, hitNormalWS, albedo,
+                                             DDGIParams.uDispatch0.w, traceBias);
+    // Recursive bounce, shaped by the ONE shared implementation both lanes
+    // call (Includes/ddgi_hit_shade.glsl's GE_DDGIShapeBounce) — it carries
+    // the convergence argument, the hue-preserving gain bound and the
+    // firefly ceiling, and it is the only place either kernel may shape this
+    // term. BounceIntensity rides in uGridSizeWS.w, the radiance clamp in
+    // uParams1.x. The direct NEE term above is deliberately NOT shaped: it
+    // reflects incoming light once rather than recursively, so an over-bright
+    // single bounce cannot itself diverge.
+    vec3 bounce = GE_DDGIShapeBounce(albedo, DDGIParams.uGridSizeWS.w,
+                                     GE_DDGISampleBounce(grid, hitPosWS, hitNormalWS,
+                                                         DDGIParams.uParams1.y,
+                                                         DDGIParams.uParams1.w, depthOctRes),
+                                     DDGIParams.uParams1.x);
+
+    ge_ddgiRays[outIdx] = vec4(direct + emissive + bounce, hit.T);
+}
+
+void main()
+{
+    uint probeLocal = gl_WorkGroupID.x;
+    uint raysPerProbe = DDGIParams.uDispatch0.y;
+    int probeIdx = int(DDGIParams.uDispatch0.x) + int(probeLocal);
+    GE_DDGIGridInfo grid = GE_DDGIBuildGridInfo();
+    if (probeIdx >= grid.probeTotal)
+        return;
+
+    // Relocation is dialled by the same classify strength every gather applies
+    // (uParams1.w) — the ray must leave from where the field believes the
+    // probe is, or trace and consume disagree about the probe's position.
+    vec3 probeOffset =
+        GE_DDGIProbeStateApply(ge_ddgiProbeState[probeIdx], DDGIParams.uParams1.w).xyz;
+    vec3 probePosWS = GE_DDGIProbePosition(grid, probeIdx) + probeOffset;
+    mat3 basis = GE_DDGIRayBasis(DDGIParams.uDispatch0.z);
+
+    for (uint rayIdx = gl_LocalInvocationID.x; rayIdx < raysPerProbe; rayIdx += GE_DDGI_TRACE_THREADS)
+        GE_DDGITraceRay(grid, probeIdx, probePosWS, rayIdx, raysPerProbe, basis);
+}

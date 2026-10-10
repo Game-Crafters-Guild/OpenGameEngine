@@ -1,0 +1,127 @@
+#version 450
+
+// DDGI GLOSSY reflection lobe blend kernel — the SHARP of the two lobes.
+// Same traced rays as the rough lobe (ddgi_rough_blend.comp) and the diffuse
+// gather, weighted with a power-64 Phong lobe (~8.4deg half-max) and stored
+// at 16x16 octahedral resolution (~7.2deg texel half-width) so the lobe is
+// actually resolvable by the map holding it — see GE_DDGI_GLOSSY_OCT_RES's
+// table in Includes/ddgi_common.glsl.
+//
+// Two things differ from the rough lobe beyond power and resolution, both
+// forced by how sparse a power-64 lobe's support is over a spherical-
+// Fibonacci ray set:
+//
+// 1. History is kept UNNORMALIZED — numerator (radiance, coverage) and scalar
+//    denominator blended separately, divided only at upload
+//    (ddgi_glossy_upload.comp). A tick whose rays barely graze this texel's
+//    lobe produces a near-zero denominator; blending the RESOLVED value would
+//    give that tick's wildly-uncertain quotient the same temporal authority
+//    as a well-supported one. Blending the unnormalized pair instead makes a
+//    weak tick contribute weakly to both halves, which is what "weighted
+//    mean over time" actually means. The rough lobe's support is dense enough
+//    at power 8 that it can blend resolved values safely.
+//
+// 2. Both halves are per-ray means (divided by raysPerProbe) before
+//    blending, so a 64 -> 256 ray reconfiguration does not hand the new
+//    sample four times the temporal authority the hysteresis slider implies.
+//
+// Numerator and denominator MUST share one hysteresis coefficient or the
+// resolved colour/coverage ratio pumps as the solve cadence changes.
+//
+// C0 only. One workgroup per probe, one thread per atlas texel (324 threads).
+
+#include "Includes/ddgi_common.glsl"
+
+layout(local_size_x = GE_DDGI_GLOSSY_TILE, local_size_y = GE_DDGI_GLOSSY_TILE, local_size_z = 1) in;
+
+layout(std140, set = 0, binding = 0) uniform DDGIGlossyBlendParams
+{
+    ivec4 uProbeCount;    // xyz = res; w = probeTotal
+    vec4 uParams0;        // x=hysteresis (yzw unused)
+    uvec4 uDispatch0;     // x=probeBase, y=raysPerProbe, z=probesThisTick, w=frameIndex
+    vec4 uTiming;         // x = update dt (ms) since this probe's last blend
+} DDGIParams;
+
+layout(std430, set = 0, binding = 1) readonly buffer DDGIRayBufferRO
+{
+    vec4 ge_ddgiRays[];  // xyz=radiance, w=hitT (>=0 local hit, -1 true miss)
+};
+
+// Unnormalized numerator: rgb = sum(radiance * lobeWeight * coverage),
+// a = sum(lobeWeight * coverage). Paired with DDGIGlossyWeight below.
+layout(std430, set = 0, binding = 2) buffer DDGIGlossyNumerator
+{
+    vec4 ge_ddgiGlossyNumerator[];
+};
+
+// Matching denominator: sum(lobeWeight) over the whole ray set.
+layout(std430, set = 0, binding = 3) buffer DDGIGlossyWeight
+{
+    float ge_ddgiGlossyWeight[];
+};
+
+// Cell record: w = 1 when ddgi_blend.comp reset this slot for a cell change
+// this tick (the followed grid scrolled it to a new world cell), so the lobe
+// history is another place's and must seed fresh too.
+layout(std430, set = 0, binding = 4) readonly buffer DDGIProbeCellRO
+{
+    vec4 ge_ddgiProbeCell[];
+};
+
+void main()
+{
+    uint probeLocal = gl_WorkGroupID.x;
+    int probeIdx = int(DDGIParams.uDispatch0.x) + int(probeLocal);
+    if (probeLocal >= DDGIParams.uDispatch0.z || probeIdx >= DDGIParams.uProbeCount.w)
+        return;
+
+    uvec2 texel = gl_LocalInvocationID.xy;
+    // Resolve the octahedral gutter BEFORE evaluating the direction: a gutter
+    // texel stores the lobe of the interior texel it continues across the
+    // fold, so a bilinear tap straddling a tile edge stays on one direction.
+    ivec2 srcTexel = GE_DDGIOctMirrorTexel(ivec2(texel), GE_DDGI_GLOSSY_TILE, GE_DDGI_GLOSSY_OCT_RES);
+    vec2 octUV = (vec2(srcTexel) - float(GE_DDGI_BORDER) + 0.5) / float(GE_DDGI_GLOSSY_OCT_RES);
+    vec3 reflectDir = GE_OctDecode(octUV);
+
+    uint raysPerProbe = DDGIParams.uDispatch0.y;
+    uint rayBase = uint(probeIdx) * raysPerProbe;
+    mat3 basis = GE_DDGIRayBasis(DDGIParams.uDispatch0.w);
+    vec3 radianceAcc = vec3(0.0);
+    float coverageAcc = 0.0;
+    float weightSum = 0.0;
+    for (uint r = 0u; r < raysPerProbe; ++r)
+    {
+        vec4 ray = GE_DDGIFiniteRay(ge_ddgiRays[rayBase + r]);
+        vec3 rayDir = GE_DDGIRayDirection(r, raysPerProbe, basis);
+        float w = GE_DDGIGlossyLobeWeight(max(dot(reflectDir, rayDir), 0.0));
+        float coverage = GE_DDGIRayCoverage(ray.w);
+        radianceAcc += ray.rgb * w * coverage;
+        coverageAcc += w * coverage;
+        weightSum += w;
+    }
+
+    float invRayCount = 1.0 / float(max(raysPerProbe, 1u));
+    vec4 curNumerator = vec4(radianceAcc, coverageAcc) * invRayCount;
+    float curWeight = weightSum * invRayCount;
+
+    uint stateIdx = uint(probeIdx) * uint(GE_DDGI_GLOSSY_TILE * GE_DDGI_GLOSSY_TILE) +
+                    texel.y * uint(GE_DDGI_GLOSSY_TILE) + texel.x;
+    vec4 prevNumerator = ge_ddgiGlossyNumerator[stateIdx];
+    float prevWeight = ge_ddgiGlossyWeight[stateIdx];
+    if (!GE_DDGIFinite(prevNumerator) || !GE_DDGIFinite(vec4(prevWeight)))
+    {
+        prevNumerator = vec4(0.0);
+        prevWeight = 0.0;
+    }
+
+    // Seed instantly when there is no history. Emptiness is read off the
+    // DENOMINATOR, never off numerator energy: a fully uncovered texel is a
+    // legitimate all-zero numerator that must keep its history, and treating
+    // it as unseeded would restart its temporal filter every tick.
+    float h = GE_DDGIHysteresisWeight(DDGIParams.uParams0.x, DDGIParams.uTiming.x);
+    if (prevWeight < 1.0e-6 || ge_ddgiProbeCell[probeIdx].w > 0.5)
+        h = 0.0;
+
+    ge_ddgiGlossyNumerator[stateIdx] = mix(curNumerator, prevNumerator, h);
+    ge_ddgiGlossyWeight[stateIdx] = max(mix(curWeight, prevWeight, h), 1.0e-6);
+}

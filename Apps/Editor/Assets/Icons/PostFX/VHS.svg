@@ -1,0 +1,19 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+  <defs>
+    <radialGradient id="vhsSheenC" cx="50%" cy="42%" r="62%">
+      <stop offset="0" stop-color="#E86BB0" stop-opacity=".5"/>
+      <stop offset=".6" stop-color="#4FD6E8" stop-opacity=".22"/>
+      <stop offset="1" stop-color="#4FD6E8" stop-opacity="0"/>
+    </radialGradient>
+    <radialGradient id="vhsReelC" cx="50%" cy="50%" r="50%">
+      <stop offset="0" stop-color="#E8E4DC" stop-opacity=".85"/>
+      <stop offset="1" stop-color="#E8E4DC" stop-opacity="0"/>
+    </radialGradient>
+  </defs>
+  <rect x="2.6" y="5.4" width="18.8" height="13.2" rx="2.8" fill="url(#vhsSheenC)" stroke="#E8E4DC"/>
+  <circle cx="8.6" cy="11.4" r="3.4" fill="url(#vhsReelC)" stroke="none"/>
+  <circle cx="15.4" cy="11.4" r="3.4" fill="url(#vhsReelC)" stroke="none"/>
+  <circle cx="8.6" cy="11.4" r="2.7" stroke="#E86BB0"/>
+  <circle cx="15.4" cy="11.4" r="2.7" stroke="#4FD6E8"/>
+  <path d="M6.4 16.4h11.2" stroke="#E8E4DC" opacity=".55"/>
+</svg>

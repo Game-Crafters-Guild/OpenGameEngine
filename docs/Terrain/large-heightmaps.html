@@ -1,0 +1,324 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Large Heightmaps</title>
+<style>
+  :root {
+    --bg: #11151b; --panel: #1b222c; --panel-light: #222b38; --border: #344152;
+    --text: #e5eaf0; --muted: #a4afbd; --accent: #83baff; --ok: #6bd08a; --warn: #e7c06a;
+  }
+  * { box-sizing: border-box; }
+  body {
+    background: var(--bg); color: var(--text);
+    font: 16px/1.62 -apple-system, "Segoe UI", system-ui, sans-serif;
+    max-width: 940px; margin: 40px auto; padding: 0 24px;
+  }
+  h1 { font-size: 30px; margin: 0 0 6px; }
+  h2 { font-size: 21px; margin: 44px 0 14px; padding-top: 22px; border-top: 1px solid var(--border); }
+  h3 { font-size: 16px; margin: 24px 0 8px; color: var(--accent); }
+  p.lede { color: var(--muted); font-size: 12px; letter-spacing: .05em; text-transform: uppercase; margin: 0 0 26px; }
+  code { font-family: "Cascadia Code", Consolas, monospace; font-size: 13.5px; color: var(--accent);
+         background: rgba(255,255,255,.045); border-radius: 4px; padding: 1px 5px; }
+  pre { background: rgba(255,255,255,.045); border: 1px solid var(--border); border-radius: 6px;
+        padding: 12px 14px; overflow-x: auto; font-size: 13.5px; }
+  pre code { background: none; padding: 0; }
+  table { border-collapse: collapse; width: 100%; margin: 14px 0 20px; font-size: 14px; }
+  th { text-align: left; background: var(--panel-light); color: var(--muted); font-weight: 600;
+       padding: 8px 10px; border-bottom: 1px solid var(--border); }
+  td { padding: 8px 10px; border-bottom: 1px solid var(--border); vertical-align: top; }
+  tr:hover td { background: rgba(255,255,255,.025); }
+  .panel { background: var(--panel); border: 1px solid var(--border); border-left: 4px solid var(--accent);
+           border-radius: 6px; padding: 12px 16px; margin: 18px 0; }
+  .panel.ok { border-left-color: var(--ok); }
+  .panel.warn { border-left-color: var(--warn); }
+  .panel-title { font-weight: 600; margin: 0 0 6px; }
+  .panel p:last-child { margin-bottom: 0; }
+  ul, ol { padding-left: 22px; } li { margin: 5px 0; }
+  footer { color: var(--muted); font-size: 12.5px; margin-top: 48px; padding-top: 14px;
+           border-top: 1px solid var(--border); }
+</style>
+</head>
+<body>
+
+<p class="lede">Guide &middot; terrain / heightmaps</p>
+<h1>Large Heightmaps</h1>
+<p>A terrain can take its ground from a real-world elevation model (a DEM) instead of procedural noise:
+export it as a raw heightmap, set its grid in the asset's import settings, and pick it as the terrain's
+base. This page is the import, the binding from the inspector and from code, what re-reads when, the
+sizes at which streaming takes over, and what a large terrain costs.</p>
+
+<h2>The short version</h2>
+<div class="panel ok">
+<p class="panel-title">Four steps.</p>
+<ol>
+  <li>Export the DEM as <code>.r32</code> (32-bit float heights in meters, row by row, the first row on the
+  south edge) and drop it into the project. It imports as a <b>Terrain Heightmap</b> asset.</li>
+  <li>Select the asset and set its <b>Samples X</b> to the samples per row it was exported with; Samples Z
+  follows from the file. A square file needs nothing.</li>
+  <li>Select the terrain, set <b>Base Source</b> to <b>Heightmap</b> and pick the asset.</li>
+  <li>Set <b>Size X</b> and <b>Size Z</b> to the extent in meters, <b>Height Scale</b> to 1, and
+  <b>Samples Per Meter</b> to the density you want the terrain to have.</li>
+</ol>
+</div>
+
+<h2>Importing a DEM</h2>
+<p>Three formats are read as a terrain's base:</p>
+<table>
+<thead><tr><th>File</th><th>Samples</th><th>Height in the world</th></tr></thead>
+<tbody>
+<tr><td><code>.r32</code></td><td>32-bit float, little-endian, row-major</td><td>sample &times; Height Scale. With Height Scale 1 a sample is meters.</td></tr>
+<tr><td><code>.r16</code></td><td>16-bit unsigned, little-endian, row-major</td><td>sample / 65535 &times; Height Scale</td></tr>
+<tr><td>16-bit PNG</td><td>imported as a Texture asset</td><td>value / 65535 &times; Height Scale</td></tr>
+</tbody>
+</table>
+<p>A raw file is the samples and nothing else. The first row is the terrain's edge at the smallest Z; each
+row runs along +X. Its grid is the asset's Import Settings, shown in its inspector with the file's format
+and sample count:</p>
+<ul>
+  <li><b>Samples X</b>: samples per row (along X). <b>Samples Z</b>: rows (along Z).</li>
+  <li>Set one and leave the other at 0: the other is the file's sample count divided by it. A value that
+  does not divide the count is refused, with the nearest values that do.</li>
+  <li>Both left at 0, the grid is assumed square. A non-square file whose sample count is not a square number
+  is refused; the notice says to set Samples X.</li>
+  <li>Both set, they must account for every sample of the file, or the heightmap is refused with the numbers
+  that disagree.</li>
+  <li>Each edit can be undone.</li>
+</ul>
+<div class="panel warn">
+<p class="panel-title">A non-square file with a square sample count reads as stripes until its grid is set.</p>
+<p>16384 &times; 4096 is 8192&sup2; samples, so with no grid set it reads as an 8192 &times; 8192
+grid: each row is half a source row and neighboring rows alternate between the two halves. On a canyon
+DEM the height step between neighboring rows jumps from about 1 m to about 200 m, and the terrain looks
+like noise. The asset inspector says which grid the file reads as; set the real one.</p>
+</div>
+<p>The sidecar files some exporters write (<code>.hdr</code>, <code>.json</code>, world files) are not
+read. The terrain does not read the DEM's own spacing either: the meters per DEM sample is the terrain's
+size divided by the samples: Size X / (Samples X &minus; 1) along X. The Terrain inspector's Base section
+says when the heightmap's shape does not match Size X : Size Z (including Samples X and Samples Z typed the
+wrong way round), and when Samples Per Meter is finer than the heightmap, with a
+<b>Match Heightmap</b> action that sets it to the heightmap's density.</p>
+
+<h2>Binding it as the base</h2>
+<h3>From the inspector</h3>
+<p>The Terrain inspector's <b>Base</b> section (planar terrains) holds <b>Base Source</b>
+(<b>Procedural Noise</b>, <b>Heightmap</b>, <b>Flat</b>) and, for Heightmap, the <b>Heightmap</b> asset
+field. When the heightmap gives no heights, the section says why and offers <b>Select Heightmap</b>, which
+selects the asset so its Samples X and Samples Z can be set.</p>
+<h3>From code</h3>
+<pre><code>auto&amp; terrain = *world.GetComponent&lt;Components::Terrain&gt;(entity);
+terrain.BaseSource = Components::TerrainBaseSource::HeightmapAsset;
+terrain.TerrainAssetGuid.Set(heightmapGuid);
+terrain.SizeX = 8192.0f;
+terrain.SizeZ = 2048.0f;
+terrain.HeightScale = 1.0f;
+terrain.SamplesPerMeter = 2.0f;</code></pre>
+<p>Nothing else is needed: the terrain notices the change on the next frame.</p>
+<h3>From the debug port</h3>
+<pre><code>set_component Terrain {"baseSource": 1, "terrainAsset": "&lt;heightmap guid&gt;"}</code></pre>
+<p>The GUID is the 8-4-4-4-12 hex form; <code>""</code> or <code>0</code> clears it.</p>
+<p><code>baseSource</code> is the number (0 noise, 1 heightmap, 2 flat). <code>get_entity_components</code>
+reports <code>BaseSource</code> and <code>TerrainAsset</code>.</p>
+
+<h2>What re-reads, and when</h2>
+<table>
+<thead><tr><th>Change</th><th>What happens</th></tr></thead>
+<tbody>
+<tr><td>Base Source or the heightmap asset</td><td>The next frame rebuilds the terrain's ground from the new base: a streamed terrain rebuilds its tile set; a small one refills its heights and re-applies its modifiers.</td></tr>
+<tr><td>The file on disk (re-export)</td><td>Re-read the next frame; the same rebuild.</td></tr>
+<tr><td>The heightmap's Samples X or Samples Z</td><td>Re-read through the same path as a re-export.</td></tr>
+<tr><td>Size, Samples Per Meter</td><td>Rebuilt once the value stops changing (a drag rebuilds once, at the end).</td></tr>
+</tbody>
+</table>
+<p>Modifiers (sculpt, flatten, paint, surface rules) apply on top of the base and are re-applied after it
+changes; they do not replace it.</p>
+
+<h2>Sizes, streaming and the atlas</h2>
+<p>The terrain's density is <b>Samples Per Meter</b>, not the DEM's: the DEM is resampled onto the
+terrain's own grid. What that grid costs follows from the samples along the longer side:</p>
+<table>
+<thead><tr><th>Samples along the longer side</th><th>How it is held</th></tr></thead>
+<tbody>
+<tr><td>up to 1025</td><td>One heightmap, always resident.</td></tr>
+<tr><td>1026 to 8193</td><td>Tiles of 1025 samples, all resident, drawn from one whole-terrain texture.</td></tr>
+<tr><td>above 8193</td><td>Tiles stream into a resident window around the camera at full detail; everything outside it is drawn from one coarse field spanning the whole terrain.</td></tr>
+</tbody>
+</table>
+<p>The Terrain inspector states the plan for the current values (tiles, resident window, coarse-field
+spacing, predicted memory) before you commit them.</p>
+
+<h2>What a large terrain costs</h2>
+<ul>
+  <li><b>GPU memory</b> follows the terrain's samples, not the DEM's: the height, splat and normal maps
+  hold every resident sample, so doubling Samples Per Meter quadruples them. The inspector's sizing
+  notice states the prediction for the current values. A kilometers-wide field at 0.5 m already fills
+  the resident window's budget.</li>
+  <li><b>CPU memory</b>: the decoded DEM stays in memory while a terrain uses it, 4 bytes per sample for
+  <code>.r32</code>.</li>
+  <li><b>Frame time</b> is highest at flight altitude, where the terrain refines across the whole view
+  and a dense near field keeps its triangle pool close to full; at eye level and from far away it is
+  low.</li>
+  <li>Finer than 0.5 m over kilometers: split the data into a smaller high-detail terrain over the area
+  that needs it.</li>
+</ul>
+
+<h2>Cooked terrain pages</h2>
+<p>A raw heightmap (<code>.r16</code> or <code>.r32</code>) is also cooked into a <b>page store</b>: the heightmap as a
+pyramid of small pages, each level half the resolution of the one below, which the terrain will stream a page at a
+time instead of decoding the whole file.</p>
+<ul>
+  <li>Cooked stores live in the project's <code>.Cache/TerrainPages</code> folder, one per heightmap, named for the
+  asset and its content. Two terrains on the same heightmap share one store. After an edit of the heightmap, or of its
+  Samples X and Samples Z, the next export cooks it again; an edit that keeps the height range rewrites
+  only the pages that changed.</li>
+  <li>The folder is derived data: deleting it is safe, and it is rebuilt on the next cook. Keep it out of version
+  control, like the rest of <code>.Cache</code>.</li>
+  <li>Exporting the game packs each shipped heightmap's store into one file,
+  <code>Assets/Cooked/Terrain/&lt;asset id&gt;.geterrain</code>, cooking it first if it changed. A heightmap whose grid
+  cannot be resolved is reported in the export's warnings, with the fix.</li>
+  <li>A cook reads the heightmap a band of rows at a time, so its memory does not grow with the file. Measured on
+  a 60 &times; 15 km heightmap at 0.25 m (57.6 GB of <code>.r32</code>): about 50 s to read the file once and 2.5
+  min to cook a 79 GB store, on a fast NVMe drive.</li>
+  <li>16-bit PNG heightmaps are not cooked into pages; they keep the limit stated below.</li>
+</ul>
+<h3>What streams at runtime</h3>
+<ul>
+  <li>A streamed terrain (tiles, above 1025 samples along the longer side) on a raw heightmap draws its height
+  from its pages: the pages under and near the camera at full detail, coarser levels further out, a page loaded
+  when it comes into view and released 30 frames after it leaves it. The splat and normal maps still
+  stream as tiles.</li>
+  <li>Height modifiers (stamps, flattens, corridors, zones, brush strokes) reach the pages: the terrain shows them
+  from its first frame, and an edit rewrites only the pages it touched. The modifiers are baked on the terrain's
+  tile grid, so this needs a heightmap of the same size. Tiles share their edge samples, and their size follows
+  Samples Per Meter (usually 1025 samples, fewer on a terrain whose shorter side is under 1024 / Samples Per Meter
+  meters), so the grid has one sample more than a whole number of tiles: a 4 &times; 1 km terrain at 4 samples per
+  meter is 16 &times; 4 tiles of 1025 samples, 16385 &times; 4097. A heightmap of another size, such as a
+  power-of-two 16384 &times; 4096, streams while no height modifier reaches it and draws from its height texture
+  once one does; the log names the size to import it at.</li>
+  <li>While a store is cooking, the Scene View shows <b>Preparing terrain pages 42%: <i>terrain name</i></b> at the
+  top of the view (with "and N more" when several cook at once), and the terrain draws from its height texture
+  as before. When the cook finishes, the terrain switches to its pages within a few frames. A scene that loads
+  while a large store cooks keeps the editor busy, so the banner advances in steps.</li>
+  <li>The game's Player opens the store packed into the exported game and never cooks. A heightmap shipped
+  without a store draws from its height texture, and the Player's log says so.</li>
+  <li>The web build and GPUs without 64-bit shader integers keep drawing from the height texture.</li>
+</ul>
+<p>What a platform spends on height pages:</p>
+<table>
+<thead><tr><th></th><th>Desktop</th><th>Steam Deck</th></tr></thead>
+<tbody>
+<tr><td>Page cache (GPU)</td><td>512 pages, 33 MiB</td><td>256 pages, 16.5 MiB</td></tr>
+<tr><td>Largest terrain that streams</td><td>a page table of 2,097,152 entries (8 MiB): a 60 &times; 15 km
+terrain at 0.25 m streams</td><td>524,288 entries (2 MiB): about 24 &times; 6 km at 0.5 m, or 60 &times; 15 km
+at 1 m</td></tr>
+<tr><td>Height modifiers (system memory)</td><td>512 MiB of modified area per terrain: about 6 km&sup2; at
+0.25 m</td><td>128 MiB: about 1.5 km&sup2; at 0.25 m</td></tr>
+</tbody>
+</table>
+<p>A terrain over one of these limits draws from its height texture, and the log states why, once, with the fix:</p>
+<ul>
+  <li>Too large: <i>"&lt;terrain&gt; (X x Z samples) does not stream its height on this platform: its page
+  table needs ... words,
+  over the platform's cap of ... words. It draws from its height texture. Lower its samples per meter or its
+  size to stream it."</i></li>
+  <li>Modifiers reach too much of it: <i>"&lt;terrain&gt; does not stream its height on this platform: its height
+  modifiers reach so much of it that their page overlay needs ... bytes, over the platform's cap of ... bytes.
+  It draws from its height texture. Shrink the modifiers' bounds (a terrain-wide modifier reaches every
+  sample) or lower the terrain's samples per meter to stream it."</i> A modifier with no bounds reaches the
+  whole terrain: on an 8 &times; 2 km terrain at 0.25 m that is 1366 MiB, over the desktop's 512 MiB.</li>
+  <li>Modifiers on a heightmap of another size: <i>"&lt;terrain&gt; does not stream its height while height modifiers
+  reach it: its heightmap's grid (X x Z samples) is not the terrain's tile lattice (X' x Z' samples), on which the
+  modifiers are baked. It draws from its height texture. Import the heightmap at X' x Z' samples to stream it with
+  its modifiers."</i></li>
+</ul>
+
+<h2>An orthophoto as the terrain's albedo</h2>
+<p>A terrain material normally lays its textures on from three sides and blends them by slope
+(<b>Projection: Triplanar</b>). That is right for a texture that tiles, such as rock, grass or sand. It is
+wrong for an image of this particular terrain, such as an orthophoto or a painted basemap: on a cliff the side
+projections pick the image row by height, so the cliff shows an unrelated part of the photo.</p>
+<p>Set the material's <b>Projection</b> to <b>Planar</b> in the terrain material library:</p>
+<ul>
+  <li>Planar lays the image straight down at the terrain's own coordinates, north up: the world's +Z is north,
+  image column 0 is the terrain's edge at the smallest X (west) and image row 0 is the edge at the largest Z
+  (north), which is how an image file stores a north-up photo. An orthophoto cut to the same area as the DEM
+  lies on the relief it was captured with, without flipping it. (The <code>.r32</code> heightmap is the other
+  way round: its first row is the smallest-Z edge, as above.)</li>
+  <li>The image spans the terrain along each axis independently, 0 to 1 along X and 0 to 1 along Z, so a
+  non-square image goes on a non-square terrain as it is: a 4:1 photo of a 60 &times; 15 km area at Tiling 1
+  covers that terrain exactly.</li>
+  <li>A cliff shows the photo stretched down its face. That is the photo's own content at that spot, not
+  another part of the image.</li>
+  <li><b>Tiling</b> means repeats across the whole terrain for a Planar material: 1 is one image over the whole
+  terrain, and 4 repeats it four times along each side, which turns Planar into a top-down tiled texture. The
+  terrain's Material Tiling (meters per repeat) does not apply. Below 1 the terrain shows only part of the image,
+  enlarged (0.5 shows its north-west quarter); 0 reads as 1.</li>
+  <li>The material's normal and ORM maps use the same projection as its albedo, so they stay registered with it.
+  The terrain's own normal map and splat are read at the terrain's coordinates as always.</li>
+  <li><b>Hex Tiling</b> stays as you set it. It shuffles the image, which is what a tiling texture wants and what
+  a photo must not have: leave it off for an orthophoto.</li>
+  <li>On a streamed terrain the image covers exactly <b>Size X</b> &times; <b>Size Z</b>. At Tiling 1 (or less) it
+  is sampled clamped to its edges, so the terrain's borders and the strip where the tile grid runs past the
+  terrain's edge show the image's own edge pixels, not the opposite edge. Above 1 it repeats.</li>
+  <li>Planar is for heightfield terrains. On a planet the terrain's coordinates are per cube face, so a Planar
+  material shades as Triplanar there.</li>
+  <li>A material without an albedo texture is unaffected by its projection; it still shades from its tint.</li>
+  <li>The photo shows only where its material is painted. Ground whose channel is painted with another material
+  (cliffs painted Rock by a surface rule, say) shows that material, not the photo.</li>
+</ul>
+<h3>From an exported orthophoto band to the terrain</h3>
+<ol>
+  <li>Export the DEM as <code>.r32</code> with its first row on the south edge (the smallest Z) and import it as
+  above; that is the order a heightmap is read in, and it is the one the orthophoto below is matched to.</li>
+  <li>Export the orthophoto in the same projection as the DEM, cropped to exactly the DEM's extent (the same
+  west, east, south and north bounds), north up. Image services and GIS exports write north-up by default;
+  do not flip it.</li>
+  <li>Keep the image's aspect the same as the terrain's: a 60 &times; 15 km terrain takes a 4:1 image, such as
+  8192 &times; 2048.</li>
+  <li>Drop the image into the project. In its import settings keep <b>Color Space</b> on Auto or sRGB (it is a
+  color map) and <b>Generate Mips</b> on. A terrain material's texture is uploaded uncompressed today, whatever
+  its Compression setting (#3014): an 8192 &times; 2048 image takes about 85 MiB of GPU memory with its mips.</li>
+  <li>In the terrain's material library, set the image as a material's <b>Albedo</b>, <b>Projection</b> to
+  <b>Planar</b>, <b>Tiling</b> to 1 and <b>Hex Tiling</b> off, and bind that material to the channel the
+  terrain paints (Grass, by default, on an unpainted terrain). The terrain shows the change at once.</li>
+</ol>
+<p>The largest image the GPU can hold is its maximum 2D texture size (Vulkan's
+<code>maxImageDimension2D</code>): 32768 pixels on current NVIDIA desktop GPUs, 16384 on many others. A
+16384-pixel image over 60 km is about 3.7 m per pixel; for finer coverage of part of the area, use a second,
+smaller terrain with its own image over that part.</p>
+
+<h2>Limits today</h2>
+<ul>
+  <li>The whole DEM is decoded into memory when the terrain first needs it and stays decoded while used:
+  a 16384 &times; 4096 <code>.r32</code> is 256 MiB of CPU memory, decoded on the main thread.</li>
+  <li>A 16-bit PNG is decoded whole, so it holds at most about 1.07 billion grayscale samples (32768 &times;
+  32767; fewer with color channels). A larger PNG does not decode, and the Terrain inspector&rsquo;s Base
+  section says so and gives the fix: export the heightmap as <code>.r32</code>, which has no size limit.</li>
+  <li>Outside the resident window the terrain is drawn from one coarse field over the longer side, so a
+  long, narrow terrain spends most of that field's rows outside itself.</li>
+  <li>The Scene View's <b>Far Clip</b> (camera settings, default 3000 m) is not widened for a large planar
+  terrain: raise it to see one whole.</li>
+  <li>The normal and splat maps are read from above, one texel per terrain sample, so on a near-vertical
+  wall their texels stretch down the slope; a higher Samples Per Meter shortens the stretch. Triplanar
+  material textures are projected from three sides on slopes steeper than about 31&deg; and from above on
+  gentler ground; a Planar material is always projected from above.</li>
+  <li>In Play mode a streamed terrain's colliders are currently built at the world origin.</li>
+</ul>
+
+<h2>Changelog</h2>
+<ul>
+  <li>2026-10-06: first version: raw heightmap width and height as import settings, the Base section, the
+  debug-port binding, the size thresholds, what a large terrain costs. The grid fields are Samples X and
+  Samples Z, one is enough, edits undo, and the Base section reports a stretched or over-sampled
+  heightmap.</li>
+  <li>2026-10-06: the 16-bit PNG size limit, and the notice past it.</li>
+  <li>2026-10-06: an orthophoto as the terrain's albedo: the material Projection (Triplanar or Planar), Tiling
+  for a Planar material, and the hex tiling rule.</li>
+  <li>2026-10-06: cooked terrain pages: the <code>.Cache/TerrainPages</code> folder and the exported <code>.geterrain</code> container.</li>
+  <li>2026-10-07: what streams at runtime: modified terrains stream, the cook banner, the budgets per platform and the refusals, including a modified heightmap off the tile grid.</li>
+</ul>
+
+<footer>Large Heightmaps &middot; 2026-10-07</footer>
+</body>
+</html>

@@ -1,0 +1,77 @@
+#version 450
+
+// Pass 1 of the two-frame FXAA (Decima 2017): compact luma-based FXAA on the
+// tonemapped LDR frame. Runs at the END of the post chain (after tonemap, DoF,
+// vignette, ...), so the input is display-referred — but display-referred
+// LINEAR, not perceptual: the sRGB OETF is applied downstream by the terminal
+// encode, so Luma() below does the perceptual encode itself. Output feeds the
+// fxaa_resolve pass, which sharpens and merges it 50/50 with the reprojected
+// previous frame.
+
+layout(local_size_x = 8, local_size_y = 8) in;
+
+layout(set = 0, binding = 0, rgba16f) uniform writeonly image2D uOutColor;
+layout(set = 0, binding = 1) uniform sampler2D uSceneColor;
+
+// FXAA edge gate: skip pixels whose local luma range is below the larger of an
+// absolute floor and a fraction of the local max (the FXAA 3.11 quality knobs).
+const float kEdgeThresholdMin = 0.0312;
+const float kEdgeThresholdMax = 0.125;
+const float kSpanMax = 8.0;
+const float kReduceMul = 0.25 * 0.25;
+const float kReduceMin = 1.0 / 128.0;
+
+#include "Includes/perceptual_luma.glsl"
+
+// Edge detection runs on perceptual luma, not the linear RGB this pass is
+// handed — see the include for the curve and why.
+float Luma(vec3 c) { return GE_PerceptualLuma(c); }
+
+void main()
+{
+    const ivec2 size = imageSize(uOutColor);
+    const ivec2 p = ivec2(gl_GlobalInvocationID.xy);
+    if (p.x >= size.x || p.y >= size.y)
+        return;
+
+    const vec2 texel = 1.0 / vec2(size);
+    const vec2 uv = (vec2(p) + 0.5) * texel;
+
+    const vec3 rgbM = texture(uSceneColor, uv).rgb;
+    const float lM = Luma(rgbM);
+    const float lNW = Luma(texture(uSceneColor, uv + vec2(-1.0, -1.0) * texel).rgb);
+    const float lNE = Luma(texture(uSceneColor, uv + vec2(1.0, -1.0) * texel).rgb);
+    const float lSW = Luma(texture(uSceneColor, uv + vec2(-1.0, 1.0) * texel).rgb);
+    const float lSE = Luma(texture(uSceneColor, uv + vec2(1.0, 1.0) * texel).rgb);
+
+    const float lMin = min(lM, min(min(lNW, lNE), min(lSW, lSE)));
+    const float lMax = max(lM, max(max(lNW, lNE), max(lSW, lSE)));
+    const float range = lMax - lMin;
+    if (range < max(kEdgeThresholdMin, lMax * kEdgeThresholdMax))
+    {
+        imageStore(uOutColor, p, vec4(rgbM, 1.0));
+        return;
+    }
+
+    // Edge direction from the diagonal luma gradient, reduced and clamped to a
+    // bounded texel-space span (classic FXAA console reconstruction).
+    vec2 dir;
+    dir.x = -((lNW + lNE) - (lSW + lSE));
+    dir.y = ((lNW + lSW) - (lNE + lSE));
+    const float dirReduce = max((lNW + lNE + lSW + lSE) * kReduceMul, kReduceMin);
+    const float rcpDirMin = 1.0 / (min(abs(dir.x), abs(dir.y)) + dirReduce);
+    dir = clamp(dir * rcpDirMin, vec2(-kSpanMax), vec2(kSpanMax)) * texel;
+
+    const vec3 rgbA =
+        0.5 * (texture(uSceneColor, uv + dir * (1.0 / 3.0 - 0.5)).rgb +
+               texture(uSceneColor, uv + dir * (2.0 / 3.0 - 0.5)).rgb);
+    const vec3 rgbB =
+        rgbA * 0.5 + 0.25 * (texture(uSceneColor, uv + dir * -0.5).rgb +
+                             texture(uSceneColor, uv + dir * 0.5).rgb);
+    const float lB = Luma(rgbB);
+
+    // The wide (rgbB) tap can overshoot at strong edges; fall back to the narrow
+    // (rgbA) average when it leaves the local luma envelope.
+    const vec3 result = (lB < lMin || lB > lMax) ? rgbA : rgbB;
+    imageStore(uOutColor, p, vec4(result, 1.0));
+}

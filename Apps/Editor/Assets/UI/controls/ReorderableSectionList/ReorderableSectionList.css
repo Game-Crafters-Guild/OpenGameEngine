@@ -1,0 +1,20 @@
+.reorderable-section-list {
+    display: flex;
+    flex-direction: column;
+    align-self: stretch;
+    min-width: 0;
+}
+
+.reorderable-section-list-line {
+    position: absolute;
+    left: 0px;
+    height: 2px;
+    display: none;
+    pointer-events: none;
+    background-color: var(--ui_color_accent_blue);
+    z-index: 10;
+}
+
+.reorderable-section-list-line-shown {
+    display: flex;
+}

@@ -1,0 +1,15 @@
+{
+  "name": "lore-vcs",
+  "version": "1.0.0",
+  "displayName": "Lore Version Control",
+  "assets": "Assets/",
+  "modules": [
+    {
+      "name": "lore-vcs-editor",
+      "kind": "Editor",
+      "lang": "Cpp",
+      "root": "Editor/",
+      "prebuilt": "Binaries/"
+    }
+  ]
+}

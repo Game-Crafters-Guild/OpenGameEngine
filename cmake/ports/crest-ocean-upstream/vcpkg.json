@@ -1,0 +1,7 @@
+{
+  "name": "crest-ocean-upstream",
+  "version-string": "4.23.0",
+  "description": "Pinned Crest Ocean System license metadata for the Ocean module reference implementation.",
+  "homepage": "https://github.com/wave-harmonic/crest",
+  "license": "MIT"
+}

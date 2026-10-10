@@ -1,0 +1,293 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Regional Terrain Grass — height and density controls</title>
+<style>
+  :root{
+    --bg:#0e1116; --panel:#161b22; --panel-light:#1c232c; --border:#2a323d;
+    --text:#d7dde5; --muted:#8b97a6; --accent:#5db0ff;
+    --danger:#ff6b6b; --bad:#ff6b6b; --ok:#5ad19b; --good:#5ad19b; --warn:#e8c468;
+    --mono:"SF Mono",ui-monospace,Menlo,Consolas,monospace;
+  }
+  *{box-sizing:border-box}
+  body{background:var(--bg);color:var(--text);font:15px/1.6 -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif;
+       margin:0;padding:0 0 80px}
+  .wrap{max-width:980px;margin:0 auto;padding:32px 24px}
+  h1{font-size:30px;margin:0 0 4px;letter-spacing:-.4px}
+  h2{font-size:22px;margin:42px 0 14px;padding-top:22px;border-top:1px solid var(--border)}
+  h3{font-size:17px;margin:26px 0 8px;color:#e9eef4}
+  p,li{color:var(--text)}
+  .lede{color:var(--muted);font-size:13px;text-transform:uppercase;letter-spacing:.12em;margin:0 0 26px}
+  a{color:var(--accent);text-decoration:none}
+  code{font-family:var(--mono);font-size:.88em;background:#11161d;border:1px solid var(--border);
+       border-radius:4px;padding:1px 5px}
+  pre{font-family:var(--mono);font-size:12.5px;line-height:1.5;background:#0b0f14;border:1px solid var(--border);
+      border-radius:8px;padding:14px 16px;overflow:auto}
+  pre code{background:none;border:none;padding:0}
+  .panel{border:1px solid var(--border);border-left-width:4px;border-radius:8px;background:var(--panel);
+         padding:14px 18px;margin:16px 0}
+  .panel.danger{border-left-color:var(--danger)} .panel.ok{border-left-color:var(--ok)}
+  .panel.warn{border-left-color:var(--warn)} .panel.before{border-left-color:#a06bff}
+  .panel.after{border-left-color:var(--ok)}
+  .panel h4{margin:0 0 6px;font-size:14px;text-transform:uppercase;letter-spacing:.06em}
+  .panel.danger h4{color:var(--danger)} .panel.ok h4{color:var(--ok)}
+  .panel.warn h4{color:var(--warn)} .panel.before h4{color:#a06bff} .panel.after h4{color:var(--ok)}
+  .grid-2{display:grid;grid-template-columns:1fr 1fr;gap:16px}
+  @media(max-width:760px){.grid-2{grid-template-columns:1fr}}
+  table{border-collapse:collapse;width:100%;margin:16px 0;font-size:13.5px}
+  th,td{border:1px solid var(--border);padding:8px 11px;text-align:left;vertical-align:top}
+  th{background:var(--panel-light);color:#e9eef4}
+  tr:hover td{background:#12171e}
+  .pill{display:inline-block;font-size:11px;font-weight:600;border-radius:20px;padding:2px 9px;letter-spacing:.03em}
+  .pill.new{background:rgba(90,209,155,.15);color:var(--ok);border:1px solid var(--ok)}
+  .pill.del{background:rgba(255,107,107,.15);color:var(--danger);border:1px solid var(--danger)}
+  .pill.mod{background:rgba(232,196,104,.15);color:var(--warn);border:1px solid var(--warn)}
+  .pill.keep{background:rgba(139,151,166,.15);color:var(--muted);border:1px solid var(--muted)}
+  .muted{color:var(--muted)}
+  ul{padding-left:22px} li{margin:4px 0}
+  .step{border:1px solid var(--border);border-radius:8px;background:var(--panel);padding:12px 16px;margin:10px 0}
+  .step b{color:var(--accent)}
+  footer{max-width:980px;margin:40px auto 0;padding:18px 24px 0;border-top:1px solid var(--border);color:var(--muted);font-size:12.5px}
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <h1>Regional Terrain Grass</h1>
+  <p class="lede">Feature guide · terrain authoring / grass placement</p>
+
+  <p>A terrain carries one grass profile: one blade height, one density, one set of look
+  parameters for the whole surface. That profile has to be the wild maximum, because nothing
+  could reduce it locally — so a village, a courtyard or a worn path was either knee-deep in
+  the same grass as the meadow around it, or the whole terrain had to be shortened to suit the
+  village.</p>
+
+  <p><code>TerrainGrassEffect</code> is the modifier effect that shortens or thins that profile
+  inside a region. It rides the existing modifier volume — the same circle, rectangle, spline
+  path, spline area and global footprints, the same falloff, master weight, enable state and
+  priority as <code>Flatten</code>, <code>HeightOffset</code>, <code>Noise</code>,
+  <code>Stamp</code>, <code>PaintLayer</code>, <code>SurfaceRules</code> and
+  <code>GroundClaim</code>.</p>
+
+  <h2>Authoring</h2>
+
+  <div class="step"><b>1.</b> Add <b>Terrain: Grass Area</b> from the component presets, or add
+  <b>Grass</b> to an existing modifier volume's effect stack.</div>
+  <div class="step"><b>2.</b> Shape and place the volume as for any other terrain effect. The
+  volume's falloff is what feathers the grass transition.</div>
+  <div class="step"><b>3.</b> Set <b>Height</b> and <b>Density</b>. Nothing else is needed: both
+  default to <b>100%</b>, so a region added and left alone changes nothing until you move one.</div>
+
+  <table>
+    <tr><th>Inspector</th><th>Stored field</th><th>Meaning</th></tr>
+    <tr><td><b>Height</b>, 0-100%, default 100%</td><td><code>HeightScale</code>, [0,1], default 1</td>
+        <td>Blade (or card) height as a percentage of the terrain's own grass height; the field shows
+        the absolute it lands on when one terrain carries grass. <code>0</code> admits no blades at
+        all.</td></tr>
+    <tr><td><b>Density</b>, 0-100%, default 100%</td><td><code>DensityScale</code>, [0,1], default 1</td>
+        <td>Percentage of the terrain's own grass density, shown alongside the resulting blades per
+        square metre. <code>0</code> admits no blades. Surviving blades keep the position, yaw, width
+        and randomness they had before the region existed, so lowering density thins a field rather
+        than reshuffling it.</td></tr>
+  </table>
+
+  <p>Both controls are percentages of the terrain's grass settings, and the stored fields stay plain
+  <code>[0,1]</code> multipliers — the percentage is presentation, the multiplier is the
+  content.</p>
+
+  <p>Nonfinite values are refused by the scene schema; finite values are clamped to
+  <code>[0,1]</code> on load, in the inspector and at gather, so a value written straight
+  through ECS is bounded too.</p>
+
+  <div class="panel warn">
+    <h4>A practical floor on Height Scale</h4>
+    <p>At the shipped profile (0.72&nbsp;m blades) a Height below about <b>50%</b> stops reading as
+    short grass and starts reading as ground color: the blades are under 36&nbsp;cm, which at eye
+    height barely clears the terrain surface. Measured at a fixed pose over a fixed interior
+    rectangle with density held at 100%, the interior's luminance contrast falls to 60% of the
+    untouched field at 50%, 47% at 35% and 33% at 25% — the halfway crossing sits between 35% and
+    50%. If a region needs to look sparser rather than shorter, lower <b>Density</b> instead; the
+    two read differently.</p>
+  </div>
+
+  <h3>How overlapping regions compose</h3>
+
+  <p>Each terrain sample starts neutral at <code>(1,1)</code> and walks the volume stack in
+  priority order, applying <code>lerp(current, target, ease(volumeWeight))</code> per effect. It
+  is an ordered <em>target</em> blend, not a product: a later region with target <code>1</code>
+  restores the full profile over an earlier suppression, which is how you cut a full-height
+  clearing back into a thinned area. The corollary is that a neutral effect is not a no-op if
+  it sits above a suppression — it has to stay in the stack to keep restoring.</p>
+
+  <p>The <code>ease</code> is a smoothstep over the volume's own falloff weight, applied to grass
+  only. The shared weight ramps linearly from 0 at the outer edge of the falloff to 1 at the inner
+  boundary, which is right for a height offset: the ground it produces <em>is</em> that ramp. Grass
+  is not that ramp. Measured on a region with a 60&nbsp;m inner radius and a 25&nbsp;m falloff, the
+  coverage an eye picks up is an <b>S-curve under either blend</b>, steepest in the middle of the
+  band (r&nbsp;≈&nbsp;75&nbsp;m) and far shallower at both boundaries than mid-band &mdash; the linear
+  blend still arrives at the outer edge at roughly 40% of its peak slope, which is the corner the
+  ease softens. That shape is consistent with visible coverage saturating in a dense field: it
+  holds near full until height &times; density has fallen well below 1. What the smoothstep changes
+  is the <em>corners</em>. It has zero slope at both ends of the weight, so the slope jump where the
+  region meets the untouched field is 1.5&ndash;2.3&times; smaller
+  (0.0156&nbsp;→&nbsp;0.0107 per metre at the outer edge, 0.0100&nbsp;→&nbsp;0.0044 at the inner one,
+  on a 50%/50% region), and the change it removes from the corners reappears in the middle, which is
+  about 1.4&times; steeper. A corner is what reads as a seam, so that is the trade: gentler corners,
+  a busier middle, and two looks that are hard to tell apart at a glance. Every other effect still
+  ramps with the shared weight, untouched.</p>
+
+  <h2>Ownership and invalidation</h2>
+
+  <p><code>TerrainModifierSystem</code> gathers volume geometry once, then splits the grass
+  effects out of the stack before the height/material composition hash. Editing a grass target,
+  its enable flag or its stack order therefore cannot move heightfield versions, splat maps,
+  normal maps, CBT height sources or physics recook inputs.</p>
+
+  <div class="panel warn">
+    <h4>Adding or removing the component is structural</h4>
+    <p>It can move a mixed volume between ECS archetypes, and equal-priority ground volumes are
+    tie-broken by archetype gather order. On a volume that also carries height or material
+    effects, adding a grass effect can therefore reorder those against another volume of the
+    same priority. Give overlapping ground volumes distinct priorities when their order
+    matters. Standalone grass volumes have no ground effects to reorder.</p>
+  </div>
+
+  <p>The compositor produces an optional RG8 control field — red is height, green is density,
+  <code>(255,255)</code> neutral — quantized after the whole ordered stack, recording the
+  rectangles and content versions that actually changed. A neutral field stores no pixels and
+  needs no texture; an active field that returns to neutral releases them. A fresh field tests
+  the lowering regions' bounds before visiting any texel, so a village-sized region never scans
+  a whole terrain.</p>
+
+  <p>Recomposition covers the union of a moved region's old and new bounds. A change in the
+  surviving volume order forces a full recomposition. Removal, disabled effects and volumes,
+  terrain recreation and terrain re-entry after <code>ECS::Disabled</code> all reconcile
+  against the current stack, including an empty one. The compositor reads the current authored
+  terrain transform rather than the origin extraction publishes later in the tick. Idle frames
+  neither recompose nor upload.</p>
+
+  <p><code>TerrainExtractionSystem</code> owns the upload cache;
+  <code>TerrainRenderFeature</code> owns the GPU textures and their deferred retirement. A new
+  control image clears to white, but a defined white clear is not yet authored content: grass
+  placement stays disabled for a terrain whose required field is still pending upload, image
+  initialization or bindless publication. A recreated unified map keeps its whole-image upload
+  requirement across a staging failure; the atlas waits for the coarse field and for every
+  currently assigned slot, including reassignments and generation changes.</p>
+
+  <p>That gate costs an author nothing in the normal case. A control texture created during
+  extraction is published in the same tick, because the extraction clock still holds the previous
+  tick's value while the registrar runs and the upload pass stamped that same value when it
+  declared during the previous frame. Adding, disabling, re-enabling and deleting a region were
+  each measured at <b>zero</b> suppressed ticks. The gate fires only when the terrain upload pass
+  has not declared since the previous extraction tick — a render pipeline with no such pass, or
+  the frame one is swapped in — which is the case it exists for.
+  <code>get_terrain_debug</code> reports <code>grassControlSuppressedTicks</code>, so the
+  question has a number rather than a screenshot.</p>
+
+  <h2>Placement</h2>
+
+  <p>The placement compute samples one control field at the blade's <em>final</em>,
+  clump-gathered site — not the candidate's pre-gather position — and multiplies the existing
+  mask probability by density. The mask random is per-site and stable, so thinning removes a
+  monotone subset of the same candidates instead of reshuffling the field. Height multiplies
+  the blade height for both ribbon blades and texture cards. The global candidate budget is
+  unchanged: a region cannot buy more grass than the terrain already pays for.</p>
+
+  <p><b>Texture cards scale as a whole; ribbons scale in height.</b> A card is grass artwork on a
+  single quad, and the renderer sizes that quad from the card's <em>width</em> &mdash; a card's height
+  is its width, and the quad is twice as tall as it is wide. Scaling only the height was therefore
+  dropped on the floor for cards: measured on a textured card field, a Height 50% region left the
+  frame indistinguishable from no region at all. The region now scales the card's width, so the whole
+  card scales, the Height control works on card grass, and the artwork keeps its proportions. A
+  ribbon blade has no such coupling: the blade <em>is</em> the geometry, so a shorter blade is simply
+  shorter and its width is unrelated. At 100% both are exactly the terrain's own size. What a region still cannot do is swap the artwork for genuinely
+  different card art; that is a per-region grass profile, which this feature does not provide.</p>
+
+  <p>Because a card loses width as well as height, <b>card coverage falls with the square of the
+  Height percentage</b> while blade coverage falls in proportion to it: at Height 50% and Density
+  50% a card region keeps roughly an eighth of the coverage outside it, where a blade region at the
+  same two numbers keeps a quarter. Card regions thin much faster than blade regions at identical
+  percentages — if a card region is reading bare, raise Height before Density.</p>
+
+  <h2>Storage and cost</h2>
+
+  <table>
+    <tr><th>Terrain shape</th><th>Control field</th><th>Cost when active</th></tr>
+    <tr><td>Single planar</td><td>Its native sample grid</td>
+        <td>2 bytes per sample, CPU and GPU. A 1025&nbsp;&times;&nbsp;1025 field is 2,101,250
+        bytes (2.004&nbsp;MiB) per copy.</td></tr>
+    <tr><td>Tiled, within the unified-texture limit</td><td>One global field on the unified
+        lattice, independent of streaming residency</td>
+        <td>The maximum 8193&nbsp;&times;&nbsp;8193 field is about 128&nbsp;MiB per copy.</td></tr>
+    <tr><td>Tiled, atlas-backed</td><td>Native control samples for resident tiles in an RG8
+        atlas with the existing slot and apron geometry, plus an analytic
+        128&nbsp;&times;&nbsp;128 global coarse field</td>
+        <td>Atlas budget accounting rises from 12 to 14 bytes per texel; the coarse texture is
+        32&nbsp;KiB.</td></tr>
+  </table>
+
+  <p>Nothing is allocated while every target is <code>1</code> or no grass effect exists. The
+  coarse field is evaluated on world coordinates, so a region on a tile that has never streamed
+  still suppresses grass there; a tile arriving after the modifier pass uploads that coarse
+  field first and is replaced by native samples on the next pass. Native control lattices do
+  not follow height LOD, so adjacent resident tiles share their boundary samples exactly.</p>
+
+  <p>Entering or leaving the active atlas budget resizes the slot window and therefore reuploads
+  existing terrain maps — a structural budget transition, not a heightfield edit. Content
+  changes within the same budget upload control maps only. No per-blade instance bytes and no
+  per-blade ECS query are added. The compat profile gains three named texture bindings, for
+  twelve placement maps in total.</p>
+
+  <h2>Limits</h2>
+
+  <ul>
+    <li>Planar terrain only, following the grass renderer itself. This does not enable spherical
+    grass; the inspector says so on a sphere volume.</li>
+    <li>Targets are bounded by <code>1</code>: a region can only reduce, never exceed the
+    terrain's authored profile or its candidate budget.</li>
+    <li>Coarse controls outside tile residency are an approximation of the native samples, not a
+    promise of native precision.</li>
+    <li>The existing single-grass-atlas-terrain limitation is unchanged.</li>
+    <li>Height and density only. There is no per-region grass profile, no alternative blade mesh
+    or card, and no general object scatter: a region scales the terrain's grass, it cannot swap the
+    artwork.</li>
+    <li>The pre-existing culling bound uses the global blade height without placement's random,
+    clump and card multipliers, so it can already underestimate blade height. Regional scales
+    are bounded by one and cannot widen that gap.</li>
+  </ul>
+
+  <div class="panel">
+    <h4>Extending the control field</h4>
+    <p>Both channels are continuous and are sampled through a linear clamp sampler
+    (<code>kTerrainGrassFieldChannels</code>, <code>TerrainGrassField.h</code>). A discrete
+    channel — a grass profile index, say — cannot simply join them: filtering would blend two
+    indices into a third that names nothing. It needs a point-sampled fetch of its own, which is
+    a change to how the field is read, not to how many fields exist.</p>
+  </div>
+
+  <h2>Coverage</h2>
+
+  <p><code>Tests/TerrainGrassRegionTests.cpp</code> drives the real scene schemas and the
+  compositor; <code>Engine/Modules/Terrain/Tests/TerrainGrassRegionGpuTests.cpp</code> compiles
+  the shipped placement shader and executes it on the device, asserting that neutral controls
+  leave placement byte-identical. <code>CBTLayoutTests</code> anchors the new GPU field offset
+  across all six shader mirrors of <code>TerrainParamsEntry</code>, and
+  <code>GrassPlacementElisionTests</code> perturbs every atlas map index.</p>
+
+  <h2>Changelog</h2>
+  <ul>
+    <li><b>2026-09-18</b> — Height and Density presented as percentages of the terrain's grass
+    settings with the resulting absolute beside them; a smoothstep ease on the grass blend so the
+    falloff's corners are gentler, not absent; texture cards scale as a whole instead of squashing.</li>
+    <li><b>2026-09-18</b> — The measured Height Scale floor, the card-mode aspect note, and
+    the admission gate's measured cost of adding a region.</li>
+    <li><b>2026-09-17</b> — First revision: <code>TerrainGrassEffect</code>, the RG8 control
+    field, unified/atlas/coarse composition, and placement height and density.</li>
+  </ul>
+
+</div>
+<footer>Regional terrain grass · v1 · 2026-09-17</footer>
+</body>
+</html>

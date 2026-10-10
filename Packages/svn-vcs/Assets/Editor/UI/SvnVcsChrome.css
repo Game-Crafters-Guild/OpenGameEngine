@@ -1,0 +1,7 @@
+/* Editor-chrome contributions from the svn-vcs package: the Settings tree
+   row icon for the SVN provider tab. Attached at the UI root via the
+   EditorPanelRegistry stylesheet contribution, after the editor theme. */
+
+.settings-tree-pane .svn-row .tree-title {
+    background-image: url("svn-vcs:Icons/SettingsSVN.png");
+}

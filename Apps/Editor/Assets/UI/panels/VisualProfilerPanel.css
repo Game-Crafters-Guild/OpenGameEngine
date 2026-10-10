@@ -1,0 +1,174 @@
+/* Visual Profiler panel — GPU/CPU per-pass timings driven by RenderGraph. */
+
+.visual-profiler-panel {
+    display: flex;
+    flex-direction: column;
+    width: 100%;
+    height: 100%;
+    background-color: var(--ui_color_bg_panel);
+    padding: 6px;
+    gap: 2px;
+}
+
+.visual-profiler-toolbar {
+    display: flex;
+    flex-direction: row;
+    align-items: center;
+    gap: 6px;
+    flex: 0 0 auto;
+}
+
+.visual-profiler-btn-pause {
+    flex: 0 0 auto;
+    width: 80px;
+}
+
+.visual-profiler-btn-clear {
+    flex: 0 0 auto;
+    width: 80px;
+}
+
+.visual-profiler-btn-mode {
+    flex: 0 0 auto;
+    width: 90px;
+}
+
+/* Pinned to the toolbar's right edge by the status label's flex:1. */
+.visual-profiler-budget-dropdown {
+    flex: 0 0 auto;
+    width: 88px;
+}
+
+.visual-profiler-budget-dropdown > .dropdown-header {
+    height: 24px;
+    min-height: 24px;
+    max-height: 24px;
+    box-sizing: border-box;
+    padding: 2px 6px 2px 8px;
+    font-size: 12px;
+}
+
+.visual-profiler-btn-budget {
+    flex: 0 0 auto;
+    width: 90px;
+}
+
+.visual-profiler-chart-label {
+    flex: 0 0 auto;
+    font-size: 12px;
+    color: #bfbfbf;
+    padding: 0 4px;
+    margin: 0;
+}
+
+.visual-profiler-chart-label.cpu {
+    color: #80D0FF;
+}
+
+.visual-profiler-chart-label.gpu {
+    color: #FFC080;
+}
+
+.visual-profiler-chart-label.bound-label {
+    display: flex;
+    flex-direction: row;
+    align-items: baseline;
+}
+
+.bound-label-word,
+.bound-label-sep {
+    font-size: 12px;
+    color: #bfbfbf;
+    padding: 0;
+    margin: 0;
+}
+
+.visual-profiler-chart-label.bound-label.cpu-bound .bound-label-word.cpu {
+    color: #60a0ff;
+    font-weight: bold;
+}
+
+.visual-profiler-chart-label.bound-label.gpu-bound .bound-label-word.gpu {
+    color: #f08040;
+    font-weight: bold;
+}
+
+.visual-profiler-status {
+    flex: 1 1 auto;
+    height: 48px;
+    min-height: 48px;
+    max-height: 48px;
+    box-sizing: border-box;
+    overflow: hidden;
+    font-size: 12px;
+    color: var(--ui_color_text_secondary);
+    padding-left: 8px;
+}
+
+.visual-profiler-bound-chart {
+    flex: 0 0 auto;
+    height: 34px;
+    background-color: var(--ui_color_bg_grid);
+    border-radius: 4px;
+    padding: 2px 6px;
+    border-left-width: 3px;
+    border-left-color: transparent;
+}
+
+.visual-profiler-chart {
+    flex: 0 0 auto;
+    height: 100px;
+    min-height: 70px;
+    background-color: var(--ui_color_bg_grid);
+    border-radius: 4px;
+    padding: 4px 6px;
+    border-left-width: 3px;
+    border-left-color: transparent;
+}
+
+/* Per-pass list migrated to the reusable TableView. Structural header/divider/row
+   chrome is owned by UI/controls/table-view.css (the control loads it itself); only
+   the per-column text colours live here. Right-alignment of CPU/GPU/% comes from
+   TrackDef::Align::End on the columns. */
+
+.visual-profiler-table {
+    flex: 1 1 auto;
+    min-height: 0;
+}
+
+.table-view-row .table-view-cell .profiler-cell-name,
+.table-view-row .table-view-cell .profiler-cell-cpu,
+.table-view-row .table-view-cell .profiler-cell-gpu,
+.table-view-row .table-view-cell .profiler-cell-pct {
+    flex-grow: 1;
+    flex-shrink: 1;
+    flex-basis: auto;
+    min-width: 0;
+    max-width: none;
+    font-size: 14px;
+    color: #bfbfbf;
+}
+
+.profiler-cell-cpu {
+    color: #80D0FF;
+    text-align: right;
+}
+
+.profiler-cell-gpu {
+    color: #FFC080;
+    text-align: right;
+}
+
+.profiler-cell-pct {
+    color: #B8D8FF;
+    text-align: right;
+}
+
+.visual-profiler-panel .table-view-row.selected,
+.visual-profiler-panel .table-view-row.selected:hover {
+    background-color: #2A3340;
+}
+
+.visual-profiler-panel .table-view-row.selected .profiler-cell-name {
+    color: #ffffff;
+}

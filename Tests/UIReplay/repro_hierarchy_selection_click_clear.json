@@ -1,0 +1,42 @@
+{
+  "name": "repro_hierarchy_selection_click_clear",
+  "windowIndex": 0,
+  "minFrames": 320,
+  "probe": {
+    "treeViewUnderId": "mount:Hierarchy",
+    "elementId": "mount:Hierarchy",
+    "visualPatchElementIds": { "enabled": true, "max": 12 }
+  },
+  "asserts": [],
+  "events": [
+    { "frame": 2, "type": "mouseMove", "target": { "kind": "elementId", "id": "tab:Hierarchy", "relX": 0.5, "relY": 0.5 } },
+    { "frame": 3, "type": "mouseDown", "button": 0 },
+    { "frame": 4, "type": "mouseUp", "button": 0 },
+
+    { "frame": 20, "type": "invokeCommand", "commandId": 16656 },
+    { "frame": 22, "type": "invokeCommand", "commandId": 16657 },
+
+    { "frame": 70, "type": "mouseMove", "target": { "kind": "labelTextUnderId", "underId": "mount:Hierarchy", "requiredClass": "tree-title", "needle": "Cube", "relX": 0.5, "relY": 0.5 } },
+    { "frame": 71, "type": "mouseDown", "button": 0 },
+    { "frame": 72, "type": "mouseUp", "button": 0 },
+
+    { "frame": 80, "type": "keyDown", "key": 341, "mods": 2 },
+    { "frame": 82, "type": "mouseMove", "target": { "kind": "labelTextUnderId", "underId": "mount:Hierarchy", "requiredClass": "tree-title", "needle": "Sphere", "relX": 0.5, "relY": 0.5 } },
+    { "frame": 83, "type": "mouseDown", "button": 0 },
+    { "frame": 84, "type": "mouseUp", "button": 0 },
+    { "frame": 86, "type": "keyUp", "key": 341, "mods": 0 },
+
+    { "frame": 100, "type": "waitSelectedCount", "subtreeId": "mount:Hierarchy", "requiredClass": "tree-item", "atLeast": 2, "timeoutFrames": 400 },
+
+    { "frame": 120, "type": "mouseMove", "target": { "kind": "labelTextUnderId", "underId": "mount:Hierarchy", "requiredClass": "tree-title", "needle": "Cube", "relX": 0.5, "relY": 0.5 } },
+    { "frame": 121, "type": "mouseDown", "button": 0 },
+    { "frame": 122, "type": "mouseUp", "button": 0 },
+    { "frame": 130, "type": "waitSelectedCount", "subtreeId": "mount:Hierarchy", "requiredClass": "tree-item", "exact": 1, "timeoutFrames": 300 },
+
+    { "frame": 160, "type": "mouseMove", "target": { "kind": "elementId", "id": "mount:Hierarchy", "relX": 0.9, "relY": 0.95 } },
+    { "frame": 161, "type": "mouseDown", "button": 0 },
+    { "frame": 162, "type": "mouseUp", "button": 0 },
+    { "frame": 170, "type": "waitSelectedCount", "subtreeId": "mount:Hierarchy", "requiredClass": "tree-item", "exact": 0, "timeoutFrames": 200 }
+  ]
+}
+

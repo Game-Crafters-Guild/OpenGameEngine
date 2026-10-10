@@ -1,0 +1,11 @@
+--- a/CMakeLists.txt	2026-08-03 19:07:18
++++ b/CMakeLists.txt	2026-08-03 19:07:18
+@@ -986,7 +986,7 @@
+ )
+ get_source_file_property(zstd_options external/basisu/zstd/zstd.c COMPILE_OPTIONS)
+ 
+-if(EMSCRIPTEN)
++if(EMSCRIPTEN AND KTX_FEATURE_JS)
+     set(
+         KTX_EM_COMMON_LINK_FLAGS
+         --bind

@@ -1,0 +1,46 @@
+#version 450
+#extension GL_GOOGLE_include_directive : require
+
+#include "Includes/shadow_pcss_decisions.glsl"
+
+// Evaluates the shipped PCSS decisions (shadow_pcss_decisions.glsl) for a list
+// of cases; ShadowPcssDecisionTests writes the cases and reads the results.
+// Case op (b.w):
+//   0 = GE_PcssIsBlocker(a.x tap depth, a.y receiver depth, a.zw offset UV,
+//       b.xy receiver-plane gradient)
+//   1 = GE_PcssKernelProvesLit(a.x kernel max depth, a.y receiver depth, a.z
+//       kernel radius UV, b.xy receiver-plane gradient)
+//   2 = GE_PcssBoundedSearchTexels(a.x search texels, a.y cap texels, a.z min texels)
+//   3 = GE_PcssPenumbraTexels(a.x average blocker, a.y receiver depth, a.z depth
+//       span, a.w tan half angle, b.x world per texel, b.y cap world)
+layout(local_size_x = 1) in;
+
+struct PcssProbeCase
+{
+    vec4 a;
+    vec4 b;
+};
+
+layout(std430, set = 0, binding = 0) buffer PcssProbe
+{
+    uvec4 meta; // x = case count
+    PcssProbeCase cases[16];
+    vec4 results[16];
+};
+
+void main()
+{
+    for (uint i = 0u; i < min(meta.x, 16u); ++i)
+    {
+        PcssProbeCase c = cases[i];
+        uint op = uint(c.b.w + 0.5);
+        if (op == 0u)
+            results[i] = vec4(GE_PcssIsBlocker(c.a.x, c.a.y, c.a.zw, c.b.xy) ? 1.0 : 0.0);
+        else if (op == 1u)
+            results[i] = vec4(GE_PcssKernelProvesLit(c.a.x, c.a.y, c.a.z, c.b.xy) ? 1.0 : 0.0);
+        else if (op == 2u)
+            results[i] = vec4(GE_PcssBoundedSearchTexels(c.a.x, c.a.y, c.a.z));
+        else if (op == 3u)
+            results[i] = vec4(GE_PcssPenumbraTexels(c.a.x, c.a.y, c.a.z, c.a.w, c.b.x, c.b.y));
+    }
+}

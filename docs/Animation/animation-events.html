@@ -1,0 +1,196 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Animation events</title>
+<style>
+  :root {
+    --bg: #0f1115; --panel: #171a21; --panel-light: #1f232c; --border: #2a2f3a;
+    --text: #d7dae0; --muted: #8b919c; --accent: #6ea8fe; --danger: #ff6b6b;
+    --bad: #ff6b6b; --ok: #4cd18a; --good: #4cd18a; --warn: #f2c94c;
+  }
+  body { margin: 0; padding: 2rem 3rem; background: var(--bg); color: var(--text);
+         font: 15px/1.55 system-ui, -apple-system, "Segoe UI", sans-serif; max-width: 1100px; }
+  h1 { margin: 0 0 .25rem; font-size: 1.9rem; }
+  h2 { margin-top: 2.2rem; padding: .35rem .6rem; border: 1px solid var(--border);
+       border-left: 4px solid var(--accent); background: var(--panel); font-size: 1.25rem; }
+  h3 { margin: 1.4rem 0 .4rem; color: var(--accent); font-size: 1.05rem; }
+  .lede { color: var(--muted); margin: 0 0 1.5rem; letter-spacing: .04em; text-transform: uppercase; font-size: .8rem; }
+  hr { border: 0; border-top: 1px solid var(--border); margin: 2rem 0; }
+  code, pre { font: 13px/1.5 ui-monospace, "Cascadia Mono", Consolas, monospace;
+              background: var(--panel-light); border-radius: 4px; }
+  code { padding: .05rem .35rem; }
+  pre { padding: .8rem 1rem; overflow-x: auto; border: 1px solid var(--border); }
+  .panel { border: 1px solid var(--border); background: var(--panel); border-radius: 6px; padding: .9rem 1.1rem; margin: 1rem 0; }
+  .panel.ok { border-left: 4px solid var(--ok); }
+  .panel.warn { border-left: 4px solid var(--warn); }
+  table { border-collapse: collapse; width: 100%; margin: 1rem 0; }
+  th, td { border: 1px solid var(--border); padding: .45rem .7rem; text-align: left; vertical-align: top; }
+  th { background: var(--panel-light); color: var(--muted); font-weight: 600; font-size: .85rem; }
+  tr:hover td { background: var(--panel); }
+  footer { margin-top: 3rem; color: var(--muted); font-size: .85rem; }
+</style>
+</head>
+<body>
+
+<h1>Animation events</h1>
+<p class="lede">GUIDE · animation / scripting · reacting when playback reaches a moment in a clip</p>
+<p>
+  An animation event marks a moment on a clip: the frame a sword connects, a foot lands, an arrow leaves the bow.
+  A glTF clip declares its events in the <code>events</code> list of its
+  <a href="gltf-clip-schema.html">clip schema</a>, each at a frame; the engine times each at that frame over the
+  clip's frame rate, so frame 19 of a clip sampled at 30 frames per second is at 19 / 30 = 0.633 seconds. As an
+  Animator plays the clip, each event <em>fires</em> in the frame whose playback reaches its time. The Animator
+  keeps the events it fired in a frame; a script reads them with <code>AnimatorApi.PollEvents</code>, an engine system
+  with <code>GetFiredEvents</code>.
+</p>
+
+<h2>Reading events from a script</h2>
+<p>
+  Poll every frame an event matters. <code>PollEvents</code> fills a buffer the script owns and returns how many
+  events it wrote; it allocates nothing. Compare names by id: <code>AnimatorApi.EventNameId</code> gives the id an
+  event's <code>NameId</code> holds, and is worth computing once.
+</p>
+<pre>public sealed class KnightImpacts : GameSystem
+{
+    static readonly ulong Hit = AnimatorApi.EventNameId("hit");
+    readonly AnimationEventRecord[] m_Events = new AnimationEventRecord[8];
+
+    // The entity whose Animator plays the attack.
+    public uint Knight;
+
+    public override void OnUpdate(float deltaTime)
+    {
+        int count = AnimatorApi.PollEvents(World, Knight, m_Events);
+        for (int i = 0; i &lt; count; ++i)
+        {
+            if (m_Events[i].NameId == Hit)
+                SpawnImpact();
+        }
+    }
+}</pre>
+
+<h3>What a record holds</h3>
+<table>
+  <tr><th>Field</th><th>Meaning</th></tr>
+  <tr><td><code>NameId</code></td><td>The name's id, <code>AnimatorApi.EventNameId(name)</code> of the whole name.</td></tr>
+  <tr><td><code>TimeSeconds</code></td><td>The event's time on its clip, in seconds from the clip's start: its frame
+      over the clip's frame rate.</td></tr>
+  <tr><td><code>NameLength</code></td><td>The name's length in UTF-8 bytes.</td></tr>
+  <tr><td><code>Name</code></td><td>The name as a string. Reading it allocates a string each time; a name longer than
+      64 bytes reads as its first 64 bytes, while <code>NameId</code> and <code>NameLength</code> stay the whole
+      name's. When byte 64 falls inside a character of more than one byte, the name read ends in U+FFFD, the
+      replacement character.</td></tr>
+</table>
+
+<h3>The buffer</h3>
+<p>
+  A call writes at most the buffer's length and returns the count. When more events fired than fit, the rest wait
+  for the next call, so a script that expects many events in one frame calls again until the count is below the
+  buffer's length. Each event is returned once: a second call in the same frame returns only the events the first
+  left, or none.
+</p>
+<p>
+  The events belong to the Animator, not to the caller: two systems that poll one Animator split its events between
+  them, whichever polls first taking them. Where several parts of a game react to one Animator (sound, effects,
+  gameplay), poll it once a frame and hand the events to each of them.
+</p>
+<div class="panel warn">
+  <code>PollEvents</code> reads an Animator's events on the main thread only, as a system's update does: the
+  animation wave writes them on worker threads. A call from another thread throws
+  <code>InvalidOperationException</code>, as does a call for an entity that is gone or has no Animator.
+</div>
+
+<h2>When an event fires</h2>
+<p>
+  Each frame, playback moves a clip from the time it had at the frame's start to its time at the frame's end. The
+  events it fires, and their order:
+</p>
+<table>
+  <tr><th>Playback</th><th>Fires</th></tr>
+  <tr><td>Forward, within the clip</td><td>The events from the frame's start time up to, not including, its end time,
+      earliest first. An event at time 0 fires in the first frame of play.</td></tr>
+  <tr><td>A clip that does not loop reaching its end</td><td>The clip stops at its end, and the events on its last
+      frame fire in the frame that reaches it, once.</td></tr>
+  <tr><td>A loop wrapping</td><td>The events from the frame's start time to the clip's end, then those from the
+      clip's start up to the frame's end time. A frame longer than the whole clip fires the events from its start
+      time to the clip's end, then those from the clip's start up to its start time: each event once, never twice in
+      one frame.</td></tr>
+  <tr><td>A section (<code>PlaySection</code>)</td><td>The section is the loop: events outside it never fire.</td></tr>
+  <tr><td>Two or more events in one frame</td><td>In time order; events on one frame in the order the file lists
+      them.</td></tr>
+  <tr><td>A seek, a section jump, a clamp into a section</td><td>Nothing: the events jumped over do not fire. The next
+      frame plays from the new time, so an event exactly at the new time fires in that frame, as one at time 0 does
+      in the first frame of play.</td></tr>
+  <tr><td>Paused, or a speed of 0</td><td>Nothing.</td></tr>
+  <tr><td>A montage at a negative play rate</td><td>The events from the frame's start time down to, not including,
+      its end time, latest first.</td></tr>
+  <tr><td>A clip of no length</td><td>Nothing.</td></tr>
+</table>
+
+<h3>Blends</h3>
+<p>
+  A clip fires only while its share of the Animator's output pose is above 0. In an animation graph, each blend gives
+  its inputs their share of its own: a two-way blend at weight <em>w</em> gives the first input 1 &minus; <em>w</em>
+  and the second <em>w</em>; a blend space gives each sample it blends that sample's weight; a state machine's
+  transition gives the state it leaves 1 &minus; <em>t</em> and the one it enters <em>t</em>, so the state it leaves
+  fires until the transition ends. A layered blend without a bone mask gives its base 1 &minus; <em>w</em> and its
+  overlay <em>w</em>; under a bone mask, and under an additive layer, the base keeps its share, because it still shows
+  on the bones the layer leaves. A clip blended out entirely fires nothing; one at weight 0.01 fires as at 1.
+</p>
+<p>
+  Without a graph, a crossfade (<code>CrossFadeSeconds</code>) plays two clips: the outgoing clip fires until the fade
+  ends, and the incoming clip from the fade's first frame. The outgoing clip's events come before the incoming
+  clip's in a frame; a graph's come in the order it evaluates its clips.
+</p>
+<p>
+  A montage fires its own events from its first frame to the frame it finishes, whatever its blend weight, while the
+  montage slot's own share is above 0.
+</p>
+<p>
+  An Animator over several skinned meshes plays the same clip on each; its events fire once.
+</p>
+
+<h2>How long events last</h2>
+<p>
+  The animation wave empties every Animator's events before its playback runs, and fills them as playback crosses
+  events. They stay until the next animation wave begins, so a system that runs after the wave reads that frame's
+  events, and an event nobody reads in its frame is gone the next.
+</p>
+
+<h2>From engine code</h2>
+<p>
+  An engine system reads an Animator's events with <code>GetFiredEvents(animator)</code>
+  (<code>Engine/Rendering/AnimationEventDispatch.h</code>): a span of <code>FiredEvent</code>, each holding a copy of
+  the <code>AnimationEvent</code> with its <code>Name</code>, <code>Time</code> and payload, in the order they
+  fired. Reading leaves them for scripts. A system that reads them declares a dependency on
+  <code>HumanoidRetarget</code>, the last system in the wave that fires events, so it runs after all of them.
+</p>
+<p>
+  A host that is not C# calls the export behind <code>PollEvents</code> directly:
+</p>
+<pre>GE_Result GE_Animator_PollEventsOnEntity(GE_Handle worldHandle, uint64_t entityId,
+                                         GE_AnimationEventRecord* records, int32_t recordCapacity,
+                                         int32_t* outCount);</pre>
+<p>
+  <code>GE_AnimationEventRecord</code> (<code>Scripting/AnimatorABI.h</code>) is the record above: 80 bytes, the
+  name's id, its time, its length and its first 64 bytes. The export returns <code>GE_Result_InvalidArg</code> for a
+  null <code>outCount</code>, a negative capacity or a null buffer with a capacity, <code>GE_Result_NotFound</code>
+  for an entity that is gone or has no Animator, and <code>GE_Result_Fail</code> off the main thread.
+</p>
+
+<hr>
+<h2>Changelog</h2>
+<ul>
+  <li>2026-09-30: a frame longer than the whole clip fires each event once; the events belong to the Animator, so
+      several listeners share one poll; a name cut inside a character ends in U+FFFD; an event at a seek's target
+      fires in the next frame.</li>
+  <li>2026-09-30: first version. Events fire on the clip path, in animation graphs and in montage slots; scripts poll
+      them with <code>AnimatorApi.PollEvents</code> (scripting ABI 3.2), engine systems read them with
+      <code>GetFiredEvents</code>.</li>
+</ul>
+
+<footer>Animation events · version 2 · 2026-09-30</footer>
+
+</body>
+</html>

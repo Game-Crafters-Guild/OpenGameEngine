@@ -1,0 +1,43 @@
+<!doctype html>
+<!-- Ground-truth mirror for OverflowClipPaddingBoxTests.cpp: the CSS overflow
+     clip region. css-overflow-3: overflow:hidden clips the element's CONTENT
+     (children) to the PADDING BOX, its corners rounded by the inner border
+     edge radii (border-radius minus border-width). The engine under test
+     clips at the BORDER box with the OUTER radii, so children paint over the
+     border ring wherever they overlap it.
+
+     Probes (all box-sizing: border-box, integer geometry, dpr 1):
+       #ring  (40,40)  300x120, 10px solid #cc3333 border, radius 40,
+              header child #22cc22 h=40. Discriminator: 45-deg TL annulus
+              midpoint (40+15.25, 40+15.25) -> border red in Chrome,
+              header green under a border-box clip.
+       #modal (40,200) 300x120, 1px solid #444444 border, radius 8,
+              header child #1d1c1d h=40, bg #2c2c2c. Mirrors the Save Scene
+              modal. Discriminator: (40+2, 200+2).
+       #icon  (40,360) 300x120, 3px solid #444444 border, radius 0,
+              overflow hidden, absolutely-positioned orange child overlapping
+              the right border band. Discriminator: x = 40+298 (inside the
+              right border band): border gray in Chrome (child clipped at the
+              padding edge 297), orange under a border-box clip.
+-->
+<html><head><style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body { background: #101010; width: 800px; height: 600px; }
+  #ring { position: absolute; left: 40px; top: 40px; width: 300px; height: 120px;
+          background: #2c2c2c; border: 10px solid #cc3333; border-radius: 40px;
+          overflow: hidden; }
+  #ringheader { height: 60px; background: #22cc22; }
+  #modal { position: absolute; left: 40px; top: 200px; width: 300px; height: 120px;
+           background: #2c2c2c; border: 1px solid #444444; border-radius: 8px;
+           overflow: hidden; }
+  #modalheader { height: 40px; background: #1d1c1d; }
+  #icon { position: absolute; left: 40px; top: 360px; width: 300px; height: 120px;
+          background: #2c2c2c; border: 3px solid #444444; overflow: hidden; }
+  #iconchild { position: absolute; left: 280px; top: 40px; width: 40px; height: 40px;
+               background: #ff8820; }
+</style></head>
+<body>
+  <div id="ring"><div id="ringheader"></div></div>
+  <div id="modal"><div id="modalheader"></div></div>
+  <div id="icon"><div id="iconchild"></div></div>
+</body></html>

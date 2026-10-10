@@ -1,0 +1,30 @@
+{
+  "name": "repro_sceneview_rmb_drag",
+  "windowIndex": 0,
+  "minFrames": 240,
+  "probe": {
+    "elementId": "SceneViewViewport"
+  },
+  "assert": {
+    "kind": "capturedMoveFastPathAtLeast",
+    "frameStart": 33,
+    "frameEnd": 45,
+    "minFrames": 1
+  },
+  "events": [
+    { "frame": 10, "type": "mouseMove", "target": { "kind": "elementId", "id": "tab:SceneView", "relX": 0.5, "relY": 0.5 } },
+    { "frame": 11, "type": "mouseDown", "button": 0 },
+    { "frame": 12, "type": "mouseUp", "button": 0 },
+
+    { "frame": 30, "type": "mouseMove", "target": { "kind": "elementId", "id": "SceneViewViewport", "relX": 0.50, "relY": 0.50 } },
+    { "frame": 31, "type": "mouseDown", "button": 1 },
+
+    { "frame": 33, "type": "mouseMove", "dx": 12.0, "dy": 2.0 },
+    { "frame": 35, "type": "mouseMove", "dx": 10.0, "dy": -1.0 },
+    { "frame": 37, "type": "mouseMove", "dx": -8.0, "dy": 3.0 },
+    { "frame": 39, "type": "mouseMove", "dx": 6.0, "dy": -2.0 },
+
+    { "frame": 41, "type": "mouseUp", "button": 1 }
+  ]
+}
+

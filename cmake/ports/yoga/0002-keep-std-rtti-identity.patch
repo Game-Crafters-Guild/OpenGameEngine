@@ -1,0 +1,25 @@
+Keep std RTTI identity on non-MSVC: -fno-rtti + -fvisibility=hidden makes every
+Yoga object emit weak private-external copies of std typeinfo it references
+(_ZTISt9exception, _ZTISt11logic_error, ...). Linking libyogacore.a into a
+dylib (libEngine.dylib) resolves the dylib's own references to those private
+copies, and libc++abi matches catch clauses by typeinfo POINTER identity — so
+every `catch (const std::exception&)` inside the dylib stops matching
+libc++-thrown exceptions and the first real throw is std::terminate.
+Catches on derived-most concrete types (e.g. std::filesystem::filesystem_error)
+keep working because Yoga never emits those typeinfos.
+
+MSVC keeps /GR-: it matches catch clauses by decorated type name, not typeinfo
+address, so it never had the defect.
+
+diff --git a/cmake/project-defaults.cmake b/cmake/project-defaults.cmake
+--- a/cmake/project-defaults.cmake
++++ b/cmake/project-defaults.cmake
+@@ -35,7 +35,5 @@ add_compile_options(
+     # Enable warnings and warnings as errors
+     -Wall
+     -Werror
+-    # Disable RTTI
+-    $<$<COMPILE_LANGUAGE:CXX>:-fno-rtti>
+     # Use -O2 (prioritize speed)
+     $<$<CONFIG:RELEASE>:-O2>
+     # Enable separate sections per function/data item

@@ -1,0 +1,85 @@
+#version 450
+
+layout(local_size_x = 8, local_size_y = 8, local_size_z = 1) in;
+layout(set = 0, binding = 0) uniform sampler2D uCurrent;
+layout(set = 0, binding = 1) uniform sampler2D uReprojected;
+layout(set = 0, binding = 2) uniform sampler2D uReprojectedMoments;
+layout(set = 0, binding = 3) uniform sampler2D uDepth;
+layout(set = 0, binding = 4) uniform sampler2D uNormalRoughness;
+layout(set = 0, binding = 5, rgba16f) uniform writeonly image2D uHistoryOut;
+layout(set = 0, binding = 6, rgba16f) uniform writeonly image2D uMomentsOut;
+
+layout(set = 0, binding = 8) uniform sampler2D uHitData;
+layout(set = 0, binding = 9, rgba16f) uniform writeonly image2D uSurfaceOut;
+
+#include "ScreenSpaceReflections/sssr_common.glsl"
+#include "ScreenSpaceReflections/sssr_history_policy.glsl"
+
+void main()
+{
+    ivec2 size = imageSize(uHistoryOut);
+    ivec2 pixel = ivec2(gl_GlobalInvocationID.xy);
+    if (any(greaterThanEqual(pixel, size))) return;
+    vec4 current = texelFetch(uCurrent, pixel, 0);
+    vec4 history = texelFetch(uReprojected, pixel, 0);
+    vec4 oldMoments = texelFetch(uReprojectedMoments, pixel, 0);
+
+    float mean = 0.0;
+    float mean2 = 0.0;
+    float sampleWeight = 0.0;
+    for (int y = -2; y <= 2; ++y)
+    for (int x = -2; x <= 2; ++x)
+    {
+        ivec2 q = clamp(pixel + ivec2(x, y), ivec2(0), size - 1);
+        vec4 sampleValue = texelFetch(uCurrent, q, 0);
+        float validWeight = step(1e-5, sampleValue.a);
+        float l = GE_Luminance(sampleValue.rgb);
+        mean += l * validWeight;
+        mean2 += l * l * validWeight;
+        sampleWeight += validWeight;
+    }
+    mean /= max(sampleWeight, 1.0);
+    mean2 /= max(sampleWeight, 1.0);
+    float sigma = sqrt(max(mean2 - mean * mean, 1e-6));
+    float historyLum = GE_Luminance(history.rgb);
+    // Confidence describes ray coverage, not whether old geometry is valid.
+    // Only reproject's accepted history may accumulate, and a changed signal
+    // must not gain extra persistence merely because the old hit was brighter
+    // or more confident than a current miss.
+    float clipRadius = max(1.5 * sigma, mean * 0.08 + 0.002);
+    float clippedLum = clamp(historyLum, max(mean - clipRadius, 0.0), mean + clipRadius);
+    // A neighborhood containing no current hits provides no useful bounds.
+    // Keeping valid, depth-tested history in that case is what turns the
+    // stochastic ray stream into a dense reflection instead of a checkerboard.
+    if (sampleWeight > 0.0 && historyLum > 1e-5)
+        history.rgb *= clippedLum / historyLum;
+
+    float roughness = GE_Roughness(texelFetch(uNormalRoughness, pixel, 0));
+    float historyLength = oldMoments.a;
+    bool currentValid = current.a > 1e-5;
+    bool historySampleValid = sssr.historyValid != 0u && historyLength > 0.0 &&
+                              history.a > 1e-5;
+    // Running-average startup and motion-reduced sample count. A changed
+    // signal reduces feedback even when its old ray confidence was high.
+    float disagreement = abs(GE_Luminance(current.rgb) - historyLum);
+    float historyWeight = GE_SssrHistoryWeight(historySampleValid, currentValid,
+        historyLength, roughness, disagreement, clipRadius);
+    vec4 resolved = mix(current, history, historyWeight);
+    float lum = GE_Luminance(resolved.rgb);
+    float momentWeight = historyWeight * 0.9;
+    float m1 = mix(lum, oldMoments.r, momentWeight);
+    float m2 = mix(lum * lum, oldMoments.g, momentWeight);
+    float rawDepth = texelFetch(uDepth, pixel, 0).r;
+    imageStore(uHistoryOut, pixel, resolved);
+    // Hit distance belongs to the current traced sample, not to a blend of hit
+    // and miss distances. -1 means no ray this frame; 0 is an actual probe miss.
+    vec4 hit = texelFetch(uHitData, pixel, 0);
+    float hitDistance = hit.a > 0.0 ? hit.z : -1.0;
+    float newLength = currentValid ? min(historyLength + 1.0 / 32.0, 1.0)
+                                  : (historySampleValid ? historyLength : 0.0);
+    imageStore(uMomentsOut, pixel, vec4(m1, m2, hitDistance, newLength));
+    vec4 nr = texelFetch(uNormalRoughness, pixel, 0);
+    vec3 normalWS = normalize(mat3(ge_invView) * GE_DecodeNormalVS(nr));
+    imageStore(uSurfaceOut, pixel, vec4(GE_OctEncode(normalWS), roughness,
+        rawDepth > kSssrMinRawDepth ? log2(max(GE_LinearZ(rawDepth), 1e-8)) : -65504.0));
+}

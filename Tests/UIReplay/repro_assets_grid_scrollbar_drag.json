@@ -1,0 +1,65 @@
+{
+  "name": "repro_assets_grid_scrollbar_drag",
+  "windowIndex": 0,
+  "minFrames": 220,
+  "probe": {
+    "gridViewUnderId": "assets-grid",
+    "scrollViewUnderId": "assets-grid",
+    "scrollbarVUnderId": "assets-grid",
+    "visualPatchElementIds": { "enabled": true, "max": 12 }
+  },
+  "asserts": [
+    {
+      "kind": "gridViewUpdatesDuringCapture",
+      "gridViewUnderId": "assets-grid",
+      "frameStart": 102,
+      "frameEnd": 106
+    },
+    {
+      "kind": "paintOffsetsMatch",
+      "elementId": "assets-grid",
+      "requiredClass": "grid-cell",
+      "frameStart": 102,
+      "frameEnd": 106,
+      "maxMismatchCount": 0
+    },
+    {
+      "kind": "visibleTextNotFullyClipped",
+      "subtreeId": "assets-grid",
+      "scrollViewUnderId": "assets-grid",
+      "requiredClasses": ["grid-title"],
+      "frameStart": 95,
+      "frameEnd": 120,
+      "minVisiblePx": 2.0,
+      "maxChecks": 1500
+    },
+    {
+      "kind": "visibleTextNotFullyClipped",
+      "subtreeId": "assets-grid",
+      "scrollViewUnderId": "assets-grid",
+      "requiredClasses": ["grid-cell"],
+      "frameStart": 95,
+      "frameEnd": 120,
+      "minVisiblePx": 2.0,
+      "maxChecks": 1500
+    }
+  ],
+  "events": [
+    { "frame": 2, "type": "mouseMove", "target": { "kind": "elementId", "id": "tab:Assets", "relX": 0.5, "relY": 0.5 } },
+    { "frame": 3, "type": "mouseDown", "button": 0 },
+    { "frame": 4, "type": "mouseUp", "button": 0 },
+
+    { "frame": 80, "type": "mouseMove", "target": { "kind": "elementId", "id": "assets-grid", "relX": 0.5, "relY": 0.5 } },
+    { "frame": 81, "type": "keyDown", "key": 341, "mods": 2 },
+    { "frame": 82, "type": "scroll", "dx": 0.0, "dy": 600.0 },
+    { "frame": 83, "type": "keyUp", "key": 341, "mods": 0 },
+
+    { "frame": 100, "type": "mouseMove", "target": { "kind": "scrollbarVUnderId", "underId": "assets-grid", "relX": 0.5, "relY": 0.8 } },
+    { "frame": 102, "type": "mouseDown", "button": 0 },
+    { "frame": 103, "type": "mouseMove", "dx": 0.0, "dy": 180.0 },
+    { "frame": 104, "type": "mouseMove", "dx": 0.0, "dy": 180.0 },
+    { "frame": 105, "type": "mouseMove", "dx": 0.0, "dy": 180.0 },
+    { "frame": 106, "type": "mouseUp", "button": 0 }
+  ]
+}
+

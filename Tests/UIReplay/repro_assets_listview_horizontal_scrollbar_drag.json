@@ -1,0 +1,83 @@
+{
+  "name": "repro_assets_listview_horizontal_scrollbar_drag",
+  "windowIndex": 0,
+  "minFrames": 260,
+  "probe": {
+    "listViewUnderId": "assets-views-container",
+    "scrollViewUnderId": "assets-list",
+    "scrollbarVUnderId": "assets-list",
+    "scrollbarHUnderId": "assets-list",
+    "elementId": "assets-list-header",
+    "visualPatchElementIds": { "enabled": true, "max": 12 }
+  },
+  "asserts": [
+    {
+      "kind": "elementVisible",
+      "elementId": "assets-list",
+      "frameStart": 40,
+      "frameEnd": 240
+    },
+    {
+      "kind": "paintOffsetsMatch",
+      "elementId": "assets-list",
+      "requiredClass": "list-cell",
+      "frameStart": 140,
+      "frameEnd": 220,
+      "maxMismatchCount": 0
+    },
+    {
+      "kind": "paintOffsetsMatch",
+      "elementId": "assets-list-header",
+      "requiredClass": "axis-header-cell",
+      "frameStart": 140,
+      "frameEnd": 220,
+      "maxMismatchCount": 0
+    },
+    {
+      "kind": "visibleTextNotFullyClipped",
+      "subtreeId": "assets-list",
+      "scrollViewUnderId": "assets-list",
+      "requiredClasses": ["axis-header-title", "col-tag", "col-referenced", "col-custom", "col-creator"],
+      "frameStart": 140,
+      "frameEnd": 220,
+      "minVisiblePx": 2.0,
+      "maxChecks": 2000
+    },
+    {
+      "kind": "visibleTextNotFullyClipped",
+      "subtreeId": "assets-list",
+      "scrollViewUnderId": "assets-list",
+      "requiredClasses": ["list-cell"],
+      "frameStart": 140,
+      "frameEnd": 220,
+      "minVisiblePx": 2.0,
+      "maxChecks": 2000
+    }
+  ],
+  "events": [
+    { "frame": 2, "type": "mouseMove", "target": { "kind": "elementId", "id": "tab:Assets", "relX": 0.5, "relY": 0.5 } },
+    { "frame": 3, "type": "mouseDown", "button": 0 },
+    { "frame": 4, "type": "mouseUp", "button": 0 },
+
+    { "frame": 35, "type": "mouseMove", "target": { "kind": "elementId", "id": "assets-views-container", "relX": 0.5, "relY": 0.5 } },
+    { "frame": 36, "type": "keyDown", "key": 76, "mods": 0 },
+    { "frame": 37, "type": "keyUp", "key": 76, "mods": 0 },
+
+    { "frame": 60, "type": "mouseMove", "target": { "kind": "elementId", "id": "assets-splitter", "relX": 0.5, "relY": 0.5 } },
+    { "frame": 61, "type": "mouseDown", "button": 0 },
+    { "frame": 62, "type": "mouseMove", "dx": 900.0, "dy": 0.0 },
+    { "frame": 63, "type": "mouseUp", "button": 0 },
+
+    { "frame": 90, "type": "mouseMove", "target": { "kind": "elementId", "id": "assets-list", "relX": 0.5, "relY": 0.5 } },
+
+    { "frame": 120, "type": "mouseMove", "target": { "kind": "scrollbarHUnderId", "underId": "assets-list", "relX": 0.85, "relY": 0.5 } },
+    { "frame": 121, "type": "mouseDown", "button": 0 },
+    { "frame": 122, "type": "mouseMove", "dx": -320.0, "dy": 0.0 },
+    { "frame": 123, "type": "mouseMove", "dx": -320.0, "dy": 0.0 },
+    { "frame": 124, "type": "mouseMove", "dx": -320.0, "dy": 0.0 },
+    { "frame": 125, "type": "mouseUp", "button": 0 },
+
+    { "frame": 150, "type": "uiTextDebugDump" }
+  ]
+}
+

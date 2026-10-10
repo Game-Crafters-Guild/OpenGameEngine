@@ -1,0 +1,65 @@
+#version 450
+// Ocean displacement combine (optional, OceanRenderer.CombineDisplacementCascade).
+// Sums the tileable FFT displacement cascades into a single camera-snapped,
+// viewer-centered cascade (one slice per LOD), so the surface can sample ~2
+// adjacent slices instead of all 16 FFT cascades per vertex/fragment. Per LOD
+// layer only the FFT cascades whose tileable patch is resolvable at that layer's
+// texel are summed (a proper anti-aliased LOD pyramid): the finest layer (smallest
+// texel) includes every cascade; coarser layers drop the high-frequency cascades
+// that would alias, leaving the large swells. A pure per-frame bake — every texel
+// is fully overwritten, so no history / ping-pong.
+
+#include "Ocean/ocean_cascade_common.glsl"
+
+layout(local_size_x = 8, local_size_y = 8, local_size_z = 1) in;
+
+// std140 — must match OceanCombineParamsGPU in Ocean/OceanTypes.h.
+layout(std140, set = 0, binding = 0) uniform OceanCombineParams
+{
+    uint  uResolution;
+    uint  uLodCount;
+    uint  uFFTCascadeCount;
+    uint  uPad0;
+
+    vec4  uWaveOriginOffset; // xy = accumulated floating-origin phase offset
+
+    // Embedded OceanCascadeLayoutGPU: per-LOD vec4 (xy=origin, z=texel, w=scale)
+    // then a padded uint lane (LodCount + 3 pad).
+    vec4  uCascadeOriginScale[GE_OCEAN_LOD_CASCADES];
+    uvec4 uCascadeMeta; // x = LodCount
+};
+
+layout(set = 0, binding = 1) uniform sampler2DArray uOceanDisplacement; // FFT (tileable)
+layout(set = 0, binding = 2, rgba16f) uniform writeonly image2DArray uCombineOut;
+
+// FFT cascade tileable patch count (mirror of ocean_common.glsl).
+const int GE_COMBINE_FFT_CASCADES = 16;
+
+void main()
+{
+    const ivec3 id = ivec3(gl_GlobalInvocationID);
+    if (uint(id.x) >= uResolution || uint(id.y) >= uResolution || uint(id.z) >= uLodCount)
+        return;
+
+    const vec4 layer = uCascadeOriginScale[id.z];
+    const vec2 origin = layer.xy;
+    const float texel = layer.z;
+    const vec2 worldXZ = OceanCascadeTexelToWorld(id.xy, origin, texel);
+
+    // Only sum cascades whose tileable patch (0.5*2^c m) is resolvable at this
+    // layer's texel (patch >= 2 texels), so coarse layers don't alias the fine
+    // octaves. The finest layer (smallest texel) admits every cascade.
+    const float minPatch = 2.0 * texel;
+    vec3 disp = vec3(0.0);
+    uint n = min(uFFTCascadeCount, uint(GE_COMBINE_FFT_CASCADES));
+    for (uint c = 0u; c < n; ++c)
+    {
+        float worldSize = 0.5 * float(1u << c);
+        if (worldSize < minPatch)
+            continue;
+        vec2 uv = (worldXZ + uWaveOriginOffset.xy) / worldSize;
+        disp += textureLod(uOceanDisplacement, vec3(uv, float(c)), 0.0).xyz;
+    }
+
+    imageStore(uCombineOut, id, vec4(disp, 0.0));
+}

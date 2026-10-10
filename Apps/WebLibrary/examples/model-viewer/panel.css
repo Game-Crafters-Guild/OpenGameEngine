@@ -1,0 +1,69 @@
+/* The model viewer's page and its control panel: a dark translucent card over the scene. */
+html, body { margin: 0; height: 100%; background: #000; color: #eee; font: 13px/1.4 system-ui, sans-serif; }
+/* An element's own display never overrides its hidden attribute. */
+[hidden] { display: none !important; }
+canvas { display: block; width: 100%; height: 100%; touch-action: none; }
+.panel { position: fixed; top: 16px; right: 16px; width: 260px; padding: 12px 14px; box-sizing: border-box;
+    background: rgba(20, 22, 28, 0.78); backdrop-filter: blur(8px); border: 1px solid rgba(255, 255, 255, 0.12);
+    border-radius: 10px; box-shadow: 0 6px 24px rgba(0, 0, 0, 0.35);
+    max-height: calc(100% - 32px); overflow-y: auto; overscroll-behavior: contain; }
+.panel summary { font-weight: 600; cursor: pointer; margin-bottom: 4px; }
+.panel label { display: flex; flex-wrap: wrap; justify-content: space-between; gap: 6px; margin: 10px 0 0; }
+/* Dark native controls: without color-scheme the select's popup and its rows stay light. */
+.panel { color-scheme: dark; }
+.panel select, .panel input[type=range] { width: 100%; accent-color: #6cf; }
+.panel select, .panel button, .panel .button { font: inherit; color: #eee; background: rgba(255, 255, 255, 0.08);
+    border: 1px solid rgba(255, 255, 255, 0.18); border-radius: 6px; padding: 5px 8px; cursor: pointer; }
+.panel select { background-color: #2a2e36; }
+.panel option { color: #eee; background: #2a2e36; }
+.panel .button { justify-content: center; }
+.panel :disabled, .panel .button:has(:disabled), .panel .check:has(:disabled) { opacity: 0.45; cursor: default; }
+.panel .check { justify-content: flex-start; align-items: center; cursor: pointer; }
+.panel .checks { display: flex; gap: 20px; }
+/* A 1 px rule down the middle of the gap keeps each readout with its own name; a wider gap would
+   wrap "Time of day 15:00" in the 260 px panel. */
+.panel .sliders { display: grid; grid-template-columns: 1fr 1fr; column-gap: 12px;
+    background: linear-gradient(rgba(255, 255, 255, 0.14), rgba(255, 255, 255, 0.14)) center / 1px 100% no-repeat; }
+.panel input[type=file] { display: none; }
+.panel .hint, .panel output[name=status] { display: block; margin: 6px 0 0; color: #9aa3ad; font-size: 12px; }
+.panel button { width: 100%; margin-top: 10px; }
+/* The Animation section under a rule; while disabled its controls fade, its title and note stay legible. */
+.panel fieldset { min-width: 0; margin: 12px 0 0; padding: 0; border: 0; border-top: 1px solid rgba(255, 255, 255, 0.12); }
+.panel fieldset:disabled { opacity: 1; }
+.panel legend { padding: 0 6px 0 0; font-weight: 600; }
+/* The download bar along the page's top edge: a 4 px opaque gray track, 3:1 against a black
+   page and apart from the sky, filled in the accent color (3.8:1 against the track). */
+.download { position: fixed; top: 0; left: 0; z-index: 1; display: block; width: 100%; height: 4px; margin: 0;
+    border: 0; appearance: none; background: #555a64; }
+.download::-webkit-progress-bar { background: transparent; }
+.download::-webkit-progress-value { background: #6cf; }
+.download::-moz-progress-bar { background: #6cf; }
+/* A download of unknown size: a short accent with a solid core sweeps along the track. */
+.download:indeterminate { background: linear-gradient(90deg, transparent, #6cf 30%, #6cf 70%, transparent) no-repeat,
+    #555a64; background-size: 30% 100%, 100% 100%; animation: download-sweep 1.2s linear infinite; }
+@keyframes download-sweep { from { background-position: -50% 0, 0 0; } to { background-position: 150% 0, 0 0; } }
+/* The status in the middle of the canvas until the first frame draws. */
+.canvas-status { position: fixed; inset: 0; display: grid; place-items: center; margin: 0; color: #9aa3ad;
+    font-size: 14px; pointer-events: none; }
+.panel .summary-progress { font-weight: 400; color: #9aa3ad; }
+/* The title carries the download and the playback for a closed panel; an open panel shows both in
+   its status and its Animation section, and its title stays one line. */
+.panel[open] .summary-progress { display: none; }
+.panel kbd { font: 12px ui-monospace, monospace; padding: 0 4px; border: 1px solid #667; border-radius: 3px; }
+body.dragging .panel { outline: 2px dashed #6cf; }
+/* The canvas's left edge, clear of the panel: the frame-rate readout at the top and the model's
+   credit at the bottom, small and whole while its model is on screen; on a narrow page, where the
+   panel is a strip along the bottom, the credit leads at the top and the readout follows it. */
+.overlays { position: fixed; inset: 16px auto 16px 16px; width: min(520px, calc(100% - 324px)); display: flex;
+    flex-direction: column; align-items: flex-start; gap: 6px; pointer-events: none; }
+.overlays > * { pointer-events: auto; }
+.credit { margin: auto 0 0; padding: 5px 9px; text-wrap: pretty; color: #c3cad2; font-size: 12px; line-height: 1.35;
+    background: rgba(20, 22, 28, 0.72); border-radius: 6px; }
+.credit a { color: #8cf; }
+.fps { padding: 6px 10px; font: 12px ui-monospace, monospace; background: rgba(20, 22, 28, 0.78); border-radius: 6px; }
+@media (max-width: 600px) {
+    /* The open strip takes at most half the page, so the model keeps the upper half; it scrolls. */
+    .panel { top: auto; bottom: 12px; left: 12px; right: 12px; width: auto; max-height: calc(50% - 12px); }
+    .overlays { inset: 12px 12px auto 12px; width: auto; }
+    .credit { order: -1; margin: 0; }
+}

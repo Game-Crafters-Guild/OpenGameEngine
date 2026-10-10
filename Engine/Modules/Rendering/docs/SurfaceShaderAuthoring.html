@@ -1,0 +1,246 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Your First Surface Shader</title>
+<script src="https://cdn.jsdelivr.net/npm/mermaid@10/dist/mermaid.min.js"></script>
+<style>
+  :root {
+    --bg: #1a1d23;
+    --panel: #232831;
+    --panel-light: #2c323d;
+    --border: #3a414d;
+    --text: #d8dde6;
+    --muted: #8a93a3;
+    --accent: #6db4ff;
+    --danger: #ff8a6e;
+    --ok: #7bd88f;
+    --warn: #f6c177;
+  }
+  * { box-sizing: border-box; }
+  html, body {
+    background: var(--bg);
+    color: var(--text);
+    font-family: -apple-system, "Segoe UI", system-ui, sans-serif;
+    line-height: 1.55;
+    margin: 0;
+    padding: 0;
+  }
+  .container { max-width: 1280px; margin: 0 auto; padding: 48px 32px 96px; }
+  h1 { font-size: 28px; margin: 0 0 8px; letter-spacing: -0.01em; }
+  h2 { font-size: 20px; margin: 48px 0 16px; padding-top: 12px; border-top: 1px solid var(--border); }
+  h3 { font-size: 16px; margin: 24px 0 8px; color: var(--accent); }
+  p { margin: 8px 0 14px; }
+  a { color: var(--accent); text-decoration: none; }
+  a:hover { text-decoration: underline; }
+  code, .mono { font-family: "JetBrains Mono", Consolas, monospace; font-size: 0.85em; background: var(--panel-light); padding: 1px 6px; border-radius: 3px; }
+  pre {
+    background: var(--panel);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 14px 16px;
+    overflow-x: auto;
+    font-family: "JetBrains Mono", Consolas, monospace;
+    font-size: 13px;
+    line-height: 1.5;
+  }
+  pre code { background: none; padding: 0; font-size: 1em; }
+  .lede { color: var(--muted); margin-bottom: 4px; font-size: 14px; }
+  .lede + h1 { margin-top: 0; }
+  .panel {
+    background: var(--panel);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 14px 20px;
+    margin: 16px 0;
+  }
+  .panel.danger { border-color: var(--danger); }
+  .panel.ok { border-color: var(--ok); }
+  .panel.warn { border-color: var(--warn); }
+  .panel > p:first-child { margin-top: 2px; }
+  .panel > p:last-child { margin-bottom: 2px; }
+  table { border-collapse: collapse; width: 100%; margin: 14px 0; font-size: 14px; }
+  th { text-align: left; color: var(--muted); font-weight: 600; padding: 8px 12px; border-bottom: 2px solid var(--border); }
+  td { padding: 7px 12px; border-bottom: 1px solid var(--border); vertical-align: top; }
+  tr:hover td { background: var(--panel); }
+  .muted { color: var(--muted); }
+  footer { margin-top: 64px; padding-top: 16px; border-top: 1px solid var(--border); color: var(--muted); font-size: 13px; }
+</style>
+</head>
+<body>
+<div class="container">
+
+<p class="lede">GUIDE · rendering · material system</p>
+<h1>Your First Surface Shader</h1>
+<p class="lede">Author a custom lit surface entirely from your project directory — no engine edits, no descriptor plumbing, no Vulkan.</p>
+
+<p>A <b>surface shader</b> is a fragment of GLSL that describes <em>what a surface looks like</em> — colors, textures, normals, emission. The engine wraps it in an adapter that owns everything else: vertex I/O, descriptor sets, lighting (Forward+ clustered, shadows, IBL), and the OpenPBR BRDF. You write one function; the engine turns it into full pipeline variants.</p>
+
+<h2>1 · Quick start</h2>
+<p>Right-click a folder in the Assets browser → <b>Create → Surface Shader</b>. This creates a <em>pair</em>: <code>NewSurface.glsl</code> (a commented, compiling template demonstrating every mechanism below) and <code>NewSurface.material</code> pre-wired to it. Drag the .material onto a mesh — it renders immediately. Then open the .glsl (the material inspector's <b>Open Surface Shader in Editor</b> button) and start editing; saving recompiles and updates the scene.</p>
+
+<h2>2 · The contract</h2>
+<p>A surface shader defines exactly one entry point:</p>
+<pre><code>SurfaceOutput EvaluateSurface(SurfaceInput sIn)
+{
+    SurfaceOutput o = DefaultSurfaceOutput();
+    o.baseColor = Mat.uBaseColor.rgb;
+    o.metallic  = Mat.uParams0.x;   // "metallic" property
+    o.roughness = Mat.uParams0.y;   // "roughness" property
+    o.normalWS  = normalize(sIn.normalWS);
+    return o;
+}</code></pre>
+<p>The full <code>SurfaceInput</code> / <code>SurfaceOutput</code> field lists live in <code>Engine/Modules/Rendering/Shaders/Includes/surface_io.glsl</code> — the input carries UVs, world position/normal/tangent, view direction, vertex color, per-slot UV transforms; the output carries the complete OpenPBR surface (base/metallic/roughness/normal/emissive/opacity plus coat, sheen, fuzz, anisotropy, subsurface, transmission, thin-film lanes). Start from <code>DefaultSurfaceOutput()</code> and write only what you use.</p>
+<div class="panel warn">
+<p><b>Rules:</b> no <code>#version</code>, no <code>layout(...)</code> declarations, no descriptor bindings — the adapter owns those. Read material parameters only through <code>Mat</code> (the per-instance material row the adapter fetches for you). Helper functions are fine; the file is included into the adapter as-is.</p>
+</div>
+
+<h3>Where the file can live</h3>
+<p>The material's <code>surfaceShader</code> reference resolves in this order: <b>the material's own directory</b> → project root(s) → package shader dirs → the engine shader tree. Dropping <code>my_surface.glsl</code> next to the .material and writing <code>"surfaceShader": "my_surface.glsl"</code> is all it takes. An authored reference that resolves nowhere is a <em>hard compile failure</em> that lists every searched root — never a silent fallback.</p>
+
+<h2>3 · Textures</h2>
+<p>Declare the textures your surface samples with <code>@texture</code> comment tags at the top of the file:</p>
+<pre><code>// @texture albedoMap    srgb
+// @texture dissolveMask linear</code></pre>
+<p><b>Well-known names</b> keep their canonical slot and are sampled directly by name — <code>texture(albedoMap, uv)</code>:</p>
+<table>
+<tr><th>Name</th><th>Slot</th><th>Name</th><th>Slot</th></tr>
+<tr><td><code>albedoMap</code></td><td>0</td><td><code>aoMap</code></td><td>4</td></tr>
+<tr><td><code>normalMap</code></td><td>1</td><td><code>coatNormalMap</code></td><td>5</td></tr>
+<tr><td><code>metallicRoughnessMap</code></td><td>2</td><td><code>roughnessMap</code></td><td>6</td></tr>
+<tr><td><code>emissiveMap</code></td><td>3</td><td><code>metallicMap</code></td><td>7</td></tr>
+</table>
+<p><b>User names</b> (anything else) are packed into the lowest free slots automatically and sampled via <code>GE_USER_TEXTURE(name)</code>:</p>
+<pre><code>float mask = texture(GE_USER_TEXTURE(dissolveMask), uv).r;</code></pre>
+<p>The .material assigns them by the same name — <code>"textures": { "dissolveMask": { ... } }</code>. Unassigned slots fall back to 1×1 defaults, so a surface renders before any texture is hooked up. The window is <b>8 slots total</b>.</p>
+<p>A surface that declares any <code>@texture</code> name owns its slot set: a name it does not declare, well-known or not, binds nothing, and a .material that assigns one gets an <code>unknown texture key</code> warning naming the valid keys. A surface with no declarations keeps the fixed slots in the table.</p>
+<div class="panel danger">
+<p><b>Two hard-failure traps</b> (both fail loudly at compile, never silently): a surface that declares user <code>@texture</code> names must not <em>also</em> read slots by raw ordinal (<code>GE_SLOT_TEX(2)</code> or the triplanar helpers) — the packed name would alias the ordinal. And a comment line whose first token is <code>@texture</code> IS a declaration — when quoting the syntax in prose, don't start the line with the tag.</p>
+</div>
+<p>A slot name works with four sampling forms: <code>texture(name, uv)</code>; <code>textureLod(name, uv, lod)</code>; <code>textureGrad(name, uv, uvPerPixelX, uvPerPixelY)</code>, for a UV whose own screen derivatives are meaningless (a UV displaced per pixel, as the standard surface's parallax does), with the footprint in repeats per pixel; and <code>textureSize(name, lod)</code>, in texels.</p>
+<p>Slot samples — the well-known names and <code>GE_USER_TEXTURE</code> — automatically receive the per-view TAAU texture-sharpness mip bias (the adapter's <code>texture()</code> overload adds <code>ge_mipBiasParams.x</code>; <code>textureGrad</code> scales the footprint by the same amount; <code>textureLod</code> takes the level as given). Raw-ordinal <code>GE_SLOT_TEX</code> sampling bypasses it; pass the bias explicitly if the texture carries surface detail (see <code>GE_SampleTriplanarSlot</code>).</p>
+<p>Per-slot tiling/offset authored on the material is applied with <code>GE_TransformUV</code>:</p>
+<pre><code>vec2 uv = GE_TransformUV(sIn.uv0, sIn.textureST[0], sIn.textureST2[0]);</code></pre>
+
+<h2>4 · Parameters</h2>
+<p>Declare each parameter your surface reads with a <code>@property</code> comment line at the top of the file. The name you declare is the GLSL spelling (<code>Props.&lt;name&gt;</code>), the <code>.material</code> key and the inspector row — one name, no mapping table, no engine edit:</p>
+<pre><code>// @property &lt;type&gt; &lt;name&gt; ["Display Name"] [default=…] [range=min,max] [group=Name] [visibleIf=…] [tooltip="…"] [hdr] [hidden]
+
+// @property color tint        "Tint"        default=1,0.55,0.2 hdr
+// @property float pulseSpeed  "Pulse Speed" default=2.0 range=0,8 group=Pulse tooltip="radians per second"
+// @property vec2  scrollSpeed "Scroll"      default=0,0.2
+// @property bool  wobble      "Wobble"      default=true
+// @property enum  axis        "Axis"        values=UV,WorldY,Radial default=UV
+
+SurfaceOutput EvaluateSurface(SurfaceInput sIn)
+{
+    SurfaceOutput o = DefaultSurfaceOutput();
+    float pulse = 0.5 + 0.5 * sin(Light.uTimeParams.x * Props.pulseSpeed);
+    o.baseColor = Props.tint * pulse;
+    ...
+}</code></pre>
+<table>
+<tr><th>Type</th><th>GLSL (<code>Props.name</code>)</th><th>Inspector</th></tr>
+<tr><td><code>float</code></td><td><code>float</code></td><td>drag field, or a slider with <code>range=min,max</code></td></tr>
+<tr><td><code>vec2</code> <code>vec3</code> <code>vec4</code></td><td>same</td><td>2–4 float fields</td></tr>
+<tr><td><code>color</code></td><td><code>vec3</code>, or <code>vec4</code> with a 4-component default</td><td>colour swatch; <code>hdr</code> adds an intensity control</td></tr>
+<tr><td><code>bool</code></td><td><code>bool</code></td><td>checkbox</td></tr>
+<tr><td><code>int</code></td><td><code>int</code></td><td>integer drag field</td></tr>
+<tr><td><code>enum</code></td><td><code>int</code> (the index)</td><td>dropdown from <code>values=A,B,C</code></td></tr>
+</table>
+<p><code>default=</code> is the single source of truth — the <code>.material</code> stores only what a material overrides, so a new material's file can have no <code>"properties"</code> at all. <code>group=</code> collects rows into a collapsible section (sections appear where their first member is declared); <code>visibleIf=name</code>, <code>visibleIf=name=value</code> and <code>visibleIf=name!=value</code> hide a row against another property, <code>alphaMode</code> or <code>lightingModel</code>; <code>hidden</code> stores a value without a row. The engine packs the storage (greedy first-fit into the 30-lane material block: 120 floats per surface; a following scalar takes a vec3's spare <code>.w</code>). Appending a declaration never moves an earlier property; inserting or reordering repacks the surface, which the edit's recompile already covers.</p>
+<p>Every declaration error — unknown type, malformed <code>range=</code>, the same name declared with two types, more than 120 floats, <code>Mat.&lt;name&gt;</code> where <code>Props.&lt;name&gt;</code> was meant — fails the compile with <code>your_file.glsl:&lt;line&gt;</code> in the Shader Errors panel and the material inspector; the material keeps its last good shader. A declared property the file never reads is a warning. Textures are still declared with <code>@texture</code> (§3), and <code>keyword=</code> on a bool is not wired yet — use <code>"keywords"</code> (§5).</p>
+
+<h2>5 · Keywords (static variants)</h2>
+<p>A material enables named keywords; the surface consumes them as <code>GE_USER_&lt;NAME&gt;</code> defines:</p>
+<pre><code>// .material:  "keywords": ["PULSE"]
+#ifdef GE_USER_PULSE
+    ...
+#endif</code></pre>
+<p>Names are sanitized to uppercase identifiers, reserved engine defines are rejected, and each material compiles <em>one</em> fixed set (max 8) — no combinatorial variant explosion.</p>
+<div class="panel warn">
+<p><b>Silent-typo caveat — this section's <code>"keywords"</code> list only:</b> nothing yet cross-checks that a material keyword is consumed by the surface (or that an <code>#ifdef GE_USER_X</code> has a matching keyword), so a misspelled entry in the <code>.material</code> <code>"keywords"</code> array is a silent no-op — check the spelling on both sides. This is a different mechanism from <code>@property</code> declarations (§4), where a typo is a <em>hard compile error</em> with a file:line in the Shader Errors panel — including <code>keyword=</code> itself, which §4's parser rejects outright until the variant-key plumbing lands.</p>
+</div>
+
+<h2>6 · Built-in inputs</h2>
+<table>
+<tr><th>Input</th><th>What it is</th></tr>
+<tr><td><code>Light.uTimeParams.x</code></td><td>Elapsed time, seconds — pulses, sines, flipbooks</td></tr>
+<tr><td><code>Light.uTimeParams.y</code></td><td>Bounded scroll clock — UV panners (keeps precision on long sessions)</td></tr>
+<tr><td><code>sIn.vertexColor</code></td><td>Vertex color (white when the mesh has none)</td></tr>
+<tr><td><code>GE_DecodeTangentNormal(s)</code></td><td>Normal-map decode (handles BC5 two-channel payloads)</td></tr>
+<tr><td><code>GE_EMISSION_PAPERWHITE_NITS</code></td><td>203 — emission is physical: <code>o.emissive</code> of 1.0 == 203 nits on screen. Author luminous surfaces in nits via a scale param, not display-referred guesses.</td></tr>
+</table>
+
+<h2>7 · The .material file</h2>
+<pre><code>{
+  "schemaVersion": 3,
+  "materialName": "DissolveCrystal",
+  "lightingModel": "StandardPBR",
+  "surfaceShader": "dissolve_pulse.glsl",   // resolves material-dir-first
+  "alphaMode": "Mask",                       // Opaque | Mask (cutoff discard) | Blend
+  "keywords": ["PULSE"],
+  "properties": {                            // overrides only — declared defaults cover the rest
+    "baseColor": [0.6, 0.8, 1.0, 1.0],
+    "roughness": 0.4,
+    "alphaCutoff": 0.5,
+    "dissolveEdge": 0.35,
+    "glow": [0.2, 1.4, 2.0]
+  },
+  "textures": {
+    "albedoMap":    { "path": "Textures/crystal_albedo.png" },
+    "dissolveMask": { "path": "Textures/noise_soft.png" }
+  }
+}</code></pre>
+<p>The editor writes GUID references alongside paths when you assign assets through the inspector; hand-authored paths self-heal into GUIDs. <code>alphaMode</code> owns blending — the shader just writes <code>o.opacity</code> (<code>Mask</code> discards below the adapter's <code>alphaCutoff</code> property — declare it in your surface to expose the slider; <code>Blend</code> composites it). A key no declaration owns is stored but never reaches the shader; the inspector lists it with the nearest declared name.</p>
+
+<h2>8 · The iteration loop</h2>
+<div class="mermaid">
+sequenceDiagram
+  participant U as You
+  participant DEP as Asset dep graph
+  participant SC as Composer + shaderc
+  participant GPU as PSO cache
+  U->>U: edit my_surface.glsl, save
+  U->>DEP: file watcher fires (Shader asset)
+  DEP->>SC: dependent materials recompile
+  SC->>GPU: new SPIR-V, pipelines re-warm
+  GPU-->>U: new pixels
+</div>
+<p>Materials referencing your file recompile automatically on save: the file watcher's shader-source event invalidates every cached shader built from the file and recompiles the registered materials that use it (surface <em>and</em> vertex-modifier references; matched by filename). A failed compile keeps the <em>last good</em> shader on screen — your mesh never disappears mid-edit — and the failure lands in the <b>Shader Errors</b> panel (§9). Note the current blast radius: any shader edit still clears the whole pipeline cache, so a big scene re-warms more PSOs than strictly necessary. If an external edit is ever missed (network drives, tools that bypass change notifications), the material inspector's <b>Recompile Shader</b> button pushes the same lane manually.</p>
+<p><b>What "automatically" covers.</b> Two things match, and between them they reach every file a compile reads:</p>
+<ul>
+<li><b>The material's authored references</b> — the <code>surfaceShader</code> and <code>vertexModifier</code> fields, matched by filename. This catches an edit to your own surface even for a material nothing has compiled yet.</li>
+<li><b>Everything a build actually read.</b> Each successful build records its whole <code>#include</code> closure — the helpers your surface pulls in at any depth, the adapters, the engine <code>Includes/*.glsl</code> — against that material's source identity. Editing any of those files names the identity and queues its materials. So <b>editing a helper you <code>#include</code> recompiles on save</b>, and so does <b>editing the implicit default surface</b> (<code>Surfaces/standard_surface.glsl</code>) that a material with an empty <code>surfaceShader</code> compiles against: its closure row records the default's chain even though its authored reference is the empty string.</li>
+</ul>
+<p>The second rule has one precondition: the material must have <em>compiled at least once this session</em>, because the closure is recorded by a build. Before that first build there is nothing for an include edit to match, and the manual <b>Recompile Shader</b> button is the way through. Authored references carry no such precondition.</p>
+<p>A <code>.Cache/Shaders</code> purge is <b>not</b> part of the fix for a missed trigger — a stale trigger is not a stale cache. The disk cache key hashes the CONTENT of every file in a shader's <code>#include</code> closure — your surface, the helpers it pulls in, the adapters, the engine <code>Includes/*.glsl</code>, at any depth — so once a recompile does run (the button, a material re-register, or an editor restart) it cannot serve a package built from the old bytes. That holds even when the edit leaves the file's timestamp and byte length untouched, which is what a timestamp-preserving copy or sync produces; the old key covered only the top-level composed source and leaned on a timestamp comparison, so those edits could silently serve pre-edit SPIR-V. If you have been purging <code>.Cache/Shaders</code> after touching adapters or includes, that habit is no longer needed.</p>
+<p>Recompiles are also <em>budgeted</em>: the drain runs a small fixed number of material recompiles per frame and carries the rest to following frames, so a surface shared by many materials spreads its cost instead of stalling one frame on every compile. Materials still awaiting their turn keep their last-good shader on screen.</p>
+
+<h2>9 · When it breaks</h2>
+<p>A material whose shader has <em>never</em> compiled draws nothing (the mesh is invisible, not magenta) — the draw is skipped rather than fed a broken pipeline. A material that compiled before keeps its last good shader on screen while you fix the error. Where to look, and what you'll see:</p>
+<table>
+<tr><th>Surface</th><th>Behavior</th></tr>
+<tr><td><b>Shader Errors panel</b></td><td>Auto-opens (bottom dock, next to Script Errors) the moment any material shader compile fails — no selection needed. Rows carry the real <code>file:line</code>; selecting one previews your shader at the failing line, double-click opens it in the script editor (or your external editor, per the script-open preference). The row clears when a later compile of that material succeeds.</td></tr>
+<tr><td><b>Material inspector</b></td><td>The <b>Shader Diagnostics</b> foldout auto-expands with the full error list when the selected material's compile failed (red dot in the header).</td></tr>
+<tr><td><b>Error lines</b></td><td>Errors in your file report <code>your_file.glsl:&lt;line&gt;</code> — real file, real line. Errors at the adapter boundary (e.g. a missing or mis-signatured <code>EvaluateSurface</code>) report the real adapter file/line <em>plus a hint naming your surface file and the required signature</em>.</td></tr>
+<tr><td><b>Composed dump</b></td><td>On failure, the exact composed source that was compiled is written to <code>.Cache/Shaders/Failed/&lt;name&gt;_composed.{vert,frag}</code> and the path is included in the error list — open it to see your file in context (injected defines, resolved includes, texture-slot macros).</td></tr>
+<tr><td><b>Log</b></td><td><code>ShaderComposer:</code> errors name the material and every searched root (unresolved surface path, rejected <code>@texture</code> sets); <code>ShaderCompilationCache</code> warnings carry the compile diagnostics.</td></tr>
+</table>
+
+<h2>10 · The graph route</h2>
+<p>The Material Graph panel (NodeGraphPanel in Material mode) builds surfaces visually — Engine Input sources, ~77 library nodes, a Surface Output master stack — and saves the result <em>as a .glsl file</em> (tag block + compiled body) that plugs into the same <code>surfaceShader</code> field. Note the one-way round-trip: hand edits to the generated body are lost on the next graph re-save.</p>
+
+<h2>11 · If you have written surface shaders elsewhere</h2>
+<div class="panel">
+<p>A surface shader is a lit shader graph written as text: <code>EvaluateSurface</code> is your graph, <code>SurfaceOutput</code> is the master stack, keywords are static feature branches, and the <code>@property</code> lines are the material's property block — a ranged float with a display name and a default is <code>// @property float foo "Foo" default=0.5 range=0,1</code>, read as <code>Props.foo</code>. Textures still come from <code>@texture</code> tags for now. The adapter (<code>adapter_forward.glsl</code>) is the lit pass library: lighting, shadows, instancing, and depth/shadow variants are inherited, never written.</p>
+</div>
+
+<footer>SurfaceShaderAuthoring.html · v1.6 · 2026-10-01 · v1.6: §11 retitled and restated without other engines' names · v1.5 (2026-09-28): §3 states that a declaring surface owns its slot set and lists the textureGrad and textureSize forms · v1.4 (2026-08-28): §5 caveat scoped to the "keywords" list and reconciled against §4's hard errors · v1.3 (2026-08-26) · contract verified against surface_io.glsl / adapter_forward.glsl / ShaderComposer.cpp at time of writing · template: Create → Surface Shader in the Assets browser · v1.3: §4 rewritten for declared properties (<code>@property</code> / <code>Props</code>; the uUser lanes are gone), §7 and §11 updated · v1.2: §8 rewritten for the include-closure trigger</footer>
+
+</div>
+<script>
+  mermaid.initialize({ startOnLoad: true, theme: 'dark', themeVariables: { darkMode: true, background: '#1a1d23' } });
+</script>
+</body>
+</html>

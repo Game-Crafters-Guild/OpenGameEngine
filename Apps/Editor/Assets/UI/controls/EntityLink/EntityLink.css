@@ -1,0 +1,57 @@
+/* EntityLink (UI/Controls/EntityLink.h): an entity named by its link, in a comment, a row or a
+   summary; requested by the link itself. */
+
+/* An entity link: a chip with the entity's name (a click selects it) and a frame glyph at its
+   right end (a click frames it). */
+/* One unit in a wrapping row: the chip never breaks inside. */
+.entity-link {
+	flex-shrink: 0;
+	white-space: nowrap;
+	flex-direction: row;
+	align-items: center;
+	gap: 4px;
+	padding-left: 6px;
+	padding-right: 3px;
+	border-radius: 8px;
+	background-color: var(--ui_color_bg_selected);
+	color: var(--ui_color_text_bright);
+	cursor: pointer;
+}
+
+/* Hovered: a lighter plate, one step above the chip's own, beside the Scene View's highlight. */
+.entity-link:hover {
+	background-color: var(--ui_color_dropdown_outline_hover);
+}
+
+.entity-link-name {
+	white-space: nowrap;
+	color: var(--ui_color_text_bright);
+	cursor: pointer;
+}
+
+.entity-link-frame {
+	width: 14px;
+	height: 14px;
+	background-image: url("editor:Icons/frame.svg");
+	background-size: 14px 14px;
+	background-repeat: no-repeat;
+	background-position: center;
+	opacity: 0.7;
+	cursor: pointer;
+}
+
+.entity-link-frame:hover {
+	opacity: 1;
+}
+
+/* A link to an entity that is not in the scene: the chip's shape, muted and italic, with the
+   text its surface gives ("deleted entity", the id). */
+.entity-link-missing {
+	padding-left: 6px;
+	padding-right: 6px;
+	border-radius: 8px;
+	background-color: var(--ui_color_bg_hover_alt);
+	color: var(--ui_color_text_dim);
+	font-style: italic;
+	cursor: default;
+}

@@ -1,0 +1,71 @@
+/* EnableDot (UI/Controls/EnableDot.h): an on/off switch drawn as a dot.
+   The element is the 24 px hit area; the mark inside it is the visual and
+   carries the state class. On hover a neutral plate fills the hit area behind
+   the mark: the mark itself never changes, since a darker dot on hover read as
+   a different state. */
+
+.enable-dot {
+	width: 24px;
+	height: 24px;
+	min-width: 24px;
+	min-height: 24px;
+	flex-shrink: 0;
+	border-radius: 12px;
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	cursor: pointer;
+}
+
+.enable-dot:hover {
+	background-color: var(--ui_color_enable_dot_hover_plate);
+}
+
+/* Keyboard focus: a ring at the edge of the hit area. A border, not a
+   shadow: an inset shadow draws nothing on the transparent hit area. The box
+   is border-box, so the ring moves neither the mark nor the title. */
+.enable-dot:focus-visible {
+	border-width: 1.5px;
+	border-color: var(--ui_color_accent_blue);
+}
+
+.enable-dot-mark {
+	width: 8px;
+	height: 8px;
+	min-width: 8px;
+	min-height: 8px;
+	border-radius: 4px;
+	pointer-events: none;
+}
+
+/* The mark's colours come through three variables, which the inactive state
+   below re-points. */
+.enable-dot-mark-on {
+	background-color: var(--enable-dot-on-color, var(--ui_color_accent_blue));
+}
+
+/* Off is a hollow ring, told from on by its shape as well as its colour. A
+   2 px stroke, so the whole ring reaches its colour past the anti-aliased
+   edge. */
+.enable-dot-mark-off {
+	border-width: 2px;
+	border-color: var(--enable-dot-off-color, var(--ui_color_enable_dot_off));
+	background-color: transparent;
+}
+
+/* Mixed: a dash, neither on nor off, as a mixed Toggle shows. */
+.enable-dot-mark-mixed {
+	height: 2px;
+	min-height: 2px;
+	border-radius: 1px;
+	background-color: var(--enable-dot-mixed-color, var(--ui_color_mixed_indicator));
+}
+
+/* Inactive: the value stays readable, muted, while something above it is off.
+   Muted through colour, never opacity, so every mark keeps 3:1 against the
+   header at rest. */
+.enable-dot-inactive {
+	--enable-dot-on-color: var(--ui_color_accent_blue_inactive);
+	--enable-dot-off-color: var(--ui_color_enable_dot_muted);
+	--enable-dot-mixed-color: var(--ui_color_enable_dot_muted);
+}

@@ -1,0 +1,154 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Terrain Shadows</title>
+<style>
+  :root {
+    --bg: #11151b; --panel: #1b222c; --panel-light: #222b38; --border: #344152;
+    --text: #e5eaf0; --muted: #a4afbd; --accent: #83baff; --ok: #6bd08a; --warn: #e7c06a;
+  }
+  * { box-sizing: border-box; }
+  body {
+    background: var(--bg); color: var(--text);
+    font: 16px/1.62 -apple-system, "Segoe UI", system-ui, sans-serif;
+    max-width: 940px; margin: 40px auto; padding: 0 24px;
+  }
+  h1 { font-size: 30px; margin: 0 0 6px; }
+  h2 { font-size: 21px; margin: 44px 0 14px; padding-top: 22px; border-top: 1px solid var(--border); }
+  h3 { font-size: 16px; margin: 24px 0 8px; color: var(--accent); }
+  p.lede { color: var(--muted); font-size: 12px; letter-spacing: .05em; text-transform: uppercase; margin: 0 0 26px; }
+  code { font-family: "Cascadia Code", Consolas, monospace; font-size: 13.5px; color: var(--accent);
+         background: rgba(255,255,255,.045); border-radius: 4px; padding: 1px 5px; }
+  table { border-collapse: collapse; width: 100%; margin: 14px 0 20px; font-size: 14px; }
+  th { text-align: left; background: var(--panel-light); color: var(--muted); font-weight: 600;
+       padding: 8px 10px; border-bottom: 1px solid var(--border); }
+  td { padding: 8px 10px; border-bottom: 1px solid var(--border); vertical-align: top; }
+  tr:hover td { background: rgba(255,255,255,.025); }
+  .panel { background: var(--panel); border: 1px solid var(--border); border-left: 4px solid var(--accent);
+           border-radius: 6px; padding: 12px 16px; margin: 18px 0; }
+  .panel.ok { border-left-color: var(--ok); }
+  .panel.warn { border-left-color: var(--warn); }
+  .panel-title { font-weight: 600; margin: 0 0 6px; }
+  .panel p:last-child { margin-bottom: 0; }
+  ul { padding-left: 22px; } li { margin: 5px 0; }
+  footer { color: var(--muted); font-size: 12.5px; margin-top: 48px; padding-top: 14px;
+           border-top: 1px solid var(--border); }
+</style>
+</head>
+<body>
+
+<p class="lede">Guide &middot; terrain / lighting</p>
+<h1>Terrain Shadows</h1>
+<p>A terrain shadows the sun: a ridge darkens the valley behind it, a hill throws its shadow across the
+lake, at any sun angle and as far as the shadow reaches. This page is what casts, what receives, how
+soft the edge is, the one setting, what it costs and what it does not do yet.</p>
+
+<h2>The short version</h2>
+
+<div class="panel ok">
+<p class="panel-title">It is on by default.</p>
+<p>Every terrain with <code>Cast Shadows</code> on (the default) shadows the scene's sun, the primary
+directional light that casts shadows. Nothing else needs setting up, in either directional shadow mode
+(<b>Cascades</b> or <b>Ray traced</b>).</p>
+</div>
+
+<h2>What casts and what receives</h2>
+
+<table>
+<thead><tr><th></th><th>What</th><th>Notes</th></tr></thead>
+<tbody>
+<tr>
+  <td><b>Casts</b></td>
+  <td>The terrain's height field: the surface its heights describe, at the resolution of the height data.</td>
+  <td>The shadow follows the heights, not the triangles the terrain is drawn with, so it does not
+  shift as the terrain refines near the camera. Meshes on the terrain cast their own shadows through the
+  shadow cascades as before.</td>
+</tr>
+<tr>
+  <td><b>Receives</b></td>
+  <td>Everything the sun lights: the terrain itself, grass, meshes, characters, the water surface.</td>
+  <td>A receiver above the ground (a roof, a tree top, a lake surface over its bed) is shadowed only
+  when it is below the terrain's shadow at that point, so tall things stand out of a valley's shadow
+  into the sun. The terrain's shadow reaches beyond the shadow cascades' distance and beyond the
+  terrain's own edge, onto the sea.</td>
+</tr>
+</tbody>
+</table>
+
+<h2>The soft edge</h2>
+<p>The sun is a disc, not a point, so a shadow's edge blurs with the distance to whatever casts it: sharp
+at the foot of a cliff, wide a long way behind a ridge. The terrain's shadow follows the same rule as
+the shadows of meshes in the same shadow mode, so a ridge and a wall of the same height soften alike:</p>
+<ul>
+  <li><b>Cascades</b> with the <b>PCSS</b> or <b>DPCF</b> filter: the edge widens with the sun light's
+  <code>Angular Diameter</code> and the distance to the ridge, up to the
+  <code>Max Penumbra (World)</code> shown beside it (the widest the blur may get across the sun's ray, as for meshes).
+  With the other filters the terrain's edge stays sharp.</li>
+  <li><b>Ray traced</b>: the edge widens with the <code>Angular Diameter</code> and the distance, without
+  a limit, as the traced mesh shadows do. A ridge two kilometers away under a low evening sun casts a
+  very soft shadow.</li>
+</ul>
+<p>On level ground the blurred band is <code>2 &times; r / sin(elevation)</code> wide, where
+<code>r = distance / cos(elevation) &times; tan(Angular Diameter / 2)</code> is the blur's half-width
+across the sun's ray (bounded by <code>Max Penumbra</code> in the cascades mode). An
+<code>Angular Diameter</code> of 0 makes every edge sharp. A <code>Max Penumbra</code> of 0 does
+not: it means the automatic limit, 0.5 m across the sun's ray, which is wider than the 0.2 m default, so
+setting it to 0 to sharpen a terrain edge widens it instead.</p>
+
+<h2>The setting</h2>
+
+<table>
+<thead><tr><th>Field</th><th>Default</th><th>Effect</th></tr></thead>
+<tbody>
+<tr>
+  <td><code>Terrain &rarr; Terrain Rendering &rarr; Cast Shadows</code></td>
+  <td>on</td>
+  <td>Off: the terrain casts no shadow on anything, itself included. Meshes still cast theirs onto the
+  terrain (that is <code>Receive Shadows</code>).</td>
+</tr>
+</tbody>
+</table>
+
+<h2>What it costs</h2>
+<p>The shadow is computed once into a map laid along the sun's direction, and every lit pixel reads it
+once. The map is recomputed only when it has to be:</p>
+<ul>
+  <li><b>A still sun:</b> never. The terrain's shadow costs one texture read per lit pixel.</li>
+  <li><b>An animated day</b> (the animate toggle beside <code>Sky Environment &rarr; Time of Day</code>): whenever the sun
+  has moved, which is most frames. The recomputation takes a fraction of a millisecond on a desktop GPU
+  for a 4 km terrain at one sample per meter, and less for smaller terrains.</li>
+  <li><b>Sculpting:</b> only the part of the map that the edited area can shadow.</li>
+</ul>
+<p>The map takes four bytes per sample (the shadow's height and the distance to what casts it): under
+3 MiB for a 600 m terrain at one sample per meter, and at most 64 MiB for the largest terrains, whose map
+uses a slightly coarser sample than their height data.</p>
+
+<h2>Limits</h2>
+
+<div class="panel warn">
+<p class="panel-title">Not yet</p>
+<ul>
+  <li><b>The edge's resolution.</b> The map has one sample per height-data cell (slightly coarser on
+  the largest terrains), so a shadow starts up to one sample behind the ridge crest that casts it.</li>
+  <li><b>Streamed (atlas-backed) terrains and planets</b> cast no terrain shadow yet.</li>
+  <li><b>One terrain.</b> With several terrains active, the one the terrain renderer draws casts.</li>
+  <li><b>The compatibility renderer profile</b> (web) has no terrain shadow.</li>
+</ul>
+</div>
+<p>With the sun below the horizon, or within half a degree of straight overhead, the terrain casts no
+shadow.</p>
+
+<h2>Changelog</h2>
+<ul>
+  <li>2026-10-04: first version: the terrain shadows the sun in both directional shadow modes;
+  <code>Cast Shadows</code> takes effect.</li>
+  <li>2026-10-05: the edge's resolution under Limits.</li>
+  <li>2026-10-05: the soft edge: the terrain's shadow blurs with the sun's angular size and the distance
+  to the ridge casting it, as mesh shadows do.</li>
+</ul>
+
+<footer>Terrain Shadows &middot; 2026-10-04</footer>
+</body>
+</html>

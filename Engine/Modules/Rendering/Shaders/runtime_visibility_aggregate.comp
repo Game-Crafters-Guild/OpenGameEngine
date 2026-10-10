@@ -1,0 +1,55 @@
+#version 450
+
+// Phase 6-iii: Runtime Visibility Aggregate Pass
+//
+// For each GPUInstance, atomic-OR the per-instance "any view visible" flag
+// (produced by visibility_union.comp) into a per-runtime flag indexed by
+// GPUInstance.runtimeId. The animation_skinning compute shader reads the
+// resulting per-runtime buffer and early-outs when ALL entities using a
+// given skeleton runtime are off-screen — recovering GPU skinning time on
+// crowd scenes where most characters are out of view.
+//
+// One thread per GPUInstance:
+//   if anyVisible[i] != 0 and instances[i].runtimeId != 0:
+//       atomicOr(runtimeVisible[runtimeId], 1)
+
+layout(local_size_x = 64, local_size_y = 1, local_size_z = 1) in;
+
+struct GPUInstance {
+#include "Includes/gpu_instance_fields.glsl"
+};
+
+layout(set = 0, binding = 0, std430) restrict readonly buffer AnyVisibleFlags {
+    uint anyVisible[];
+};
+
+layout(set = 0, binding = 1, std430) restrict readonly buffer InstanceBuffer {
+    GPUInstance instances[];
+};
+
+layout(set = 0, binding = 2, std430) restrict coherent buffer RuntimeVisibleBuffer {
+    uint runtimeVisible[];
+};
+
+layout(push_constant) uniform PushConstants {
+    uint instanceCount;       // # entries in instances[] and anyVisible[]
+    uint runtimeVisibleCap;   // capacity of runtimeVisible[] in element units (bounds-check)
+} pc;
+
+void main() {
+    uint i = gl_GlobalInvocationID.x;
+    if (i >= pc.instanceCount) {
+        return;
+    }
+    if (anyVisible[i] == 0u) {
+        return;
+    }
+    uint rt = instances[i].runtimeId;
+    if (rt == 0u || rt >= pc.runtimeVisibleCap) {
+        // 0 = unskinned / no runtime. Out-of-range = sparse id beyond our cap —
+        // skip atomic (the skinning shader will fall back to "always animate"
+        // since its bounds check matches this cap).
+        return;
+    }
+    atomicOr(runtimeVisible[rt], 1u);
+}

@@ -1,0 +1,125 @@
+/* Mixer Panel - same background colors as editor theme (tokens.css) */
+/* Path: UIElement.Mixer.panel > uielement.mixer-panel */
+/* Min height so faders + labels stay usable; flex allows panel to grow when resizing */
+.mixer-panel {
+    display: flex;
+    flex-direction: column;
+    position: relative;
+    width: 100%;
+    height: 100%;
+    min-height: 260px;
+    background-color: var(--ui_color_bg_panel);
+    padding: 8px;
+}
+
+/* gap set in C++ (SetGap) */
+.mixer-strips-row {
+    flex: 1 1 auto;
+    min-height: 220px;
+}
+
+/* padding-top set in C++ */
+.mixer-strip {
+    width: 72px;
+    min-width: 72px;
+    max-width: 72px;
+    flex: 1 1 auto;
+    min-height: 220px;
+    background-color: var(--ui_color_bg_grid);
+    border-radius: 8px;
+    padding: 6px;
+    box-shadow: 0 1px 2px rgba(0, 0, 0, 0.25);
+}
+
+.mixer-strip--master {
+    /* Master strip - green level bar via .mixer-fader--master */
+}
+
+/* gap set in C++ */
+.mixer-scale-fader-row {
+    flex: 1 1 auto;
+    min-height: 220px;
+    min-width: 0;
+    width: 100%;
+    box-sizing: border-box;
+    align-items: stretch;
+}
+
+/* padding set in C++ */
+.mixer-db-scale {
+    width: 24px;
+    min-width: 24px;
+    max-width: 24px;
+    flex: 0 0 auto;
+    min-height: 220px;
+    align-self: stretch;
+    margin-left: 0;
+    margin-right: 0;
+}
+
+.mixer-db-label {
+    font-size: 10px;
+    font-family: inherit;
+}
+
+.mixer-db-label-major {
+    color: var(--ui_color_text_bright);
+    font-weight: 600;
+    font-size: 10px;
+}
+
+.mixer-db-label-minor {
+    color: var(--ui_color_text_dim);
+}
+
+/* VU meter: narrow bar (6px), stretches with panel height (min 220px); fill/thumb scaled in C++ from layout height */
+.mixer-vu-container {
+    width: 24px;
+    min-width: 24px;
+    max-width: 24px;
+    flex: 0 0 auto;
+    min-height: 220px;
+    align-self: stretch;
+    justify-content: flex-end;
+    overflow: visible;
+}
+
+.mixer-vu-clip {
+    width: 6px;
+    min-width: 6px;
+    min-height: 2px;
+    border-radius: 2px;
+    overflow: hidden;
+}
+
+.mixer-vu-thumb {
+    flex-shrink: 0;
+    border-radius: 2px;
+    min-height: 8px;
+    min-width: 16px;
+    /* Wider than VU (6px), centered, so thumb extends horizontally outside the bar */
+}
+
+/* Full-height gradient strip; height set in C++ to 100/level % of clip so color bands stay fixed, clip masks from top */
+.mixer-vu-strip {
+    width: 6px;
+    min-width: 6px;
+    flex-shrink: 0;
+}
+
+.mixer-vu-segment {
+    width: 100%;
+    min-height: 2px;
+    flex-shrink: 0;
+}
+
+/* Path: UIElement.Mixer.panel > uielement.mixer-panel > uielement.mixer-strips-row > uielement.mixer-strip > label.mixer-label */
+.mixer-label {
+    display: block;
+    position: relative;
+    font-size: 10px;
+    font-weight: 500;
+    color: var(--ui_color_text_bright);
+    margin-top: 4px;
+    text-align: center;
+}

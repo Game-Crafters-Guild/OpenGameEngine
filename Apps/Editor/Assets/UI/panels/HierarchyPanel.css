@@ -1,0 +1,41 @@
+/* The Hierarchy panel's own sheet, requested by HierarchyPanel for its subtree.
+
+   A row's enable state. Editor::HierarchyRowActivity puts the state classes
+   on the elements that draw it: the title dims for an entity switched
+   off itself (hierarchy-title-off) and less for one that is on while an
+   ancestor is off (hierarchy-title-inactive), and its tooltip says which; the
+   icon is the entity's own switch, so it dims only for an entity that is off
+   itself (hierarchy-preview-icon-off). */
+
+.hierarchy-title-off {
+	opacity: 0.45;
+}
+
+.hierarchy-title-inactive {
+	opacity: 0.7;
+}
+
+/* The icon of an entity switched off itself; a latched icon of such an entity
+   (below) shows the committed off state at the preview strength. */
+.hierarchy-preview-icon-off {
+	opacity: 0.45;
+	--hierarchy-preview-icon-committed-opacity: 0.3;
+}
+
+/* A hovered icon previews the switch a click makes: an entity that is on
+   previews off, an entity that is off previews on. The off rule comes after
+   the on rule, which it overrides at equal specificity. */
+.hierarchy-preview-icon:hover {
+	opacity: 0.3;
+}
+
+.hierarchy-preview-icon-off:hover {
+	opacity: 1.0;
+}
+
+/* After a click the icon shows the state it committed until the pointer
+   leaves; re-entering removes the latch and previews the next switch again.
+   Last, so it wins over both preview rules at equal specificity. */
+.tree-icon-hover-preview-suppressed:hover {
+	opacity: var(--hierarchy-preview-icon-committed-opacity, 1.0);
+}

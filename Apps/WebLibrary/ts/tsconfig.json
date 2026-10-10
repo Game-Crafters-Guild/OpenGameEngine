@@ -1,0 +1,15 @@
+{
+  "compilerOptions": {
+    "target": "ES2022",
+    "module": "ESNext",
+    "moduleResolution": "Bundler",
+    "lib": ["ES2022", "DOM", "DOM.Iterable"],
+    "strict": true,
+    "noEmit": true,
+    "allowJs": true,
+    "checkJs": true,
+    "skipLibCheck": false,
+    "paths": { "@openengine/web": ["./opengine.d.ts"] }
+  },
+  "include": ["opengine.d.ts", "components.d.ts", "src/**/*", "test/types/**/*", "../examples/*/main.js"]
+}

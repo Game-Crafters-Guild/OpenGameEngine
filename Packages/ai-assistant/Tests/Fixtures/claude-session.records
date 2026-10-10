@@ -1,0 +1,10 @@
+{"type":"queue-operation","operation":"enqueue","timestamp":"2026-10-07T09:00:00.000Z","sessionId":"00000000-0000-4000-8000-000000000011","content":"Why does the terrain flicker\nat a distance?"}
+{"parentUuid":null,"isSidechain":false,"type":"user","message":{"role":"user","content":"  Why does the terrain flicker\nat a distance?"},"uuid":"u1","timestamp":"2026-10-07T09:00:00.100Z","cwd":"C:\\Projects\\Game","sessionId":"00000000-0000-4000-8000-000000000011","version":"2.1.290"}
+{"parentUuid":"u1","isSidechain":false,"attachment":{"type":"date","date":"2026-10-07"},"type":"attachment","uuid":"a1"}
+{"parentUuid":"a1","isSidechain":false,"isMeta":true,"type":"user","message":{"role":"user","content":"<local-command-caveat>meta</local-command-caveat>"},"uuid":"m1"}
+{"parentUuid":"m1","isSidechain":false,"type":"assistant","message":{"role":"assistant","content":[{"type":"tool_use","id":"t1","name":"Read","input":{}}]},"uuid":"r1"}
+{"parentUuid":"r1","isSidechain":false,"type":"user","message":{"role":"user","content":[{"type":"tool_result","tool_use_id":"t1","content":"file text"}]},"uuid":"t1r"}
+{"type":"user","message":{"role":"user","content":"a line cut short
+{"parentUuid":"t1r","isSidechain":true,"type":"user","message":{"role":"user","content":"a subagent prompt"},"uuid":"s1"}
+{"parentUuid": "t1r", "isSidechain": false, "type": "user", "message": {"role": "user", "content": [{"type": "text", "text": "And at night?"}]},"uuid":"u2"}
+{"type":"last-prompt","lastPrompt":"And at night?","sessionId":"00000000-0000-4000-8000-000000000011"}

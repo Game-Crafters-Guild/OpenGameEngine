@@ -1,0 +1,244 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Text Effects — shadow, glow and outline</title>
+<style>
+  :root{
+    --bg:#0e1116; --panel:#161b22; --panel-light:#1c232c; --border:#2a323d;
+    --text:#d7dde5; --muted:#8b97a6; --accent:#5db0ff;
+    --danger:#ff6b6b; --bad:#ff6b6b; --ok:#5ad19b; --good:#5ad19b; --warn:#e8c468;
+    --mono:"SF Mono",ui-monospace,Menlo,Consolas,monospace;
+  }
+  *{box-sizing:border-box}
+  body{background:var(--bg);color:var(--text);font:15px/1.6 -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif;
+       margin:0;padding:0 0 80px}
+  .wrap{max-width:980px;margin:0 auto;padding:32px 24px}
+  h1{font-size:30px;margin:0 0 4px;letter-spacing:-.4px}
+  h2{font-size:22px;margin:42px 0 14px;padding-top:22px;border-top:1px solid var(--border)}
+  h3{font-size:17px;margin:26px 0 8px;color:#e9eef4}
+  p,li{color:var(--text)}
+  .lede{color:var(--muted);font-size:13px;text-transform:uppercase;letter-spacing:.12em;margin:0 0 26px}
+  a{color:var(--accent);text-decoration:none}
+  code{font-family:var(--mono);font-size:.88em;background:#11161d;border:1px solid var(--border);
+       border-radius:4px;padding:1px 5px}
+  pre{font-family:var(--mono);font-size:13px;background:#11161d;border:1px solid var(--border);
+      border-radius:8px;padding:14px 18px;overflow:auto;line-height:1.5}
+  pre code{background:none;border:0;padding:0}
+  .panel{border:1px solid var(--border);border-left-width:4px;border-radius:8px;background:var(--panel);
+         padding:14px 18px;margin:16px 0}
+  .panel.ok{border-left-color:var(--ok)} .panel.warn{border-left-color:var(--warn)}
+  .panel h4{margin:0 0 6px;font-size:14px;text-transform:uppercase;letter-spacing:.06em}
+  .panel.ok h4{color:var(--ok)} .panel.warn h4{color:var(--warn)}
+  .grid-2{display:grid;grid-template-columns:1fr 1fr;gap:16px}
+  @media(max-width:760px){.grid-2{grid-template-columns:1fr}}
+  table{border-collapse:collapse;width:100%;margin:16px 0;font-size:13.5px}
+  th,td{border:1px solid var(--border);padding:8px 11px;text-align:left;vertical-align:top}
+  th{background:var(--panel-light);color:#e9eef4}
+  tr:hover td{background:#12171e}
+  .muted{color:var(--muted)}
+  ul{padding-left:22px} li{margin:4px 0}
+  footer{max-width:980px;margin:40px auto 0;padding:18px 24px 0;border-top:1px solid var(--border);color:var(--muted);font-size:12.5px}
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <h1>Text Effects</h1>
+  <p class="lede">Feature guide · UI / text styling</p>
+
+  <p>Any text in the UI can carry a <b>shadow</b>, a <b>glow</b> and an <b>outline</b>. You
+  declare them in CSS, on the rule that styles the text, like any other property. They
+  decorate the glyphs only: text size, wrapping, selection and the caret do not change, and
+  neither does the element's layout box. Labels, buttons, fields and every control that draws
+  text through the shared text path get them, including localized text and fallback fonts.</p>
+
+  <h2>Declare an effect</h2>
+
+  <p>Put the colors in tokens on the root element of your layout and read them with
+  <code>var()</code>, so one palette change restyles every effect. Tokens inherit, so every
+  text inside that element reads them. One selector per rule.</p>
+
+<pre><code>.hud {
+    --hud_text_shadow: #000000b3;
+    --hud_text_glow: #e05a0099;
+    --hud_text_outline: #172418;
+}
+
+.hud-title {
+    color: #eee1b1;
+    text-shadow: 0px 2px 1px var(--hud_text_shadow);
+    text-outline: 1px var(--hud_text_outline);
+}
+
+.hud-selected {
+    color: #ffd263;
+    text-glow: 6px var(--hud_text_glow);
+}</code></pre>
+
+  <p>Then give the text its class in the layout:</p>
+
+<pre><code>&lt;UIElement class="hud"&gt;
+    &lt;Label class="hud-title" text="Adventure"/&gt;
+    &lt;Label class="hud-selected" text="Start"/&gt;
+&lt;/UIElement&gt;</code></pre>
+
+  <div class="panel warn">
+    <h4>Do not put the tokens on <code>:root</code></h4>
+    <p><code>:root</code> matches only an element without a parent. A UI document mounted in a
+    scene or in the editor has a parent, so its <code>:root</code> rules never apply, and the
+    effects draw nothing. Declare the tokens on a class of the layout's own root element.</p>
+  </div>
+
+  <div class="panel ok">
+    <h4>Everything is CSS</h4>
+    <p>An effect is a style property. It inherits, it responds to <code>:hover</code> and the
+    other pseudo-classes, it transitions, and a hot-reloaded stylesheet changes it at once.
+    There is no C++ call to set one.</p>
+  </div>
+
+  <h2>Properties</h2>
+  <table>
+    <tr><th>Shorthand</th><th>Value</th><th>Longhands</th></tr>
+    <tr><td><code>text-shadow</code></td><td><code>x y [blur] color</code> or
+      <code>color x y [blur]</code>, or <code>none</code></td>
+      <td><code>text-shadow-offset-x</code>, <code>text-shadow-offset-y</code>,
+      <code>text-shadow-blur</code>, <code>text-shadow-color</code></td></tr>
+    <tr><td><code>text-glow</code></td><td><code>radius color</code>, or <code>none</code></td>
+      <td><code>text-glow-radius</code>, <code>text-glow-color</code></td></tr>
+    <tr><td><code>text-outline</code></td><td><code>width color</code>, or <code>none</code></td>
+      <td><code>text-outline-width</code>, <code>text-outline-color</code></td></tr>
+  </table>
+  <ul>
+    <li>Lengths are logical pixels (<code>px</code> or unitless) and scale with the UI scale.
+    Shadow offsets may be negative; blur, radius and width may not.</li>
+    <li>Colors are named, hexadecimal (<code>#rgb</code>, <code>#rrggbb</code>,
+    <code>#rrggbbaa</code>), <code>rgb()</code>, <code>rgba()</code>, <code>hsl()</code> or a
+    <code>var()</code> that resolves to one. A transparent color turns its effect off.</li>
+    <li>Every longhand inherits and accepts <code>initial</code>, <code>inherit</code> and
+    <code>unset</code>. <code>none</code> clears a shorthand.</li>
+    <li>A malformed value is ignored as a whole, and the earlier declaration stays. The log
+    warns once per malformed declaration and names the accepted form. A shadow without a color
+    is one of these: write the color.</li>
+  </ul>
+
+  <h2>What each effect draws</h2>
+
+  <p>The three effects are drawn under the text's fill, from one measurement: the distance from
+  each pixel to the glyph's outline.</p>
+
+  <div class="grid-2">
+    <div class="panel">
+      <h4>Outline</h4>
+      <p>Covers every pixel within <b>width</b> of the glyph, with the same one-pixel soft edge
+      the glyph has. It grows the glyph outward; the fill is unchanged on top of it.</p>
+    </div>
+    <div class="panel">
+      <h4>Glow</h4>
+      <p>Full strength at the glyph's edge (or the outline's edge), fading as
+      <code>exp(-2 (d / radius)²)</code> with the distance <code>d</code> past it, the same
+      falloff as the <code>glow</code> property on boxes. It fades out at twice the radius.</p>
+    </div>
+    <div class="panel">
+      <h4>Shadow, sharp</h4>
+      <p>With no blur, the glyph's own shape moved by the offset.</p>
+    </div>
+    <div class="panel">
+      <h4>Shadow, blurred</h4>
+      <p>The blur is the CSS blur radius: the shadow's edge is a Gaussian of standard
+      deviation <b>blur / 2</b>, as for <code>box-shadow</code>. It reaches 1.5 &times; blur
+      past the offset shape.</p>
+    </div>
+  </div>
+
+  <p>The shadow and the glow are cast by the outlined glyph: with an outline, they start at the
+  outline's edge. Paint order, back to front: shadow, glow, outline, fill. A line draws the
+  effects of all of its glyphs first and its fills after, so no effect covers a letter of its
+  own line, and every shadow and glow of the line paints under every outline of it. Within the
+  shadow-and-glow layer the effects of neighboring glyphs stack in reading order, so a glyph's
+  shadow can sit over the previous glyph's glow. A semi-transparent text color shows the effects
+  through the glyph. For <code>opacity</code> below 1, see Limits.</p>
+
+  <h2>Clipping</h2>
+  <p>While its text fits, an element's own <code>overflow: hidden</code> does not cut its
+  text's effects. The clip is the padding box grown by the effect's reach on every side; the
+  text itself stays inside the padding box because it fits (an ellipsized run ends inside the
+  box), so a glowing label in a fixed-height list or tree row keeps its whole glow, ellipsized
+  or not. Glyph ink that overhangs the text's advance, such as an italic's tail, can show past
+  the padding box by up to the reach. The reach is the outline width plus twice the radius for a glow; the larger
+  offset plus the outline width, 1.5 &times; the blur and 1 pixel of antialiasing for a
+  shadow; and the width plus 1 pixel for an outline. The clips of the element's ancestors
+  still apply: a parent with <code>overflow: hidden</code> cuts the effect at its own edge. A
+  scroll view's viewport is such an ancestor: give the scrolled content padding of at least the
+  reach, or the first and last rows' effects are cut at its edge.</p>
+  <ul>
+    <li>Text that the box cuts (it overflows without an ellipsis, or wraps taller than the box)
+    keeps the padding box, and its effects are cut with it.</li>
+    <li>An element whose overflow clip also clips child elements keeps the padding box for its
+    own text's effects.</li>
+  </ul>
+
+  <h2>Limits</h2>
+  <ul>
+    <li>One shadow per element. Shadow lists and <code>inset</code> are not supported.</li>
+    <li>Color glyphs (emoji) take the shadow only, sharp, from their alpha. They have no
+    outline to measure a glow or an outline from.</li>
+    <li>Outline width, glow radius and shadow blur clamp to 64 device pixels, and each shadow
+    offset to 256 device pixels either way, so an effect reaches at most 417 device pixels
+    past its glyph.</li>
+    <li>Effects are drawn line by line. A line's glow, outline or upward shadow paints over
+    the line above where it reaches that far: a glow reaches twice its radius. Keep that reach
+    within the gap between lines, or raise the <code>line-height</code>.</li>
+    <li>While an element's <code>opacity</code> is below 1, a neighboring glyph's glow shows
+    faintly through the letters: at most opacity &times; (1 &minus; opacity) of the glow's
+    strength, a quarter at 50%. A glyph's own effects never show through its letters, and at
+    opacity 1 no effect shows through any letter. It shows on dimmed or disabled text styled
+    with <code>opacity</code> and while a glowing label fades in or out. Where that matters,
+    drop the glow in the dimmed rule (<code>text-glow: none</code>). In the same way, below
+    opacity 1 a glyph's glow shows through its own outline at up to opacity &times;
+    (1 &minus; opacity) of its strength. Issue #2940 tracks drawing the text and its effects as
+    one layer.</li>
+    <li>Effect lengths are absolute pixels (<code>em</code> is not accepted), so they do not grow
+    with the font size: a 1px outline is a hairline at 64px. Choose them for the size the text
+    is shown at, and check the palette over every background the text sits on: a glow that
+    reads over the sky can disappear over bright ground, where a dark shadow and outline still
+    carry the letters.</li>
+    <li>A glyph with an outline or a glow measures its distance to the outline over the curves
+    within reach, so a wider outline or glow costs more per pixel and widens the area each
+    glyph draws. Each glyph is drawn once per layer the text uses: once for plain text, twice
+    with a shadow or a glow only, twice with an outline only, and three times with an outline
+    and a shadow or glow. Text without effects draws exactly as before.</li>
+  </ul>
+
+  <h2>Custom text controls</h2>
+  <p>A control that draws its own text gets the effects of its style when it emits through
+  <code>MakeGlyphRunTarget</code> and <code>EmitGlyphRun</code>: the target carries the
+  element's effects, scaled to device pixels, and <code>EmitGlyphRun</code> draws them as one
+  effect primitive per glyph before the run's fills.</p>
+
+  <h2>Changelog</h2>
+  <ul>
+    <li>2026-10-06: An element's own <code>overflow: hidden</code> no longer cuts its text's
+    effects: the clip grows by their reach while the text fits, so a glow in a fixed-height
+    row is whole. The padding workaround is gone.</li>
+    <li>2026-10-05: A line's effects paint under all of its fills: a glyph's glow or outline no
+    longer covers the glyph before it, and a glyph's glow no longer covers the previous glyph's
+    outline. The <code>.hud-selected</code> example's glow is a deeper orange, so the letters
+    keep their edge. Malformed values warn with the accepted form. Clipping
+    says how to keep an effect whole inside a clipped label.</li>
+    <li>2026-10-05: Tokens are declared on the layout's root element, not on <code>:root</code>,
+    which a mounted document never matches.</li>
+    <li>2026-10-01: Moved from <code>docs/text-effects.html</code>. Effects are drawn in the
+    glyph's own draw from the distance to its outline. Shadow blur is the CSS blur radius
+    (sigma = blur / 2); the glow falloff matches the box <code>glow</code>. Shadow offsets
+    clamp to 256 device pixels. Token colors documented.</li>
+    <li>2026-09-25: Vector-glyph blur and outline computed analytically per scanline.</li>
+    <li>2026-09-20: Added text shadows, glow and outlines, inherited style properties and the
+    sharp-shadow shorthand.</li>
+  </ul>
+
+</div>
+<footer>Text Effects guide · 2026-10-06</footer>
+</body>
+</html>

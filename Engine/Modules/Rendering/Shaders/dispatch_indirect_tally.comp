@@ -1,0 +1,18 @@
+#version 450
+
+// F1 DispatchIndirect test — kernel B.
+// One thread per workgroup (local size 1) so the atomic counter equals the
+// number of workgroups launched. Each workgroup also stamps its id into the
+// marks array, so the readback proves *which* workgroups ran, not just how
+// many.
+layout(local_size_x = 1, local_size_y = 1, local_size_z = 1) in;
+
+layout(set = 0, binding = 0, std430) restrict buffer WorkgroupTally {
+    uint Counter;   // word 0: total workgroups (atomic)
+    uint Marks[];   // word 1..: Marks[id] = 100 + id
+};
+
+void main() {
+    atomicAdd(Counter, 1u);
+    Marks[gl_WorkGroupID.x] = 100u + gl_WorkGroupID.x;
+}

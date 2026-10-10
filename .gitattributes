@@ -1,0 +1,74 @@
+# Normalize line endings and classify text/binary
+# Keep LF in repo to avoid CRLF/LF churn across platforms
+* text=auto
+
+# Source code (LF)
+*.c   text eol=lf
+*.cc  text eol=lf
+*.cpp text eol=lf
+*.cxx text eol=lf
+*.h   text eol=lf
+*.hh  text eol=lf
+*.hpp text eol=lf
+*.hxx text eol=lf
+*.inl text eol=lf
+*.cs  text eol=lf
+*.cmake text eol=lf
+CMakeLists.txt text eol=lf
+*.py  text eol=lf
+*.js  text eol=lf
+*.ts  text eol=lf
+*.jsx text eol=lf
+*.tsx text eol=lf
+*.json text eol=lf
+*.yml text eol=lf
+*.yaml text eol=lf
+*.xml text eol=lf
+*.md  text eol=lf
+*.txt text eol=lf
+*.css text eol=lf
+*.html text eol=lf
+*.glsl text eol=lf
+*.vert text eol=lf
+*.frag text eol=lf
+*.comp text eol=lf
+*.slang text eol=lf
+*.hlsl text eol=lf
+*.shader text eol=lf
+*.shaderdesc text eol=lf
+# Asset database (JSONL, line-oriented — must stay LF or sparse-hash mismatches)
+*.assetdb text eol=lf
+# Published package identity manifests (JSONL; republish is byte-compared — keep LF)
+.assetmanifest text eol=lf
+
+# Shell/Windows scripts
+*.sh  text eol=lf
+*.bat text eol=crlf
+*.cmd text eol=crlf
+*.ps1 text eol=crlf
+
+# Binary assets
+*.png binary
+*.jpg binary
+*.jpeg binary
+*.gif binary
+*.bmp binary
+*.ico binary
+*.fbx binary
+*.wav binary
+*.ogg binary
+*.mp3 binary
+*.ttf binary
+*.otf binary
+*.zip binary
+*.7z  binary
+*.rar binary
+*.dll binary
+*.exe binary
+*.lib binary
+*.pdb binary
+*.so  binary
+*.dylib binary
+*.a   binary
+*.spv binary
+*.cso binary

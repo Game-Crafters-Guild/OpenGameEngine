@@ -1,0 +1,2060 @@
+/* Node Graph panel: fill Mount so body/wrapper get full content area for hit-test.
+ * Slightly darker than #2C2C2C but lighter than area between panels (tabbar #1D1D1C). */
+.node-graph-panel {
+	display: flex;
+	flex-direction: column;
+	flex: 1 1 0%;
+	width: 100%;
+	height: 100%;
+	min-width: 0;
+	min-height: 0;
+	background-color: #282828;
+	color: #e0e0e0;
+}
+
+/* When panel is mounted in dock content, ensure it fills the Mount (fixes ~25% hit area) */
+.mount .node-graph-panel {
+	flex: 1 1 0%;
+	width: 100%;
+	height: 100%;
+	min-width: 0;
+	min-height: 0;
+}
+
+.node-graph-panel-container {
+	display: flex;
+	flex-direction: column;
+	flex: 1 1 0%;
+	width: 100%;
+	height: 100%;
+	min-width: 0;
+	min-height: 0;
+}
+
+.node-graph-toolbar {
+	display: flex;
+	flex-direction: row;
+	align-items: center;
+	height: 32px;
+	width: 100%;
+	min-width: 0;
+	padding: 0 8px;
+	background-color: #252526;
+	border-bottom-width: 0;
+	border-style: solid;
+	flex-shrink: 0;
+	gap: 8px;
+	font-size: var(--ui_font_size_base);
+	font-family: var(--ui_font_family);
+	position: relative;
+	overflow: hidden;
+}
+
+/* Title label: margin from toolbar start */
+.node-graph-toolbar #NodeGraphTitleLabel {
+	margin-left: 8px;
+	flex: 0 1 260px;
+	min-width: 0;
+	max-width: 260px;
+	overflow: hidden;
+}
+
+.node-graph-toolbar #NodeGraphSubgraphBack {
+	margin-left: 8px;
+	flex: 0 0 auto;
+	font-size: 12px;
+	cursor: pointer;
+}
+
+/* Sized to content in every state: the label only ever holds "OK" or an error
+   count, and either one clipping to "…" reads as a broken toolbar. Full error
+   text lives in the tooltip; the spacer and right group absorb the slack. */
+.node-graph-toolbar #NodeGraphCompileStatus {
+	flex: 0 0 auto;
+	white-space: nowrap;
+}
+
+.node-graph-toolbar #NodeGraphAutoCompileToggle.node-graph-auto-compile-toggle {
+	min-width: 64px;
+	flex: 0 0 auto;
+	padding-left: 26px;
+	padding-right: 8px;
+	background-image: none;
+	background-size: 12px 10px;
+	background-position: 8px 50%;
+	background-repeat: no-repeat;
+}
+
+.node-graph-toolbar #NodeGraphAutoCompileToggle.node-graph-auto-compile-toggle.icon-active {
+	background-image: url("editor:Icons/checked.png");
+	background-image-tint: var(--ui_icon_tint_active);
+	color: #d8d8d8;
+}
+
+.node-graph-toolbar #NodeGraphAutoCompileToggle.node-graph-auto-compile-toggle.icon-active:hover {
+	background-image-tint: var(--ui_icon_tint_hover);
+}
+
+/* Compile status dot sits to the right of Compile — real element, not ::before/::after. */
+.node-graph-toolbar #NodeGraphCompileWrap.node-graph-compile-wrap {
+	display: flex;
+	flex-direction: row;
+	align-items: center;
+	flex: 0 0 auto;
+	gap: 6px;
+}
+
+.node-graph-toolbar #NodeGraphCompileStatusDot.node-graph-compile-status-dot {
+	width: 8px;
+	height: 8px;
+	min-width: 8px;
+	min-height: 8px;
+	flex: 0 0 8px;
+	flex-shrink: 0;
+	border-radius: 50%;
+}
+
+.node-graph-toolbar #NodeGraphCompileStatusDot.node-graph-compile-status-dot.up-to-date {
+	background-color: #4caf50;
+	box-shadow: 0 0 4px rgba(76, 175, 80, 0.55);
+}
+
+.node-graph-toolbar #NodeGraphCompileStatusDot.node-graph-compile-status-dot.stale {
+	background-color: #8a8a8a;
+	box-shadow: none;
+}
+
+.node-graph-toolbar #NodeGraphCompileStatus.error-text {
+	color: #FF6B6B;
+}
+
+/* Compile diagnostics, between the toolbar and the canvas so a broken graph is
+   read where the graph is edited. Folded to its summary line by default: a
+   failing graph costs the canvas one text row until the author opens the list.
+   Hidden while it holds nothing (display is set from ShaderGraphPanel). */
+.node-graph-diagnostics {
+	display: flex;
+	flex-direction: column;
+	width: 100%;
+	min-width: 0;
+	flex-shrink: 0;
+	padding: 4px 8px;
+	background-color: #3A2323;
+	border-bottom-width: 1px;
+	border-color: #F04A4A;
+	border-style: solid;
+	gap: 2px;
+	/* The strip's palette, defined once here and inherited by its rows: the
+	   summary line and the rows are the same failure text. */
+	--graph-diagnostic-text: #FF9A9A;
+	--graph-diagnostic-row-hover: rgba(240, 74, 74, 0.18);
+	/* The on-disk-failure hint: muted, because nothing in this panel failed to
+	   compile — the file on disk did. */
+	--graph-diagnostic-muted-text: #C89A9A;
+}
+
+/* The whole line is the click target, so the chevron needs no hit area of its
+   own and the count stays reachable at any strip width. */
+.node-graph-diagnostic-summary {
+	display: flex;
+	flex-direction: row;
+	align-items: center;
+	width: 100%;
+	min-width: 0;
+	height: 22px;
+	min-height: 22px;
+	max-height: 22px;
+	padding: 0 4px;
+	gap: 6px;
+	cursor: pointer;
+}
+
+.node-graph-diagnostic-summary:hover {
+	background-color: var(--graph-diagnostic-row-hover);
+}
+
+/* The on-disk-failure hint: one line with no rows behind it, so nothing about
+   it may read as openable. */
+.node-graph-diagnostic-summary.no-toggle {
+	cursor: default;
+}
+
+.node-graph-diagnostic-summary.no-toggle:hover {
+	background-color: transparent;
+}
+
+/* Armed: a press is held on this line and a release here will activate it. */
+.node-graph-diagnostic-summary.pressed {
+	background-color: var(--graph-diagnostic-row-hover);
+}
+
+.node-graph-diagnostic-chevron {
+	width: 10px;
+	height: 10px;
+	min-width: 10px;
+	min-height: 10px;
+	background-size: 10px 10px;
+	background-repeat: no-repeat;
+	background-position: center;
+	background-image: url("editor:Icons/arrow-right.png");
+	background-image-tint: var(--graph-diagnostic-text);
+}
+
+.node-graph-diagnostic-chevron.expanded {
+	background-image: url("editor:Icons/arrow-down.png");
+}
+
+.node-graph-diagnostic-chevron.no-toggle {
+	display: none;
+}
+
+/* One line, ellipsised rather than wrapped: the folded strip can never grow a
+   second row however long the first message is, and the cut reads as a cut. */
+.node-graph-diagnostic-summary-text {
+	flex: 1;
+	min-width: 0;
+	height: 22px;
+	color: var(--graph-diagnostic-text);
+	font-size: 12px;
+	text-align: left;
+	white-space: nowrap;
+	overflow: hidden;
+	text-overflow: ellipsis;
+}
+
+.node-graph-diagnostic-summary-text.no-toggle {
+	color: var(--graph-diagnostic-muted-text);
+}
+
+/* Bounded and scrolling: a graph that fails in twenty places opens to four
+   rows, not twenty, and never pushes the canvas off the panel. */
+.node-graph-diagnostic-list {
+	display: none;
+	flex-direction: column;
+	width: 100%;
+	min-width: 0;
+	max-height: 88px;
+	flex-shrink: 0;
+}
+
+.node-graph-diagnostic-list.expanded {
+	display: flex;
+}
+
+.node-graph-diagnostic-scroll {
+	width: 100%;
+	min-width: 0;
+	min-height: 0;
+	overflow-x: hidden;
+	overflow-y: visible;
+	/* Messages are clipped, not scrolled sideways: no horizontal bar. */
+	--ui_scrollview_measure_horizontal: 0;
+}
+
+.node-graph-diagnostic-list-content {
+	display: flex;
+	flex-direction: column;
+	width: 100%;
+	min-width: 0;
+	gap: 2px;
+}
+
+.node-graph-diagnostic-row {
+	display: flex;
+	flex-direction: row;
+	align-items: center;
+	width: 100%;
+	min-width: 0;
+	height: 22px;
+	min-height: 22px;
+	max-height: 22px;
+	padding: 0 4px;
+	cursor: pointer;
+}
+
+.node-graph-diagnostic-row:hover {
+	background-color: var(--graph-diagnostic-row-hover);
+}
+
+/* No node to jump to — drop the affordance so the row does not read clickable. */
+.node-graph-diagnostic-row.graph-scoped {
+	cursor: default;
+}
+
+.node-graph-diagnostic-row.graph-scoped:hover {
+	background-color: transparent;
+}
+
+.node-graph-diagnostic-row.pressed {
+	background-color: var(--graph-diagnostic-row-hover);
+}
+
+.node-graph-diagnostic-row-text {
+	flex: 1;
+	min-width: 0;
+	height: 22px;
+	color: var(--graph-diagnostic-text);
+	font-size: 12px;
+	text-align: left;
+	white-space: nowrap;
+	overflow: hidden;
+	text-overflow: ellipsis;
+}
+
+
+.node-graph-toolbar #NodeGraphCompileButton.node-graph-compile-button {
+	min-width: 76px;
+}
+
+.node-graph-toolbar #NodeGraphCompileButton.node-graph-compile-button.needs-compile {
+	background-color: rgba(255, 255, 255, 0.12);
+	border-color: #454545;
+	color: #8a8a8a;
+}
+
+.node-graph-toolbar #NodeGraphCompileButton.node-graph-compile-button.needs-compile:hover {
+	background-color: rgba(255, 255, 255, 0.22);
+	border-color: #5a5a5a;
+	color: #b0b0b0;
+}
+
+.node-graph-toolbar-preview-button {
+	width: 24px;
+	height: 24px;
+	min-width: 24px;
+	min-height: 24px;
+	background-size: 16px 16px;
+	background-repeat: no-repeat;
+	background-position: center;
+	opacity: 0.4;
+	border: none;
+	background-color: transparent;
+}
+
+.node-graph-toolbar-preview-ibl-toggle {
+	background-image: url("editor:Icons/skyenvironment.png");
+}
+
+.node-graph-toolbar-expand-toggle {
+	background-image: url("editor:Icons/expand.svg");
+}
+
+.node-graph-toolbar-preview-button:hover {
+	opacity: 0.85;
+	background-color: transparent;
+}
+
+.node-graph-toolbar-preview-button.icon-active {
+	opacity: 0.7;
+}
+
+.node-graph-toolbar-preview-button.icon-active:hover {
+	opacity: 0.85;
+}
+
+/* Spacer between title and right group (minimal; right group grows to fill) */
+.node-graph-toolbar .toolbar-spacer {
+	flex-grow: 0;
+	flex-shrink: 0;
+	min-width: 8px;
+}
+
+/* Right group: grid, connection style, spacer, search (search at far right like Log panel) */
+.node-graph-toolbar .node-graph-toolbar-right {
+	display: flex;
+	flex-direction: row;
+	align-items: center;
+	gap: 8px;
+	flex-grow: 1;
+	flex-shrink: 1;
+	min-width: 0;
+}
+
+/* Palette-color and grid toggles before the connection-style toggle. */
+.node-graph-toolbar .node-graph-toolbar-right #NodeGraphNodesPanelToggle,
+.node-graph-toolbar .node-graph-toolbar-right #NodeGraphVariablesPanelToggle,
+.node-graph-toolbar .node-graph-toolbar-right .node-graph-toolbar-panel-toggle,
+.node-graph-toolbar .node-graph-toolbar-right #NodeGraphPaletteColorToggle,
+.node-graph-toolbar .node-graph-toolbar-right .node-graph-toolbar-palette-color,
+.node-graph-toolbar .node-graph-toolbar-right .node-graph-toolbar-palette-color.color-filter-icon,
+.node-graph-toolbar .node-graph-toolbar-right .node-graph-toolbar-palette-color.button.color-filter-icon,
+.node-graph-toolbar .node-graph-toolbar-right #NodeGraphGridToggle,
+.node-graph-toolbar .node-graph-toolbar-right .node-graph-toolbar-grid,
+.node-graph-toolbar .node-graph-toolbar-right .node-graph-toolbar-grid.grid-icon,
+.node-graph-toolbar .node-graph-toolbar-right .node-graph-toolbar-grid.button.grid-icon {
+	width: 24px;
+	height: 24px;
+	min-width: 24px;
+	min-height: 24px;
+	background-size: 16px 16px;
+	background-repeat: no-repeat;
+	background-position: center;
+	opacity: 0.5;
+	border: none;
+	background-color: transparent;
+}
+
+.node-graph-toolbar .node-graph-toolbar-right #NodeGraphNodesPanelToggle,
+.node-graph-toolbar .node-graph-toolbar-right #NodeGraphVariablesPanelToggle,
+.node-graph-toolbar .node-graph-toolbar-right .node-graph-toolbar-panel-toggle {
+	width: auto;
+	min-width: 44px;
+	padding: 0 8px;
+	color: #d8d8d8;
+	font-size: 12px;
+	font-weight: 500;
+	text-align: center;
+	background-image: none;
+}
+
+.node-graph-toolbar .node-graph-toolbar-right #NodeGraphPaletteColorToggle,
+.node-graph-toolbar .node-graph-toolbar-right .node-graph-toolbar-palette-color.color-filter-icon,
+.node-graph-toolbar .node-graph-toolbar-right .node-graph-toolbar-palette-color.button.color-filter-icon {
+	background-image: url("editor:Icons/color-filter.svg");
+}
+
+.node-graph-toolbar .node-graph-toolbar-right #NodeGraphGridToggle,
+.node-graph-toolbar .node-graph-toolbar-right .node-graph-toolbar-grid.grid-icon,
+.node-graph-toolbar .node-graph-toolbar-right .node-graph-toolbar-grid.button.grid-icon {
+	background-image: url("editor:Icons/grid-icon.png");
+}
+
+.node-graph-toolbar .node-graph-toolbar-right #NodeGraphNodesPanelToggle:hover,
+.node-graph-toolbar .node-graph-toolbar-right #NodeGraphVariablesPanelToggle:hover,
+.node-graph-toolbar .node-graph-toolbar-right .node-graph-toolbar-panel-toggle:hover,
+.node-graph-toolbar .node-graph-toolbar-right #NodeGraphPaletteColorToggle:hover,
+.node-graph-toolbar .node-graph-toolbar-right .node-graph-toolbar-palette-color:hover,
+.node-graph-toolbar .node-graph-toolbar-right .node-graph-toolbar-palette-color.color-filter-icon:hover,
+.node-graph-toolbar .node-graph-toolbar-right #NodeGraphGridToggle:hover,
+.node-graph-toolbar .node-graph-toolbar-right .node-graph-toolbar-grid:hover,
+.node-graph-toolbar .node-graph-toolbar-right .node-graph-toolbar-grid.grid-icon:hover {
+	opacity: 1;
+	background-color: transparent;
+}
+
+.node-graph-toolbar .node-graph-toolbar-right #NodeGraphNodesPanelToggle.icon-active,
+.node-graph-toolbar .node-graph-toolbar-right #NodeGraphVariablesPanelToggle.icon-active,
+.node-graph-toolbar .node-graph-toolbar-right .node-graph-toolbar-panel-toggle.icon-active,
+.node-graph-toolbar .node-graph-toolbar-right #NodeGraphPaletteColorToggle.icon-active,
+.node-graph-toolbar .node-graph-toolbar-right .node-graph-toolbar-palette-color.color-filter-icon.icon-active,
+.node-graph-toolbar .node-graph-toolbar-right #NodeGraphGridToggle.icon-active,
+.node-graph-toolbar .node-graph-toolbar-right .node-graph-toolbar-grid.grid-icon.icon-active {
+	opacity: 1;
+}
+
+/* Connection-style toggle: immediately after grid in flow. The icon shows the
+   style currently in use; clicking swaps to the other one. */
+.node-graph-toolbar .node-graph-toolbar-right .node-graph-toolbar-connection-style {
+	width: 24px;
+	height: 24px;
+	min-width: 24px;
+	min-height: 24px;
+	flex: 0 0 24px;
+	background-size: 16px 16px;
+	background-repeat: no-repeat;
+	background-position: center;
+	opacity: 0.5;
+	border: none;
+	background-color: transparent;
+}
+
+.node-graph-toolbar .node-graph-toolbar-right .node-graph-toolbar-connection-style:hover {
+	opacity: 1;
+	background-color: transparent;
+}
+
+.node-graph-toolbar .node-graph-toolbar-right .connection-straight-icon {
+	background-image: url("editor:Icons/connection-straight.svg");
+}
+
+.node-graph-toolbar .node-graph-toolbar-right .connection-curved-icon {
+	background-image: url("editor:Icons/connection-curved.svg");
+}
+
+.node-graph-toolbar #NodeGraphCompileButton {
+	width: 64px;
+	min-width: 64px;
+	flex: 0 0 64px;
+}
+
+/* Spacer to push search bar to the right edge (like Log panel) */
+.node-graph-toolbar .node-graph-toolbar-search-spacer {
+	flex-grow: 1;
+	flex-shrink: 1;
+	min-width: 8px;
+}
+
+.node-graph-body {
+	display: flex;
+	flex-direction: row;
+	flex: 1 1 0%;
+	width: 100%;
+	height: 100%;
+	min-width: 0;
+	min-height: 0;
+	overflow: hidden;
+	position: relative;
+}
+
+/* Search bar in toolbar: same size and layout as Log panel (320px × 22px) */
+.node-graph-toolbar .panel-search-bar {
+	position: relative;
+	left: unset;
+	right: unset;
+	bottom: unset;
+	top: unset;
+	flex-grow: 0;
+	flex-shrink: 1;
+	align-self: center;
+	height: 22px;
+	width: 320px;
+	min-width: 120px;
+	max-width: 320px;
+}
+
+.node-graph-toolbar .panel-search-field {
+	width: 100%;
+	height: 100%;
+}
+
+/* Node Palette: on top in z-order, draggable; start 16px from borders; rounded corners. */
+.node-graph-palette {
+	display: flex;
+	flex-direction: column;
+	position: absolute;
+	left: 16px;
+	top: 16px;
+	width: 220px;
+	max-height: 95%;
+	z-index: 10;
+	background-color: #1C1C1D;
+	border-style: solid;
+	border-radius: 8px;
+	padding: 8px;
+	gap: 8px;
+	cursor: default;
+}
+
+.node-graph-palette-drag-handle {
+	cursor: move;
+}
+
+.node-graph-panel-resize-bottom {
+	position: absolute;
+	left: 8px;
+	right: 8px;
+	bottom: 0;
+	height: 14px;
+	z-index: 21;
+	cursor: row-resize;
+	background-color: transparent;
+	border-radius: 0 0 8px 8px;
+	pointer-events: auto;
+}
+
+.node-graph-scroll-more-indicator {
+	position: absolute;
+	z-index: 20;
+	pointer-events: none;
+}
+
+/* Collapsed: double-click title to show only the name */
+.node-graph-palette-collapsed .node-graph-palette-search-row,
+.node-graph-palette-collapsed .node-graph-palette-search,
+.node-graph-palette-collapsed .node-graph-palette-scroll,
+.node-graph-palette-collapsed .node-graph-palette-content,
+.node-graph-palette-collapsed .node-graph-scroll-more-indicator,
+.node-graph-palette-collapsed .node-graph-panel-resize-bottom,
+.node-graph-palette-collapsed scrollview {
+	display: none;
+}
+
+.node-graph-palette-collapsed {
+	justify-content: center;
+	gap: 0;
+}
+
+.node-graph-palette-title {
+	display: flex;
+	align-items: center;
+	width: 100%;
+	min-height: 28px;
+	font-size: 11px;
+	font-weight: 600;
+	letter-spacing: 0.5px;
+	color: #d8d8d8;
+	text-transform: uppercase;
+	padding-top: 4px;
+	padding-bottom: 8px;
+	padding-left: 4px;
+	padding-right: 4px;
+	flex-shrink: 0;
+	border-radius: 4px;
+}
+
+.node-graph-palette-title:hover {
+	color: #ffffff;
+}
+
+.node-graph-palette-collapsed .node-graph-palette-title {
+	align-items: center;
+	justify-content: flex-start;
+	height: 32px;
+	min-height: 32px;
+	max-height: 32px;
+	padding-top: 0;
+	padding-bottom: 0;
+	text-align: left;
+}
+
+.node-graph-palette-search-row,
+.node-graph-variables-search-row {
+	display: flex;
+	position: relative;
+	min-height: 28px;
+	flex-shrink: 0;
+}
+
+.node-graph-palette-search {
+	min-height: 28px;
+	width: 100%;
+	padding: 4px 24px 4px 8px;
+	background-color: #3c3c3c;
+	border-radius: 4px;
+	border-width: 1px;
+	border-color: #505050;
+	border-style: solid;
+	color: #e0e0e0;
+	font-size: var(--ui_font_size_base);
+	flex-shrink: 0;
+}
+
+.node-graph-palette-search TextInput {
+	padding-right: 24px;
+}
+
+.node-graph-palette-search:focus {
+	border-color: #666;
+	outline: none;
+}
+
+.node-graph-palette-search-row.search-accent-focus .node-graph-palette-search:focus {
+	border-color: var(--ui_color_accent);
+}
+
+.node-graph-inline-search-icon {
+	position: absolute;
+	right: 8px;
+	top: 50%;
+	margin-top: -6px;
+	width: 12px;
+	height: 12px;
+	background-image: url("editor:Icons/search.png");
+	background-size: 12px 12px;
+	background-repeat: no-repeat;
+	background-position: center;
+	opacity: 0.55;
+	pointer-events: none;
+}
+
+.node-graph-inline-search-clear,
+button.node-graph-inline-search-clear,
+.button.node-graph-inline-search-clear {
+	position: absolute;
+	right: 6px;
+	top: 50%;
+	margin-top: -8px;
+	width: 16px;
+	height: 16px;
+	min-width: 16px;
+	min-height: 16px;
+	max-width: 16px;
+	max-height: 16px;
+	padding: 0;
+	border-width: 0;
+	border-style: none;
+	border-radius: 3px;
+	background-color: transparent;
+	background-size: 12px 12px;
+	background-position: center;
+	opacity: 0.65;
+	pointer-events: auto !important;
+	z-index: 20;
+}
+
+.node-graph-palette-search-row.has-query .node-graph-inline-search-icon,
+.node-graph-variables-search-row.has-query .node-graph-inline-search-icon {
+	display: none;
+}
+
+.node-graph-palette-search-row:hover .node-graph-inline-search-icon,
+.node-graph-variables-search-row:hover .node-graph-inline-search-icon,
+.node-graph-palette-search-row:focus-within .node-graph-inline-search-icon,
+.node-graph-variables-search-row:focus-within .node-graph-inline-search-icon {
+	opacity: 1.0;
+}
+
+.node-graph-inline-search-clear:hover,
+button.node-graph-inline-search-clear:hover,
+.button.node-graph-inline-search-clear:hover {
+	background-color: rgba(255, 255, 255, 0.192);
+	opacity: 1.0;
+}
+
+.node-graph-palette-scroll {
+	flex: 1;
+	min-height: 0;
+	overflow-x: hidden;
+	overflow-y: visible;
+	--ui_scrollview_measure_horizontal: 0;
+}
+
+.node-graph-palette-scroll .scrollbar.vertical,
+.node-graph-variables-scroll .scrollbar.vertical {
+	margin-left: 4px;
+	margin-right: 4px;
+}
+
+.node-graph-palette-content {
+	display: flex;
+	flex-direction: column;
+	gap: 4px;
+	padding: 4px 0;
+}
+
+.node-graph-palette-section {
+	display: flex;
+	flex-direction: column;
+	gap: 4px;
+	margin-bottom: 8px;
+}
+
+.node-graph-palette .node-graph-palette-section-title {
+	display: flex;
+	align-items: center;
+	font-size: 13px;
+	font-weight: 600;
+	color: #9d9d9d;
+	text-transform: uppercase;
+	letter-spacing: 0.3px;
+	height: 20px;
+	min-height: 20px;
+	max-height: 20px;
+	padding: 0;
+	flex-shrink: 0;
+	line-height: 16px;
+}
+
+.node-graph-palette button.node-graph-palette-node-button,
+.node-graph-palette .button.node-graph-palette-node-button,
+.node-graph-palette .node-graph-palette-node-button {
+	display: flex;
+	align-items: center;
+	justify-content: flex-start;
+	height: 24px;
+	min-height: 24px;
+	max-height: 24px;
+	flex-basis: 24px;
+	flex-grow: 0;
+	flex-shrink: 0;
+	padding: 2px 8px;
+	gap: 6px;
+	background-color: #3c3c3c;
+	border-radius: 4px;
+	border-width: 0;
+	border-style: none;
+	color: #e0e0e0;
+	font-size: var(--ui_font_size_base);
+	font-family: var(--ui_font_family);
+	text-align: center;
+	cursor: pointer;
+}
+
+.node-graph-palette button.node-graph-palette-node-button:hover,
+.node-graph-palette .button.node-graph-palette-node-button:hover,
+.node-graph-palette .node-graph-palette-node-button:hover {
+	background-color: #505050;
+	color: #ffffff;
+}
+
+.node-graph-palette button.node-graph-palette-node-button:active,
+.node-graph-palette .button.node-graph-palette-node-button:active,
+.node-graph-palette .node-graph-palette-node-button:active {
+	background-color: #2d2d30;
+}
+
+.graph-node-palette-icon {
+	width: 16px;
+	height: 16px;
+	flex-shrink: 0;
+	/* Unknown types keep the generic glyph; any gn-icon--<stem> class wins. */
+	background-image: url("editor:Icons/node.png");
+	background-repeat: no-repeat;
+	background-size: contain;
+	background-position: center;
+}
+
+.node-graph-palette .node-graph-palette-node-button-colored,
+.node-graph-palette .button.node-graph-palette-node-button-colored {
+	color: #ffffff;
+}
+
+.node-graph-palette-node-drag-ghost {
+	pointer-events: none;
+	box-shadow: 0 8px 24px rgba(0, 0, 0, 0.32);
+	gap: 2px;
+}
+
+.node-graph-palette-node-drag-ghost-label,
+.node-graph-palette-node-drag-ghost-value {
+	padding-left: 10px;
+	padding-right: 10px;
+	text-align: center;
+}
+
+.node-graph-variables {
+	display: flex;
+	flex-direction: column;
+	position: absolute;
+	left: 252px;
+	top: 16px;
+	/* GraphPanel::kVariablesPanelWidth overrides this at build time; keep the
+	   two in step. */
+	width: 480px;
+	max-height: 95%;
+	z-index: 9;
+	background-color: #1C1C1D;
+	border-style: solid;
+	border-radius: 8px;
+	padding: 8px;
+	gap: 8px;
+	cursor: default;
+}
+
+.node-graph-variables-header {
+	display: flex;
+	flex-direction: row;
+	align-items: center;
+	min-height: 28px;
+	gap: 8px;
+	flex-shrink: 0;
+}
+
+.node-graph-variables-title {
+	display: flex;
+	align-items: center;
+	flex: 1 1 0%;
+	min-width: 0;
+	min-height: 28px;
+	font-size: 11px;
+	font-weight: 600;
+	letter-spacing: 0.5px;
+	color: #d8d8d8;
+	text-transform: uppercase;
+	padding-left: 4px;
+	border-radius: 4px;
+}
+
+.node-graph-variables-drag-handle {
+	cursor: move;
+}
+
+.node-graph-variables-title:hover {
+	color: #ffffff;
+}
+
+.node-graph-variables-search {
+	min-height: 28px;
+	width: 100%;
+	padding: 4px 24px 4px 8px;
+	background-color: #3c3c3c;
+	border-radius: 4px;
+	border-width: 1px;
+	border-color: #505050;
+	border-style: solid;
+	color: #e0e0e0;
+	font-size: var(--ui_font_size_base);
+	flex-shrink: 0;
+}
+
+.node-graph-variables-search TextInput {
+	padding-right: 24px;
+}
+
+.node-graph-variables-search:focus {
+	border-color: #666;
+	outline: none;
+}
+
+.node-graph-variables-search-row.search-accent-focus .node-graph-variables-search:focus {
+	border-color: var(--ui_color_accent);
+}
+
+.node-graph-variables-add,
+button.node-graph-variables-add,
+.button.node-graph-variables-add {
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	width: 24px;
+	height: 24px;
+	min-width: 24px;
+	min-height: 24px;
+	max-width: 24px;
+	max-height: 24px;
+	padding: 0;
+	background-color: transparent;
+	background-image: none;
+	border-radius: 4px;
+	border-width: 0;
+	border-style: none;
+	box-shadow: none;
+	color: #d8d8d8;
+	opacity: 0.45;
+	font-size: 20px;
+	font-weight: 500;
+	line-height: 20px;
+	cursor: pointer;
+}
+
+.node-graph-variables-add:hover,
+button.node-graph-variables-add:hover,
+.button.node-graph-variables-add:hover {
+	background-color: transparent;
+	color: #ffffff;
+	opacity: 1.0;
+}
+
+.node-graph-variables-add:active,
+button.node-graph-variables-add:active,
+.button.node-graph-variables-add:active {
+	background-color: transparent;
+	color: #b9d7ff;
+	opacity: 1.0;
+}
+
+.node-graph-variables-collapsed .node-graph-variables-add,
+.node-graph-variables-collapsed .node-graph-variables-search-row,
+.node-graph-variables-collapsed .node-graph-variables-search,
+.node-graph-variables-collapsed .node-graph-variables-scroll,
+.node-graph-variables-collapsed .node-graph-variables-content,
+.node-graph-variables-collapsed .node-graph-scroll-more-indicator,
+.node-graph-variables-collapsed .node-graph-panel-resize-bottom {
+	display: none;
+}
+
+.node-graph-variables-collapsed {
+	justify-content: center;
+	gap: 0;
+}
+
+.node-graph-variables-collapsed .node-graph-variables-header {
+	align-items: center;
+	height: 32px;
+	min-height: 32px;
+	max-height: 32px;
+}
+
+.node-graph-variables-collapsed .node-graph-variables-title {
+	align-items: center;
+	height: 32px;
+	min-height: 32px;
+	max-height: 32px;
+	padding-top: 0;
+	padding-bottom: 0;
+}
+
+.node-graph-variables-scroll {
+	flex: 1;
+	min-height: 0;
+	overflow-x: hidden;
+	overflow-y: visible;
+	--ui_scrollview_measure_horizontal: 0;
+}
+
+.node-graph-variables-content {
+	display: flex;
+	flex-direction: column;
+	gap: 6px;
+	padding: 2px 0;
+}
+
+.node-graph-variable-row {
+	display: flex;
+	flex-direction: row;
+	align-items: center;
+	min-height: 40px;
+	gap: 6px;
+	padding: 4px;
+	background-color: #2b2b2c;
+	border-radius: 4px;
+}
+
+.node-graph-variable-row:hover {
+	background-color: #333334;
+}
+
+.node-graph-variable-row-draggable {
+	cursor: grab;
+}
+
+.node-graph-variable-row-draggable.dragging {
+	cursor: grabbing;
+	background-color: #384150;
+	border-width: 1px;
+	border-color: var(--ui_color_accent);
+	border-style: solid;
+}
+
+.node-graph-variable-name {
+	width: 92px;
+	min-width: 92px;
+	max-width: 92px;
+	flex: 0 0 92px;
+	flex-grow: 0;
+	flex-shrink: 0;
+	height: 24px;
+	min-height: 24px;
+	padding: 0;
+	background-color: transparent;
+	border-width: 0;
+	border-style: none;
+	color: #e0e0e0;
+	font-size: 12px;
+}
+
+.node-graph-variable-name TextInput {
+	width: 100%;
+	height: 100%;
+	padding: 4px 8px;
+	background-color: #202020;
+	border-radius: 4px;
+	border-width: 1px;
+	border-color: transparent;
+	border-style: solid;
+	color: #d8d8d8;
+	font-size: 12px;
+}
+
+.node-graph-variable-name:hover TextInput,
+.node-graph-variable-name TextInput:focus {
+	border-color: var(--ui_color_accent);
+	color: #ffffff;
+}
+
+.node-graph-variable-type {
+	width: 82px;
+	min-width: 82px;
+	max-width: 82px;
+	flex: 0 0 82px;
+	height: 24px;
+	min-height: 24px;
+	font-size: 12px;
+}
+
+.node-graph-variable-type > .dropdown-header {
+	width: 100%;
+	height: 24px;
+	min-height: 24px;
+	padding: 4px 6px 4px 8px;
+	background-color: #202020;
+	border-color: transparent;
+	border-radius: 4px;
+	font-size: 12px;
+	box-sizing: border-box;
+}
+
+.node-graph-variable-type:hover > .dropdown-header,
+.node-graph-variable-type:focus > .dropdown-header,
+.node-graph-variable-type:focus-within > .dropdown-header,
+.node-graph-variable-type.open > .dropdown-header {
+	border-color: var(--ui_color_accent);
+	color: #ffffff;
+}
+
+.node-graph-variable-value-group {
+	display: flex;
+	flex-direction: row;
+	align-items: center;
+	justify-content: center;
+	width: 96px;
+	min-width: 96px;
+	max-width: 96px;
+	flex: 0 0 96px;
+	height: 24px;
+	min-height: 24px;
+}
+
+.node-graph-variable-value-group-color {
+	justify-content: center;
+}
+
+.node-graph-variable-color-swatch {
+	flex: 0 0 auto;
+	width: 20px;
+	min-width: 20px;
+	height: 20px;
+	min-height: 20px;
+	border-radius: 3px;
+	border-width: 1px;
+	border-style: solid;
+	border-color: #555555;
+	cursor: pointer;
+}
+
+.node-graph-variable-value-field {
+	width: 100%;
+	min-width: 0;
+	max-width: 96px;
+	flex: 1 1 auto;
+	height: 24px;
+	min-height: 24px;
+	padding: 0;
+	background-color: transparent;
+	border-width: 0;
+	border-style: none;
+	color: #e0e0e0;
+	font-size: 12px;
+}
+
+.node-graph-variable-value-group-draggable {
+	gap: 0;
+}
+
+.node-graph-variable-value-field-draggable,
+.node-graph-variable-value-field-draggable TextInput,
+.node-graph-variable-value-field-draggable .float-field-input,
+.node-graph-variable-value-field-draggable .int-field-input {
+	cursor: ew-resize;
+}
+
+.node-graph-variable-value-field TextInput,
+.node-graph-variable-value-field .float-field-input,
+.node-graph-variable-value-field .int-field-input {
+	width: 100%;
+	height: 100%;
+	min-width: 0;
+	padding: 4px 8px;
+	background-color: #202020;
+	border-radius: 4px;
+	border-width: 1px;
+	border-color: transparent;
+	border-style: solid;
+	color: #d8d8d8;
+	font-size: 12px;
+}
+
+.node-graph-variable-value-field:hover TextInput,
+.node-graph-variable-value-field TextInput:focus,
+.node-graph-variable-value-field.focused TextInput,
+.node-graph-variable-value-field:hover .float-field-input,
+.node-graph-variable-value-field:hover .int-field-input,
+.node-graph-variable-value-field .float-field-input:focus,
+.node-graph-variable-value-field .int-field-input:focus,
+.node-graph-variable-value-field.focused .float-field-input,
+.node-graph-variable-value-field.focused .int-field-input {
+	border-color: var(--ui_color_accent);
+	color: #ffffff;
+}
+
+.node-graph-variable-value-toggle,
+.node-graph-variable-value-toggle.toggle {
+	width: 26px;
+	height: 12px;
+	border-radius: 6px;
+	flex-grow: 0;
+	flex-shrink: 0;
+}
+
+.node-graph-variable-value-toggle .toggle-knob {
+	width: 10px;
+	height: 10px;
+	border-radius: 5px;
+	margin: 1px;
+}
+
+.node-graph-variable-row-spacer {
+	flex: 1 1 auto;
+	min-width: 8px;
+}
+
+.node-graph-variable-toggle-group {
+	display: flex;
+	flex-direction: row;
+	align-items: center;
+	justify-content: center;
+	gap: 4px;
+	width: 72px;
+	min-width: 72px;
+	flex: 0 0 72px;
+}
+
+.node-graph-variable-toggle-label {
+	font-size: 12px;
+	line-height: 12px;
+	color: #a8a8a8;
+	text-align: left;
+	white-space: nowrap;
+}
+
+.node-graph-variable-empty {
+	display: flex;
+	align-items: center;
+	min-height: 28px;
+	padding: 4px;
+	color: #8f8f8f;
+	font-size: 12px;
+}
+
+/* Graph canvas area: must get full size so entire window draws (body + wrapper fill height). */
+.node-graph-canvas-wrapper {
+	display: flex;
+	flex: 1 1 0%;
+	width: 100%;
+	height: 100%;
+	min-width: 200px;
+	min-height: 200px;
+	overflow: hidden;
+	background-color: #282828;
+	pointer-events: auto;
+	align-self: stretch;
+}
+
+/* Material preview sphere — top-right overlay. */
+.node-graph-preview {
+	display: none;
+	flex-direction: column;
+	position: absolute;
+	right: 24px;
+	top: 24px;
+	width: 220px;
+	height: 220px;
+	z-index: 10;
+	background-color: #1C1C1D;
+	border-style: solid;
+	border-radius: 8px;
+	padding: 8px;
+	gap: 0;
+	pointer-events: auto;
+}
+
+.node-graph-preview-title {
+	position: absolute;
+	left: 28px;
+	top: 16px;
+	z-index: 11;
+	font-size: 12px;
+	font-weight: 600;
+	letter-spacing: 0.5px;
+	color: #9d9d9d;
+	text-transform: uppercase;
+	flex-shrink: 0;
+	pointer-events: none;
+}
+
+/* Lit by MaterialGraphPreviewHost while the move strip is hovered or dragged:
+   the strip itself is invisible, so the title is what tells you it can move. */
+.node-graph-preview-title.move-hint {
+	color: #ffffff;
+}
+
+.node-graph-preview-collapsed .node-graph-preview-image,
+.node-graph-preview-collapsed .node-graph-preview-resize-left,
+.node-graph-preview-collapsed .node-graph-preview-resize-right,
+.node-graph-preview-collapsed .node-graph-preview-resize-bottom {
+	display: none;
+}
+
+/* Square whatever the host is resized to: the preview renders a sphere, so a
+   stretched viewport would letterbox it against its own backdrop. */
+.node-graph-preview-image {
+	background-color: var(--graph-plate-bg, var(--ui_color_bg_plate));
+	flex: 0 0 auto;
+	width: 100%;
+	aspect-ratio: 1;
+	min-height: 0;
+	border-radius: 4px;
+	cursor: grab;
+}
+
+.node-graph-preview-edge-zone {
+	position: absolute;
+	background-color: transparent;
+	border-style: none;
+	border-width: 0;
+	border-color: transparent;
+	border-radius: 0;
+	z-index: 12;
+}
+
+/* The move handle and the resize zones are hit targets only — no hover or drag
+   chrome. Any fill or edge on them spans a whole side of the host and reads as a
+   stray line beside the image; the cursors carry the affordance, the lit title
+   says the strip is grabbable, and the host moving is the drag feedback. */
+.node-graph-preview-move-top {
+	left: 0;
+	top: 0;
+	right: 0;
+	height: 30px;
+	cursor: move;
+	border-radius: 8px 8px 0 0;
+}
+
+.node-graph-preview-collapsed .node-graph-preview-move-top {
+	height: 48px;
+	border-radius: 8px;
+}
+
+.node-graph-preview-resize-left {
+	left: 0;
+	top: 30px;
+	bottom: 0;
+	width: 14px;
+	cursor: col-resize;
+}
+
+.node-graph-preview-resize-right {
+	right: 0;
+	top: 30px;
+	bottom: 0;
+	width: 14px;
+	cursor: col-resize;
+}
+
+.node-graph-preview-resize-bottom {
+	left: 14px;
+	right: 0;
+	bottom: 0;
+	height: 14px;
+	cursor: row-resize;
+}
+
+/* Canvas fills the wrapper. overflow:hidden clips canvas-drawn edges to the
+   canvas rect; child nodes (B1) still overflow:visible on the node root. */
+.node-canvas {
+	flex: 1 1 0%;
+	width: 100%;
+	height: 100%;
+	min-width: 0;
+	min-height: 0;
+	overflow: hidden;
+	background-color: #282828;
+	pointer-events: auto;
+	cursor: default;
+}
+
+.blend-space-1d-editor,
+.blend-space-2d-editor {
+	flex: 1 1 0%;
+	width: 100%;
+	height: 100%;
+	min-width: 0;
+	min-height: 0;
+	overflow: hidden;
+	background-color: #282828;
+	pointer-events: auto;
+	position: relative;
+}
+
+.blend-space-1d-clip-row {
+	position: absolute;
+	left: 8px;
+	right: 8px;
+	bottom: 8px;
+	height: 28px;
+	min-height: 28px;
+	pointer-events: auto;
+}
+
+.blend-space-1d-clip-row.hidden {
+	display: none;
+}
+
+/* Node layer / overlay. Pan translates the 0x0 layer. Engine CSS treats
+   unknown length units as px, so zoom type uses per-tier layer font-size
+   (inherited; percent font-size compounds). Geometry is percent of the
+   node rect (naturalSize × zoom). `.graph-zK` must stay 13px × kMinZoom ×
+   1.196^K so type tracks the rect; inspector 26px value boxes and 18px
+   checkboxes are overridden below so they follow the port, not those floors. */
+.graph-node-layer {
+	position: absolute;
+	left: 0;
+	top: 0;
+	width: 0;
+	height: 0;
+	overflow: visible;
+	pointer-events: none;
+}
+
+.graph-overlay {
+	width: 100%;
+	height: 100%;
+	pointer-events: none;
+	z-index: 1;
+}
+
+.graph-node {
+	position: absolute;
+	overflow: visible;
+	display: flex;
+	flex-direction: column;
+	background-color: var(--graph-node-bg, #323232);
+	border-radius: var(--graph-node-radius, 4px);
+	/* No layout border: selection/hover draw on the ring overlay (no layout
+	   impact), so a reserved border only opens a node-background gutter that
+	   keeps the header fill off the edge. Ports and the ring center on the
+	   box edge. */
+	border-width: 0;
+	/* Layer is pointer-events:none (hits fall through to the canvas). Nodes
+	   must opt back in or :hover never matches and CSS hover chrome is dead. */
+	pointer-events: auto;
+	/* GraphCanvas publishes the Node Drop Shadow settings as --graph-node-shadow
+	   (or `none` when they are off); the fallback matches the shipped defaults.
+	   .drop-target replaces it with a blue glow. */
+	box-shadow: var(--graph-node-shadow, 4px 8px 24px rgba(0, 0, 0, 0.2));
+}
+
+/* Hover/selection line: a border-only overlay, last child of the node, so it
+   paints above the header and fields (the engine emits an element's outline
+   before its children). Geometry is zoom-driven from CSS: calc() insets plus
+   the ring width/radius vars the canvas publishes. */
+.graph-node-ring {
+	position: absolute;
+	/* Paints above every sibling (ports are appended after the ring). */
+	z-index: 5;
+	/* 2 graph units, centered on the node edge: half hangs outside via the
+	   calc() insets. The radius wraps the shell by the half-line (canvas
+	   publishes it). */
+	left: calc(-1px * var(--length-scale, 1));
+	top: calc(-1px * var(--length-scale, 1));
+	right: calc(-1px * var(--length-scale, 1));
+	bottom: calc(-1px * var(--length-scale, 1));
+	border-width: var(--graph-ring-width, 2px);
+	border-radius: var(--graph-ring-radius, 5px);
+	pointer-events: none;
+	border-style: solid;
+	border-color: transparent;
+}
+
+.graph-node:hover > .graph-node-ring {
+	border-color: rgba(255, 255, 255, 0.55);
+}
+
+/* Selected and search-match both mean "accent ring"; the node carries
+   ring-accent when either holds (GraphNode::ApplyVisualState). Declared after
+   the hover rule above, which it outranks on source order at equal
+   specificity — so the :hover variants this used to spell out are unnecessary
+   rather than merely collapsed. */
+.graph-node.ring-accent > .graph-node-ring {
+	border-color: #3A8FFF;
+}
+
+.graph-node.runtime-active {
+	border-color: #FFA83A;
+}
+
+.graph-node.drop-target {
+	border-color: #3A8FFF;
+	box-shadow: 0 0 8px rgba(58, 143, 255, 0.5);
+}
+
+/* The node the last compile blamed: red border plus glow. */
+.graph-node.has-error {
+	border-color: #F04A4A;
+	box-shadow: 0 0 8px rgba(240, 74, 74, 0.5);
+}
+
+/* Both states at once: selection (and search) keeps the blue border, the red
+   glow keeps saying "error". Without this, has-error wins the border at equal
+   specificity and selecting a broken node looks like nothing happened. */
+.graph-node.has-error.selected,
+.graph-node.has-error.search-match {
+	border-color: #3A8FFF;
+}
+
+.graph-node-body {
+	overflow: hidden;
+	flex: 1 1 auto;
+	width: 100%;
+	height: 100%;
+	display: flex;
+	flex-direction: column;
+	border-radius: var(--graph-node-radius, 4px);
+}
+
+.graph-node-header {
+	/* 28/60 on a 1-row node. BindModel overrides to 28/nodeHeight so grown
+	   nodes keep a 28-unit title row instead of a 47% bar that eats ports.
+	   Horizontal inset is 3 graph units, fixed, not percent of the node:
+	   widths differ per node and the title must not slide when they change.
+	   Top-only radius tracks --graph-node-radius; a square header otherwise
+	   covers .graph-node's rounded top. */
+	height: 46.667%;
+	min-height: 0;
+	padding-left: calc(3px * var(--length-scale, 1));
+	padding-right: calc(3px * var(--length-scale, 1));
+	/* Per node type, published by GraphPortedNode from the type's Node Colors
+	   setting; the fallback is the generic node blue. */
+	background-color: var(--graph-node-header-bg, #4a6fa5);
+	display: flex;
+	align-items: center;
+	flex-shrink: 0;
+	border-radius: var(--graph-node-radius, 4px) var(--graph-node-radius, 4px) 0 0;
+	gap: 2%;
+}
+
+.graph-node-icon {
+	width: 8%;
+	aspect-ratio: 1;
+	flex-shrink: 0;
+	/* Unknown types keep the generic glyph; any gn-icon--<stem> class wins. */
+	background-image: url("editor:Icons/node.png");
+	background-repeat: no-repeat;
+	background-size: contain;
+	background-position: center;
+}
+
+.graph-node-title {
+	flex: 1 1 auto;
+	min-width: 0;
+	color: #ffffff;
+	white-space: nowrap;
+	overflow: hidden;
+	text-overflow: ellipsis;
+	/* The title fills the header, so the Node Header Alignment setting moves
+	   the text inside it. GraphCanvas puts the class on the node layer. */
+	text-align: left;
+}
+
+.gn-title-align--center .graph-node-title {
+	text-align: center;
+}
+
+.gn-title-align--right .graph-node-title {
+	text-align: right;
+}
+
+.graph-node-content {
+	flex: 1 1 auto;
+	min-height: 0;
+	/* Horizontal: In/Out flow-label gutter. Symmetric so a centered value
+	   cannot sit on Result/Value. Vertical: fill the body and center
+	   value/editors; width-relative padding-top pulled compact values
+	   against the header at small zoom. */
+	padding-left: 16%;
+	padding-right: 16%;
+	padding-top: 0;
+	display: flex;
+	flex-direction: column;
+	justify-content: center;
+	align-items: center;
+}
+
+.graph-node-value {
+	flex: 0 0 auto;
+	width: 100%;
+	height: 48%;
+	min-height: 0;
+	align-self: stretch;
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	background-color: var(--graph-value-bg, #202020);
+	padding-left: calc(6px * var(--length-scale, 1));
+	padding-right: calc(6px * var(--length-scale, 1));
+	border-width: 1px;
+	border-style: solid;
+	border-color: transparent;
+	border-radius: var(--graph-value-radius, 4px);
+	font-size: 92.308%;
+	color: #cfcfcf;
+	text-align: left;
+	overflow: hidden;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+}
+
+/* Rendered node preview: one cell of the panel's GPU preview atlas. The pinned
+   edges and the sprite addressing come from MaterialGraphNode, which measures in
+   graph units. The radius is load-bearing, not decoration: at 0 the background
+   image is not clipped to the element and the atlas sprays across the canvas. */
+.graph-node-preview-plate {
+	position: absolute;
+	background-color: var(--graph-plate-bg, var(--ui_color_bg_plate));
+	border-radius: var(--graph-value-radius, 4px);
+	overflow: hidden;
+}
+
+/* Expanded node view: one value row per parameter that has no inline port
+   editor. Rows are node children (not port children), absolutely placed by
+   GraphPortedNode against the grown node rect. */
+.graph-detail-row {
+	position: absolute;
+	left: 0;
+	width: 100%;
+	display: flex;
+	flex-direction: row;
+	align-items: center;
+}
+
+/* left/width come from GraphPortedNode: they are shares of the node's value
+   column, which is measured in graph units, not CSS pixels. */
+.graph-detail-label {
+	position: absolute;
+	font-size: 92.308%;
+	color: #9a9a9a;
+	overflow: hidden;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+}
+
+.graph-detail-value {
+	position: absolute;
+	display: flex;
+	align-items: center;
+	height: 72%;
+}
+
+.graph-node-preview {
+	width: 100%;
+	height: 36%;
+	min-height: 0;
+	flex-shrink: 0;
+	background-color: #1a1a1a;
+	background-repeat: no-repeat;
+	background-size: contain;
+	background-position: center;
+}
+
+.graph-inline-editors {
+	display: flex;
+	flex-direction: row;
+	flex-wrap: wrap;
+	align-items: center;
+	justify-content: center;
+	flex: 0 0 auto;
+	width: 100%;
+	height: 48%;
+	min-height: 0;
+}
+
+.graph-inline-field {
+	pointer-events: auto;
+	flex: 1 1 auto;
+	min-width: 0;
+	width: 28%;
+	height: 100%;
+	align-self: center;
+	font-size: inherit;
+}
+
+/* One visible float (FloatConstant). Vec2/Time/Vec4 keep the 28% row so
+   a second field does not wrap under the node edge. */
+.graph-node-content .graph-single-float .graph-inline-field.float-field {
+	flex: 0 0 auto;
+	width: 56%;
+	max-width: 56%;
+}
+
+.graph-inline-field.text-field {
+	width: 100%;
+	flex: 1 1 auto;
+}
+
+/* ---- Shared value-box surface --------------------------------------------
+   ONE rule paints every editable value box on a node — wide fields, X/Y/Z
+   chips, text inputs, dropdown headers, suffix hosts — with the shared tone,
+   zoom-scaled inset and radius. Per-widget rules below add only geometry
+   that genuinely differs; never restate these declarations. */
+.graph-node-layer .field-editor {
+	min-width: 0;
+	min-height: 0;
+	line-height: 1.1;
+	padding-top: 0;
+	padding-bottom: 0;
+	/* One shared inner inset for every value box — wide fields and X/Y/Z
+	   chips alike — sized to read like the inspector's numeric fields.
+	   Vertical padding overflows the port row, so horizontal only. */
+	padding-left: calc(6px * var(--length-scale, 1));
+	padding-right: calc(6px * var(--length-scale, 1));
+	overflow: hidden;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+	background-color: var(--graph-value-bg, #202020);
+	border-width: 1px;
+	border-style: solid;
+	border-color: transparent;
+	/* Same px on both axes so corners stay circular. Percentage radius is an
+	   ellipse (rx vs width, ry vs height) and turns these boxes into pills. */
+	border-radius: var(--graph-value-radius, 4px);
+	font-size: inherit;
+}
+
+.graph-node-layer .field-editor {
+	width: 100%;
+	height: 100%;
+	max-height: 100%;
+}
+
+/* Numeric text centers in its box: with content-sized chips, equal left and
+   right air only exists at center. Strings keep the reading edge. */
+.graph-node-layer .field-editor {
+	text-align: left;
+}
+
+/* Numeric text centers in its box: with content-sized chips, equal left and
+   right air only exists at center. Declared after the rule above so the
+   numeric marker wins on source order at equal specificity. */
+.graph-node-layer .numeric-field-input {
+	text-align: center;
+}
+
+/* Inspector value boxes use the accent border on hover/focus. Graph fields
+   start with a transparent 1px border so this swap does not shift layout. */
+.graph-node-layer .field-editor:hover {
+	border-color: var(--ui_color_accent);
+	color: #FFFFFF;
+}
+
+.graph-node-layer .field-editor:focus {
+	border-color: var(--ui_color_accent);
+	color: #FFFFFF;
+}
+
+/* Not foldable into the two above: :focus matches the inner editor, while
+   focus-within matches the WRAPPER whose child holds focus — a numeric field
+   keeps the accent while its drag-to-change grip owns the pointer and the
+   editor itself is not focused. Different element, different condition. */
+.graph-node-layer .field-editor-host:focus-within .field-editor {
+	border-color: var(--ui_color_accent);
+	color: #FFFFFF;
+}
+
+.graph-node-layer .graph-node-value:hover {
+	border-color: var(--ui_color_accent);
+	color: #FFFFFF;
+}
+
+.graph-node-layer .graph-node-value:focus {
+	border-color: var(--ui_color_accent);
+	color: #FFFFFF;
+}
+
+.graph-detail-swatch {
+	width: 100%;
+	height: 100%;
+	/* Same corner as the value boxes it sits under, including when the Node
+	   Corner Radius setting moves them. */
+	border-radius: var(--graph-value-radius, 4px);
+	pointer-events: none;
+}
+
+/* ColorConstant's swatch edits the node's own parameters, so it takes clicks;
+   the Color Parameter one mirrors a variable and stays inert. */
+.graph-detail-swatch-pickable {
+	pointer-events: auto;
+	cursor: pointer;
+}
+
+/* Wire drag: GraphCanvas marks the canvas 'connecting' and flags every port the
+   pending connection could legally land on, so the legal drops light and the
+   rest recede. One rule per selector — the hover variant only exists because a
+   hovered port would otherwise take the generic port hover and lose the ring. */
+/* Recede, don't fade: opacity makes the port translucent and the canvas shows
+   through it, which reads as a rendering fault rather than as "not a target".
+   A darker grey keeps it opaque and still lets the green candidates carry. */
+.node-canvas.connecting .graph-port:not(.valid-target) {
+	background-color: #5a5a5a;
+}
+
+.node-canvas.connecting .graph-port.valid-target:hover {
+	opacity: 1;
+	border-color: #50C878;
+	outline-width: 2px;
+	outline-style: solid;
+	outline-color: #50C878;
+	box-shadow: 0 0 8px rgba(80, 200, 120, 0.85);
+}
+
+.graph-port-drop-slot {
+	pointer-events: auto;
+	background-color: var(--graph-plate-bg, var(--ui_color_bg_plate));
+}
+
+.graph-port-drop-slot.drop-valid {
+	outline-width: 2px;
+	outline-style: solid;
+	outline-color: #50C878;
+}
+
+.graph-port-drop-slot.drop-invalid {
+	outline-width: 2px;
+	outline-style: solid;
+	outline-color: #DC5050;
+}
+
+.graph-port .graph-inline-editors {
+	position: absolute;
+	left: 140%;
+	top: -50%;
+	width: 1100%;
+	height: 180%;
+	min-width: 0;
+	min-height: 0;
+	flex-wrap: nowrap;
+	pointer-events: auto;
+	z-index: 2;
+}
+
+/* Bool: [port][checkbox][label]. Percents are of the port. Host is a 130%
+   square centered on the port so the box fills it and stays on the row.
+   left 185% leaves a gutter after the port; the box ends before the label
+   at 360%. */
+.graph-port.has-inline-editor.bool-editor .graph-inline-editors {
+	left: 185%;
+	top: -15%;
+	width: 130%;
+	height: 130%;
+	align-items: center;
+	justify-content: center;
+	overflow: visible;
+}
+
+.graph-node-layer .graph-port.bool-editor .checkbox {
+	width: 100%;
+	height: 100%;
+	max-width: 100%;
+	max-height: 100%;
+	min-width: 0;
+	min-height: 0;
+	padding: 0;
+	gap: 0;
+	align-self: center;
+	align-items: center;
+	justify-content: center;
+	flex-shrink: 0;
+	overflow: visible;
+}
+
+.graph-node-layer .graph-port.bool-editor .checkbox-box {
+	width: 100%;
+	height: 100%;
+	max-width: 100%;
+	max-height: 100%;
+	min-width: 0;
+	min-height: 0;
+	flex-shrink: 0;
+	aspect-ratio: 1;
+	border-width: 1px;
+}
+
+.graph-node-layer .graph-port.bool-editor .checkbox-label {
+	display: none;
+}
+
+.graph-port.has-inline-editor.bool-editor .graph-port-label {
+	left: 360%;
+}
+
+.graph-port.has-inline-editor:not(.bool-editor) .graph-inline-editors {
+	/* Port is 10 graph units and hangs 5 past the node left. left 750%
+	   starts at node-x 70, after the 60-unit label column. width 1100%
+	   ends at 180, at the right-edge port clearance. BindPortEditors
+	   overrides left/width per row from the measured label column. Height
+	   180% / top -40% leaves a 6-unit gap between stacked value boxes. */
+	left: 750%;
+	top: -40%;
+	width: 1100%;
+	height: 180%;
+	min-width: 0;
+	max-width: 1100%;
+	overflow: hidden;
+}
+
+.graph-port.has-inline-editor:not(.bool-editor) .graph-port-label {
+	max-width: 600%;
+	overflow: hidden;
+	text-overflow: ellipsis;
+}
+
+/* shares-out-row hosts get their width as an element override, measured from
+   the row's actual Out-label length (GraphNodeMetrics), so the value box ends
+   before the glyphs whatever the name — no fixed-width rule here. */
+
+.graph-port .graph-inline-field {
+	flex: 1 1 0;
+	width: 100%;
+	max-width: 100%;
+	/* A lone float cannot collapse under the inspector padding; width 100%
+	   still fills the host when it fits. Vec-editor XYZ overrides. */
+	min-width: 90%;
+}
+
+.graph-port.has-inline-editor.vec-editor .graph-inline-field {
+	min-width: 0;
+}
+
+.graph-port-output .graph-inline-editors {
+	display: none;
+}
+
+/* 13px × 0.585 × 1.196^K. z3 is zoom 1. Node and value-box radii are 4px at
+   zoom 1, scaled by the same ratio so corners track the node rect. */
+.graph-z0 { font-size: 7.6px; }
+.graph-z1 { font-size: 9.1px; }
+.graph-z2 { font-size: 10.9px; }
+.graph-z3 { font-size: 13px; }
+.graph-z4 { font-size: 15.6px; }
+.graph-z5 { font-size: 18.6px; }
+.graph-z6 { font-size: 22.3px; }
+.graph-z7 { font-size: 26.6px; }
+.graph-z8 { font-size: 31.9px; }
+.graph-z9 { font-size: 38.1px; }
+
+.graph-node-layer .graph-node-title,
+.graph-node-layer .graph-inline-field,
+.graph-node-layer .dropdown-header {
+	font-size: inherit;
+}
+
+/* Inspector Vector3Field keeps a 13px / 14×27px axis chip. On a port row that
+   chip does not follow .graph-zK, so Y/Z look like a different type size.
+   Length `em` is parsed as px in this engine (`1em` → 1px) and clips the letter
+   to a sliver; size the chip in percent of the vec host, which already tracks
+   the port / zoom. */
+.graph-node-layer .vector3-field {
+	gap: 1%;
+	height: 100%;
+	min-width: 0;
+	min-height: 0;
+	align-items: center;
+	flex-wrap: nowrap;
+	overflow: hidden;
+}
+
+.graph-node-layer .vector3-field > .vector3-label {
+	/* A one-glyph axis label needs glyph width, nothing more: every point
+	   saved here is chip width. */
+	width: 6%;
+	min-width: 6%;
+	max-width: 6%;
+	height: 100%;
+	min-height: 0;
+	margin: 0;
+	font-size: inherit;
+	line-height: 1;
+	flex: 0 0 6%;
+	pointer-events: auto;
+	cursor: default;
+}
+
+.graph-node-layer .field-suffix {
+	height: 100%;
+	min-height: 0;
+	margin: 0;
+	font-size: inherit;
+	line-height: 1;
+	flex-shrink: 0;
+}
+
+.graph-node-layer .vector3-field .float-field,
+.graph-node-layer .vector3-component-x,
+.graph-node-layer .vector3-component-y,
+.graph-node-layer .vector3-component-z {
+	height: 100%;
+	/* Leftover after 6% labels × 3 and 1% gaps × 5 is 77% — over 25% per
+	   axis, which holds a signed two-decimal value with both insets. */
+	min-width: 24%;
+	min-height: 0;
+	flex: 1 1 0;
+}
+
+.graph-node-layer .graph-node-value,
+.graph-node-layer .graph-port-label {
+	font-size: 92.308%;
+}
+
+/* Above the selection ring (z-index 5): the ring hangs half outside the node
+   edge, which is exactly where a port sits, so a ringed node would otherwise
+   paint its outline across every port. */
+.graph-port {
+	position: absolute;
+	z-index: 6;
+	width: 5%;
+	/* 10/60 on a 1-row node. BindModel sets width/height percents per node
+	   so ports stay circular when the node grows for extra port rows.
+	   No layout border: port-relative percents (750%/1100%) must resolve
+	   against the 10-unit box. A 1px border shrinks that to 8 units and
+	   parks value hosts on top of long port names. The ring is box-shadow. */
+	height: 16.667%;
+	aspect-ratio: 1;
+	border-radius: 50%;
+	background-color: #c0c0c0;
+	border-width: 0;
+	box-shadow: 0 0 0 1px #222222;
+	pointer-events: auto;
+	overflow: visible;
+}
+
+.graph-port:hover {
+	background-color: #ffffff;
+	outline-width: 2px;
+	outline-style: solid;
+	outline-color: #3A8FFF;
+	box-shadow: 0 0 6px rgba(58, 143, 255, 0.65);
+}
+
+.graph-port-input {
+	/* The node has no layout border, so the padding box IS the outer edge:
+	   half the 10-unit port outside centers the dot on the edge, where the
+	   hover/selection ring also centers (.graph-node-ring). */
+	left: -2.5%;
+}
+
+.graph-port-output {
+	right: -2.5%;
+}
+
+.graph-port-label {
+	position: absolute;
+	top: -40%;
+	height: 180%;
+	white-space: nowrap;
+	pointer-events: none;
+	overflow: visible;
+	font-size: 92.308%;
+	color: #d0d0d0;
+}
+
+.graph-port-input .graph-port-label {
+	/* 10px from port center. Port is 10px and hangs 5px outside, so 150% of
+	   the port is 10px from the node edge. */
+	left: 150%;
+}
+
+.graph-port-output .graph-port-label {
+	/* Mirror of the input inset — name sits inside the node, left of the
+	   output port. 500% (50 units) fits Entity / Pressed; shrink-to-fit
+	   keeps short names such as Out next to the port. */
+	right: 150%;
+	left: auto;
+	text-align: right;
+	max-width: 500%;
+	overflow: hidden;
+	text-overflow: ellipsis;
+}
+
+/* Green, not the accent blue: blue is what a port already wears on hover, so a
+   legal drop target has to read differently from "the pointer is here". */
+.graph-port.valid-target {
+	border-color: #50C878;
+	outline-width: 2px;
+	outline-style: solid;
+	outline-color: #50C878;
+	box-shadow: 0 0 8px rgba(80, 200, 120, 0.85);
+}
+
+/* Value-box insets are standard CSS math over the zoom: calc(6px *
+   var(--length-scale)) keeps the text's inset proportional to the box at
+   every zoom (6px at zoom 1). GraphCanvas publishes the zoom as
+   --length-scale on the node layer. */

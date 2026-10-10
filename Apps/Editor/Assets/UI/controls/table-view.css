@@ -1,0 +1,138 @@
+/* TableView control — structural styling + the default header look, shared by every consumer
+   (VRAM, Assets, ...). The TableView control loads this itself via RequestSubtreeStyleAssetPath,
+   so a consumer gets dividers/headers/cells (and the standard header bar + sort icon) for free.
+   Keep layout/control rules and the shared header chrome here; PER-ROW / per-cell content colours
+   live in the consumer's own stylesheet, and a consumer may override these header rules if needed. */
+
+.table-view {
+    display: flex;
+    flex-direction: column;
+    flex: 1 1 auto;
+    min-height: 0;
+    background-color: var(--ui_color_bg_grid);
+    border-radius: 4px;
+}
+
+.table-view-body {
+    flex: 1 1 auto;
+    min-height: 0;
+}
+
+.table-view-row {
+    display: flex;
+    flex-direction: row;
+    align-items: center;
+    height: 20px;
+}
+
+.table-view-row:hover {
+    background-color: var(--ui_color_bg_hover);
+}
+
+.table-view-cell {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    padding: 0 6px;
+    font-size: 14px;
+}
+
+.axis-header {
+    display: flex;
+    flex-direction: row;
+    align-items: center;
+    height: 24px;
+    background-color: #262727;
+    border-bottom-width: 1px;
+    border-bottom-color: #2A2A2A;
+}
+
+.axis-header-cell {
+    display: flex;
+    flex-direction: row;
+    align-items: center;
+    height: 100%;       /* fill the header row so the resize divider spans top-to-bottom */
+    padding: 0 6px;
+    position: relative;
+}
+
+.axis-header-cell.align-end {
+    justify-content: flex-end;
+}
+
+.axis-header-title {
+    flex: 1 1 auto;
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    font-size: var(--ui_font_size_list);
+    line-height: 24px;  /* center the title text in the 24px header row */
+    color: var(--ui_color_text);
+}
+
+/* Active column brightens its title (the legacy ".sorted" affordance). */
+.axis-header-cell.sorted .axis-header-title {
+    color: #ffffff;
+}
+
+/* Sort-direction indicator: a small PNG triangle, not a text glyph (the UI font has no
+   outline for U+25B2/U+25BC). Empty until the control marks the column ascending/descending. */
+.axis-header-sort {
+    flex: 0 0 auto;
+    width: 8px;
+    height: 8px;
+    margin-left: 4px;
+    background-size: contain;
+    background-repeat: no-repeat;
+    background-position: center;
+    opacity: 0.7;
+}
+
+.axis-header-sort.ascending {
+    background-image: url("editor:Icons/dropdownsmallup.png");
+}
+
+.axis-header-sort.descending {
+    background-image: url("editor:Icons/dropdownsmall.png");
+}
+
+/* The divider decouples the grab target from the visible line. The divider itself is a
+   wide TRANSPARENT grab strip (8px); a thin 2px line child (.axis-divider-line) pinned
+   to its right edge is the only thing drawn, so the separator reads as a hairline while
+   the hit box stays comfortable.
+
+   The strip is the cell's last child, so it sits at the right edge inside the cell's 6px
+   right padding; margin-right: -6px cancels exactly that padding so the strip's RIGHT
+   edge (and therefore the pinned line) lands on the column boundary while the strip's
+   body stays WITHIN the cell. It must never cross past the boundary — the next header
+   cell is a later sibling and would occlude the grab box, making the divider
+   un-clickable. */
+.axis-divider {
+    display: flex;
+    flex-direction: row;
+    justify-content: flex-end;
+    flex: 0 0 auto;
+    width: 8px;
+    margin-right: -6px;
+    cursor: col-resize;
+    align-self: stretch;
+}
+
+/* The visible hairline. Non-interactive so it never steals the strip's mousedown; the
+   strip's handler still receives the event via the hit-test (pointer-events:none makes
+   the line un-hittable, so the strip below it is hit instead).
+
+   Drawn DARKER than the header bar (the "groove" look from the legacy headers): the line
+   sits a shade below the header background so it reads as a subtle recessed separator
+   rather than a bright ridge. */
+.axis-divider-line {
+    width: 2px;
+    align-self: stretch;
+    pointer-events: none;
+    background-color: var(--ui_color_bg_tabbar);
+}
+
+.axis-divider:hover .axis-divider-line {
+    background-color: var(--ui_color_accent);
+}

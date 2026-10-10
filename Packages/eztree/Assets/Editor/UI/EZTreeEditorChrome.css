@@ -1,0 +1,32 @@
+/* Editor-chrome classes the eztree package contributes (registered via
+   EditorPanelRegistry::RegisterEditorStyleSheet, attached at the editor UI
+   root). These style elements OUTSIDE any panel subtree: hierarchy rows,
+   inspector/search icons, and the Tree Stats dock-tab icon. Global sheets
+   append after the editor theme, so these rules extend it. The icon itself
+   stays an editor asset, referenced across mounts via the alias prefix. */
+
+/* Scene hierarchy / inspector header / bookmarks: Tree Generator entity icon */
+.tree .tree-item.hierarchy-entity-tree-generator .hierarchy-preview-icon,
+.inspector-header-container .inspector-hierarchy-entity-icon.hierarchy-entity-tree-generator,
+.bookmark-row .bookmark-icon.hierarchy-entity-tree-generator {
+	background-image: url("editor:Icons/leaf.svg");
+}
+
+/* Inspector section icon */
+.inspector-section-icon.inspector-section-icon-tree-generator {
+	background-image: url("editor:Icons/leaf.svg");
+}
+
+/* Component-picker search result icon (matches the editor's shared
+   component-icon treatment in SearchDialog.css) */
+.search-result-icon.inspector-section-icon-tree-generator {
+	background-size: 16px 16px;
+	background-image-tint: rgba(200, 200, 200, 1.0);
+	background-image-saturation: 1.0;
+	background-image: url("editor:Icons/leaf.svg");
+}
+
+/* Tree Stats dock-tab icon */
+.dock-tab-icon.eztree-stats-tab-icon {
+	background-image: url("editor:Icons/leaf.svg");
+}

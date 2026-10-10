@@ -1,0 +1,114 @@
+{
+  "name": "repro_inspector_edit_primitives",
+  "windowIndex": 0,
+  "minFrames": 420,
+  "probe": {
+    "elementId": "mount:Inspector",
+    "scrollViewUnderId": "mount:Inspector"
+  },
+  "assert": {
+    "kind": "layoutConverged",
+    "elementId": "mount:Inspector",
+    "frameStart": 200,
+    "frameEnd": 400,
+    "includeStyleDirty": false
+  },
+  "asserts": [
+    {
+      "kind": "visibleTextNotFullyClipped",
+      "subtreeId": "mount:Inspector",
+      "scrollViewUnderId": "mount:Inspector",
+      "requiredClasses": ["inspector-text", "inspector-label", "inspector-field-label", "inspector-section-header"],
+      "frameStart": 200,
+      "frameEnd": 400,
+      "minVisiblePx": 2.0,
+      "maxChecks": 1800
+    }
+  ],
+  "events": [
+    { "frame": 2, "type": "mouseMove", "target": { "kind": "elementId", "id": "tab:Hierarchy", "relX": 0.5, "relY": 0.5 } },
+    { "frame": 3, "type": "mouseDown", "button": 0 },
+    { "frame": 4, "type": "mouseUp", "button": 0 },
+
+    { "frame": 20, "type": "invokeCommand", "commandId": 16659 },
+    { "frame": 30, "type": "mouseMove", "target": { "kind": "elementId", "id": "tab:Inspector", "relX": 0.5, "relY": 0.5 } },
+    { "frame": 31, "type": "mouseDown", "button": 0 },
+    { "frame": 32, "type": "mouseUp", "button": 0 },
+
+    { "frame": 45, "type": "mouseMove", "target": { "kind": "elementId", "id": "Transform.LocalScale.X", "relX": 0.5, "relY": 0.5 } },
+    { "frame": 46, "type": "mouseDown", "button": 0 },
+    { "frame": 47, "type": "mouseUp", "button": 0 },
+    { "frame": 48, "type": "keyDown", "key": 65, "mods": 2 },
+    { "frame": 49, "type": "keyUp", "key": 65, "mods": 2 },
+    { "frame": 50, "type": "char", "codepoint": 49 },
+    { "frame": 51, "type": "char", "codepoint": 48 },
+    { "frame": 52, "type": "char", "codepoint": 48 },
+    { "frame": 53, "type": "keyDown", "key": 257 },
+    { "frame": 54, "type": "keyUp", "key": 257 },
+
+    { "frame": 60, "type": "mouseMove", "target": { "kind": "elementId", "id": "Transform.LocalScale.Y", "relX": 0.5, "relY": 0.5 } },
+    { "frame": 61, "type": "mouseDown", "button": 0 },
+    { "frame": 62, "type": "mouseUp", "button": 0 },
+    { "frame": 63, "type": "keyDown", "key": 65, "mods": 2 },
+    { "frame": 64, "type": "keyUp", "key": 65, "mods": 2 },
+    { "frame": 65, "type": "char", "codepoint": 49 },
+    { "frame": 66, "type": "keyDown", "key": 257 },
+    { "frame": 67, "type": "keyUp", "key": 257 },
+
+    { "frame": 73, "type": "mouseMove", "target": { "kind": "elementId", "id": "Transform.LocalScale.Z", "relX": 0.5, "relY": 0.5 } },
+    { "frame": 74, "type": "mouseDown", "button": 0 },
+    { "frame": 75, "type": "mouseUp", "button": 0 },
+    { "frame": 76, "type": "keyDown", "key": 65, "mods": 2 },
+    { "frame": 77, "type": "keyUp", "key": 65, "mods": 2 },
+    { "frame": 78, "type": "char", "codepoint": 49 },
+    { "frame": 79, "type": "char", "codepoint": 48 },
+    { "frame": 80, "type": "char", "codepoint": 48 },
+    { "frame": 81, "type": "keyDown", "key": 257 },
+    { "frame": 82, "type": "keyUp", "key": 257 },
+
+    { "frame": 120, "type": "invokeCommand", "commandId": 16656 },
+
+    { "frame": 140, "type": "mouseMove", "target": { "kind": "elementId", "id": "Transform.LocalPosition.X", "relX": 0.5, "relY": 0.5 } },
+    { "frame": 141, "type": "mouseDown", "button": 0 },
+    { "frame": 142, "type": "mouseUp", "button": 0 },
+    { "frame": 143, "type": "keyDown", "key": 65, "mods": 2 },
+    { "frame": 144, "type": "keyUp", "key": 65, "mods": 2 },
+    { "frame": 145, "type": "char", "codepoint": 50 },
+    { "frame": 146, "type": "keyDown", "key": 257 },
+    { "frame": 147, "type": "keyUp", "key": 257 },
+
+    { "frame": 153, "type": "mouseMove", "target": { "kind": "elementId", "id": "Transform.LocalPosition.Y", "relX": 0.5, "relY": 0.5 } },
+    { "frame": 154, "type": "mouseDown", "button": 0 },
+    { "frame": 155, "type": "mouseUp", "button": 0 },
+    { "frame": 156, "type": "keyDown", "key": 65, "mods": 2 },
+    { "frame": 157, "type": "keyUp", "key": 65, "mods": 2 },
+    { "frame": 158, "type": "char", "codepoint": 48 },
+    { "frame": 159, "type": "char", "codepoint": 46 },
+    { "frame": 160, "type": "char", "codepoint": 53 },
+    { "frame": 161, "type": "keyDown", "key": 257 },
+    { "frame": 162, "type": "keyUp", "key": 257 },
+
+    { "frame": 168, "type": "mouseMove", "target": { "kind": "elementId", "id": "Transform.LocalPosition.Z", "relX": 0.5, "relY": 0.5 } },
+    { "frame": 169, "type": "mouseDown", "button": 0 },
+    { "frame": 170, "type": "mouseUp", "button": 0 },
+    { "frame": 171, "type": "keyDown", "key": 65, "mods": 2 },
+    { "frame": 172, "type": "keyUp", "key": 65, "mods": 2 },
+    { "frame": 173, "type": "char", "codepoint": 45 },
+    { "frame": 174, "type": "char", "codepoint": 51 },
+    { "frame": 175, "type": "keyDown", "key": 257 },
+    { "frame": 176, "type": "keyUp", "key": 257 },
+
+    { "frame": 230, "type": "invokeCommand", "commandId": 16657 },
+
+    { "frame": 250, "type": "mouseMove", "target": { "kind": "elementId", "id": "Transform.LocalRotation.Y", "relX": 0.5, "relY": 0.5 } },
+    { "frame": 251, "type": "mouseDown", "button": 0 },
+    { "frame": 252, "type": "mouseUp", "button": 0 },
+    { "frame": 253, "type": "keyDown", "key": 65, "mods": 2 },
+    { "frame": 254, "type": "keyUp", "key": 65, "mods": 2 },
+    { "frame": 255, "type": "char", "codepoint": 52 },
+    { "frame": 256, "type": "char", "codepoint": 53 },
+    { "frame": 257, "type": "keyDown", "key": 257 },
+    { "frame": 258, "type": "keyUp", "key": 257 }
+  ]
+}
+

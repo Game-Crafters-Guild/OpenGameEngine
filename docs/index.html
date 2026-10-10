@@ -1,0 +1,299 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Game Engine Documentation</title>
+  <style>
+    :root {
+      color-scheme: dark;
+      --bg: #171817;
+      --panel: #232423;
+      --line: #393a39;
+      --text: #ededed;
+      --muted: #b9bbb9;
+      --accent: #3a8fff;
+      --accent-2: #4caf50;
+      --warn: #d9a441;
+      --danger: #d96a6a;
+      --radius: 8px;
+      font-family: Inter, Roboto, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+    }
+
+    * { box-sizing: border-box; }
+
+    body {
+      margin: 0;
+      min-height: 100vh;
+      color: var(--text);
+      background:
+        linear-gradient(180deg, rgba(58, 143, 255, 0.08), transparent 320px),
+        var(--bg);
+      line-height: 1.6;
+    }
+
+    a {
+      color: #91c4ff;
+      text-decoration: none;
+    }
+
+    a:hover { text-decoration: underline; }
+
+    .wrap {
+      max-width: 920px;
+      margin: 0 auto;
+      padding: 48px 28px 80px;
+    }
+
+    p.lede {
+      margin: 0 0 28px;
+      font-size: 13px;
+      letter-spacing: 0.04em;
+      text-transform: uppercase;
+      color: var(--muted);
+    }
+
+    h1 {
+      margin: 0 0 12px;
+      font-size: 28px;
+      font-weight: 650;
+      letter-spacing: -0.02em;
+    }
+
+    .sub {
+      margin: 0 0 36px;
+      color: var(--muted);
+      max-width: 62ch;
+    }
+
+    hr {
+      border: none;
+      border-top: 1px solid var(--line);
+      margin: 36px 0;
+    }
+
+    h2 {
+      margin: 0 0 16px;
+      font-size: 15px;
+      font-weight: 650;
+      text-transform: uppercase;
+      letter-spacing: 0.06em;
+      color: var(--muted);
+    }
+
+    .grid {
+      display: grid;
+      gap: 14px;
+    }
+
+    @media (min-width: 640px) {
+      .grid.two-col {
+        grid-template-columns: 1fr 1fr;
+        gap: 16px 20px;
+      }
+    }
+
+    .card {
+      background: var(--panel);
+      border: 1px solid var(--line);
+      border-radius: var(--radius);
+      padding: 18px 20px;
+    }
+
+    .card strong {
+      display: block;
+      margin-bottom: 8px;
+      font-size: 15px;
+    }
+
+    .card p {
+      margin: 0;
+      font-size: 14px;
+      color: var(--muted);
+    }
+
+    .card .link {
+      margin-top: 12px;
+      font-size: 14px;
+    }
+
+    .pill {
+      display: inline-block;
+      padding: 2px 8px;
+      border-radius: 999px;
+      font-size: 11px;
+      font-weight: 600;
+      letter-spacing: 0.04em;
+      text-transform: uppercase;
+      margin-left: 8px;
+      vertical-align: middle;
+    }
+
+    .pill.new { background: rgba(76, 175, 80, 0.2); color: var(--accent-2); }
+
+    .panel {
+      border-radius: var(--radius);
+      padding: 18px 20px;
+      border: 1px solid var(--line);
+      background: rgba(35, 36, 35, 0.65);
+    }
+
+    .panel.warn {
+      border-color: rgba(217, 164, 65, 0.45);
+      background: rgba(217, 164, 65, 0.08);
+    }
+
+    .panel.warn h2 {
+      color: var(--warn);
+      margin-bottom: 10px;
+    }
+
+    .panel.warn p, .panel.warn li {
+      color: var(--text);
+      font-size: 14px;
+    }
+
+    .panel.warn ul {
+      margin: 12px 0 0;
+      padding-left: 20px;
+    }
+
+    .muted {
+      color: var(--muted);
+      font-size: 13px;
+    }
+
+    .footer {
+      margin-top: 48px;
+      padding-top: 24px;
+      border-top: 1px solid var(--line);
+      font-size: 13px;
+      color: var(--muted);
+    }
+
+    code {
+      font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+      font-size: 0.92em;
+      background: rgba(0, 0, 0, 0.35);
+      padding: 1px 6px;
+      border-radius: 4px;
+    }
+  </style>
+</head>
+<body>
+  <div class="wrap">
+    <p class="lede">Documentation · Game Engine</p>
+    <h1>Documentation hub</h1>
+    <p class="sub">
+      Browse HTML references from the repository, or open Markdown sources on GitHub.
+      When <a href="https://docs.github.com/pages">GitHub Pages</a> is enabled for this repo
+      (<em>Settings → Pages → Build: GitHub Actions</em>), the workflow
+      <code>docs-site.yml</code> publishes these files from the <code>docs/</code> folder.
+    </p>
+
+    <h2>Getting started</h2>
+    <div class="grid">
+      <div class="card">
+        <strong>Your first project <span class="pill new">HTML</span></strong>
+        <p>Create or open a project, save a scene, and export a game you can run.</p>
+        <p class="link"><a href="first-project.html">Open first-project.html</a></p>
+      </div>
+      <div class="card">
+        <strong>Game builds and Steam publishing <span class="pill new">HTML</span></strong>
+        <p>Prepare, verify and upload releases; Steam Deck builds and deployment.</p>
+        <p class="link"><a href="GamePublishing.html">Open GamePublishing.html</a></p>
+      </div>
+    </div>
+
+    <hr>
+
+    <h2>Animation</h2>
+    <div class="grid">
+      <div class="card">
+        <strong>Humanoid retargeting <span class="pill new">HTML</span></strong>
+        <p>Play a clip authored on one humanoid skeleton on another: assets, import, auto-bootstrap, and what runs each frame.</p>
+        <p class="link"><a href="Animation/HumanoidRetargeting.html">Open HumanoidRetargeting.html</a></p>
+      </div>
+    </div>
+
+    <hr>
+
+    <h2>Editor UI</h2>
+    <div class="grid">
+      <div class="card">
+        <strong>Editor UI Component Library <span class="pill new">HTML</span></strong>
+        <p>Single-page catalog of controls, tokens, classes, and authoring patterns.</p>
+        <p class="link"><a href="Editor/UI_COMPONENT_LIBRARY.html">Open UI_COMPONENT_LIBRARY.html</a></p>
+      </div>
+      <div class="card">
+        <strong>Guidelines</strong>
+        <p>UI authoring rules live beside the component catalog.</p>
+        <p class="link">
+          <a href="Editor/UI_GUIDELINES.md">UI_GUIDELINES.md</a>
+        </p>
+      </div>
+      <div class="card">
+        <strong>UI control defaults <span class="pill new">HTML</span></strong>
+        <p>The default stylesheet under every UI document, its color properties, and slider track colors.</p>
+        <p class="link"><a href="ui-control-defaults.html">Open ui-control-defaults.html</a></p>
+      </div>
+      <div class="card">
+        <strong>Text effects <span class="pill new">HTML</span></strong>
+        <p>The <code>text-shadow</code>, <code>text-glow</code> and <code>text-outline</code> properties and their limits.</p>
+        <p class="link"><a href="UI/text-effects.html">Open text-effects.html</a></p>
+      </div>
+      <div class="card">
+        <strong>Timeline API Manual <span class="pill new">HTML</span></strong>
+        <p>Engine evaluator, <code>.timeline</code> JSON, editor panel API, and timeline bar UI controls.</p>
+        <p class="link"><a href="Editor/Timeline-API-Manual.html">Open Timeline-API-Manual.html</a></p>
+      </div>
+    </div>
+
+    <hr>
+
+    <h2>Quick links</h2>
+    <div class="grid two-col">
+      <div class="card">
+        <strong>Setup &amp; usage</strong>
+        <p class="link">
+          <a href="../BUILD.md">Build and test guide</a>
+        </p>
+      </div>
+      <div class="card">
+        <strong>Development</strong>
+        <p class="link">
+          <a href="../CONTRIBUTING.md">Contributing</a> &middot;
+          <a href="../CodingStyle.md">Coding style</a> &middot;
+          <a href="README.md">Docs index (README)</a>
+        </p>
+      </div>
+      <div class="card">
+        <strong>AI &amp; MCP</strong>
+        <p class="link">
+          <a href="MCP_SETUP.md">MCP Setup</a>
+        </p>
+      </div>
+    </div>
+
+    <div class="panel warn" style="margin-top: 28px;">
+      <h2>For maintainers · Updating the UI library</h2>
+      <p>
+        <code>docs/Editor/UI_COMPONENT_LIBRARY.html</code> is the canonical component catalog;
+        edit it directly for new components, tokens, or rules. Authoring rules stay in
+        <code>docs/Editor/UI_GUIDELINES.md</code>.
+      </p>
+    </div>
+
+    <div class="footer">
+      <p class="muted">
+        Public docs hub: <a href="https://openengine.dev/docs/">openengine.dev/docs</a> (UI component library and related pages are linked from there.)
+      </p>
+      <p class="muted" style="margin-top:8px;">
+        Local preview: open this file from disk in a browser.
+        Optional GitHub Pages copy: <code>https://&lt;owner&gt;.github.io/&lt;repo&gt;/Editor/UI_COMPONENT_LIBRARY.html</code>
+      </p>
+      <p class="muted" style="margin-top:8px;">2026-05-18</p>
+    </div>
+  </div>
+</body>
+</html>

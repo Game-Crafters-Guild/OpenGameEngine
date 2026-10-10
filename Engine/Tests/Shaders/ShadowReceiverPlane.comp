@@ -1,0 +1,33 @@
+#version 460
+#extension GL_GOOGLE_include_directive : require
+#include "../../Modules/Rendering/Shaders/Includes/shadow_receiver_plane.glsl"
+layout(local_size_x=1) in;
+layout(set=0,binding=0,std430) buffer Results { uint results[]; };
+void main()
+{
+    // A sloping receiver with a tiny, non-singular screen-to-shadow UV
+    // footprint. Its depth remains affine at every actual comparison texel.
+    vec2 slope = vec2(0.03, -0.05);
+    vec2 gradient = GE_ShadowReceiverPlaneGradient(
+        vec3(1e-7, 0, slope.x * 1e-7), vec3(0, 2e-7, slope.y * 2e-7));
+    float texel = 1.0 / 2048.0;
+    uint rawLit = 0, planeLit = 0, blockerLit = 0;
+    for (int y=-2; y<=2; ++y)
+        for (int x=-2; x<=2; ++x)
+        {
+            vec2 offset = vec2(x,y) * texel;
+            float corrected = GE_ShadowReceiverPlaneDepth(0.400001, offset, gradient, texel);
+            for (int j=0; j<2; ++j)
+                for (int i=0; i<2; ++i)
+                {
+                    vec2 sampleOffset = offset + (vec2(i,j) - 0.3) * texel;
+                    float surface = 0.4 + dot(slope, sampleOffset);
+                    rawLit += 0.400001 >= surface ? 1u : 0u;
+                    planeLit += corrected >= surface ? 1u : 0u;
+                    blockerLit += corrected >= surface + 0.0002 ? 1u : 0u;
+                }
+        }
+    vec2 degenerate = GE_ShadowReceiverPlaneGradient(vec3(1,1,2),vec3(2,2,4));
+    results[0]=rawLit; results[1]=planeLit; results[2]=blockerLit;
+    results[3]=all(equal(degenerate,vec2(0))) ? 1u : 0u;
+}

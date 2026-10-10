@@ -1,0 +1,19 @@
+{
+  "schemaVersion": 3,
+  "materialName": "OpenPBR - Brushed Anisotropic Metal",
+  "lightingModel": "StandardPBR",
+  "alphaMode": "Opaque",
+  "doubleSided": false,
+  "surfaceShader": "Surfaces/standard_pbr.glsl",
+  "properties": {
+    "baseColor": [0.66, 0.67, 0.69, 1.0],
+    "metallic": 1.0,
+    "roughness": 0.4516,
+    "enableAnisotropy": true,
+    "anisotropy": 0.85
+  },
+  "textures": {
+    "normalMap": "dc421e66-7ce1-4548-801c-1489069b3555",
+    "metallicRoughnessMap": "200087b8-9a63-4525-a638-55e69206fc60"
+  }
+}

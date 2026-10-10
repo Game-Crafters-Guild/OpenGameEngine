@@ -1,0 +1,19 @@
+{
+  "schemaVersion": 3,
+  "materialName": "Ocean lookdev - shore",
+  "lightingModel": "StandardPBR",
+  "alphaMode": "Opaque",
+  "doubleSided": false,
+  "surfaceShader": "Surfaces/standard_pbr.glsl",
+  "properties": {
+    "baseColor": [
+      0.26,
+      0.23,
+      0.17,
+      1
+    ],
+    "metallic": 0,
+    "roughness": 0.85
+  },
+  "textures": {}
+}

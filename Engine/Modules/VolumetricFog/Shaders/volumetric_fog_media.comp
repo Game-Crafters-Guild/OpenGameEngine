@@ -1,0 +1,97 @@
+#version 450
+
+#define GE_VOLUMETRIC_FOG_BIND_JITTER_ATLAS 1
+#define GE_VOLUMETRIC_FOG_BIND_LOCAL_VOLUMES 1
+#define GE_VOLUMETRIC_FOG_BIND_DENSITY_NOISE 1
+#include "volumetric_fog_common.glsl"
+
+layout(local_size_x = 8, local_size_y = 8, local_size_z = 8) in;
+layout(rgba16f, set = 0, binding = 0) uniform writeonly image3D uOutMedia;
+layout(rgba16f, set = 0, binding = 15) uniform writeonly image3D uOutEmission;
+
+void main()
+{
+    ivec3 gid = ivec3(gl_GlobalInvocationID.xyz);
+    ivec3 grid = ivec3(fog.uGridParams.xyz);
+    if (any(greaterThanEqual(gid, grid)))
+        return;
+
+    vec2 uv = (vec2(gid.xy) + vec2(0.5)) / max(fog.uGridParams.xy, vec2(1.0));
+    float slice01 = FogSliceCoord(gid.z, FogFrameJitter(gid));
+    float distanceToCamera = FogSliceDistance(slice01);
+    vec3 worldPos = FogWorldFromUvDistance(uv, distanceToCamera);
+
+    float heightAboveBase = max(worldPos.y - fog.uHeightParams.x, 0.0);
+    float density = fog.uAlbedoDensity.w * exp(-heightAboveBase / max(fog.uHeightParams.y, 0.01));
+    density *= FogLocalVolumeWeight(worldPos);
+    vec3 albedoWeighted = fog.uAlbedoDensity.rgb * max(density, 0.0);
+    vec3 emission = fog.uEmissionAnisotropy.rgb;
+
+    if (fog.uNoiseParams.x > 0.5)
+    {
+        vec3 noiseP = worldPos / max(fog.uNoiseParams.y, 0.01) + fog.uNoiseVelocityTime.xyz * fog.uNoiseVelocityTime.w;
+        float n = FogApplyDensityThreshold(
+            pow(clamp(FogDensityNoise(noiseP), 0.0, 1.0), fog.uNoiseParams.w),
+            fog.uDensityParams.x,
+            fog.uDensityParams.y);
+        density *= mix(1.0, n * 1.8, fog.uNoiseParams.z);
+        albedoWeighted = fog.uAlbedoDensity.rgb * max(density, 0.0);
+    }
+
+#ifdef GE_VOLUMETRIC_FOG_BIND_LOCAL_VOLUMES
+    uint volumeCount = min(uFogLocalVolumeHeader.x, 64u);
+    for (uint i = 0u; i < volumeCount; ++i)
+    {
+        FogLocalVolumePacked volume = uFogLocalVolumes[i];
+        float w = FogLocalVolumeWeightPacked(worldPos, volume);
+        if (w <= 0.0)
+            continue;
+
+        float localDensity = max(volume.params0.z, 0.0);
+        if (fog.uNoiseParams.x > 0.5)
+        {
+            vec3 localNoiseP =
+                FogLocalPositionWorldPacked(worldPos, volume) / max(fog.uNoiseParams.y, 0.01) +
+                fog.uNoiseVelocityTime.xyz * fog.uNoiseVelocityTime.w +
+                vec3(float(i) * 0.173);
+            float ln = pow(clamp(FogDensityNoise(localNoiseP), 0.0, 1.0), fog.uNoiseParams.w);
+            ln = FogApplyDensityThreshold(ln, volume.params1.x, volume.params1.y);
+            localDensity *= mix(1.0, ln * 1.8, fog.uNoiseParams.z);
+        }
+
+        float gradientT = FogLocalGradientFactor(worldPos, uv, fog.uSunDirection.xyz, volume);
+        vec3 gradientTint = mix(volume.gradientLow.rgb, volume.gradientHigh.rgb, gradientT);
+        vec3 localAlbedo = volume.albedo.rgb * mix(vec3(1.0), gradientTint, clamp(volume.params1.w, 0.0, 1.0));
+        int mode = int(volume.params0.w + 0.5);
+        float contribution = localDensity * w;
+        if (mode == 1)
+        {
+            float removed = min(density, contribution);
+            density -= removed;
+            albedoWeighted = fog.uAlbedoDensity.rgb * max(density, 0.0);
+        }
+        else if (mode == 2)
+        {
+            float t = clamp(w, 0.0, 1.0);
+            density = mix(density, localDensity, t);
+            albedoWeighted = mix(albedoWeighted, localAlbedo * max(localDensity, 0.0), t);
+            emission = mix(emission, volume.emission.rgb, t);
+        }
+        else
+        {
+            density += contribution;
+            albedoWeighted += localAlbedo * contribution;
+            emission += volume.emission.rgb * clamp(w, 0.0, 1.0);
+        }
+    }
+#endif
+
+    if (fog.uHeightParams.w < 0.5)
+        density *= 1.0 - smoothstep(0.985, 1.0, slice01);
+    vec3 finalAlbedo = density > 1.0e-6 ? albedoWeighted / density : fog.uAlbedoDensity.rgb;
+    // Skipped when no local volume changes emission: the grid is one texel then
+    // and the lighting pass reads the view's emission uniform instead.
+    if (fog.uFogExtraParams.w > 0.5)
+        imageStore(uOutEmission, gid, vec4(max(emission, vec3(0.0)), 0.0));
+    imageStore(uOutMedia, gid, vec4(max(finalAlbedo, vec3(0.0)), max(density, 0.0)));
+}

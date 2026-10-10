@@ -1,0 +1,9 @@
+@PACKAGE_INIT@
+
+include(CMakeFindDependencyMacro)
+
+# No external dependencies for GenerationalVector
+
+include("${CMAKE_CURRENT_LIST_DIR}/GenerationalVectorTargets.cmake")
+
+check_required_components(GenerationalVector)

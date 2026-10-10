@@ -1,0 +1,111 @@
+[scene name="CrossRigWalk" version=1]
+; Example scene: a clip authored for one humanoid skeleton played on a model
+; with another.
+; Both rigs bind in T-pose, so the retarget poses are identity. This is the
+; basic case the auto-bootstrap handles with no setup.
+;
+; The repository ships no character model or clip. To run the scene, set the
+; character's model (MeshRenderer) and its Animator clip to a clip authored
+; on another skeleton, then enter Play.
+;
+; See CrossRigWalk.Readme.md next to this scene for the walkthrough.
+
+[entity id="e_1001"]
+Light.type = 0
+Light.intensity = 1e+05
+Light.intensityUnit = Lux
+Light.castsShadows = true
+Light.cascadeCount = 4
+Name.value = "Directional Light"
+Transform.position = (0, 5, 0)
+Transform.scale = (1, 1, 1)
+
+
+; Latitude -45 puts the early-afternoon sun behind the camera.
+[entity id="e_1003"]
+SkyEnvironment.TimeOfDayHours = 14
+SkyEnvironment.Latitude = -45
+SkyEnvironment.SunLight = "e_1001"
+SkyEnvironment.TimeOfDayDrivesSunLight = true
+SkyEnvironment.AutoSunMoon = true
+Name.value = "Sky"
+Transform.position = (0, 0, 0)
+Transform.rotation = (0, 0, 0, 1)
+Transform.scale = (1, 1, 1)
+
+
+[entity id="e_1004"]
+Name.value = "Post Process Volume"
+PostProcessVolume.enabled = true
+PostProcessVolume.weight = 1
+PostProcessVolume.priority = 0
+PostProcessVolume.postProcessMask = 4294967295
+PostProcessVolume.tonemap = 4
+PostProcessVolume.ditherMode = 0
+PostProcessVolume.isGlobal = true
+PostProcessVolume.shape = 0
+PostProcessVolume.blendDistance = 1
+Transform.position = (0, 0, 0)
+Transform.rotation = (0, 0, 0, 1)
+Transform.scale = (1, 1, 1)
+
+
+; ---- Ground plane ---------------------------------------------------------
+
+[entity id="e_1010"]
+MeshRenderer.meshPrimitive = Plane
+MeshRenderer.renderLayerMask = 1
+MeshRenderer.castShadows = false
+MeshRenderer.receiveShadows = true
+Name.value = "Ground"
+Transform.position = (0, 0, 0)
+Transform.rotation = (0, 0, 0, 1)
+Transform.scale = (500, 1, 500)
+
+
+[entity id="e_1011"]
+MeshRenderer.meshPrimitive = Cube
+MeshRenderer.renderLayerMask = 1
+MeshRenderer.material = [path="Examples/Materials/Lookdev/studio_pedestal.material"]
+MeshRenderer.castShadows = false
+MeshRenderer.receiveShadows = true
+Name.value = "Stand"
+Transform.position = (0, -0.009, 0)
+Transform.rotation = (0, 0, 0, 1)
+Transform.scale = (1.2, 0.02, 1.2)
+
+
+; ---- Target character -----------------------------------------------------
+; Set the model and the Animator clip. The first time the clip plays, the
+; auto-bootstrap:
+;   1. imports <yourMesh>.humanoidrig.json (T-pose bind -> identity retarget pose)
+;   2. imports <yourClip>.humanoidrig.json (T-pose bind -> identity)
+;   3. loads or creates <Source>_to_<Target>.retargetmap.json next to the model
+;   4. adds a HumanoidRetargeterComponent that uses it
+
+[entity id="e_1100"]
+Name.value = "TargetCharacter"
+Transform.position = (0, 0, 0)
+Transform.rotation = (0, 0, 0, 1)
+Transform.scale = (1, 1, 1)
+MeshRenderer.renderLayerMask = 1
+MeshRenderer.castShadows = true
+MeshRenderer.receiveShadows = true
+Animator.active = true
+Animator.loop = true
+Animator.source = "Clip"
+Animator.autoPlayOnEnterPlayMode = true
+
+
+; ---- Camera --------------------------------------------------------------
+
+[entity id="e_2000"]
+Camera.fovY = 60
+Camera.nearZ = 0.1
+Camera.farZ = 100
+Camera.exposureControl = 3
+Camera.exposureCompensation = 1
+Name.value = "Main Camera"
+Transform.position = (0, 1.6, 3)
+Transform.rotation = (0, 0.9951, -0.0985, 0)
+Transform.scale = (1, 1, 1)

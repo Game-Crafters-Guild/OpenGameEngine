@@ -1,0 +1,22 @@
+{
+  "alphaMode": "Opaque",
+  "doubleSided": false,
+  "lightingModel": "StandardPBR",
+  "materialName": "GlassThick",
+  "properties": {
+    "baseColor": [1.0, 1.0, 1.0, 1.0],
+    "metallic": 0.0,
+    "roughness": 0.03,
+    "specularIor": 1.5,
+    "enableTransmission": true,
+    "transmissionWeight": 1.0,
+    "transmissionColor": [1.0, 1.0, 1.0],
+    "enableTransmissionThick": true,
+    "refractionDistance": 1.2,
+    "attenuationColor": [0.35, 0.75, 0.45],
+    "attenuationDistance": 1.0
+  },
+  "schemaVersion": 3,
+  "surfaceShader": "Surfaces/standard_pbr.glsl",
+  "textures": {}
+}

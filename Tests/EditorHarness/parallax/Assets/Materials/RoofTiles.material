@@ -1,0 +1,44 @@
+{
+  "schemaVersion": 3,
+  "materialName": "RoofTiles",
+  "lightingModel": "StandardPBR",
+  "alphaMode": "Opaque",
+  "doubleSided": false,
+  "surfaceShader": "Surfaces/standard_pbr.glsl",
+  "properties": {
+    "baseColor": [
+      1.0,
+      1.0,
+      1.0,
+      1.0
+    ],
+    "metallic": 0.0,
+    "roughness": 0.7
+  },
+  "textures": {
+    "albedoMap": {
+      "guid": "0d2498a5-5501-42ef-8cfa-870203361871",
+      "path": "Textures/roof_tiles_albedo.png",
+      "tiling": [
+        5.0,
+        4.4
+      ]
+    },
+    "normalMap": {
+      "guid": "034bcb69-7eb5-4be6-95e8-0b1aaae1692c",
+      "path": "Textures/roof_tiles_normal.png",
+      "tiling": [
+        5.0,
+        4.4
+      ]
+    },
+    "heightMap": {
+      "guid": "13144926-0d96-4d1c-b92e-7c299038b97b",
+      "path": "Textures/roof_tiles_height.png",
+      "tiling": [
+        5.0,
+        4.4
+      ]
+    }
+  }
+}

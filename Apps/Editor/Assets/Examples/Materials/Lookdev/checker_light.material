@@ -1,0 +1,14 @@
+{
+  "schemaVersion": 3,
+  "materialName": "Lookdev - Checker Card (light)",
+  "lightingModel": "StandardPBR",
+  "alphaMode": "Opaque",
+  "doubleSided": false,
+  "surfaceShader": "Surfaces/standard_pbr.glsl",
+  "properties": {
+    "baseColor": [0.72, 0.72, 0.72, 1.0],
+    "metallic": 0.0,
+    "roughness": 0.85
+  },
+  "textures": {}
+}

@@ -1,0 +1,296 @@
+#version 450
+// Ocean foam simulation. Per texel of each camera-snapped foam LOD layer:
+//   1. advect the previous frame's foam by the wind/flow field, reprojecting the
+//      read through the previous ping-pong layout so camera movement is stable,
+//   2. decay it exponentially (foam *= exp(-FadeRate * dt)),
+//   3. deposit new foam where the FFT displacement folds: the horizontal-
+//      displacement Jacobian goes negative on breaking/pinching crests, so
+//      foam += max(0, Coverage - jacobian) * Strength.
+// The Jacobian is the same central-difference of the FFT displacement gradient
+// the surface shader used per-pixel; here it accumulates into a persistent
+// cascade so foam builds over seconds and trails behind waves.
+
+#include "Ocean/ocean_cascade_common.glsl"
+
+layout(local_size_x = 8, local_size_y = 8, local_size_z = 1) in;
+
+const int GE_OCEAN_MAX_FOAM_INPUTS = 8;
+
+struct OceanFoamInputGPU
+{
+    vec4 OriginExtent;
+    vec4 AmountFeatherBlend;
+};
+
+// std140 — must match OceanFoamParamsGPU in Ocean/OceanTypes.h.
+layout(std140, set = 0, binding = 0) uniform OceanFoamParams
+{
+    uint  uResolution;
+    uint  uLodCount;
+    uint  uFFTCascadeCount;
+    float uDeltaTime;
+
+    float uFadeRate;
+    float uCoverage;
+    float uStrength;
+    float uShorelineMaxDepth;
+
+    float uShorelineStrength;
+    uint  uSeabedDepthAvailable;
+    uint  uFlowAvailable;   // 1 = advect foam by the flow cascade (was _FoamSimPad0)
+    float uFlowScale;       // meters/second -> cascade-UV scale per advection step
+
+    // Shape controls mirror the visible OceanShapeDisplacement path, so foam is
+    // deposited by the same crests that are actually rendered.
+    float uShapeWeight;
+    float uShapeMaxHorizontalDisplacement;
+    float uShapeMaxVerticalDisplacement;
+    float uShapeRespectShallowAttenuation;
+
+    float uShapeSubSurfaceDepthMax;
+    float uWaveOriginOffsetX;
+    float uWaveOriginOffsetZ;
+    uint  uResetHistory;
+
+    float uWindVelocityX;
+    float uWindVelocityZ;
+    uint  uCombinedDisplacementAvailable;
+    uint  uAuthoredFoamSourceCount;
+
+    float uShorelineFadeRateScale; // shoreline foam decays at this fraction of uFadeRate
+    float uShorelinePad0;
+    float uShorelinePad1;
+    float uShorelinePad2;
+
+    // Embedded OceanCascadeLayoutGPU: per-LOD vec4 (xy=origin, z=texel, w=scale)
+    // then a padded uint lane (LodCount + 3 pad). Cascade is the current write
+    // layout; PrevCascade is the layout the previous ping-pong texture was written
+    // with.
+    vec4  uCascadeOriginScale[GE_OCEAN_LOD_CASCADES];
+    uvec4 uCascadeMeta; // x = LodCount
+
+    vec4  uPrevCascadeOriginScale[GE_OCEAN_LOD_CASCADES];
+    uvec4 uPrevCascadeMeta;
+
+    // Combined displacement cascade layout. Valid when
+    // uCombinedDisplacementAvailable != 0.
+    vec4  uCombineCascadeOriginScale[GE_OCEAN_LOD_CASCADES];
+    uvec4 uCombineCascadeMeta;
+
+    OceanFoamInputGPU uAuthoredFoamSources[GE_OCEAN_MAX_FOAM_INPUTS];
+};
+
+layout(set = 0, binding = 1) uniform sampler2DArray uPrevFoam;       // previous frame's RGBA foam
+layout(set = 0, binding = 2) uniform sampler2DArray uOceanDisplacement; // FFT displacement (tileable)
+layout(set = 0, binding = 3, rgba16f) uniform writeonly image2DArray uFoamOut;
+// Sea-floor depth cascade (shares this foam cascade's snapped layout): distance
+// from sea level down to the seabed, for the shoreline-foam term.
+layout(set = 0, binding = 4) uniform sampler2DArray uSeabedDepth;
+// Flow cascade (shares this foam cascade's snapped layout): horizontal current
+// (RG = world XZ velocity, m/s) used to advect the foam. uFlowAvailable gates it.
+layout(set = 0, binding = 5) uniform sampler2DArray uFlow;
+// Optional combined displacement cascade. Currently unavailable from the render
+// node until the combine path is world-stable.
+layout(set = 0, binding = 6) uniform sampler2DArray uOceanCombinedDisplacement;
+
+// FFT cascade tileable patch size (mirror of ocean_common.glsl).
+const int GE_FOAM_FFT_CASCADES = 16;
+
+// Sum the FFT displacement cascades at a world XZ point (tileable / Repeat wrap).
+// Mirrors OceanSampleDisplacement's world-space direct FFT sum.
+vec3 FoamSampleDisplacement(vec2 worldXZ, uint count)
+{
+    worldXZ += vec2(uWaveOriginOffsetX, uWaveOriginOffsetZ);
+    vec3 disp = vec3(0.0);
+    uint n = min(count, uint(GE_FOAM_FFT_CASCADES));
+    for (uint c = 0u; c < n; ++c)
+    {
+        float worldSize = 0.5 * float(1u << c);
+        vec2 uv = worldXZ / worldSize;
+        disp += textureLod(uOceanDisplacement, vec3(uv, float(c)), 0.0).xyz;
+    }
+    return disp;
+}
+
+vec3 FoamSampleCombinedDisplacement(vec2 worldXZ, uint lod)
+{
+    uint lodCount = min(uCombineCascadeMeta.x, uint(GE_OCEAN_LOD_CASCADES));
+    if (lodCount == 0u)
+        return vec3(0.0);
+
+    uint sampleLod = min(lod, lodCount - 1u);
+    vec4 layer = uCombineCascadeOriginScale[sampleLod];
+    float res = float(textureSize(uOceanCombinedDisplacement, 0).x);
+    vec2 uv = OceanCascadeUV(worldXZ, layer.xy, layer.z, res);
+    return textureLod(uOceanCombinedDisplacement,
+                      vec3(clamp(uv, 0.0, 1.0), float(sampleLod)), 0.0).xyz;
+}
+
+vec3 FoamSampleSourceDisplacement(vec2 worldXZ, uint count, uint lod)
+{
+    if (uCombinedDisplacementAvailable != 0u)
+        return FoamSampleCombinedDisplacement(worldXZ, lod);
+    return FoamSampleDisplacement(worldXZ, count);
+}
+
+vec4 FoamSamplePrevious(vec2 worldXZ, uint lod)
+{
+    if (uResetHistory != 0u)
+        return vec4(0.0);
+    uint lodCount = min(uPrevCascadeMeta.x, uint(GE_OCEAN_LOD_CASCADES));
+    if (lod >= lodCount)
+        return vec4(0.0);
+
+    vec4 prevLayer = uPrevCascadeOriginScale[lod];
+    vec2 uv = OceanCascadeUV(worldXZ, prevLayer.xy, prevLayer.z, float(uResolution));
+    if (any(lessThan(uv, vec2(0.0))) || any(greaterThan(uv, vec2(1.0))))
+        return vec4(0.0);
+    return textureLod(uPrevFoam, vec3(uv, float(lod)), 0.0);
+}
+
+float FoamSampleSeabedDepth(vec2 worldXZ, vec2 origin, float texel, uint lod)
+{
+    if (uSeabedDepthAvailable == 0u)
+        return 1.0e6;
+
+    vec2 uv = OceanCascadeUV(worldXZ, origin, texel, float(uResolution));
+    return textureLod(uSeabedDepth, vec3(clamp(uv, 0.0, 1.0), float(lod)), 0.0).r;
+}
+
+float FoamRectWeight(vec2 worldXZ, OceanFoamInputGPU source)
+{
+    vec2 d = abs(worldXZ - source.OriginExtent.xy);
+    vec2 halfExtent = max(source.OriginExtent.zw, vec2(1e-3));
+    if (d.x > halfExtent.x || d.y > halfExtent.y)
+        return 0.0;
+    float feather = max(source.AmountFeatherBlend.y, 0.0);
+    if (feather <= 1e-3)
+        return 1.0;
+    return smoothstep(0.0, feather, min(halfExtent.x - d.x, halfExtent.y - d.y));
+}
+
+float FoamApplyBlend(float current, float value, float weight, float encodedMode)
+{
+    int mode = int(clamp(floor(encodedMode + 0.5), 0.0, 4.0));
+    float combined = value;
+    if (mode == 1) combined = current + value * uDeltaTime;
+    else if (mode == 2) combined = current * value;
+    else if (mode == 3) combined = min(current, value);
+    else if (mode == 4) combined = max(current, value);
+    return mix(current, combined, weight);
+}
+
+vec3 FoamShapeDisplacement(vec2 worldXZ, uint count, vec2 origin, float texel, uint lod)
+{
+    vec3 d = FoamSampleSourceDisplacement(worldXZ, count, lod);
+
+    float atten = uShapeWeight;
+    if (uShapeRespectShallowAttenuation > 0.0)
+    {
+        float seabed = FoamSampleSeabedDepth(worldXZ, origin, texel, lod);
+        float shallow = clamp(seabed / max(uShapeSubSurfaceDepthMax, 1.0), 0.0, 1.0);
+        atten *= mix(1.0, shallow, uShapeRespectShallowAttenuation);
+    }
+
+    d *= atten;
+    d.xz = clamp(d.xz, vec2(-uShapeMaxHorizontalDisplacement),
+                 vec2(uShapeMaxHorizontalDisplacement));
+    d.y = clamp(d.y, -uShapeMaxVerticalDisplacement, uShapeMaxVerticalDisplacement);
+    return d;
+}
+
+void main()
+{
+    const ivec3 id = ivec3(gl_GlobalInvocationID);
+    if (uint(id.x) >= uResolution || uint(id.y) >= uResolution || uint(id.z) >= uLodCount)
+        return;
+
+    const vec4 layer = uCascadeOriginScale[id.z];
+    const vec2 origin = layer.xy;
+    const float texel = layer.z;
+    const uint lod = uint(id.z);
+
+    const vec2 worldXZ = OceanCascadeTexelToWorld(id.xy, origin, texel);
+
+    // Jacobian of the horizontal FFT displacement via central differences. The
+    // sampling epsilon is one foam texel — the smallest stable world step at
+    // this LOD. (1 + dDx/dx)(1 + dDz/dz) - (dDx/dz)(dDz/dx): folds (< 1) mark
+    // pinching / breaking crests.
+    const float e = texel;
+    const float inv2e = 1.0 / (2.0 * e);
+    vec3 dL = FoamShapeDisplacement(worldXZ - vec2(e, 0.0), uFFTCascadeCount, origin, texel, lod);
+    vec3 dR = FoamShapeDisplacement(worldXZ + vec2(e, 0.0), uFFTCascadeCount, origin, texel, lod);
+    vec3 dD = FoamShapeDisplacement(worldXZ - vec2(0.0, e), uFFTCascadeCount, origin, texel, lod);
+    vec3 dU = FoamShapeDisplacement(worldXZ + vec2(0.0, e), uFFTCascadeCount, origin, texel, lod);
+    float dDxdx = (dR.x - dL.x) * inv2e;
+    float dDzdz = (dU.z - dD.z) * inv2e;
+    float dDxdz = (dU.x - dD.x) * inv2e;
+    float dDzdx = (dR.z - dL.z) * inv2e;
+    float jacobian = (1.0 + dDxdx) * (1.0 + dDzdz) - dDxdz * dDzdx;
+
+    // Advect the previous foam in world space, then map that previous-world point
+    // through the layout the read texture was written with. Zero explicit flow means
+    // only the wind fallback drifts it.
+    vec2 flowWorld = vec2(uWindVelocityX, uWindVelocityZ);
+    if (uFlowAvailable != 0u)
+    {
+        const vec2 fuvFlow = (vec2(id.xy) + 0.5) / float(uResolution);
+        flowWorld += textureLod(uFlow, vec3(fuvFlow, float(id.z)), 0.0).rg * uFlowScale;
+    }
+    vec2 prevWorldXZ = worldXZ - flowWorld * uDeltaTime;
+    vec4 prev = FoamSamplePrevious(prevWorldXZ, lod);
+
+    // Decay + deposition. Treat Coverage as the start of the breaking ramp and
+    // push full deposit toward true foldover (negative Jacobian). The previous
+    // linear `Coverage - jacobian` deposited into broad compressed wave regions,
+    // so whitecaps became blotchy sheets instead of thin breaking streaks.
+    float decay = exp(-uFadeRate * uDeltaTime);
+    float shoreDecay = exp(-uFadeRate * uShorelineFadeRateScale * uDeltaTime);
+    float freshDecay = exp(-max(uFadeRate, 0.2) * 1.25 * uDeltaTime);
+    float breakingEnergy = smoothstep(uCoverage, -0.15, jacobian);
+    float foldEnergy = max(0.0, -jacobian);
+    float waveDeposit = (breakingEnergy * breakingEnergy + foldEnergy * 0.35)
+                      * uStrength * uDeltaTime;
+    float shoreDeposit = 0.0;
+
+    // Shoreline deposition: the depth cascade shares this layout, so the seabed
+    // depth at this texel is a direct same-index sample. Foam builds where the
+    // water thins toward the waterline (depth -> 0). Gated off when no seabed was
+    // baked this frame. Time-scaled like the breaking deposit so it doesn't blow
+    // past the clamp instantly (the persistent foam still accumulates + trails).
+    if (uSeabedDepthAvailable != 0u)
+    {
+        const vec2 fuv = (vec2(id.xy) + 0.5) / float(uResolution);
+        float seabedDepth = textureLod(uSeabedDepth, vec3(fuv, float(id.z)), 0.0).r;
+        float shore = smoothstep(uShorelineMaxDepth, 0.0, seabedDepth) * uShorelineStrength;
+        // Gate the shoreline deposit by local wave breaking (the same Jacobian dip
+        // that drives open-water whitecaps) so shoreline foam pulses with the swell
+        // breaking on the shallows instead of painting a flat band on a calm sea —
+        // closer to the reference, which combines shallow depth with wave energy. A
+        // small base keeps a gentle waterline rim even when the sea is glassy.
+        float breakAmt = clamp(breakingEnergy, 0.0, 1.0);
+        shoreDeposit += shore * (0.35 + 0.65 * breakAmt) * uDeltaTime;
+    }
+
+    float waveFoam = clamp(prev.r * decay + waveDeposit, 0.0, 4.0);
+    float shoreFoam = clamp(prev.g * shoreDecay + shoreDeposit, 0.0, 4.0);
+    float deposit = waveDeposit + shoreDeposit;
+    float freshness = clamp(prev.b * freshDecay + deposit * 2.5, 0.0, 1.0);
+
+    uint authoredCount = min(uAuthoredFoamSourceCount, uint(GE_OCEAN_MAX_FOAM_INPUTS));
+    for (uint sourceIndex = 0u; sourceIndex < authoredCount; ++sourceIndex)
+    {
+        OceanFoamInputGPU source = uAuthoredFoamSources[sourceIndex];
+        float weight = FoamRectWeight(worldXZ, source);
+        if (weight <= 0.0)
+            continue;
+        float before = waveFoam;
+        waveFoam = clamp(FoamApplyBlend(waveFoam, source.AmountFeatherBlend.x,
+                                        weight, source.AmountFeatherBlend.z), 0.0, 4.0);
+        float authoredDeposit = abs(waveFoam - before);
+        deposit += authoredDeposit;
+        freshness = max(freshness, clamp(authoredDeposit, 0.0, 1.0));
+    }
+
+    imageStore(uFoamOut, id, vec4(waveFoam, shoreFoam, freshness, deposit));
+}

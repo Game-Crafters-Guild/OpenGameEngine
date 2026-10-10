@@ -1,0 +1,3 @@
+# Byte-exact copies of the authoring project's scene + libraries: the fixture reproduces the
+# live editor's inputs, so no EOL normalization may touch them.
+* -text

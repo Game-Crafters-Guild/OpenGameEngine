@@ -1,0 +1,11 @@
+FROM mcr.microsoft.com/dotnet/sdk@sha256:0eeb52c76e35a5431ca707ad2bc75e38006a05393045d8532ae44c15d9474523 AS dotnet
+FROM registry.gitlab.steamos.cloud/steamrt/steamrt4/sdk@sha256:2ff6220464894964266c7dbda1b91ca24e433a58ad3edff26571a2a9e5163e00
+
+# Build native Linux releases against the same ABI as Steam Linux Runtime 4.0.
+# The SDK supplies the compiler, headers, libraries and native build tools.
+# Copy only the managed SDK from Noble; never its native compiler or sysroot.
+COPY --from=dotnet /usr/share/dotnet /usr/share/dotnet
+ENV DOTNET_ROOT=/usr/share/dotnet
+ENV PATH="/usr/share/dotnet:${PATH}"
+WORKDIR /src
+CMD ["bash", "-lc", "echo 'GameEngine Steam Runtime 4 build container ready.'"]

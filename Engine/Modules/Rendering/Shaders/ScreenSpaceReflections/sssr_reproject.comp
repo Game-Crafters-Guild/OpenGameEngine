@@ -1,0 +1,229 @@
+#version 450
+
+layout(local_size_x = 8, local_size_y = 8, local_size_z = 1) in;
+layout(set = 0, binding = 0) uniform sampler2D uCurrent;
+layout(set = 0, binding = 1) uniform sampler2D uHitData;
+layout(set = 0, binding = 2) uniform sampler2D uDepth;
+layout(set = 0, binding = 3) uniform sampler2D uHistory;
+layout(set = 0, binding = 4) uniform sampler2D uMoments;
+layout(set = 0, binding = 5, rgba16f) uniform writeonly image2D uReprojected;
+layout(set = 0, binding = 6, rgba16f) uniform writeonly image2D uReprojectedMoments;
+layout(set = 0, binding = 8) uniform sampler2D uNormalRoughness; // 7 is the ViewParams UBO
+// One texel per workgroup: the block-scale radiance reference the prefilter uses
+// as its firefly gate. Stored PREMULTIPLIED — .rgb = mean of radiance*confidence,
+// .a = mean confidence — because the prefilter samples it bilinearly, and
+// interpolating block means that were already divided would weight a sparsely
+// traced block equally with a fully traced one. Dividing after the interpolation
+// is the correctly weighted mean over the whole bilinear footprint.
+//
+// This dispatch is FULL-SCREEN, which is what makes every texel defined for the
+// prefilter — whose apron reads blocks belonging to tiles the denoise tile list
+// does not contain.
+layout(set = 0, binding = 9, rgba16f) uniform writeonly image2D uAvgRadiance;
+
+layout(set = 0, binding = 10) uniform sampler2D uSurfaceHistory;
+layout(std140, set = 0, binding = 11) uniform SssrReprojection
+{
+    mat4 prevInvViewProj;
+};
+layout(set = 0, binding = 12) uniform sampler2D uMotionVectors;
+
+#include "ScreenSpaceReflections/sssr_common.glsl"
+#include "ScreenSpaceReflections/sssr_history_policy.glsl"
+#include "ScreenSpaceReflections/sssr_reprojection.glsl"
+
+// Block reduction accumulator. Weighting by confidence rather than by luminance
+// (FidelityFX weights by exp(-luma), which is calibrated for LDR and collapses to
+// its floor in physical light units) keeps untraced pixels — the majority on a
+// rate-limited rough surface — from dragging the mean toward zero.
+//
+// The reduction spans exactly one average-radiance block, which is what makes this
+// workgroup's store a whole block's mean: the shared constant is the contract, not
+// the literal 8 the layout above spells.
+const int kBlockThreads = kSssrAvgRadianceBlock * kSssrAvgRadianceBlock;
+shared vec4 sBlockRadiance[kBlockThreads];
+
+void main()
+{
+    ivec2 size = imageSize(uReprojected);
+    ivec2 pixel = ivec2(gl_GlobalInvocationID.xy);
+    // Out-of-bounds threads must reach the reduction barriers below with everyone
+    // else, so the bounds test gates work rather than returning early. They fetch
+    // clamped texels, contribute zero weight to the block, and store nothing.
+    bool inBounds = all(lessThan(pixel, size));
+    ivec2 fetchPixel = min(pixel, size - 1);
+    vec2 uv = (vec2(fetchPixel) + 0.5) / vec2(size);
+    vec4 current = texelFetch(uCurrent, fetchPixel, 0);
+    float currentLum = GE_Luminance(current.rgb);
+    float currentDepth = texelFetch(uDepth, fetchPixel, 0).r;
+
+    // Two reprojection targets, blended by roughness:
+    // * RECEIVER: the shaded surface point — correct for rough lobes, and the
+    //   disocclusion validator in all cases.
+    // * VIRTUAL POSITION: the mirror image lives BEHIND the surface along the
+    //   eye ray at receiver + hitDist; reprojecting that point tracks the
+    //   reflection's parallax under camera translation (receiver-only indexing
+    //   smears mirror reflections whenever the camera moves).
+    // ge_taaJitter.zw lands the unjittered reprojection on the previous frame's
+    // actual (jittered) raster grid.
+    vec4 hit = texelFetch(uHitData, fetchPixel, 0);
+    vec3 receiverVS = GE_ViewPosition(uv, currentDepth);
+    vec2 receiverUv;
+    float expectedPrevDepth;
+    bool receiverMoved;
+    bool receiverProjectionValid = GE_SssrReprojectSurface(uMotionVectors, uv, receiverVS,
+        receiverUv, expectedPrevDepth, receiverMoved);
+
+    float hitDist = max(hit.z, 0.0); // 0 for misses/env fallback => virtual == receiver
+    vec3 virtualVS = receiverVS + normalize(receiverVS) * hitDist;
+    vec3 virtualWS = (ge_invView * vec4(virtualVS, 1.0)).xyz;
+    vec4 virtualClip = ge_prevViewProj * vec4(virtualWS, 1.0);
+    vec3 virtualNdc = virtualClip.xyz / max(abs(virtualClip.w), 1e-7);
+    vec2 virtualUv = GE_NdcToUv(virtualNdc.xy + ge_taaJitter.zw);
+
+    float roughness = GE_Roughness(texelFetch(uNormalRoughness, fetchPixel, 0));
+    float expectedOldHitDistance = hitDist;
+    // Object motion at either endpoint changes the virtual image. Reconstruct
+    // the previous receiver and hit using their exact previous depth, then
+    // reflect that hit about the previous receiver plane. Merely adding the
+    // hit's screen velocity has the wrong direction for a tilted mirror.
+    if (receiverProjectionValid && hit.z > 0.0)
+    {
+        float hitDepth = textureLod(uDepth, hit.xy, 0.0).r;
+        vec3 hitVS = GE_ViewPosition(hit.xy, hitDepth);
+        vec2 oldHitUv;
+        float oldHitDepth;
+        bool hitMoved;
+        bool hitProjectionValid = GE_SssrReprojectSurface(uMotionVectors, hit.xy, hitVS,
+            oldHitUv, oldHitDepth, hitMoved);
+        if (hitProjectionValid && sssr.historyValid != 0u)
+        {
+            vec4 oldHitSurface = texelFetch(uSurfaceHistory, ivec2(oldHitUv * vec2(size)), 0);
+            vec3 hitNormalWS = normalize(mat3(ge_invView) * GE_DecodeNormalVS(
+                texelFetch(uNormalRoughness, ivec2(hit.xy * vec2(size)), 0)));
+            hitProjectionValid = GE_SssrDepthHistoryValid(
+                GE_SssrDecodeHistoryDepth(oldHitSurface.a), GE_LinearZ(oldHitDepth)) &&
+                dot(GE_OctDecode(oldHitSurface.rg), hitNormalWS) > 0.9;
+        }
+        if (hitProjectionValid && (receiverMoved || hitMoved))
+        {
+            vec4 previousReceiver = prevInvViewProj * vec4(
+                GE_UvToNdc(receiverUv) - ge_taaJitter.zw, expectedPrevDepth, 1.0);
+            vec4 previousHit = prevInvViewProj * vec4(
+                GE_UvToNdc(oldHitUv) - ge_taaJitter.zw, oldHitDepth, 1.0);
+            if (abs(previousReceiver.w) > 1e-6 && abs(previousHit.w) > 1e-6)
+            {
+                vec3 receiverPoint = previousReceiver.xyz / previousReceiver.w;
+                vec3 hitPoint = previousHit.xyz / previousHit.w;
+                vec3 planeNormal = normalize(mat3(ge_invView) *
+                    GE_DecodeNormalVS(texelFetch(uNormalRoughness, fetchPixel, 0)));
+                if (sssr.historyValid != 0u)
+                    planeNormal = GE_OctDecode(texelFetch(uSurfaceHistory,
+                        ivec2(receiverUv * vec2(size)), 0).rg);
+                vec3 mirroredHit = GE_SssrMirrorPoint(hitPoint, receiverPoint, planeNormal);
+                virtualClip = ge_prevViewProj * vec4(mirroredHit, 1.0);
+                virtualUv = GE_NdcToUv(virtualClip.xy / max(virtualClip.w, 1e-6) + ge_taaJitter.zw);
+                expectedOldHitDistance = distance(hitPoint, receiverPoint);
+            }
+        }
+        // A reflected object that had no visible previous endpoint cannot lend
+        // color history, even if the receiving floor itself stayed visible.
+        receiverProjectionValid = receiverProjectionValid && hitProjectionValid;
+    }
+    vec2 reprojectionUv = mix(virtualUv, receiverUv, smoothstep(0.08, 0.35, roughness));
+
+    // Validate the receiver independently of the reflection lookup. World-space
+    // normals survive camera rotation; linear depth gives the same relative
+    // disocclusion tolerance near and far. Never interpolate surface metadata
+    // across silhouettes to manufacture a matching surface.
+    vec3 normalWS = normalize(mat3(ge_invView) *
+        GE_DecodeNormalVS(texelFetch(uNormalRoughness, fetchPixel, 0)));
+    bool receiverInBounds = all(greaterThan(receiverUv, vec2(0.0))) &&
+                            all(lessThan(receiverUv, vec2(1.0)));
+    bool valid = sssr.historyValid != 0u && receiverInBounds && receiverProjectionValid &&
+                 virtualClip.w > 1e-6 && GE_SssrIsReflective(currentDepth, roughness);
+    if (valid)
+    {
+        vec4 surface = texelFetch(uSurfaceHistory, ivec2(receiverUv * vec2(size)), 0);
+        float expectedZ = GE_LinearZ(expectedPrevDepth);
+        valid = GE_SssrDepthHistoryValid(GE_SssrDecodeHistoryDepth(surface.a), expectedZ) &&
+                dot(GE_OctDecode(surface.rg), normalWS) > 0.9 &&
+                abs(surface.b - roughness) < 0.1;
+    }
+
+    // Gather color AND moments at the reflection coordinate. Validate each
+    // bilinear tap before mixing to reject incompatible neighbouring surfaces.
+    // Hit-distance rejection is strongest for deterministic mirrors; stochastic
+    // rough rays legitimately choose different points each frame.
+    vec4 history = vec4(0.0);
+    vec4 oldMoments = vec4(0.0);
+    float support = 0.0;
+    if (valid)
+    {
+        vec2 pos = reprojectionUv * vec2(size) - 0.5;
+        ivec2 base = ivec2(floor(pos));
+        vec2 phase = fract(pos);
+        for (int y = 0; y < 2; ++y)
+        for (int x = 0; x < 2; ++x)
+        {
+            ivec2 q = base + ivec2(x, y);
+            if (any(lessThan(q, ivec2(0))) || any(greaterThanEqual(q, size))) continue;
+            vec4 surface = texelFetch(uSurfaceHistory, q, 0);
+            vec4 moments = texelFetch(uMoments, q, 0);
+            vec4 sampleHistory = texelFetch(uHistory, q, 0);
+            bool compatible = GE_SssrDecodeHistoryDepth(surface.a) > 0.0 && moments.a > 0.0 &&
+                dot(GE_OctDecode(surface.rg), normalWS) > 0.9 &&
+                abs(surface.b - roughness) < 0.1 &&
+                GE_SssrIsFinite(sampleHistory) && GE_SssrIsFinite(moments);
+            compatible = compatible &&
+                GE_SssrHitHistoryValid(roughness, hit.a, expectedOldHitDistance, moments.b);
+            if (!compatible) continue;
+            float w = (x == 0 ? 1.0 - phase.x : phase.x) *
+                      (y == 0 ? 1.0 - phase.y : phase.y);
+            history += sampleHistory * w;
+            oldMoments += moments * w;
+            support += w;
+        }
+    }
+    // An explicit zero history length is the per-pixel rejection signal. Do not
+    // substitute current radiance here: it would masquerade as valid history in
+    // TemporalResolve and blend unfiltered current into the filtered signal.
+    if (support >= 0.5)
+    {
+        history /= support;
+        oldMoments /= support;
+        float motionTexels = GE_SssrMotionPixels(uv, reprojectionUv, ge_taaJitter.xy,
+                                                ge_taaJitter.zw, ge_screenSize.xy);
+        oldMoments.a /= 1.0 + 0.15 * motionTexels;
+    }
+    else
+    {
+        history = vec4(0.0);
+        oldMoments = vec4(currentLum, currentLum * currentLum, 0.0, 0.0);
+    }
+    if (inBounds)
+    {
+        imageStore(uReprojected, pixel, history);
+        imageStore(uReprojectedMoments, pixel, oldMoments);
+    }
+
+    // A non-finite sample would poison the whole block and, through the
+    // prefilter's bilinear read, its neighbours as well. It is SELECTED away
+    // rather than multiplied by a zero weight: Inf * 0 and NaN * 0 are both NaN,
+    // which is how a value that is merely wrong becomes a value that spreads.
+    bool blockUsable = inBounds && GE_SssrIsFinite(current);
+    float blockWeight = blockUsable ? max(current.a, 0.0) : 0.0;
+    uint lane = gl_LocalInvocationIndex;
+    sBlockRadiance[lane] =
+        blockUsable ? vec4(current.rgb * blockWeight, blockWeight) : vec4(0.0);
+    barrier();
+    for (uint stride = uint(kBlockThreads) / 2u; stride > 0u; stride >>= 1u)
+    {
+        if (lane < stride)
+            sBlockRadiance[lane] += sBlockRadiance[lane + stride];
+        barrier();
+    }
+    if (lane == 0u)
+        imageStore(uAvgRadiance, ivec2(gl_WorkGroupID.xy),
+                   sBlockRadiance[0] / float(kBlockThreads));
+}

@@ -1,0 +1,7 @@
+{
+  "name": "nvtx3-upstream",
+  "version": "3.6.0",
+  "description": "Pinned NVIDIA Tools Extension (NVTX) v3 headers used by the engine's Nsight Systems range instrumentation. Header-only: NVTX resolves its injection library at runtime, so nothing is built or linked.",
+  "homepage": "https://github.com/NVIDIA/NVTX",
+  "license": "Apache-2.0 WITH LLVM-exception"
+}

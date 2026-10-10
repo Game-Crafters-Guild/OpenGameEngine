@@ -1,0 +1,9 @@
+{
+  "name": "gameengine-shaderreflect-host",
+  "version-string": "1.0.0",
+  "dependencies": [
+    "nlohmann-json",
+    "spirv-headers",
+    "spirv-reflect"
+  ]
+}

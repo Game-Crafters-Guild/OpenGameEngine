@@ -1,0 +1,331 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Device-Loss Instrumentation</title>
+<style>
+:root{
+  --bg:#0f1115; --panel:#171a21; --panel-light:#1e222b; --border:#2b3140;
+  --text:#dde3ee; --muted:#8b93a5; --accent:#6ea8fe;
+  --danger:#ff6b6b; --bad:#ff6b6b; --ok:#5ad18b; --good:#5ad18b; --warn:#f0b849;
+}
+*{box-sizing:border-box}
+body{margin:0;padding:2.5rem 1.25rem 4rem;background:var(--bg);color:var(--text);
+  font:15px/1.65 -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif}
+.wrap{max-width:1080px;margin:0 auto}
+h1{font-size:2rem;margin:0 0 .25rem;letter-spacing:-.02em}
+h2{font-size:1.3rem;margin:2.5rem 0 1rem;padding:.6rem .9rem;background:var(--panel);
+  border:1px solid var(--border);border-left:3px solid var(--accent);border-radius:6px}
+h3{font-size:1.05rem;margin:1.6rem 0 .6rem;color:var(--accent)}
+.lede{color:var(--muted);font-size:.85rem;text-transform:uppercase;letter-spacing:.08em;margin:0 0 2rem}
+p{margin:.7rem 0}
+code{font-family:"Cascadia Code",Consolas,monospace;font-size:.88em;
+  background:var(--panel-light);padding:.12em .38em;border-radius:4px;border:1px solid var(--border)}
+pre{background:var(--panel);border:1px solid var(--border);border-radius:8px;
+  padding:1rem;overflow-x:auto;margin:.9rem 0}
+pre code{background:none;border:none;padding:0;font-size:.85em;line-height:1.55}
+.panel{background:var(--panel);border:1px solid var(--border);border-radius:8px;
+  padding:1rem 1.2rem;margin:1rem 0}
+.panel.ok{border-left:3px solid var(--ok)}
+.panel.danger{border-left:3px solid var(--danger)}
+.panel.warn{border-left:3px solid var(--warn)}
+.pill{display:inline-block;font-size:.72rem;font-weight:600;padding:.15em .55em;
+  border-radius:20px;letter-spacing:.03em;vertical-align:middle}
+.pill.new{background:rgba(90,209,139,.16);color:var(--ok);border:1px solid rgba(90,209,139,.4)}
+.pill.del{background:rgba(255,107,107,.16);color:var(--bad);border:1px solid rgba(255,107,107,.4)}
+.pill.mod{background:rgba(240,184,73,.16);color:var(--warn);border:1px solid rgba(240,184,73,.4)}
+.pill.keep{background:rgba(110,168,254,.16);color:var(--accent);border:1px solid rgba(110,168,254,.4)}
+.tablewrap{overflow-x:auto;margin:1rem 0}
+table{border-collapse:collapse;width:100%;min-width:600px;font-size:.9rem}
+th,td{text-align:left;padding:.55rem .7rem;border-bottom:1px solid var(--border);vertical-align:top}
+th{background:var(--panel);color:var(--muted);font-size:.78rem;text-transform:uppercase;letter-spacing:.05em}
+tbody tr:hover{background:var(--panel-light)}
+ul,ol{margin:.7rem 0;padding-left:1.4rem}
+li{margin:.35rem 0}
+hr{border:none;border-top:1px solid var(--border);margin:2.5rem 0}
+footer{color:var(--muted);font-size:.82rem;margin-top:3rem;padding-top:1rem;border-top:1px solid var(--border)}
+.muted{color:var(--muted)}
+</style>
+</head>
+<body>
+<div class="wrap">
+
+<h1>Device-Loss Instrumentation</h1>
+<p class="lede">GUIDE &middot; rendering / diagnostics &middot; instruments for a VK_ERROR_DEVICE_LOST investigation</p>
+
+<p>What to arm, and in what order, when the engine takes a
+<code>VK_ERROR_DEVICE_LOST</code>. Scope is crash/hang forensics —
+for wrong-pixel debugging see <code>docs/Rendering/gpu-debugging-guide.md</code>.</p>
+
+<div class="panel warn">
+<strong>The constraint that shapes everything here:</strong> this engine ships with
+<code>VK_EXT_descriptor_buffer</code> ON, and several standard instruments are
+partly or wholly disabled by it. Each entry below states explicitly whether it
+survives descriptor buffer, because an instrument that silently does nothing is
+worse than no instrument — its silence reads as a clean result.
+</div>
+
+<h2>What each instrument can and cannot see</h2>
+
+<div class="tablewrap">
+<table>
+<thead><tr><th>Instrument</th><th>Answers</th><th>Survives descriptor buffer?</th><th>Perturbs the app?</th></tr></thead>
+<tbody>
+<tr>
+  <td><code>VK_NV_device_diagnostic_checkpoints</code><br><span class="pill keep">existing</span></td>
+  <td>WHERE execution stopped, at pass granularity</td>
+  <td class="ok">Yes</td>
+  <td>No — records a marker payload only</td>
+</tr>
+<tr>
+  <td><code>VK_EXT_device_fault</code><br><span class="pill new">added</span></td>
+  <td>WHAT the hardware faulted on — address, access type, vendor code</td>
+  <td class="ok">Yes, and independent of checkpoint granularity</td>
+  <td>No — post-mortem query only</td>
+</tr>
+<tr>
+  <td>GPU-AV <em>buffer-content</em> checks<br><span class="pill new">added</span></td>
+  <td>Malformed indirect draw/dispatch args, out-of-bounds indices</td>
+  <td class="ok">Yes — this half is not disabled</td>
+  <td class="warn">Yes — see the caveat below</td>
+</tr>
+<tr>
+  <td>GPU-AV <em>shader instrumentation</em></td>
+  <td>Descriptor / BDA out-of-bounds inside shaders</td>
+  <td class="bad">No — force-disabled by the layer</td>
+  <td>n/a</td>
+</tr>
+<tr>
+  <td>DebugPrintf</td>
+  <td>Shader-side printf</td>
+  <td class="bad">No — force-disabled by the layer</td>
+  <td>n/a</td>
+</tr>
+<tr>
+  <td>Crash Diagnostic Layer<br><span class="pill keep">external</span></td>
+  <td>WHERE execution stopped, at <em>per-command</em> granularity</td>
+  <td class="ok">Yes — inserts buffer markers, touches no descriptors</td>
+  <td>Marker writes only; <code>sync_after_commands</code> does add barriers</td>
+</tr>
+</tbody>
+</table>
+</div>
+
+<h3>Measured capability on the current dev machine</h3>
+<p>From <code>DeviceDiagnosticsTests</code> (headless, prints on every run — re-check
+rather than trusting this table on other hardware):</p>
+<pre><code>[ probe    ] VK_NV_device_diagnostic_checkpoints advertised=yes available=yes
+[ probe    ] VK_EXT_device_fault advertised=yes deviceFaultFeature=yes armed=yes
+[ probe    ] VK_AMD_buffer_marker advertised=yes (crash-diagnostic-layer per-command granularity)</code></pre>
+<p>All three instruments are therefore available here, and because
+<code>VK_AMD_buffer_marker</code> is present the Crash Diagnostic Layer can use
+its buffer-marker path rather than falling back to checkpoints.</p>
+
+<h3 id="checkpoint-limit">Why checkpoints alone are not enough here</h3>
+<p>On this machine every queue family reports
+<code>checkpointExecutionStageMask = 0x2001</code> —
+<code>TOP_OF_PIPE | BOTTOM_OF_PIPE</code> and nothing else. A pass therefore
+reports only "started" and "finished". When a checkpoint dump brackets a fault
+as <em>the same pass at both stages</em>, the pass ran to completion and
+checkpoints cannot narrow the window further, no matter how many markers are
+added. That is a hardware/driver granularity limit, not a wiring gap — which is
+what motivates the other two instruments.</p>
+
+<h2>Arming them</h2>
+
+<h3>Device fault — on by default in Debug/DebugFast, opt-in in Release</h3>
+<p>Enabled whenever the device advertises the extension and its
+<code>deviceFault</code> feature, and the config default says to ask for it.
+Retrieval costs nothing until a loss, so the developer configs keep it armed;
+a shipped build should not silently take on an extension nothing in it reads,
+so Release asks explicitly. <code>GE_VK_DEVICE_FAULT</code> overrides in both
+directions — <code>=1</code> arms a Release investigation, <code>=0</code>
+disarms a developer build to A/B whether the extension itself changed anything.
+Startup logs exactly one of:</p>
+<pre><code>VulkanDevice: VK_EXT_device_fault ARMED — a device loss will report fault address/vendor records automatically
+VulkanDevice: VK_EXT_device_fault NOT REQUESTED (opt-in in this config) — ... set GE_VK_DEVICE_FAULT=1 to arm it
+VulkanDevice: VK_EXT_device_fault unavailable — device-lost reports will carry no faulting-address records</code></pre>
+<p>"We did not ask" and "the device cannot" are different facts, and after a loss
+it is too late to work out which one you had.</p>
+<p>On a loss, after the checkpoint dump:</p>
+<pre><code>VulkanDevice: device fault records: description='...'; address records (N): [0] WRITE_INVALID
+  reported=0x00000000deadb000 precision=4096 range=[0x00000000deadb000,0x00000000deadc000);
+  vendor records (M): [0] '...' code=0x... data=0x...</code></pre>
+<div class="panel">
+<strong>Match on the range; treat the reported address as an extra hint.</strong>
+Reported addresses are precise only to a power-of-two granule
+(<code>addressPrecision</code>). The half-open <code>range=[begin,end)</code> is
+the set of GPU virtual addresses one of which faulted, and is what you match
+against a buffer's device address. The spec also allows a driver to report a
+<em>more</em> precise address than its stated precision, in which case
+<code>reported=</code> is a valid additional hint — which is why both are
+printed.
+</div>
+<div class="panel">
+<strong>Reading the trailing NOTE.</strong> The retrieval is a two-call protocol
+and <code>VK_INCOMPLETE</code> has three independent causes, so the report names
+which one fired rather than asserting that records were lost:
+<ul>
+<li><code>NOTE: records TRUNCATED (n/m address, n/m vendor)</code> — records were
+    genuinely lost. If it adds <code>— capped at 256 records per array</code>,
+    <em>we</em> dropped them: the driver reported an implausible count and the
+    request was capped rather than allowed to allocate unbounded inside the crash
+    handler.</li>
+<li><code>NOTE: all records retrieved; driver also holds an N-byte vendor binary
+    crash dump (not requested...)</code> — <strong>nothing was lost.</strong> The
+    vendor blob is declined on purpose (it needs a vendor offline tool), and
+    declining it returns <code>VK_INCOMPLETE</code> by itself. Since
+    <code>deviceFaultVendorBinary</code> is not enabled, a conformant driver
+    should report 0 here, so a nonzero size also says something about the
+    driver.</li>
+<li><code>NOTE: driver returned VK_INCOMPLETE but reported nothing short</code> —
+    the driver's record counts moved between the sizing and retrieval calls,
+    which the spec forbids. Records may be missing that these numbers cannot
+    name.</li>
+<li>No NOTE at all — everything the driver had was retrieved.</li>
+</ul>
+</div>
+<p>If the extension is unavailable, or the loss was synthesized (fault injection
+or the hung-escalation cap, neither of which puts the device in the <em>lost</em>
+state that <code>vkGetDeviceFaultInfoEXT</code> requires), the loss path says so
+explicitly rather than printing nothing — an absent report is never mistaken for
+a clean one.</p>
+
+<h3>GPU-AV buffer-content checks — <code>GE_VK_GPU_AV=1</code></h3>
+<p>Off by default. It also needs the validation layer actually <em>loaded</em>,
+which DebugFast does not do by default — set <code>GE_VK_VALIDATION=1</code>
+alongside it, or the run reports nothing at all. Startup states whether it
+actually engaged; if it did not, it says that too, and names this as the likely
+reason.</p>
+<pre><code>set GE_VK_VALIDATION=1
+set GE_VK_GPU_AV=1</code></pre>
+<p>What it covers, and what it deliberately does not:</p>
+<ul>
+<li><span class="pill new">covered</span> indirect draw arguments
+    (<code>VkDrawIndirectCommand</code>, <code>VkDrawIndexedIndirectCommand</code>)</li>
+<li><span class="pill new">covered</span> indirect dispatch arguments
+    (<code>VUID-VkDispatchIndirectCommand-x/y/z-00417/18/19</code>)</li>
+<li><span class="pill new">covered</span> indirect trace-rays arguments (no
+    consumer in this engine today — it comes with the family)</li>
+<li><span class="pill new">covered</span> index buffers — indices within the index
+    buffer, and within the fetched vertex buffers</li>
+<li><span class="pill new">covered</span> buffer copies</li>
+<li><span class="pill del">not covered</span> descriptor out-of-bounds, buffer
+    device address out-of-bounds, ray-query validation, DebugPrintf — all
+    shader-instrumentation checks, all disabled while
+    <code>VK_EXT_descriptor_buffer</code> is <em>enabled on the device</em>. The
+    gate is the extension being enabled, not this engine using it:
+    <code>GE_VK_USE_DESCRIPTOR_BUFFER=0</code> only flips the runtime path and
+    leaves the extension enabled, so it does not restore them, whereas
+    <code>GE_VK_CAPTURE_COMPAT=1</code> drops the extension and does. Request
+    them with <code>GE_VK_GPU_AV_SHADER_INSTRUMENTATION</code> (default
+    <code>auto</code> — asked for exactly when the extension is ruled out)</li>
+</ul>
+<p>Each of those five checks is requested explicitly, not inherited. The layer
+reads the <code>gpuav_buffers_validation</code> parent and, when it is true, then
+reads the five individually — so pinning only the parent would leave each check
+governed by its own default, and a default flip would empty the instrument while
+the parent still reported the family as enabled.</p>
+
+<div class="panel danger">
+<strong>GPU-AV perturbs the state it measures.</strong> It inserts a validation
+dispatch ahead of each indirect command using its own pipeline and normal
+descriptor sets. Its <code>RestorablePipelineState</code>
+(<code>gpuav/core/gpuav_validation_pipeline.cpp</code>) restores pipeline,
+descriptor sets, push constants and rendering state — but has
+<em>no handling of <code>VK_EXT_descriptor_buffer</code> bindings</em>. Under
+descriptor buffer the app's descriptor-buffer offsets are therefore not
+re-established after an inserted dispatch. Treat GPU-AV findings as leads to
+corroborate against a <code>GE_VK_GPU_AV=0</code> run, never as standalone
+proof, and treat a <em>new</em> failure mode under GPU-AV as possibly the
+instrument's own.
+</div>
+
+<h3>Crash Diagnostic Layer — per-command granularity, zero engine changes</h3>
+<p>Ships with the Vulkan SDK as <code>VK_LAYER_LUNARG_crash_diagnostic</code>. It
+is registered as an <strong>explicit</strong> layer, so
+<code>VK_CRASH_DIAGNOSTIC_ENABLE=1</code> alone will not load it — force it on
+through the loader:</p>
+<pre><code>set VK_LOADER_LAYERS_ENABLE=VK_LAYER_LUNARG_crash_diagnostic
+set CDL_OUTPUT_PATH=C:\Dev\_cdl
+set CDL_INSTRUMENT_ALL_COMMANDS=true
+set CDL_DUMP_COMMANDS=all
+set CDL_DUMP_SHADERS=on_crash
+set CDL_TRACK_SEMAPHORES=true
+set CDL_WATCHDOG_TIMEOUT_MS=10000</code></pre>
+<p>It writes a dump naming the command buffers that were executing and the exact
+command each had reached. It reports its own capability at startup, and the
+messages to check for are:</p>
+<pre><code>No VK_NV_device_diagnostic_checkpoints or VK_AMD_buffer_marker extension, progression tracking will be disabled.
+No VK_AMD_buffer_marker extension, semaphore tracking will be disabled.
+No VK_EXT_device_fault extension, vendor-specific crash dumps will not be available.</code></pre>
+<div class="panel warn">
+<strong>Check which marker mechanism it picked.</strong> With
+<code>VK_AMD_buffer_marker</code> it writes a per-command marker value and gets
+true per-command resolution. Falling back to NV checkpoints inherits the same
+<code>0x2001</code> stage limit described <a href="#checkpoint-limit">above</a>
+and buys much less. If the first message above appears, the layer is tracking
+nothing and its silence means nothing.
+</div>
+<p><code>CDL_INSTRUMENT_ALL_COMMANDS=true</code> is expensive; it is a forensic
+mode, never a default. <code>CDL_SYNC_AFTER_COMMANDS</code> adds a barrier after
+each instrumented command — it sharpens attribution but changes scheduling, so a
+fault that disappears under it is evidence of a synchronization bug, not a fixed
+one.</p>
+
+<h2>Suggested order for a device-loss investigation</h2>
+<ol>
+<li><strong>Read the existing loss log first.</strong> Checkpoints plus device
+    fault are already armed and cost nothing. If the fault records name an
+    address, correlate it with buffer device addresses before adding any
+    instrument.</li>
+<li><strong>If the fault window is a single pass that both started and finished</strong>,
+    checkpoints are exhausted — go to per-command granularity with the Crash
+    Diagnostic Layer rather than adding more markers.</li>
+<li><strong>If the suspect pass consumes GPU-written indirect arguments or an
+    index buffer</strong>, run <code>GE_VK_GPU_AV=1</code>; that is exactly the
+    check that is otherwise missing, and it produces a VUID rather than a
+    silent fault. Corroborate any hit against a control run.</li>
+<li><strong>Only then reach for RenderDoc.</strong> A capture of a run that
+    device-losses is often unobtainable; the passive instruments above survive
+    the loss, which is why they come first.</li>
+</ol>
+
+<h2>Changelog</h2>
+<ul>
+<li><strong>2026-08-02</strong> — shader instrumentation is requestable again
+when <code>VK_EXT_descriptor_buffer</code> is out of the way
+(<code>GE_VK_GPU_AV_SHADER_INSTRUMENTATION</code>, default <code>auto</code>).
+Corrected the coverage list: the layer's gate is the extension being
+<em>enabled on the device</em>, not this engine using it, so
+<code>GE_VK_USE_DESCRIPTOR_BUFFER=0</code> does not restore the
+shader-instrumentation checks and <code>GE_VK_CAPTURE_COMPAT=1</code>
+does.</li>
+<li><strong>Initial revision</strong> — created alongside the
+<code>feat/gpu-fault-instrumentation</code> branch: documents the
+<code>0x2001</code> checkpoint limit, the descriptor-buffer split in GPU-AV
+(shader instrumentation disabled, buffer-content checks retained), the newly
+wired <code>VK_EXT_device_fault</code> path, and the Crash Diagnostic Layer
+procedure.</li>
+<li><strong>2026-08-01</strong> — review pass on the branch. Device fault became
+default-on in Debug/DebugFast and opt-in in Release
+(<code>GE_VK_DEVICE_FAULT</code>), so the arming section now lists three startup
+states rather than two. Added how to read the trailing <code>VK_INCOMPLETE</code>
+note, which no longer claims lost records for a vendor binary that was declined
+on purpose. Softened the address-range guidance to match the spec: the range is
+what you match on, but a driver may report more precisely than it claims, so the
+raw address is a valid hint. Recorded that GPU-AV needs
+<code>GE_VK_VALIDATION=1</code> to load the layer at all, that indirect
+trace-rays buffers are part of the buffer-content family, and that the family's
+five checks are each pinned explicitly.</li>
+</ul>
+
+<footer>
+Device-Loss Instrumentation &middot; v2 &middot; canonical (undated by policy) &middot;
+supersedes nothing; complements <code>docs/Rendering/gpu-debugging-guide.md</code>
+</footer>
+
+</div>
+</body>
+</html>

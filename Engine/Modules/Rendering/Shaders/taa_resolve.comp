@@ -1,0 +1,398 @@
+#version 450
+
+// Temporal AA resolve (P0: native resolution — upscale is a later parameter,
+// not a different shader). Per output pixel:
+//   1. Motion: closest-depth 3x3 dilated movers MV (rasterized by
+//      taa_motion_vectors) or analytic camera reprojection from depth
+//      (UNJITTERED invViewProj into the previous frame's UNJITTERED viewProj
+//      — phase-stable both ways; see the TaaResolveParams note below).
+//   2. History: 5-tap optimized Catmull-Rom (bilinear history sampling is
+//      where TAA blur comes from).
+//   3. Rejection: off-screen, depth disocclusion (history alpha carries the
+//      previous frame's raster depth), and velocity-driven falloff.
+//   4. Clamp: variance clipping AABB in YCoCg around the 3x3 neighborhood
+//      (min/max box clamps too loosely -> ghost trails). Stationary history
+//      keeps unclipped coverage when the current phase merely missed a
+//      subpixel; a uniform stale highlight is clipped so lighting changes at
+//      rest converge; depth mismatches reject unless scene and camera epochs
+//      certify unchanged coverage.
+//   5. Blend: linear coverage integration for validated stationary history;
+//      Karis luminance weighting for reprojected/clipped history.
+// History layout: rgb = resolved color, a = this frame's raster depth.
+
+layout(local_size_x = 8, local_size_y = 8) in;
+
+layout(set = 0, binding = 0, rgba16f) uniform writeonly image2D uOutHistory;
+layout(set = 0, binding = 1, rgba16f) uniform writeonly image2D uOutColor;
+layout(set = 0, binding = 2) uniform sampler2D uSceneColor;
+layout(set = 0, binding = 3) uniform sampler2D uDepth;
+layout(set = 0, binding = 4) uniform sampler2D uMV;
+layout(set = 0, binding = 5) uniform sampler2D uHistory;
+
+layout(std140, set = 0, binding = 6) uniform TaaResolveParams
+{
+    // Current frame, UNJITTERED inverse view-proj. Deliberately NOT the
+    // jittered raster matrix: reprojection must be phase-STABLE (static
+    // camera => prevUv == uv exactly => center-tap history identity). Using
+    // the jittered inverse leaks the phase into every history resample and
+    // the whole converged image crawls. The sub-texel world-pos bias vs the
+    // jittered depth is standard TAA practice (velocity from unjittered
+    // matrices) and is invisible next to the clamp.
+    mat4 uInvViewProj;
+    mat4 uPrevViewProj;        // previous frame, UNJITTERED (history converges unjittered)
+    vec4 uExtent;              // xy = render size, zw = 1 / render size
+    // x = base history weight (~0.95), y = history valid (0/1),
+    // z = debug mode (0 off, 1 MV, 2 rejection), w = velocity falloff / px.
+    vec4 uParams0;
+    // x = variance clip gamma, y = depth reject threshold,
+    // z = current-sample sharpen strength,
+    // w = disocclusion motion gate (px): depth reject is skipped below this
+    //     screen-motion so static jittered edges accumulate instead of
+    //     falsely rejecting every frame.
+    vec4 uParams1;
+    // xy = current-frame jitter as a viewport-UV offset (sign resolved on the
+    // CPU); the current sample is reconstructed at the UNJITTERED pixel
+    // position so its per-phase variance collapses (at-rest stability)
+    // while the accumulated kernel still integrates sub-pixel detail.
+    // z = sub-pixel correction toggle (0/1, Editor > Experimental).
+    // w = scene-history validation: -1 unchanged content/camera, 0 per-pixel
+    // validation, +1 changed content or movers (clip stale receiver lighting).
+    vec4 uParams2;
+} Taa;
+
+#include "Includes/screen_position.glsl"
+#include "Includes/taa_history.glsl"
+
+// Movers MV target clear sentinel — any real UV delta is well inside (-2, 2).
+const float kMVSentinel = 50.0;
+
+// Weight subtracted from history trust at the worst-case sub-texel phase
+// (motion sitting exactly between texels, where bilinear-alike history
+// resampling blurs the most). Matches the reference TRAA's subpixelCorrection
+// boost constant.
+const float kSubpixelCorrectionWeight = 0.25;
+
+vec3 RGBToYCoCg(vec3 c)
+{
+    return vec3(0.25 * c.r + 0.5 * c.g + 0.25 * c.b,
+                0.5 * c.r - 0.5 * c.b,
+                -0.25 * c.r + 0.5 * c.g - 0.25 * c.b);
+}
+
+vec3 YCoCgToRGB(vec3 c)
+{
+    return max(vec3(c.x + c.y - c.z, c.x + c.z, c.x - c.y - c.z), vec3(0.0));
+}
+
+float Luma(vec3 rgb)
+{
+    return dot(rgb, vec3(0.2126, 0.7152, 0.0722));
+}
+
+// Variance clip: pull the history toward the neighborhood mean when it exits
+// the mu +/- gamma*sigma AABB (Salvi). Center-directed clip, not clamp — a
+// corner clamp biases chroma.
+vec3 ClipToAABB(vec3 q, vec3 aabbMin, vec3 aabbMax)
+{
+    vec3 center = 0.5 * (aabbMax + aabbMin);
+    vec3 extents = max(0.5 * (aabbMax - aabbMin), vec3(1e-5));
+    vec3 v = q - center;
+    vec3 unitV = abs(v / extents);
+    float maxUnit = max(unitV.x, max(unitV.y, unitV.z));
+    return maxUnit > 1.0 ? center + v / maxUnit : q;
+}
+
+// 5-tap optimized Catmull-Rom (Jimenez): 4 corner taps folded into the
+// center cross via bilinear weights. Negative-lobe results clamped >= 0.
+vec4 SampleCatmullRom(sampler2D tex, vec2 uv)
+{
+    vec2 texelSize = Taa.uExtent.zw;
+    vec2 samplePos = uv * Taa.uExtent.xy;
+    vec2 texPos1 = floor(samplePos - 0.5) + 0.5;
+    vec2 f = samplePos - texPos1;
+    vec2 w0 = f * (-0.5 + f * (1.0 - 0.5 * f));
+    vec2 w1 = 1.0 + f * f * (-2.5 + 1.5 * f);
+    vec2 w2 = f * (0.5 + f * (2.0 - 1.5 * f));
+    vec2 w3 = f * f * (-0.5 + 0.5 * f);
+    vec2 w12 = w1 + w2;
+    vec2 offset12 = w2 / max(w12, vec2(1e-5));
+    vec2 texPos0 = (texPos1 - 1.0) * texelSize;
+    vec2 texPos3 = (texPos1 + 2.0) * texelSize;
+    vec2 texPos12 = (texPos1 + offset12) * texelSize;
+    vec4 result = texture(tex, vec2(texPos12.x, texPos0.y)) * (w12.x * w0.y) +
+                  texture(tex, vec2(texPos0.x, texPos12.y)) * (w0.x * w12.y) +
+                  texture(tex, vec2(texPos12.x, texPos12.y)) * (w12.x * w12.y) +
+                  texture(tex, vec2(texPos3.x, texPos12.y)) * (w3.x * w12.y) +
+                  texture(tex, vec2(texPos12.x, texPos3.y)) * (w12.x * w3.y);
+    // The four dropped corner taps carry ~6% of the kernel; renormalize by the
+    // retained weight so the result is not darkened every frame.
+    float weightSum = (w12.x * w0.y) + (w0.x * w12.y) + (w12.x * w12.y) +
+                      (w3.x * w12.y) + (w12.x * w3.y);
+    return max(result / max(weightSum, 1e-5), vec4(0.0));
+}
+
+// Motion at a pixel: the movers pass's exact per-instance MV when written,
+// else camera reprojection of the depth-reconstructed position. Also returns
+// the expected previous NDC depth for the disocclusion test (negative = no
+// estimate: mover pixels reproject exactly, skip depth rejection for them).
+vec2 MotionAt(ivec2 p, float depth, out float expectedPrevDepth)
+{
+    // The CPU compared unjittered camera bytes and scene epochs. Avoid the
+    // far-view matrix roundoff of reconstructing a provably zero velocity.
+    if (Taa.uParams2.w < -0.5)
+    {
+        expectedPrevDepth = depth;
+        return vec2(0.0);
+    }
+    expectedPrevDepth = -1.0;
+    vec2 mv = texelFetch(uMV, p, 0).rg;
+    if (mv.x < kMVSentinel)
+        return mv;
+    vec2 uv = (vec2(p) + 0.5) * Taa.uExtent.zw;
+    vec4 world = Taa.uInvViewProj * vec4(GE_ViewportUVToYUpNdc(uv), depth, 1.0);
+    if (abs(world.w) < 1e-9)
+        return vec2(0.0);
+    world /= world.w;
+    vec4 prevClip = Taa.uPrevViewProj * world;
+    if (prevClip.w <= 1e-6)
+        return vec2(0.0);
+    vec3 prevNdc = prevClip.xyz / prevClip.w;
+    expectedPrevDepth = prevNdc.z;
+    return uv - GE_YUpNdcToViewportUV(prevNdc.xy);
+}
+
+// Fraction of a texel's worth of sub-pixel motion at this pixel, in [0, 1]:
+// 0 at a texel-aligned offset (history resamples the same texel every frame),
+// 1 at the worst-case half-texel offset (history resamples a 50/50 blend of
+// two texels every frame, which is where reprojection blur peaks).
+float SubpixelCorrection(vec2 velocityUv, vec2 textureSize)
+{
+    vec2 velocityTexel = velocityUv * textureSize;
+    vec2 phase = fract(abs(velocityTexel));
+    vec2 phaseWeight = max(phase, 1.0 - phase);
+    return (1.0 - phaseWeight.x * phaseWeight.y) / 0.75;
+}
+
+void main()
+{
+    ivec2 px = ivec2(gl_GlobalInvocationID.xy);
+    ivec2 extent = ivec2(Taa.uExtent.xy);
+    if (px.x >= extent.x || px.y >= extent.y)
+        return;
+
+    vec2 uv = (vec2(px) + 0.5) * Taa.uExtent.zw;
+    float depth = texelFetch(uDepth, px, 0).r;
+
+    if (Taa.uParams0.y < 0.5)
+    {
+        // Seed the unjittered output grid on reset as well as during normal
+        // accumulation, avoiding a one-frame phase jump.
+        vec3 raw = texture(uSceneColor, uv + Taa.uParams2.xy).rgb;
+        imageStore(uOutHistory, px, vec4(raw, depth));
+        imageStore(uOutColor, px, vec4(raw, 1.0));
+        return;
+    }
+
+    // Current-frame estimate reconstructed at the UNJITTERED pixel position
+    // (Catmull-Rom at uv + jitter offset). A raw jittered texelFetch makes
+    // the whole converged image crawl with the jitter phase — visible at-rest
+    // shimmer. The accumulation still integrates sub-pixel detail because
+    // each phase's reconstruction taps different source texels.
+    // Current reconstruction follows the depth-footprint gather below.
+
+    // Closest-depth 3x3 motion dilation: take the motion of the front-most
+    // (reverse-Z: max depth) neighbor so silhouettes drag their background
+    // correctly instead of edge-ghosting.
+    ivec2 closestPx = px;
+    float closestDepth = depth;
+    float farthestDepth = depth;
+    for (int y = -1; y <= 1; ++y)
+    {
+        for (int x = -1; x <= 1; ++x)
+        {
+            if (x == 0 && y == 0)
+                continue;
+            ivec2 q = clamp(px + ivec2(x, y), ivec2(0), extent - 1);
+            float d = texelFetch(uDepth, q, 0).r;
+            farthestDepth = min(farthestDepth, d);
+            if (d > closestDepth)
+            {
+                closestDepth = d;
+                closestPx = q;
+            }
+        }
+    }
+    // Negative reconstruction lobes ring around depth silhouettes. Use a
+    // nonnegative bilinear kernel there, and suppress current-sample unsharp.
+    float depthRange = (closestDepth - farthestDepth) / max(closestDepth, 1e-5);
+    float interior = 1.0 - smoothstep(0.002, 0.02, depthRange);
+    vec3 current = texture(uSceneColor, uv + Taa.uParams2.xy).rgb;
+    if (interior > 0.0)
+        current = mix(current, SampleCatmullRom(uSceneColor, uv + Taa.uParams2.xy).rgb, interior);
+    float expectedPrevDepth;
+    vec2 mv = MotionAt(closestPx, closestDepth, expectedPrevDepth);
+    bool isMoverMV = texelFetch(uMV, closestPx, 0).r < kMVSentinel;
+
+    vec2 prevUv = uv - mv;
+    bool offscreen = any(lessThan(prevUv, vec2(0.0))) || any(greaterThan(prevUv, vec2(1.0)));
+
+    // Gather the clipping neighborhood on the same unjittered grid as current
+    // and history. Raster-phase bounds otherwise clip a stable history toward
+    // each phase of edge coverage, producing flicker even at rest.
+    vec3 currYCoCg = RGBToYCoCg(current);
+    vec3 minCurrent = texture(uSceneColor, uv + Taa.uParams2.xy).rgb;
+    vec3 maxCurrent = minCurrent;
+    vec3 m1 = currYCoCg;
+    vec3 m2 = currYCoCg * currYCoCg;
+    for (int y = -1; y <= 1; ++y)
+    {
+        for (int x = -1; x <= 1; ++x)
+        {
+            if (x == 0 && y == 0)
+                continue;
+            vec3 neighbor = texture(uSceneColor, uv + Taa.uParams2.xy +
+                                    vec2(x, y) * Taa.uExtent.zw).rgb;
+            minCurrent = min(minCurrent, neighbor);
+            maxCurrent = max(maxCurrent, neighbor);
+            vec3 n = RGBToYCoCg(neighbor);
+            m1 += n;
+            m2 += n * n;
+        }
+    }
+    vec3 mu = m1 / 9.0;
+    vec3 sigma = sqrt(max(m2 / 9.0 - mu * mu, vec3(0.0)));
+    float gamma = Taa.uParams1.x;
+    vec3 aabbMin = mu - gamma * sigma;
+    vec3 aabbMax = mu + gamma * sigma;
+
+    // Sharpness preservation: integrating jittered samples box-filters the
+    // image (~0.5-texel footprint) — visibly softer than MSAA on stills.
+    // Unsharp the CURRENT sample against the 3x3 mean before blending; the
+    // accumulated result converges to a sharpened supersampled image. The
+    // clamp AABB stays on the unsharpened neighborhood.
+    float sharpen = Taa.uParams1.z * interior;
+    vec3 currSharpYCoCg = currYCoCg + (currYCoCg - mu) * sharpen;
+    // Negative-lobe/unsharp undershoot must not seed persistent dark trails.
+    // A lower bound preserves accumulated bright subpixel coverage.
+    current = max(YCoCgToRGB(currSharpYCoCg), minCurrent);
+
+    vec4 historySample = texture(uHistory, prevUv);
+    if (interior > 0.0)
+        historySample = mix(historySample, SampleCatmullRom(uHistory, prevUv), interior);
+    vec3 historyYCoCg = RGBToYCoCg(historySample.rgb);
+    vec3 clampedYCoCg = ClipToAABB(historyYCoCg, aabbMin, aabbMax);
+    float clampAmount = length(clampedYCoCg - historyYCoCg);
+    // A world/camera epoch match certifies that an absent subpixel surface is
+    // missed raster coverage. Otherwise require the existing local depth proof.
+    bool stationaryScene = Taa.uParams2.w < -0.5;
+    ivec2 historyPx = ivec2(clamp(prevUv * Taa.uExtent.xy, vec2(0.0), Taa.uExtent.xy - 1.0));
+    float footprintHistoryDepth = texelFetch(uHistory, historyPx, 0).a;
+    bool stationaryFootprint = !offscreen && expectedPrevDepth >= 0.0 && length(mv * Taa.uExtent.xy) < 0.01 &&
+        (stationaryScene || TaaStaticHistoryMatches(uDepth, px, extent, uHistory, historyPx,
+                                                   extent, footprintHistoryDepth));
+    // At a silhouette the accumulated bilinear footprint spans both jitter
+    // extremes. A one-pixel history neighborhood can contain only mixed edge
+    // colors even when this phase sees pure background: that is coverage, not
+    // a lighting change. Include the full two-input-pixel footprint there.
+    // When the scene is certified unchanged, even disjoint color bounds can
+    // be different phases of thin coverage. Keep the uniform stale-lighting
+    // check below for untracked shading changes on otherwise static surfaces.
+    bool shadingChanged = stationaryFootprint && !stationaryScene &&
+        TaaShadingChanged(uHistory, historyPx, ivec2(Taa.uExtent.xy), minCurrent, maxCurrent,
+                         ivec2(interior < 0.999 ? 2 : 1));
+    float mvPixels = length(mv * Taa.uExtent.xy);
+    vec3 clippedHistory = clamp(YCoCgToRGB(clampedYCoCg), minCurrent, maxCurrent);
+    vec3 coverageHistory = max(historySample.rgb, vec3(0.0));
+    bool staleLighting = stationaryFootprint &&
+        TaaHistoryNeighborhoodUniform(uHistory, historyPx, ivec2(Taa.uExtent.xy)) &&
+        TaaSampleOutsideCurrent(historySample.rgb, minCurrent, maxCurrent);
+    // A moving caster changes lighting on zero-motion receivers. Preserve
+    // phase-missed coverage only without movers or evidence of stale lighting;
+    // normal color clipping still allows in-range history to accumulate.
+    bool retainUnclippedCoverage = stationaryFootprint && !shadingChanged &&
+        !staleLighting && Taa.uParams2.w < 0.5;
+    vec3 history = retainUnclippedCoverage ?
+        coverageHistory : clippedHistory;
+
+    // Rejection: off-screen history is gone; a depth mismatch at the
+    // reprojected point is a disocclusion (the surface history remembers is
+    // not the surface that is there now). Reverse-Z NDC compare, relative
+    // threshold (fp16 history depth).
+    float weight = Taa.uParams0.x;
+    bool depthReject = false;
+    if (offscreen || shadingChanged)
+        weight = 0.0;
+    // A static background revealed by a moving foreground object has zero
+    // motion but a stale surface: reject it.
+    else if (expectedPrevDepth >= 0.0 && mvPixels < 0.01 && !stationaryFootprint)
+    {
+        depthReject = true;
+        weight = 0.0;
+    }
+    else if (expectedPrevDepth >= 0.0 && mvPixels > Taa.uParams1.w)
+    {
+        // Disocclusion depth must be POINT-sampled, not read from the
+        // Catmull-Rom color tap (historySample.a): the 5-tap bicubic blends
+        // foreground/background depth across every silhouette, so a ~2-4px band
+        // around each edge carries a mixed stored depth that never matches the
+        // crisp point-reprojected expected depth -> the band FALSELY rejects its
+        // history every frame and shows the raw jittered edge coverage instead
+        // of the converged supersample (the dominant static-camera edge/detail
+        // shimmer). A nearest tap matches the reprojection at static edges (no
+        // false reject) while a genuine disocclusion under motion still
+        // mismatches (real reject preserved).
+        ivec2 histTexel =
+            ivec2(clamp(prevUv * Taa.uExtent.xy, vec2(0.0), Taa.uExtent.xy - vec2(1.0)));
+        float storedPrevDepth = texelFetch(uHistory, histTexel, 0).a;
+        float tolerance = Taa.uParams1.y * max(expectedPrevDepth, storedPrevDepth) + 1e-4;
+        if (abs(expectedPrevDepth - storedPrevDepth) > tolerance)
+        {
+            depthReject = true;
+            weight = 0.0;
+        }
+    }
+    // Sub-pixel correction: reduce history trust as this pixel's motion phase
+    // moves away from texel alignment (see SubpixelCorrection) — independent
+    // of the velocity falloff below, since a slow but badly-phased motion
+    // blurs the reprojected history just as much as a fast, well-phased one.
+    // No-op on already-zeroed weight (offscreen/disocclusion), matching the
+    // reference's hasValidHistory gating. Editor-toggleable (uParams2.z);
+    // the reference's own doc flags a possible square-pattern artifact as
+    // the trade for less blur under slow motion, so this needs an off switch.
+    if (Taa.uParams2.z > 0.5)
+        weight = max(weight - SubpixelCorrection(mv, Taa.uExtent.xy) * kSubpixelCorrectionWeight, 0.0);
+    // Velocity falloff: fast motion trusts history less (fresh samples win
+    // over reprojection error accumulation).
+    weight *= exp(-mvPixels * Taa.uParams0.w);
+
+    // Reprojected/clipped samples retain Karis weighting for HDR fireflies.
+    // Validated stationary history integrates coverage in linear light. Karis
+    // weighting here would give an old dark sample nearly all the weight when
+    // an HDR emitter appears, preserving a dark sun ring despite fresh input.
+    float wCurr = stationaryFootprint ? 1.0 : 1.0 / (1.0 + Luma(current));
+    float wHist = stationaryFootprint ? 1.0 : 1.0 / (1.0 + Luma(history));
+    vec3 blended = (current * wCurr * (1.0 - weight) + history * wHist * weight) /
+                   max(wCurr * (1.0 - weight) + wHist * weight, 1e-5);
+
+    imageStore(uOutHistory, px, vec4(blended, depth));
+
+    float debugMode = Taa.uParams0.z;
+    if (debugMode > 1.5)
+    {
+        // Rejection view: green = clamp pressure, red = depth disocclusion,
+        // blue = off-screen or shading-change rejection. Black = clean accumulation.
+        vec3 dbg = vec3(depthReject ? 1.0 : 0.0, clamp(clampAmount * 8.0, 0.0, 1.0),
+                        offscreen || shadingChanged ? 1.0 : 0.0);
+        imageStore(uOutColor, px, vec4(dbg, 1.0));
+    }
+    else if (debugMode > 0.5)
+    {
+        // MV view: RG = motion scaled/centered, B = mover-rasterized flag.
+        imageStore(uOutColor, px,
+                   vec4(clamp(mv * 20.0 + 0.5, vec2(0.0), vec2(1.0)), isMoverMV ? 1.0 : 0.0, 1.0));
+    }
+    else
+    {
+        imageStore(uOutColor, px, vec4(blended, 1.0));
+    }
+}

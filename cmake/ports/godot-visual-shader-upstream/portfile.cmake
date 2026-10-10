@@ -1,0 +1,11 @@
+set(VCPKG_POLICY_EMPTY_PACKAGE enabled)
+
+set(GE_GODOT_VISUAL_SHADER_COMMIT "35e80b3a8822a9df9be390814b62f44c0a9c69e8")
+
+vcpkg_download_distfile(GE_GODOT_LICENSE
+    URLS "https://raw.githubusercontent.com/godotengine/godot/${GE_GODOT_VISUAL_SHADER_COMMIT}/LICENSE.txt"
+    FILENAME "godot-${GE_GODOT_VISUAL_SHADER_COMMIT}-LICENSE.txt"
+    SHA512 a76a1bc7c6651bf9e3d6c738c2d5b1568142177c5177a29f7e6a55a0429afb4dc80bfbb3e2552803fcd3c05b2e7a1099d125030717e0ab5a31a19b6bf3cd21a7
+)
+
+vcpkg_install_copyright(FILE_LIST "${GE_GODOT_LICENSE}")

@@ -1,0 +1,153 @@
+/* AssetField Control Styles
+ *
+ * Clickable inspector field for asset selection via SearchDialog.
+ * Shows type icon, asset name, and clear button.
+ */
+
+/* ---- Field root (clickable row) ---- */
+.asset-field {
+	display: flex;
+	flex-direction: row;
+	align-items: center;
+	gap: 6px;
+	padding: 4px 8px;
+	border-radius: 6px;
+	border: 1px solid rgba(255, 255, 255, 0.24);
+	background-color: rgba(0, 0, 0, 0.13);
+	cursor: pointer;
+	min-height: 27px;
+	width: 100%;
+	/* Shrink inside inspector flex rows; clip children so long names stay inside the box. */
+	min-width: 0;
+	overflow: hidden;
+	box-sizing: border-box;
+}
+
+.asset-field:hover {
+	border-color: rgba(255, 255, 255, 0.42);
+	background-color: rgba(0, 0, 0, 0.2);
+}
+
+/* Inspector asset selection reads as a dropdown. Match the shared dropdown
+ * header without changing asset fields used by other editor surfaces. */
+.asset-field.dropdown-asset-field {
+	border-color: var(--ui_color_dropdown_outline);
+	border-radius: var(--ui_radius_sm);
+	background-color: #202020;
+}
+
+.asset-field.dropdown-asset-field:hover {
+	border-color: var(--ui_color_dropdown_outline_hover);
+	background-color: #262626;
+}
+
+.asset-field.dropdown-asset-field.open {
+	background-color: var(--ui_color_bg_selected);
+	color: var(--ui_color_text_bright);
+}
+
+.asset-field.dropdown-asset-field.open .asset-field-name {
+	color: var(--ui_color_text_bright);
+}
+
+/* ---- Type icon (reuses icon-* classes from SearchDialog.css) ---- */
+.asset-field-icon {
+	width: 16px;
+	height: 16px;
+	min-width: 16px;
+	min-height: 16px;
+	border-radius: 3px;
+	flex-shrink: 0;
+	background-size: contain;
+	background-repeat: no-repeat;
+	background-position: center;
+}
+
+.asset-field-icon.hidden {
+	display: none;
+}
+
+/* ---- Model preview (inspector; same engine texture / path as asset search thumbs) ---- */
+.asset-field-preview {
+	width: 40px;
+	height: 40px;
+	min-width: 40px;
+	min-height: 40px;
+	border-radius: 4px;
+	flex-shrink: 0;
+	background-color: rgba(0, 0, 0, 0.16);
+	background-size: contain;
+	background-repeat: no-repeat;
+	background-position: center;
+}
+
+.asset-field-preview.hidden {
+	display: none;
+}
+
+/* ---- Asset name ---- */
+.asset-field-name {
+	flex: 1;
+	font-size: 13px;
+	color: var(--ui_color_text_bright);
+	min-width: 0;
+	overflow: hidden;
+	white-space: nowrap;
+}
+
+.asset-field.entity-field .asset-field-name {
+	color: var(--ui_color_text_dim);
+}
+
+/* Entity references use the same field outline as Inspector dropdowns. */
+.asset-field.entity-field {
+	border-color: var(--ui_color_dropdown_outline);
+	border-radius: var(--ui_radius_sm);
+}
+
+.asset-field.entity-field:hover {
+	border-color: var(--ui_color_dropdown_outline_hover);
+}
+
+.asset-field-name.empty {
+	color: var(--ui_color_text_dim);
+	font-style: italic;
+}
+
+/* ---- Clear control (image: Label × sat low in the line box vs hover fill) ---- */
+.asset-field-clear {
+	width: 18px;
+	height: 18px;
+	min-width: 18px;
+	min-height: 18px;
+	flex-shrink: 0;
+	cursor: pointer;
+	border-radius: 3px;
+	box-sizing: border-box;
+	background-color: transparent;
+	background-image: url("editor:Icons/xclose.png");
+	background-size: 10px 10px;
+	background-repeat: no-repeat;
+	background-position: center;
+	background-image-tint: rgba(255, 255, 255, 0.66);
+}
+
+.asset-field-clear:hover {
+	background-color: rgba(255, 255, 255, 0.28);
+	background-image-tint: rgba(255, 255, 255, 1.0);
+}
+
+.asset-field-clear.hidden {
+	display: none;
+}
+
+/* ---- Drag-drop feedback ---- */
+.asset-field.drop-valid {
+	border-color: #50C878;
+	background-color: rgba(80, 200, 120, 0.1);
+}
+
+.asset-field.drop-invalid {
+	border-color: #DC5050;
+	background-color: rgba(220, 80, 80, 0.1);
+}

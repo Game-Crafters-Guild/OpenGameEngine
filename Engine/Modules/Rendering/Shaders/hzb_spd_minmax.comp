@@ -1,0 +1,233 @@
+#version 450
+
+// Fused HZB downsample, tile pass (1 of 2) — builds the occlusion pyramid
+// (MIN reduce; reverse-Z ⇒ MIN = farthest) and the SSR traversal pyramid
+// (MAX reduce ⇒ nearest surface) from ONE read of the depth image.
+//
+// CONTENT CONTRACT: the MIN pyramid is BIT-IDENTICAL to hzb_spd.comp's and to
+// the hzb_build.comp chain's; the MAX pyramid is bit-identical to the chain
+// run with mode 2. HzbSpdMinMaxParityTests pins both on GPU. The fold rule,
+// operation order and tile/finalize split are hzb_spd.comp's verbatim — only
+// the reduce op and the destination images vary per pyramid.
+//
+// LDS is REUSED across the two pyramids rather than doubled: each thread loads
+// its 4x4 depth block into registers once, then the mip-1 + LDS-level sequence
+// runs twice over the same sA/sB tiles (a barrier separates the phases). This
+// keeps shared memory at hzb_spd.comp's 5120 bytes (sA 4096 + sB 1024) rather
+// than 10240, so occupancy matches the MIN-only path. The binding device limit
+// is the FINALIZE pass's, not this one's: hzb_spd_minmax_finalize.comp's 22016
+// bytes would double past the 32768-byte maxComputeSharedMemorySize floor and
+// disable SPD on MoltenVK. The saved work is the depth read, not the LDS
+// arithmetic.
+//
+// As in hzb_spd.comp: folds are skipped for mips 2..6 (the miss is confined to
+// each level's global last row/column) and repaired by hzb_spd_minmax_finalize
+// .comp, which also builds mips 7..12. No storage image is re-read within a
+// dispatch, so every binding stays pure readonly/writeonly and nothing is
+// `coherent`.
+
+layout(local_size_x = 16, local_size_y = 16, local_size_z = 1) in;
+
+layout(set = 0, binding = 0, r32f) uniform readonly image2D uDepth;
+layout(set = 0, binding = 1, r32f) uniform writeonly image2D uMip0Min;
+// Mips 1..6 as single-mip views (slot i = mip i+1; slots past the real chain
+// re-bind the deepest mip and are never addressed — mipCount clamps).
+layout(set = 0, binding = 2, r32f) uniform writeonly image2D uMipsMin[6];
+layout(set = 0, binding = 3, r32f) uniform writeonly image2D uMip0Max;
+layout(set = 0, binding = 4, r32f) uniform writeonly image2D uMipsMax[6];
+
+layout(push_constant) uniform PushConstants
+{
+    uint width;    // depth / mip 0 extent
+    uint height;
+    uint mipCount; // full chain length incl. mip 0
+};
+
+// Ping-pong tiles: levels 1/3/5 in sA, levels 2/4/6 in sB. Shared by both
+// pyramid phases (see the LDS note above).
+shared float sA[32][32];
+shared float sB[16][16];
+
+// Pyramid selector: index 0 = MIN (occlusion), 1 = MAX (SSR traversal).
+const uint kPyramidMin = 0u;
+const uint kPyramidMax = 1u;
+const uint kPyramidCount = 2u;
+
+// The reduce op. `pyr` is uniform across the workgroup (a constant-bound loop
+// counter), so this predicates rather than diverges; the MIN arm emits the
+// same min() hzb_spd.comp does, which is what keeps the pyramids bit-equal.
+float Fold(uint pyr, float a, float b)
+{
+    return (pyr == kPyramidMax) ? max(a, b) : min(a, b);
+}
+
+ivec2 LevelExtent(uint m)
+{
+    return ivec2(int(max(1u, width >> m)), int(max(1u, height >> m)));
+}
+
+void StoreMip0(uint pyr, ivec2 c, float v)
+{
+    const vec4 t = vec4(v, 0.0, 0.0, 0.0);
+    if (pyr == kPyramidMax)
+        imageStore(uMip0Max, c, t);
+    else
+        imageStore(uMip0Min, c, t);
+}
+
+void StoreMip(uint pyr, uint m, ivec2 c, float v) // m in 1..6 -> uMips*[m-1]
+{
+    const vec4 t = vec4(v, 0.0, 0.0, 0.0);
+    if (pyr == kPyramidMax)
+    {
+        switch (m)
+        {
+            case 1u: imageStore(uMipsMax[0], c, t); break;
+            case 2u: imageStore(uMipsMax[1], c, t); break;
+            case 3u: imageStore(uMipsMax[2], c, t); break;
+            case 4u: imageStore(uMipsMax[3], c, t); break;
+            case 5u: imageStore(uMipsMax[4], c, t); break;
+            default: imageStore(uMipsMax[5], c, t); break;
+        }
+    }
+    else
+    {
+        switch (m)
+        {
+            case 1u: imageStore(uMipsMin[0], c, t); break;
+            case 2u: imageStore(uMipsMin[1], c, t); break;
+            case 3u: imageStore(uMipsMin[2], c, t); break;
+            case 4u: imageStore(uMipsMin[3], c, t); break;
+            case 5u: imageStore(uMipsMin[4], c, t); break;
+            default: imageStore(uMipsMin[5], c, t); break;
+        }
+    }
+}
+
+float LoadDepthClamped(ivec2 c, ivec2 maxSrc)
+{
+    return imageLoad(uDepth, clamp(c, ivec2(0), maxSrc)).r;
+}
+
+void main()
+{
+    const ivec2 wg = ivec2(gl_WorkGroupID.xy);
+    const ivec2 lid = ivec2(gl_LocalInvocationID.xy);
+
+    const ivec2 ext0 = ivec2(int(width), int(height));
+    const ivec2 maxSrc0 = ext0 - ivec2(1);
+
+    // ── The single depth read: each thread owns a 4x4 block — exactly the
+    // interior 2x2 footprints of its four mip-1 texels — held in registers and
+    // consumed by BOTH pyramid phases. Clamped loads duplicate edge texels,
+    // matching hzb_build.comp's LoadClamped.
+    const ivec2 blockBase = wg * 64 + lid * 4;
+    float blk[4][4];
+    for (int j = 0; j < 4; ++j)
+        for (int i = 0; i < 4; ++i)
+            blk[j][i] = LoadDepthClamped(blockBase + ivec2(i, j), maxSrc0);
+
+    // Mip 0 of both pyramids is the same same-size depth copy (hzb_build.comp
+    // mode 0); the reduce op only starts to matter at mip 1.
+    for (int j = 0; j < 4; ++j)
+        for (int i = 0; i < 4; ++i)
+        {
+            const ivec2 c = blockBase + ivec2(i, j);
+            if (c.x < ext0.x && c.y < ext0.y)
+            {
+                StoreMip0(kPyramidMin, c, blk[j][i]);
+                StoreMip0(kPyramidMax, c, blk[j][i]);
+            }
+        }
+
+    // ── Per-pyramid phase: mip 1 from registers (exact fold), then mips 2..6
+    // from the LDS ping-pong. `pyr` is uniform, so every barrier below sits in
+    // uniform control flow.
+    for (uint pyr = 0u; pyr < kPyramidCount; ++pyr)
+    {
+        // Separates this phase's sA writes from the previous phase's sA reads
+        // (level 6 reads sA). Harmless on the first iteration.
+        barrier();
+
+        if (mipCount > 1u)
+        {
+            const ivec2 ext1 = LevelExtent(1u);
+            const bool oddW = (width & 1u) != 0u;
+            const bool oddH = (height & 1u) != 0u;
+            for (int j = 0; j < 2; ++j)
+                for (int i = 0; i < 2; ++i)
+                {
+                    const ivec2 local = lid * 2 + ivec2(i, j); // 0..31 in-tile
+                    const ivec2 d = wg * 32 + local;
+                    if (d.x >= ext1.x || d.y >= ext1.y)
+                        continue;
+                    // Interior 2x2 from registers, hzb_build.comp's op order;
+                    // the rare fold texels re-load from the image (tile edge).
+                    const int bi = i * 2;
+                    const int bj = j * 2;
+                    float acc = blk[bj][bi];
+                    acc = Fold(pyr, acc, blk[bj][bi + 1]);
+                    acc = Fold(pyr, acc, blk[bj + 1][bi]);
+                    acc = Fold(pyr, acc, blk[bj + 1][bi + 1]);
+
+                    const bool lastCol = d.x == ext1.x - 1;
+                    const bool lastRow = d.y == ext1.y - 1;
+                    const ivec2 base = d * 2;
+                    if (oddW && lastCol)
+                    {
+                        acc = Fold(pyr, acc, LoadDepthClamped(base + ivec2(2, 0), maxSrc0));
+                        acc = Fold(pyr, acc, LoadDepthClamped(base + ivec2(2, 1), maxSrc0));
+                    }
+                    if (oddH && lastRow)
+                    {
+                        acc = Fold(pyr, acc, LoadDepthClamped(base + ivec2(0, 2), maxSrc0));
+                        acc = Fold(pyr, acc, LoadDepthClamped(base + ivec2(1, 2), maxSrc0));
+                    }
+                    if (oddW && oddH && lastCol && lastRow)
+                        acc = Fold(pyr, acc, LoadDepthClamped(base + ivec2(2, 2), maxSrc0));
+
+                    StoreMip(pyr, 1u, d, acc);
+                    sA[local.y][local.x] = acc;
+                }
+        }
+
+        // Mips 2..6: LDS ping-pong, plain clamped 2x2 (folds deferred to the
+        // finalize pass). SRC/DST alternate sA/sB; barriers sit in uniform
+        // control flow (the per-level guards are push-constant-uniform).
+#define GE_SPD_LDS_LEVEL(dstMip, SRC, DST)                                                     \
+        barrier();                                                                             \
+        if (mipCount > uint(dstMip))                                                           \
+        {                                                                                      \
+            const int span = 64 >> dstMip;                                                     \
+            if (lid.x < span && lid.y < span)                                                  \
+            {                                                                                  \
+                const ivec2 d = wg * span + lid;                                               \
+                const ivec2 dstExt = LevelExtent(uint(dstMip));                                \
+                if (d.x < dstExt.x && d.y < dstExt.y)                                          \
+                {                                                                              \
+                    const ivec2 srcExt = LevelExtent(uint(dstMip) - 1u);                       \
+                    const ivec2 maxS = srcExt - ivec2(1);                                      \
+                    const ivec2 srcTile = wg * (span * 2);                                     \
+                    const ivec2 b = d * 2;                                                     \
+                    const ivec2 s00 = clamp(b, ivec2(0), maxS) - srcTile;                      \
+                    const ivec2 s10 = clamp(b + ivec2(1, 0), ivec2(0), maxS) - srcTile;        \
+                    const ivec2 s01 = clamp(b + ivec2(0, 1), ivec2(0), maxS) - srcTile;        \
+                    const ivec2 s11 = clamp(b + ivec2(1, 1), ivec2(0), maxS) - srcTile;        \
+                    float acc = SRC[s00.y][s00.x];                                             \
+                    acc = Fold(pyr, acc, SRC[s10.y][s10.x]);                                   \
+                    acc = Fold(pyr, acc, SRC[s01.y][s01.x]);                                   \
+                    acc = Fold(pyr, acc, SRC[s11.y][s11.x]);                                   \
+                    StoreMip(pyr, uint(dstMip), d, acc);                                       \
+                    DST[lid.y][lid.x] = acc;                                                   \
+                }                                                                              \
+            }                                                                                  \
+        }
+
+        GE_SPD_LDS_LEVEL(2, sA, sB)
+        GE_SPD_LDS_LEVEL(3, sB, sA)
+        GE_SPD_LDS_LEVEL(4, sA, sB)
+        GE_SPD_LDS_LEVEL(5, sB, sA)
+        GE_SPD_LDS_LEVEL(6, sA, sB)
+#undef GE_SPD_LDS_LEVEL
+    }
+}

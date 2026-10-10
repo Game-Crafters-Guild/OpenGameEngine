@@ -1,0 +1,54 @@
+{
+  "name": "repro_hierarchy_multi_create_cubes",
+  "windowIndex": 0,
+  "minFrames": 360,
+  "probe": {
+    "treeViewUnderId": "mount:Hierarchy",
+    "elementId": "mount:Hierarchy",
+    "pixelHash": {
+      "enabled": true,
+      "frameStart": 120,
+      "frameEnd": 260,
+      "everyNFrames": 4,
+      "maxPending": 1,
+      "readbackDelayFrames": 2,
+      "failOnAllBlack": true,
+      "dumpPpm": true,
+      "normalizedRegion": { "x": 0.0, "y": 0.0507, "w": 0.2115, "h": 0.6813 }
+    }
+  },
+  "assert": {
+    "kind": "layoutConverged",
+    "elementId": "mount:Hierarchy",
+    "frameStart": 140,
+    "frameEnd": 220,
+    "includeStyleDirty": true
+  },
+  "asserts": [
+    {
+      "kind": "visibleTextNotFullyClipped",
+      "subtreeId": "mount:Hierarchy",
+      "scrollViewUnderId": "mount:Hierarchy",
+      "requiredClasses": ["tree-title"],
+      "frameStart": 140,
+      "frameEnd": 240,
+      "minVisiblePx": 2.0,
+      "maxChecks": 1800
+    }
+  ],
+  "events": [
+    { "frame": 2, "type": "mouseMove", "target": { "kind": "elementId", "id": "tab:Hierarchy", "relX": 0.5, "relY": 0.5 } },
+    { "frame": 3, "type": "mouseDown", "button": 0 },
+    { "frame": 4, "type": "mouseUp", "button": 0 },
+
+    { "frame": 20, "type": "invokeCommand", "commandId": 16656 },
+    { "frame": 24, "type": "invokeCommand", "commandId": 16656 },
+    { "frame": 28, "type": "invokeCommand", "commandId": 16656 },
+    { "frame": 32, "type": "invokeCommand", "commandId": 16656 },
+    { "frame": 36, "type": "invokeCommand", "commandId": 16656 },
+    { "frame": 40, "type": "invokeCommand", "commandId": 16656 },
+    { "frame": 44, "type": "invokeCommand", "commandId": 16656 },
+    { "frame": 48, "type": "invokeCommand", "commandId": 16656 }
+  ]
+}
+

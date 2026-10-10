@@ -1,0 +1,13 @@
+ufbx
+====
+
+Vendored copy of the ufbx FBX importer.
+
+Upstream:  https://github.com/ufbx/ufbx
+License:   MIT or Public Domain (see LICENSE)
+Version:   v0.21.3
+Commit:    83bc7cf44f76bc8622de63b809a42b5d557cd733
+Files:     ufbx.h ufbx.c LICENSE
+
+To bump to a newer release, run Tools/update-ufbx.sh <tag>
+(for example: Tools/update-ufbx.sh v0.22.0)

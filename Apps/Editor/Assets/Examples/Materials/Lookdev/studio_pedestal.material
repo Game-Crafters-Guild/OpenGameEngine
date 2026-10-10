@@ -1,0 +1,14 @@
+{
+  "schemaVersion": 3,
+  "materialName": "Lookdev - Studio Pedestal",
+  "lightingModel": "StandardPBR",
+  "alphaMode": "Opaque",
+  "doubleSided": false,
+  "surfaceShader": "Surfaces/standard_pbr.glsl",
+  "properties": {
+    "baseColor": [0.035, 0.035, 0.038, 1.0],
+    "metallic": 0.0,
+    "roughness": 0.35
+  },
+  "textures": {}
+}

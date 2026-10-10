@@ -1,0 +1,93 @@
+<!doctype html><meta charset="utf-8"><title>Contact shadow WebGPU validation</title>
+<style>body{font:16px system-ui;background:#19202b;color:#eef;padding:24px}button{padding:12px;font:inherit}canvas{width:771px;height:291px;image-rendering:pixelated}pre{white-space:pre-wrap}</style>
+<h1>Contact shadow WebGPU validation</h1><button id="run">Run shader tests</button>
+<p>Production WGSL compute shaders · 257 × 97 · full prepare, trace, resolve and footprint matching.</p>
+<canvas width="257" height="97"></canvas><pre id="result">Ready</pre>
+<script type="module">
+const output=document.querySelector('#result');
+document.querySelector('#run').onclick=async()=>{
+ try {
+  output.textContent='Running';
+  const adapter=await navigator.gpu.requestAdapter();if(!adapter)throw Error('No WebGPU adapter');
+  const device=await adapter.requestDevice();const errors=[];
+  device.addEventListener('uncapturederror',e=>errors.push(e.error.message));
+  device.pushErrorScope('validation');
+  const fixture=await(await fetch('dispatch.json')).json();
+  const metadata=await(await fetch('metadata.json')).json();
+  const names=['screen_space_shadow_prepare','screen_space_shadow','screen_space_shadow_resolve','screen_space_shadow_match'];
+  // Follow the exported metadata, including unsigned masks and storage access.
+  // A successful WGSL translation alone cannot catch a mismatched runtime layout.
+  const layoutEntry=b=>{
+   const e={binding:b.binding,visibility:GPUShaderStage.COMPUTE};
+   if(b.type===0)e.buffer={type:'uniform'};
+   else if(b.type===1)e.buffer={type:b.readOnly?'read-only-storage':'storage'};
+   else if(b.type===4){
+    if(b.image.format!==17)throw Error('Contact mask must be R32_UINT');
+    e.storageTexture={access:b.readOnly?'read-only':'write-only',format:'r32uint'};
+   }else if(b.type===3||b.type===5){
+    e.texture={sampleType:b.image.unsignedInteger?'uint':b.image.depth?'depth':b.image.filtered?'float':'unfilterable-float'};
+   }else throw Error('Unexpected descriptor type '+b.type);
+   return e;
+  };
+  const pipelines=[];
+  for(let i=0;i<names.length;i++) {
+   const module=device.createShaderModule({label:names[i],code:await(await fetch(names[i]+'.wgsl')).text()});
+   const messages=(await module.getCompilationInfo()).messages.filter(m=>m.type==='error');
+   if(messages.length)throw Error(names[i]+': '+messages.map(m=>m.message).join('\n'));
+   const layout=device.createBindGroupLayout({entries:metadata[names[i]].sets.find(s=>s.set===0).bindings.map(layoutEntry)});
+   pipelines.push(await device.createComputePipelineAsync({label:names[i],layout:device.createPipelineLayout({bindGroupLayouts:[layout]}),compute:{module,entryPoint:'main'}}));
+  }
+  const W=257,H=97,N=W*H,stride=Math.ceil(W*4/256)*256;
+  const createBuffer=(size,usage,data)=>{const b=device.createBuffer({size,usage:usage|GPUBufferUsage.COPY_DST});if(data)device.queue.writeBuffer(b,0,data);return b};
+  async function runCase(kind,match=false,reverse=false) {
+   const owned=[];const own=x=>(owned.push(x),x);
+   const depth=own(device.createTexture({size:[W,H],format:'r32float',usage:GPUTextureUsage.TEXTURE_BINDING|GPUTextureUsage.COPY_DST}));
+   const values=new Float32Array(N);
+   for(let y=0;y<H;y++)for(let x=0;x<W;x++) values[y*W+x]=kind==='sky'?0:kind==='step'&&x<128?.405:.4;
+   device.queue.writeTexture({texture:depth},values,{bytesPerRow:W*4},[W,H]);
+   const visibility=own(createBuffer(N*4,GPUBufferUsage.STORAGE));
+   const makeMask=()=>own(device.createTexture({size:[W,H],format:'r32uint',usage:GPUTextureUsage.STORAGE_BINDING|GPUTextureUsage.TEXTURE_BINDING|GPUTextureUsage.COPY_SRC}));
+   const mask=makeMask(),matched=makeMask();
+   const encoder=device.createCommandEncoder();
+   const bind=(i,resources,groups)=>{const entries=resources.map((r,binding)=>({binding,resource:r}));const bg=device.createBindGroup({layout:pipelines[i].getBindGroupLayout(0),entries});const p=encoder.beginComputePass();p.setPipeline(pipelines[i]);p.setBindGroup(0,bg);p.dispatchWorkgroups(...groups);p.end()};
+   const dims=[Math.ceil(W/8),Math.ceil(H/8),1];
+   bind(0,[depth.createView(),{buffer:visibility}],dims);
+   const dispatches=reverse?[...fixture.dispatches].reverse():fixture.dispatches;
+   for(const d of dispatches){
+    const bytes=new ArrayBuffer(48),f=new Float32Array(bytes),ints=new Int32Array(bytes);
+    f.set(fixture.light);ints.set([...d.offset,W,H],4);f.set([.005,.02,4],8);
+    const params=own(createBuffer(48,GPUBufferUsage.UNIFORM,bytes));
+    bind(1,[depth.createView(),{buffer:visibility},{buffer:params}],d.groups);
+   }
+   bind(2,[depth.createView(),mask.createView(),{buffer:visibility}],dims);
+   if(match){
+    const params=new Float32Array(20);for(let i=0;i<16;i+=5)params[i]=1;params[17]=.1;params[18]=64;
+    const shadow=new Float32Array(116);shadow[0]=W/192;shadow[5]=H/192;shadow[10]=shadow[15]=1;
+    shadow[64]=100;shadow[70]=1;shadow[71]=100;shadow[75]=2;
+    const pb=own(createBuffer(80,GPUBufferUsage.UNIFORM,params)),sb=own(createBuffer(464,GPUBufferUsage.UNIFORM,shadow));
+    bind(3,[depth.createView(),mask.createView(),{buffer:visibility},matched.createView(),{buffer:pb},{buffer:sb}],dims);
+   }
+   const rb=own(device.createBuffer({size:stride*H,usage:GPUBufferUsage.COPY_DST|GPUBufferUsage.MAP_READ}));
+   encoder.copyTextureToBuffer({texture:match?matched:mask},{buffer:rb,bytesPerRow:stride},[W,H]);
+   device.queue.submit([encoder.finish()]);await rb.mapAsync(GPUMapMode.READ);
+   const raw=new Uint32Array(rb.getMappedRange()),packed=new Uint32Array(N);
+   for(let y=0;y<H;y++)packed.set(raw.subarray(y*stride/4,y*stride/4+W),y*W);
+   rb.unmap();for(const x of owned)x.destroy();return packed;
+  }
+  const tests=[];const assert=(name,ok,details={})=>{tests.push({name,passed:!!ok,...details});if(!ok)throw Error(name+' failed')};
+  for(const kind of ['sky','plane']){const a=await runCase(kind,true);assert(kind+' remains fully lit',a.every(v=>(v&255)===255));}
+  const full=await runCase('step'),matched=await runCase('step',true),reversed=await runCase('step',false,true);
+  const count=a=>{let n=0;for(let y=2;y<H-2;y++)for(let x=128;x<158;x++)n+=(a[y*W+x]&255)<230;return n};
+  assert('contact step shadows receivers',count(full)>100,{shadowedReceivers:count(full)});
+  assert('dispatch order is deterministic',full.every((v,i)=>v===reversed[i]));
+  assert('PCF footprint matching retains contact',count(matched)>100,{shadowedReceivers:count(matched)});
+  const bit=new ArrayBuffer(4),u=new Uint32Array(bit),f=new Float32Array(bit);
+  assert('packed receiver depth is retained',matched.every((v,i)=>{u[0]=v&0xffffff00;return Math.abs(f[0]-(i%W<128?.405:.4))<.00002}));
+  const canvas=document.querySelector('canvas'),ctx=canvas.getContext('2d'),img=ctx.createImageData(W,H);
+  matched.forEach((v,i)=>{const c=v&255;img.data.set([c,c,c,255],i*4)});ctx.putImageData(img,0,0);
+  await device.queue.onSubmittedWorkDone();const validation=await device.popErrorScope();if(validation)errors.push(validation.message);
+  assert('no WebGPU validation errors',errors.length===0,{errors});
+  output.textContent=JSON.stringify({status:'PASS',adapter:adapter.info,tests},null,2);
+ }catch(e){output.textContent=JSON.stringify({status:'FAIL',error:String(e),stack:e.stack},null,2)}
+};
+</script>

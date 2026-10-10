@@ -1,0 +1,126 @@
+/* Basic demo stylesheet migrated from code: flex layout, panels, and boxes */
+
+/* The --demo-text-* tokens colour the text shadow, glow and outline rules.
+   They sit on the demo's own root class, not :root, because :root matches only
+   a parentless element and a document mounted in a host has a parent. */
+.root {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+    --demo-text-shadow: #000000cc;
+    --demo-text-glow: #50bfff;
+    --demo-text-outline: #101020;
+}
+
+.header {
+    background-color: #3a6ea5;
+    color: #ffffff;
+    padding: 12px;
+    border-radius: 6px;
+    margin: 8px;
+}
+
+.row {
+    display: flex;
+    flex-direction: row;
+    gap: 12px;
+}
+
+.column {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+}
+
+.panel {
+    background-color: #222;
+    border: 1px solid #555;
+    padding: 12px;
+}
+
+.title {
+    background-color: #3a6ea5;
+    height: 40px;
+    border-radius: 4px;
+}
+
+.box {
+    background-color: #808080;
+    height: 80px;
+    border-radius: 6px;
+}
+
+.button {
+    background-color: #444;
+    border: 1px solid #666;
+    border-radius: 6px;
+    width: 200px;
+    height: 48px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: #ffffff;
+}
+
+.button.primary {
+    background-color: orange;
+}
+
+
+
+/* Ensure labels have visible height when used in flex rows */
+label {
+    height: 24px;
+}
+
+#titleLabel {
+    height: 40px;
+    font-size: 24px;
+    text-shadow: 2px 2px 1px var(--demo-text-shadow);
+}
+
+/* --demo-accent is unused and demonstrates parsing. */
+:root {
+    --demo-accent: #3a6ea5;
+    padding: 12px;
+}
+
+
+#left {
+    background-color: red;
+}
+
+#right {
+    background-color: pink;
+}
+
+#right:hover {
+    background-color: purple;
+}
+
+
+#box2 {
+    background-color: #808080;
+    width: 40px;
+    height: 40px;
+}
+
+#box3 {
+    background-color: #5719e7;
+    width: 20px;
+    height: 20px;
+}
+
+/* Tiny SetOnClick showcase label */
+#clickEcho {
+    height: 20px;
+    font-size: 16px;
+    color: yellow;
+    text-glow: 2px var(--demo-text-glow);
+}
+
+.effect-outline {
+    font-size: 28px;
+    color: #ffffff;
+    text-outline: 1.5px var(--demo-text-outline);
+}

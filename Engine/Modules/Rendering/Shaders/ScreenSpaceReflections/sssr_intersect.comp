@@ -1,0 +1,294 @@
+#version 450
+
+layout(local_size_x = 64, local_size_y = 1, local_size_z = 1) in;
+
+layout(set = 0, binding = 0) uniform sampler2D uSceneColor;
+layout(set = 0, binding = 1) uniform sampler2D uDepth;
+layout(set = 0, binding = 2) uniform sampler2D uHZB;
+layout(set = 0, binding = 3) uniform sampler2D uNormalRoughness;
+layout(set = 0, binding = 4, rgba16f) uniform writeonly image2D uRadiance;
+layout(set = 0, binding = 8, rgba16f) uniform writeonly image2D uHitData;
+layout(set = 0, binding = 6) uniform sampler2D uBlueNoise;
+// The forward shader's actual base-lobe estimate and response, including
+// layered-material attenuation. A miss reads exactly what composite subtracts.
+layout(set = 0, binding = 9) uniform sampler2D uSpecularRadiance;
+layout(set = 0, binding = 10) uniform sampler2D uSpecularWeight;
+layout(set = 0, binding = 13) uniform sampler2D uMotionVectors;
+// Previous frame's FINAL composited color (post-SSR): hits sample it
+// reprojected, so reflections contain last frame's reflections (cheap
+// multi-bounce) and late-frame shading the pre-SSR input lacks.
+layout(set = 0, binding = 11) uniform sampler2D uPrevScene;
+layout(std430, set = 0, binding = 5) readonly buffer RayListBuffer { uint rays[]; } RayList;
+#include "ScreenSpaceReflections/sssr_common.glsl"
+#include "ScreenSpaceReflections/sssr_reprojection.glsl"
+#include "ScreenSpaceReflections/sssr_history_policy.glsl"
+#define GE_SSSR_ARGS_BINDING 12
+#define GE_SSSR_ARGS_READONLY
+#include "ScreenSpaceReflections/sssr_dispatch.glsl"
+
+// Denoise hits and misses as one incident-radiance signal. The fallback is
+// exported by the forward shader, so AO, film, box projection and DDGI sampling
+// cannot drift between the miss path and composite.
+const float kEnvFallbackConfidence = 0.4;
+void WriteEnvFallback(ivec2 pixel)
+{
+    vec3 radiance = texelFetch(uSpecularRadiance, pixel, 0).rgb;
+    imageStore(uRadiance, pixel, vec4(radiance, kEnvFallbackConfidence));
+    imageStore(uHitData, pixel, vec4(0.0, 0.0, 0.0, kEnvFallbackConfidence));
+}
+
+// Eric Heitz's visible-normal GGX sampling, isotropic form.
+vec3 SampleGGXVNDF(vec3 V, float alpha, vec2 Xi)
+{
+    vec3 Vh = normalize(vec3(alpha * V.x, alpha * V.y, V.z));
+    float lensq = Vh.x * Vh.x + Vh.y * Vh.y;
+    vec3 T1 = lensq > 0.0 ? vec3(-Vh.y, Vh.x, 0.0) * inversesqrt(lensq)
+                          : vec3(1.0, 0.0, 0.0);
+    vec3 T2 = cross(Vh, T1);
+    float r = sqrt(Xi.x);
+    float phi = 2.0 * GE_PI * Xi.y;
+    float t1 = r * cos(phi);
+    float t2 = r * sin(phi);
+    float s = 0.5 * (1.0 + Vh.z);
+    t2 = mix(sqrt(max(0.0, 1.0 - t1 * t1)), t2, s);
+    vec3 Nh = t1 * T1 + t2 * T2 + sqrt(max(0.0, 1.0 - t1*t1 - t2*t2)) * Vh;
+    return normalize(vec3(alpha * Nh.x, alpha * Nh.y, max(0.0, Nh.z)));
+}
+
+mat3 TangentFrame(vec3 N)
+{
+    vec3 T = normalize(abs(N.z) < 0.999 ? cross(vec3(0.0, 0.0, 1.0), N)
+                                        : cross(vec3(0.0, 1.0, 0.0), N));
+    return mat3(T, cross(N, T), N);
+}
+
+// Halvings the crossing refine needs. The leftover bracket is the distance the
+// reflected image quantises to, so the budget is targeted in PIXELS at the hit:
+// a budget expressed as a fraction of the bracket instead ties the residual to
+// maxDistance/maxSteps, and a wide march then bands the reflection of curved
+// geometry into concentric iso-distance rings. The floor keeps a bracket that
+// is already near a pixel from resolving to no halvings at all; the cap bounds
+// the cost, since the bracket is unbounded (maxDistance is user-set) and every
+// halving costs a dependent depth fetch.
+const int kMinRefineSteps = 6;
+const int kMaxRefineSteps = 20;
+const float kRefineTargetPixels = 0.5;
+
+int RefineStepsFor(float bracket, float depthVS)
+{
+    // ge_proj[1][1] = 1/tan(fovY/2) and w_clip == z_view (LH ZO reverse-Z), so
+    // one pixel spans 2*z / (proj11 * height) world units at view-space depth z.
+    // The height is the VIEWPORT's: the projection maps its NDC onto the
+    // rasterized rectangle, which is shorter than the target when letterboxed.
+    float viewportHeightPixels = ge_screenSize.y * sssr.viewportRect.w;
+    float pixelWorld =
+        2.0 * abs(depthVS) / max(abs(ge_proj[1][1]) * viewportHeightPixels, 1e-4);
+    float target = max(kRefineTargetPixels * pixelWorld, 1e-5);
+    return clamp(int(ceil(log2(max(bracket / target, 1.0)))), kMinRefineSteps,
+                 kMaxRefineSteps);
+}
+
+void main()
+{
+    // gl_GlobalInvocationID.x is not the ray index: the grid spills into Y once the
+    // ray count needs more groups than one dispatch row can hold. The linear index
+    // is identical to it while the grid stays one row tall, which is every frame
+    // below kSssrMaxDispatchWidth groups.
+    uint listIndex =
+        GE_SssrLinearGroupIndex(gl_WorkGroupID.xy) * gl_WorkGroupSize.x + gl_LocalInvocationID.x;
+    // The grid covers a rounded-up multiple of the workgroup size, and a spilled
+    // grid overshoots further. Neither tail was appended.
+    if (listIndex >= Args.rayCount)
+        return;
+    uint packed = RayList.rays[listIndex];
+    ivec2 pixel = ivec2(int(packed & 0xffffu), int(packed >> 16u));
+    ivec2 extent = textureSize(uDepth, 0);
+    // Backstop on the cleared sentinel: the count gate above already excludes
+    // every slot classify did not write, so this only fires if the two disagree.
+    if (any(greaterThanEqual(pixel, extent)))
+        return;
+    vec2 uv0 = (vec2(pixel) + 0.5) / vec2(extent);
+    float rawDepth = texelFetch(uDepth, pixel, 0).r;
+    vec4 nr = texelFetch(uNormalRoughness, pixel, 0);
+    float roughness = clamp(GE_Roughness(nr), 0.015, 0.92);
+    vec3 N = GE_DecodeNormalVS(nr);
+    vec3 origin = GE_ViewPosition(uv0, rawDepth);
+    vec3 V = normalize(-origin);
+    // The lobe the forward pass shaded, exported as a view-space direction: the
+    // mirror of the shading normal, bent by anisotropy. Sampling around the
+    // half vector between it and the eye reproduces exactly that lobe.
+    vec3 mirrorDir = GE_OctDecode(vec2(texelFetch(uSpecularWeight, pixel, 0).a,
+                                       texelFetch(uSpecularRadiance, pixel, 0).a));
+    // |V + mirror| is 2*dot(N,V), so it collapses to zero on an edge-on shading
+    // normal and normalize() would hand the VNDF basis a NaN — which survives
+    // every later comparison and spreads through the prefilter's neighbourhood.
+    // The G-buffer normal is the only defined basis there.
+    vec3 lobeAxis = V + mirrorDir;
+    vec3 lobeNormal = dot(lobeAxis, lobeAxis) > 1e-8 ? normalize(lobeAxis) : N;
+    // Near-mirror lobes are traced DETERMINISTICALLY: at tiny alpha the VNDF is
+    // a delta anyway, and per-frame jitter only turns thin-feature hits into
+    // hit/miss flicker (speckle) the denoiser must fight. Only genuinely glossy
+    // lobes are worth a stochastic sample.
+    bool isMirror = roughness < 0.06;
+    vec3 H = lobeNormal;
+    if (!isMirror)
+    {
+        mat3 basis = TangentFrame(lobeNormal);
+        vec3 localV = transpose(basis) * V;
+        H = basis * SampleGGXVNDF(localV, roughness * roughness,
+                                  GE_BlueNoise(uBlueNoise, uvec2(pixel), sssr.frameIndex));
+    }
+    vec3 rayDir = normalize(reflect(-V, H));
+    if (dot(rayDir, N) <= 1e-4)
+    {
+        // A below-surface sample cannot contribute to the visible lobe.
+        WriteEnvFallback(pixel);
+        return;
+    }
+
+    // ---- bounded HiZ march ----
+    // Fixed world-space steps (baseStep * 2^mip) with bisection refinement at
+    // the crossing. Toward-camera rays use the same near-plane-bounded test.
+    float maxDistance = max(sssr.sssrMaxDistance, 0.05);
+    float traceDistance = GE_SssrTraceDistance(origin.z, rayDir.z, ge_nearFar.x, maxDistance);
+    int maxSteps = clamp(sssr.sssrMaxSteps, 8, 192);
+    float baseStep = max(traceDistance / float(maxSteps), max(abs(origin.z) * 0.001, 0.015));
+    // The start offset dithers the sampling GRID along an already-fixed ray, so
+    // unlike the VNDF direction above it applies to mirrors too: pinning it
+    // would give every pixel the same t-grid, making the refine residual
+    // screen-coherent instead of noise the prefilter and temporal accumulation
+    // resolve. Spanning a FULL step gives that residual a uniform phase, at a
+    // mean start of one baseStep.
+    float startJitter = GE_BlueNoise(uBlueNoise, uvec2(pixel), sssr.frameIndex + 17u).x;
+    float t = baseStep * (0.5 + startJitter);
+    float previousT = 0.0;
+    vec2 sizeF = vec2(extent);
+    int hzbTop = max(textureQueryLevels(uHZB) - 1, 0);
+    float mip = clamp(floor(log2(1.0 + roughness * 6.0)), 0.0, float(hzbTop));
+
+    for (int step = 0; step < 192 && step < maxSteps && t < traceDistance; ++step)
+    {
+        vec3 rayPos = origin + rayDir * t;
+        float rayDepth;
+        vec2 uv = GE_ProjectView(rayPos, rayDepth);
+        if (any(lessThanEqual(uv, vec2(0.001))) || any(greaterThanEqual(uv, vec2(0.999))))
+            break;
+
+        // uHZB is View.SSRHiZ: a MAX reduction = the NEAREST surface per tile in
+        // reverse-Z (near=1, far=0) — the ray registers a crossing the moment
+        // its depth falls at/behind the tile's nearest surface, so coarse mips
+        // never skip past near geometry. The bisection below resolves the hit.
+        float sceneHZB = textureLod(uHZB, uv, mip).r;
+        bool behindSurface = rayDepth <= sceneHZB; // reverse-Z: smaller = farther
+        if (behindSurface && mip > 0.0)
+        {
+            mip -= 1.0;
+            t = max(previousT, t - baseStep * exp2(mip));
+            continue;
+        }
+        if (behindSurface)
+        {
+            float lo = previousT;
+            float hi = t;
+            int refineSteps = RefineStepsFor(hi - lo, rayPos.z);
+            for (int refine = 0; refine < kMaxRefineSteps && refine < refineSteps;
+                 ++refine)
+            {
+                float mid = 0.5 * (lo + hi);
+                vec3 midPos = origin + rayDir * mid;
+                float midDepth;
+                vec2 midUv = GE_ProjectView(midPos, midDepth);
+                float surfaceRaw = textureLod(uDepth, midUv, 0.0).r;
+                if (surfaceRaw > 1e-7 && midDepth <= surfaceRaw)
+                    hi = mid;
+                else
+                    lo = mid;
+            }
+            t = hi;
+            rayPos = origin + rayDir * t;
+            vec2 huv = GE_ProjectView(rayPos, rayDepth);
+            float hitRaw = textureLod(uDepth, huv, 0.0).r;
+            vec3 hitPos = GE_ViewPosition(huv, hitRaw);
+            float separation = abs(hitPos.z - rayPos.z);
+            float thickness = max(sssr.sssrThickness, 0.002) * (1.0 + abs(hitPos.z) * 0.005);
+            // Facing test: a real hit's surface points TOWARD the ray. Without
+            // it, rays aimed at geometry BEHIND an occluder graze the
+            // occluder's silhouette within the thickness tolerance and get
+            // falsely intercepted — the occluder's edge eats the reflection
+            // behind it (silhouette fragments / cut reflections).
+            vec3 hitN = GE_DecodeNormalVS(texelFetch(uNormalRoughness, ivec2(huv * sizeF), 0));
+            bool facing = dot(hitN, rayDir) < -0.05;
+            if (hitRaw > 1e-7 && facing && separation <= thickness &&
+                distance(huv, uv0) > length(ge_screenSize.zw) * 1.5)
+            {
+                float tWorld = t;
+                float confidence = GE_EdgeConfidence(huv) *
+                    (1.0 - clamp(tWorld / maxDistance, 0.0, 1.0)) *
+                    (1.0 - clamp(separation / thickness, 0.0, 1.0));
+                // Contact hardening: the GGX footprint grows with BOTH roughness
+                // and ray length — contact reflections stay sharp on rough
+                // surfaces, distant ones soften. Full roughness blur by ~2 m.
+                float distanceSpread = clamp(tWorld * 0.5, 0.0, 1.0);
+                float maxColorMip = float(max(textureQueryLevels(uSceneColor) - 1, 0));
+                float colorMip = roughness * distanceSpread * maxColorMip;
+                // Grazing incidence stretches the reflected pixel footprint —
+                // single-texel fetches of small bright features come back as
+                // blocky specks at the rim. Bias toward a prefiltered mip as
+                // NoV falls; head-on mirror reflections keep mip 0.
+                float grazing = 1.0 - clamp(dot(N, V), 0.0, 1.0);
+                colorMip = min(colorMip + grazing * grazing * 2.0, maxColorMip);
+                // Prefer last frame's FINAL composited color at the hit,
+                // reprojected — it already contains reflections (multi-bounce).
+                // Falls back to the current pre-SSR scene on disocclusion or
+                // when no history exists.
+                vec2 prevUv;
+                float expectedPrevDepth;
+                bool hitMoved;
+                bool previousHitValid = GE_SssrReprojectSurface(uMotionVectors, huv, hitPos,
+                    prevUv, expectedPrevDepth, hitMoved);
+                // Bounce sample is valid only when the history texel was
+                // written by (approximately) the SAME surface: its stored
+                // depth (alpha) must match the hit's reprojected depth.
+                // Without this, camera motion reflects whatever geometry
+                // happens to sit at the reprojected pixel — smeared ghosts.
+                vec3 radiance = textureLod(uSceneColor, huv, colorMip).rgb;
+                if (sssr.multiBounce != 0 && sssr.historyValid != 0u &&
+                    all(greaterThan(prevUv, vec2(0.001))) &&
+                    all(lessThan(prevUv, vec2(0.999))))
+                {
+                    // Depth rides the alpha channel: it must be POINT-fetched.
+                    // Linear-filtering it blends across silhouettes into values
+                    // that pass validation by accident, leaking smeared blocks
+                    // of foreground/background into the bounce. Color may
+                    // filter only once the center texel validates.
+                    ivec2 prevPix = ivec2(prevUv * vec2(extent));
+                    float prevDepth = texelFetch(uPrevScene, prevPix, 0).a;
+                    float depthTol = max(0.002, abs(expectedPrevDepth) * 0.02);
+                    if (abs(prevDepth - expectedPrevDepth) <= depthTol)
+                        radiance = textureLod(uPrevScene, prevUv, 0.0).rgb;
+                }
+                // Soft firefly clamp: an emissive hit can be orders of magnitude
+                // brighter than its neighborhood; one such single-sample spike
+                // defeats the temporal variance clamp and sparkles. Compressing
+                // (not truncating) above the knee keeps highlights readable.
+                float lum = GE_Luminance(radiance);
+                const float kFireflyKnee = 4.0;
+                if (lum > kFireflyKnee)
+                    radiance *= (kFireflyKnee + sqrt(lum - kFireflyKnee)) / lum;
+                imageStore(uRadiance, pixel, vec4(radiance, confidence));
+                imageStore(uHitData, pixel, vec4(huv, tWorld, confidence));
+                return;
+            }
+        }
+        else if ((step & 3) == 3)
+        {
+            mip = min(mip + 1.0, float(hzbTop));
+        }
+        previousT = t;
+        t += baseStep * exp2(mip);
+    }
+
+    // March ended without a hit (off-screen, out of budget, or out of distance):
+    // write the probe estimate so the denoiser sees continuous radiance.
+    WriteEnvFallback(pixel);
+}

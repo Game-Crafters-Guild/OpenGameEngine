@@ -1,0 +1,90 @@
+/* Color Picker Window Styles */
+
+/* Root element - full window coverage */
+.colorpicker-window-root {
+    position: absolute;
+    left: 0;
+    top: 0;
+    width: 100%;
+    height: 100%;
+    background-color: #252526;
+}
+
+/* Main panel layout */
+.colorpicker-window-panel {
+    display: flex;
+    flex-direction: column;
+    justify-content: space-between;
+    padding: 16px;
+    background-color: #252526;
+    width: 100%;
+    height: 100%;
+}
+
+/* Picker container - takes up remaining space */
+.colorpicker-picker-container {
+    flex: 1;
+    overflow: hidden;
+}
+
+/* Button row at bottom */
+.colorpicker-button-row {
+    display: flex;
+    flex-direction: row;
+    justify-content: flex-end;
+    align-items: center;
+    gap: 12px;
+    margin-bottom: 8px;
+    margin-left: 8px;
+    margin-right: 8px;
+}
+
+/* Button group container */
+.colorpicker-button-group {
+    display: flex;
+    flex-direction: row;
+    justify-content: flex-end;
+    gap: 12px;
+}
+
+/* Shared button styles for color picker window */
+.colorpicker-btn {
+    min-width: 130px;
+    padding: 8px 20px;
+    color: #ffffff;
+    border: none;
+    border-radius: 6px;
+    font-size: 14px;
+    text-align: center;
+}
+
+/* Apply button (primary styling comes from theme) */
+.colorpicker-apply-btn {
+    min-width: 130px;
+    padding: 8px 20px;
+    color: #ffffff;
+    border: none;
+    border-radius: 6px;
+    font-size: 14px;
+    text-align: center;
+}
+
+/* Cancel button */
+.colorpicker-cancel-btn {
+    min-width: 130px;
+    padding: 8px 20px;
+    background-color: #555;
+    color: #ffffff;
+    border: none;
+    border-radius: 6px;
+    font-size: 14px;
+    text-align: center;
+}
+
+.colorpicker-cancel-btn:hover {
+    background-color: #666;
+}
+
+.colorpicker-cancel-btn:active {
+    background-color: #444;
+}

@@ -1,0 +1,24 @@
+/* Dropdown control — disabled presentation.
+   The control's layout, popup and resting/hover surface live in
+   theme/widgets.css with the rest of the .dropdown family; this file carries
+   only the state the control itself refuses input in, attached by Dropdown's
+   constructor (RequestSubtreeStyleAssetPath).
+
+   A disabled dropdown is a value to READ. It keeps the value at normal reading
+   weight — dimming the text is what made a read-only panel unreadable — and
+   drops the affordances that promise a menu the control will not open. */
+
+.dropdown:disabled > .dropdown-header {
+	background-color: transparent;
+	border-color: transparent;
+	cursor: default;
+}
+
+.dropdown:disabled .dropdown-header-label {
+	color: var(--ui_color_text_dim);
+}
+
+/* No chevron: a box with an arrow that never opens is a false affordance. */
+.dropdown:disabled .dropdown-chevron {
+	display: none;
+}

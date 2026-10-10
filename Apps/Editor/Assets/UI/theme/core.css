@@ -1,0 +1,2238 @@
+#root,
+.dock-root {
+	display: flex;
+	flex-direction: column;
+	gap: 0px;
+	padding: 0px;
+	background-color: var(--ui_color_bg_root);
+	/* Overlay chrome (torn-off frames, menus) is a sibling of .dockspace, not
+	   a descendant. Pin the editor type scale here so those surfaces inherit
+	   the same 14px as docked tabs instead of the engine initial 18px. */
+	font-size: var(--ui_font_size_base);
+	font-family: var(--ui_font_family);
+	color: var(--ui_color_text);
+}
+
+.panel {
+	display: flex;
+	flex-direction: column;
+	flex-grow: 1;
+	min-width: 0;
+	min-height: 0;
+	background-color: var(--ui_color_bg_panel);
+	border-color: var(--ui_color_border);
+	border-width: 0px;
+	border-radius: 0px;
+	padding: 0px;
+	color: var(--ui_color_text_bright);
+}
+
+/* .assets { width: 280px; } */
+/* .inspector { width: 320px; } */
+.scene {
+	flex-grow: 1;
+}
+
+.dockspace {
+	background-color: var(--ui_color_bg_tabbar);
+	border-color: var(--ui_color_border);
+	border-width: 0px;
+	border-radius: 0px;
+	font-size: var(--ui_font_size_base);
+	color: var(--ui_color_text);
+	font-family: var(--ui_font_family);
+	flex-grow: 1;
+	min-height: 0;
+}
+
+/* Generic utility: hide an element entirely.
+   The doubled `.hidden.hidden` selector is intentional — it raises the
+   specificity from (0,1,0) to (0,2,0) so this rule beats later-loaded
+   element rules like `button { display: flex }` or `.camera-bookmarks {
+   display: flex }` that would otherwise win on tie-breaking. (`!important`
+   is also supported now, but specificity is preferred where it suffices.) */
+.hidden.hidden {
+	display: none;
+}
+
+/* Shared explanatory card used by inspectors and Settings pages. */
+.editor-info-card {
+	width: 100%;
+	min-width: 0;
+	background-color: var(--ui_info_card_background, #212121);
+	border-radius: 6px;
+	padding: 8px 10px;
+	margin-top: 5px;
+	margin-bottom: 7px;
+	outline-width: var(--ui_info_card_outline_width, 1px);
+	outline-style: var(--ui_info_card_outline_style, solid);
+	outline-color: var(--ui_info_card_outline_color, #353535);
+	box-shadow: var(--ui_info_card_shadow, none);
+}
+
+/* Global off switch for explanatory cards (User Settings > UI > Info Cards).
+   Set per card rather than through a root class: a descendant selector rooted
+   at the UI root does not reach panel content here. Doubled for the same
+   tie-breaking reason as `.hidden.hidden` above, and kept distinct from
+   `hidden` so it cannot un-hide a card something else is hiding. */
+.info-card-off.info-card-off {
+	display: none;
+}
+
+.editor-info-card-text {
+	color: var(--ui_color_text_dim);
+	font-size: 13px;
+	font-style: normal;
+	overflow-wrap: break-word;
+	word-wrap: break-word;
+	word-break: break-word;
+	min-width: 0;
+}
+
+/* Editable text reports the I-beam. UIManager resolves the cursor by walking
+   up from the hovered element, so declaring it on the editors covers the whole
+   family of typed fields (TextField, FloatField, IntField, search boxes, ...)
+   whose inner node is the one actually under the pointer. */
+textinput,
+textarea {
+	cursor: text;
+}
+
+/* A field carrying a trailing suffix (TextFieldBase::SetSuffix, e.g. "px"/"%")
+   becomes the bordered box itself: the inner editor goes transparent and the faded,
+   non-interactive suffix label sits beside it on the same row, centered against the
+   value at any --value_box_height. Default (FieldEnd) lets the editor fill, pinning
+   the suffix to the trailing edge; .suffix-after-text shrinks the editor so the
+   suffix hugs the value. */
+.has-suffix {
+	flex-direction: row;
+	align-items: center;
+	border-width: 1px;
+	border-radius: 6px;
+	border-color: transparent;
+	background-color: #202020;
+	height: var(--value_box_height, 26px);
+	padding: 0 12px;
+}
+.has-suffix:focus,
+.has-suffix:focus-within {
+	border-color: rgba(255, 255, 255, 0.7);
+}
+.has-suffix > .field-editor {
+	flex-grow: 1;
+	flex-shrink: 1;
+	width: auto;
+	min-width: 0;
+	height: 100%;
+	padding: 0;
+	border-width: 0;
+	background-color: transparent;
+}
+/* AfterText: shrink the editor to its content so the suffix hugs the value. (For
+   inspector fields, widgets.css lifts its own .float-field-input min-width floor for
+   this mode — the cascade resolves by source order, so the counter lives there.) */
+.has-suffix.suffix-after-text > .field-editor {
+	flex-grow: 0;
+	min-width: 0;
+}
+
+/* Editor bottom toolbar */
+.editor-bottom-toolbar {
+	display: flex;
+	flex-direction: row;
+	align-items: center;
+	gap: 8px;
+	height: 40px;
+	padding: 2px 8px;
+	background-color: #222222;
+	border-color: var(--ui_color_border);
+	border-width: 0px;
+	border-bottom-width: 1px;
+	border-top-width: 0px;
+	flex-shrink: 0;
+	font-size: var(--ui_font_size_base);
+	font-family: var(--ui_font_family);
+	color: var(--ui_color_text);
+	justify-content: flex-start;
+	position: relative;
+}
+
+.editor-bottom-toolbar {
+	border-bottom-width: 0px;
+	border-top-width: 0px;
+	justify-content: center;
+	background-color: #1D1D1D;
+	position: relative;
+	gap: 12px;
+}
+
+/* Hide editor chrome when playing fullscreen Game View. */
+.play-fullscreen-gameview .editor-bottom-toolbar,
+.play-fullscreen-gameview .bottom-toolbar-center {
+	display: none;
+}
+
+/* Note: Layout button icon styles are now fully defined in the Layout Button section below */
+
+.bottom-toolbar-center {
+	display: flex;
+	flex-direction: row;
+	align-items: center;
+	gap: 8px;
+	position: relative;
+	padding-right: 32px;
+}
+
+#AddLayoutButton,
+.bottom-toolbar-center .plus-icon {
+	position: absolute;
+	right: 0;
+	top: 3px;
+}
+
+/* Bottom toolbar 3-zone: equal-width flex sides keep the layout presets centered; the right
+   side right-aligns the native-script build status (vertically centered via the bar's align-items). */
+.bottom-toolbar-side {
+	display: flex;
+	flex-direction: row;
+	align-items: center;
+	flex: 1 1 0;
+	min-width: 0;
+}
+.bottom-toolbar-side-right {
+	justify-content: flex-end;
+	padding-right: 8px;
+}
+.bottom-toolbar-status {
+	white-space: nowrap;
+	flex-shrink: 0;
+	font-size: 12px;
+	color: #8A8A8A;
+}
+.bottom-toolbar-status.is-building { color: #C8C8C8; }
+.bottom-toolbar-status.is-ok       { color: #5FB85F; }
+.bottom-toolbar-status.is-fail     { color: #E0A030; }
+/* Build-configuration tag on the left side of the footer. Present in every configuration, so a
+   missing tag reads as a stale or broken build rather than "this one must be Release". */
+.bottom-toolbar-build-config {
+	font-size: 12px;
+	color: #8A8A8A;
+}
+/* Vulkan validation-error badge: empty (invisible) at zero errors, red count otherwise. */
+.vk-validation-badge {
+	color: #E05050;
+	margin-right: 10px;
+}
+
+/* Icon button styles */
+.icon-button,
+button.icon-button,
+.button.icon-button {
+	width: 24px;
+	height: 24px;
+	padding: 4px;
+	min-width: 24px;
+	min-height: 24px;
+	border-width: 0;
+	border-style: none;
+	background-color: transparent;
+	position: relative;
+}
+
+.icon-button:hover,
+.icon-button:active,
+.icon-button.pressed,
+button.icon-button:hover,
+button.icon-button:active,
+button.icon-button.pressed,
+.button.icon-button:hover,
+.button.icon-button:active,
+.button.icon-button.pressed,
+.icon-button.secondary:hover,
+.icon-button.secondary:active,
+.icon-button.secondary.pressed,
+button.icon-button.secondary:hover,
+button.icon-button.secondary:active,
+button.icon-button.secondary.pressed {
+	background-color: transparent;
+	border-color: transparent;
+}
+
+/* Dragging state for toolbar icon buttons */
+.icon-button.dragging,
+button.icon-button.dragging,
+.button.icon-button.dragging {
+	opacity: 0.3;
+	cursor: grabbing;
+}
+
+/* Opens the live panel inventory from the top toolbar. */
+.menulist-icon {
+	background-image: url("editor:Icons/menulist.png");
+	background-size: contain;
+	background-repeat: no-repeat;
+	background-position: center;
+	opacity: 0.35;
+}
+
+.menulist-icon:hover,
+button.menulist-icon:hover,
+.button.menulist-icon:hover {
+	opacity: 1.0;
+	background-color: transparent !important;
+}
+
+/* Ghost element that follows cursor during drag */
+.drag-ghost,
+button.drag-ghost,
+.button.drag-ghost {
+	opacity: 0.9;
+	pointer-events: none;
+}
+
+/* Insertion indicator */
+.toolbar-insertion-indicator {
+	background-color: var(--ui_color_accent);
+	pointer-events: none;
+}
+
+/* Add layout button (plus icon) - must come after icon-button to override */
+.plus-icon {
+	background-image: url("editor:Icons/plus.png");
+	/* Keep the 32px source artwork compact inside the 24px button hit target. */
+	background-size: 16px 16px !important;
+	background-repeat: no-repeat;
+	background-position: center;
+	background-image-tint: var(--ui_icon_tint_default);
+	opacity: 1.0;
+	width: 24px;
+	height: 24px;
+	min-width: 24px;
+	min-height: 24px;
+	max-width: 24px;
+	max-height: 24px;
+	padding: 0px;
+}
+
+.plus-icon:hover {
+	background-image-tint: var(--ui_icon_tint_hover);
+	opacity: 1.0;
+	background-color: transparent !important;
+}
+
+.settings-icon {
+	background-image: url("editor:Icons/settings.png");
+	background-size: contain;
+	background-repeat: no-repeat;
+	background-position: center;
+	/* Don't use `opacity` to dim icon-only buttons: it affects the whole control
+	   (including hover/active backgrounds from generic button styles) and can look
+	   like a washed-out/white overlay. Prefer tinting the background image. */
+	background-image-tint: rgba(255, 255, 255, 0.58);
+	background-color: transparent;
+	border-width: 0px;
+	border-style: none;
+	border-color: transparent;
+	opacity: 1.0;
+}
+
+.settings-icon:hover,
+button.settings-icon:hover,
+.button.settings-icon:hover {
+	background-color: transparent;
+	background-image-tint: rgba(255, 255, 255, 1.0);
+}
+
+.xclose-icon {
+	background-image: url("editor:Icons/xclose.png");
+	background-size: 16px 16px;
+	background-repeat: no-repeat;
+	background-position: center;
+	background-image-tint: rgba(255, 255, 255, 0.58);
+	background-color: transparent;
+	border-width: 0px;
+	border-style: none;
+	border-color: transparent;
+	opacity: 1.0;
+}
+
+.xclose-icon:hover,
+button.xclose-icon:hover,
+.button.xclose-icon:hover {
+	background-color: transparent;
+	background-image-tint: rgba(255, 255, 255, 1.0);
+}
+.fullscreen-icon {
+	background-image: url("editor:Icons/fullscreen.png");
+	background-size: contain;
+	background-repeat: no-repeat;
+	background-position: center;
+	opacity: 0.35;
+}
+
+.fullscreen-icon:hover,
+button.fullscreen-icon:hover,
+.button.fullscreen-icon:hover {
+	opacity: 1.0;
+	background-color: transparent !important;
+}
+
+/* Active state for the play-fullscreen toggle in the top toolbar. */
+.fullscreen-icon.pressed,
+button.fullscreen-icon.pressed,
+.button.fullscreen-icon.pressed {
+	opacity: 1.0;
+	background-color: transparent !important;
+}
+
+.stop-icon {
+	background-image: url("editor:Icons/stop.png");
+	background-size: contain;
+	background-repeat: no-repeat;
+	background-position: center;
+	opacity: 0.35;
+}
+
+.stop-icon:hover,
+button.stop-icon:hover,
+.button.stop-icon:hover {
+	opacity: 1.0;
+	background-color: transparent !important;
+}
+
+.play-icon {
+	background-image: url("editor:Icons/play.png");
+	background-size: contain;
+	background-repeat: no-repeat;
+	background-position: center;
+	opacity: 0.35;
+}
+
+.play-backward-icon {
+	background-image: url("editor:Icons/play-backward.png");
+	background-size: contain;
+	background-repeat: no-repeat;
+	background-position: center;
+	opacity: 0.35;
+}
+
+.pause-icon {
+	background-image: url("editor:Icons/pause.png");
+	background-size: contain;
+	background-repeat: no-repeat;
+	background-position: center;
+	opacity: 0.35;
+}
+
+.play-icon:hover,
+button.play-icon:hover,
+.button.play-icon:hover,
+.play-icon:active,
+button.play-icon:active,
+.button.play-icon:active,
+.play-icon.pressed,
+button.play-icon.pressed,
+.button.play-icon.pressed {
+	opacity: 1.0;
+	background-image: url("editor:Icons/playactive.png");
+	background-color: transparent !important;
+}
+
+.play-backward-icon:hover,
+button.play-backward-icon:hover,
+.button.play-backward-icon:hover,
+.play-backward-icon:active,
+button.play-backward-icon:active,
+.button.play-backward-icon:active,
+.play-backward-icon.pressed,
+button.play-backward-icon.pressed,
+.button.play-backward-icon.pressed {
+	opacity: 1.0;
+	background-image: url("editor:Icons/playbackwardactive.png");
+	background-color: transparent !important;
+}
+
+.pause-icon:hover,
+button.pause-icon:hover,
+.button.pause-icon:hover,
+.pause-icon:active,
+button.pause-icon:active,
+.button.pause-icon:active {
+	opacity: 1.0;
+	background-image: url("editor:Icons/pause_on.png");
+	background-color: transparent !important;
+}
+
+.pause-icon.pressed,
+button.pause-icon.pressed,
+.button.pause-icon.pressed {
+	opacity: 1.0;
+	background-image: url("editor:Icons/pause_on.png");
+	background-color: transparent !important;
+}
+
+.node-icon {
+	background-image: url("editor:Icons/node.png");
+	background-size: contain;
+	background-repeat: no-repeat;
+	background-position: center;
+	background-image-tint: rgba(255, 255, 255, 0.58);
+	background-color: transparent;
+	border-width: 0px;
+	border-style: none;
+	border-color: transparent;
+	opacity: 1.0;
+}
+
+.node-icon:hover,
+button.node-icon:hover,
+.button.node-icon:hover {
+	background-color: transparent;
+	background-image-tint: rgba(255, 255, 255, 1.0);
+}
+
+.loop-icon {
+	background-image: url("editor:Icons/looptime.png");
+	background-size: contain;
+	background-repeat: no-repeat;
+	background-position: center;
+	background-color: transparent !important;
+	margin-left: 8px;
+	opacity: 0.35;
+}
+
+.loop-icon:hover,
+button.loop-icon:hover,
+.button.loop-icon:hover,
+.loop-icon:active,
+button.loop-icon:active,
+.button.loop-icon:active,
+.loop-icon.pressed,
+button.loop-icon.pressed,
+.button.loop-icon.pressed,
+.loop-icon.active,
+button.loop-icon.active,
+.button.loop-icon.active,
+button.loop-icon.secondary.active,
+.button.loop-icon.secondary.active {
+	opacity: 1.0;
+	background-color: transparent !important;
+	border-color: transparent !important;
+	background-image: url("editor:Icons/looptime.png");
+}
+
+.sync-playhead-icon {
+	background-image: url("editor:Icons/sync-playhead.png");
+	background-size: contain;
+	background-repeat: no-repeat;
+	background-position: center;
+	background-color: transparent !important;
+	opacity: 0.35;
+}
+
+.sync-playhead-icon:hover,
+button.sync-playhead-icon:hover,
+.button.sync-playhead-icon:hover,
+.sync-playhead-icon:active,
+button.sync-playhead-icon:active,
+.button.sync-playhead-icon:active,
+.sync-playhead-icon.pressed,
+button.sync-playhead-icon.pressed,
+.button.sync-playhead-icon.pressed,
+.sync-playhead-icon.active,
+button.sync-playhead-icon.active,
+.button.sync-playhead-icon.active,
+button.sync-playhead-icon.secondary.active,
+.button.sync-playhead-icon.secondary.active {
+	opacity: 1.0;
+	background-color: transparent !important;
+	border-color: transparent !important;
+}
+
+.record-icon {
+	background-image: url("editor:Icons/record.png");
+	background-size: contain;
+	background-repeat: no-repeat;
+	background-position: center;
+	background-color: transparent !important;
+	opacity: 0.35;
+}
+
+.record-icon:hover,
+button.record-icon:hover,
+.button.record-icon:hover,
+.record-icon:active,
+button.record-icon:active,
+.button.record-icon:active,
+.record-icon.pressed,
+button.record-icon.pressed,
+.button.record-icon.pressed {
+	opacity: 1.0;
+	background-color: transparent !important;
+	border-color: transparent !important;
+}
+
+/* Recording state: use recording.png (red icon) */
+.record-icon.active,
+button.record-icon.active,
+.button.record-icon.active,
+button.record-icon.secondary.active,
+.button.record-icon.secondary.active {
+	opacity: 1.0;
+	background-color: transparent !important;
+	border-color: transparent !important;
+	background-image: url("editor:Icons/recording.png");
+}
+
+/* VHS transport uses the familiar red VCR record dot even while idle. */
+.toolbar-record-icon.vhs-record-red,
+button.toolbar-record-icon.vhs-record-red,
+.button.toolbar-record-icon.vhs-record-red {
+	opacity: 1.0;
+	background-color: transparent !important;
+	background-image: url("editor:Icons/recording_on_button.png");
+	background-position: center;
+	background-repeat: no-repeat;
+	background-size: contain;
+}
+
+/* Rewind/fast-forward controls match the compact transport-button treatment. */
+.vhs-transport-seek-button {
+	background-color: transparent;
+	background-repeat: no-repeat;
+	background-position: center;
+	background-size: 16px 16px;
+	border-width: 0;
+	border-style: none;
+	border-color: transparent;
+	border-radius: 4px;
+	height: 24px;
+	min-height: 24px;
+	padding: 4px;
+}
+
+.vhs-rewind-icon {
+	background-image: url("editor:Icons/rewind.png");
+	opacity: 0.35;
+}
+
+.vhs-fast-forward-icon {
+	background-image: url("editor:Icons/fastforward.png");
+	opacity: 0.35;
+}
+
+.vhs-transport-seek-button:hover {
+	background-color: transparent;
+	border-color: transparent;
+	opacity: 1.0;
+}
+
+.vhs-transport-seek-button:active,
+.vhs-transport-seek-button.active,
+.vhs-transport-seek-button.pressed {
+	background-color: transparent;
+	border-color: transparent;
+	opacity: 1.0;
+}
+
+.save-icon {
+	background-image: url("editor:Icons/save.png");
+	background-size: contain;
+	background-repeat: no-repeat;
+	background-position: center;
+	opacity: 0.35;
+}
+
+.save-icon:hover,
+button.save-icon:hover,
+.button.save-icon:hover {
+	opacity: 1.0;
+	background-color: transparent !important;
+}
+
+.save-dirty-indicator {
+	position: absolute;
+	left: 100%;
+	top: -1px;
+	font-size: 12px;
+	font-weight: 500;
+	color: var(--ui_color_text);
+	pointer-events: none;
+}
+
+/* Save button: no visual change when scene is dirty */
+
+/* ======================================
+   Animation editor icons
+   Same pattern as .play-icon / .save-icon: 35% opacity idle, 100% on hover.
+   ====================================== */
+
+.copy-icon {
+	background-image: url("editor:Icons/copy.png");
+	background-size: contain;
+	background-repeat: no-repeat;
+	background-position: center;
+	opacity: 0.35;
+}
+
+.paste-icon {
+	background-image: url("editor:Icons/paste.png");
+	background-size: contain;
+	background-repeat: no-repeat;
+	background-position: center;
+	opacity: 0.35;
+}
+
+.eye-icon {
+	background-image: url("editor:Icons/eye.png");
+	background-size: contain;
+	background-repeat: no-repeat;
+	background-position: center;
+	opacity: 0.35;
+}
+
+.fold-icon {
+	background-image: url("editor:Icons/fold.png");
+	background-size: contain;
+	background-repeat: no-repeat;
+	background-position: center;
+	opacity: 0.35;
+}
+
+.expand-outline-icon {
+	background-image: url("editor:Icons/expand_outline.png");
+	background-size: contain;
+	background-repeat: no-repeat;
+	background-position: center;
+	opacity: 0.35;
+}
+
+.contract-outline-icon {
+	background-image: url("editor:Icons/contract_outline.png");
+	background-size: contain;
+	background-repeat: no-repeat;
+	background-position: center;
+	opacity: 0.35;
+}
+
+.folder-open-icon {
+	background-image: url("editor:Icons/folder_open.png");
+	background-size: contain;
+	background-repeat: no-repeat;
+	background-position: center;
+	opacity: 0.35;
+}
+
+.frame-all-icon {
+	background-image: url("editor:Icons/frame_all.png");
+	background-size: contain;
+	background-repeat: no-repeat;
+	background-position: center;
+	opacity: 0.35;
+}
+
+.frame-selected-curves-icon {
+	background-image: url("editor:Icons/frame selected curves.png");
+	background-size: contain;
+	background-repeat: no-repeat;
+	background-position: center;
+	opacity: 0.35;
+}
+
+.fit-height-icon {
+	background-image: url("editor:Icons/fit_heigth.png");
+	background-size: contain;
+	background-repeat: no-repeat;
+	background-position: center;
+	opacity: 0.35;
+}
+
+.snap-time-icon {
+	background-image: url("editor:Icons/snap value.png");
+	background-size: contain;
+	background-repeat: no-repeat;
+	background-position: center;
+	opacity: 0.35;
+}
+
+.snap-value-icon {
+	background-image: url("editor:Icons/snap time.png");
+	background-size: contain;
+	background-repeat: no-repeat;
+	background-position: center;
+	opacity: 0.35;
+}
+
+.linear-curve-icon {
+	background-image: url("editor:Icons/linear_curve.png");
+	background-size: contain;
+	background-repeat: no-repeat;
+	background-position: center;
+	opacity: 0.35;
+}
+
+.stepped-curve-icon {
+	background-image: url("editor:Icons/stepped_curve.png");
+	background-size: contain;
+	background-repeat: no-repeat;
+	background-position: center;
+	opacity: 0.35;
+}
+
+.spline-curve-icon {
+	background-image: url("editor:Icons/spline_curve.png");
+	background-size: contain;
+	background-repeat: no-repeat;
+	background-position: center;
+	opacity: 0.35;
+}
+
+.smooth-lowpass-icon {
+	background-image: url("editor:Icons/simplyfy_curve.png");
+	background-size: contain;
+	background-repeat: no-repeat;
+	background-position: center;
+	opacity: 0.35;
+}
+
+.smooth-peak-icon {
+	background-image: url("editor:Icons/smooth_peak.png");
+	background-size: contain;
+	background-repeat: no-repeat;
+	background-position: center;
+	opacity: 0.35;
+}
+
+.simplify-curve-icon {
+	background-image: url("editor:Icons/smooth_curve.png");
+	background-size: contain;
+	background-repeat: no-repeat;
+	background-position: center;
+	opacity: 0.35;
+}
+
+.draw-curve-icon {
+	background-image: url("editor:Icons/draw_curve.png");
+	background-size: contain;
+	background-repeat: no-repeat;
+	background-position: center;
+	opacity: 0.35;
+}
+
+.retime-icon {
+	background-image: url("editor:Icons/retime.png");
+	background-size: contain;
+	background-repeat: no-repeat;
+	background-position: center;
+	opacity: 0.35;
+}
+
+.draw-curve-icon {
+	background-image: url("editor:Icons/draw_curve.png");
+	background-size: contain;
+	background-repeat: no-repeat;
+	background-position: center;
+	opacity: 0.35;
+}
+
+.draw-curve-icon:hover,
+button.draw-curve-icon:hover,
+.button.draw-curve-icon:hover {
+	opacity: 1.0;
+	background-color: transparent !important;
+}
+
+.ease-ease-icon {
+	background-image: url("editor:Icons/ease_ease.png");
+	background-size: contain;
+	background-repeat: no-repeat;
+	background-position: center;
+	opacity: 0.35;
+}
+
+.ease-out-icon {
+	background-image: url("editor:Icons/ease_out.png");
+	background-size: contain;
+	background-repeat: no-repeat;
+	background-position: center;
+	opacity: 0.35;
+}
+
+.ease-in-icon {
+	background-image: url("editor:Icons/easy_in.png");
+	background-size: contain;
+	background-repeat: no-repeat;
+	background-position: center;
+	opacity: 0.35;
+}
+
+.toggle-keytool-icon {
+	background-image: url("editor:Icons/toggle_keytool.png");
+	background-size: contain;
+	background-repeat: no-repeat;
+	background-position: center;
+	opacity: 0.35;
+}
+
+.add-key-marker-icon {
+	background-image: url("editor:Icons/add_key_marker.png");
+	background-size: contain;
+	background-repeat: no-repeat;
+	background-position: center;
+	opacity: 0.35;
+}
+
+.add-noise-icon {
+	background-image: url("editor:Icons/add_noise.png");
+	background-size: contain;
+	background-repeat: no-repeat;
+	background-position: center;
+	opacity: 0.35;
+}
+
+.euler-filter-icon {
+	background-image: url("editor:Icons/euler_filter.png");
+	background-size: contain;
+	background-repeat: no-repeat;
+	background-position: center;
+	opacity: 0.35;
+}
+
+.lattice-icon {
+	background-image: url("editor:Icons/lattice.png");
+	background-size: contain;
+	background-repeat: no-repeat;
+	background-position: center;
+	opacity: 0.35;
+}
+
+.bone-icon {
+	background-image: url("editor:Icons/bone_icon.png");
+	background-size: contain;
+	background-repeat: no-repeat;
+	background-position: center;
+	opacity: 0.35;
+}
+
+.break-tangents-icon {
+	background-image: url("editor:Icons/break_tangent.png");
+	background-size: contain;
+	background-repeat: no-repeat;
+	background-position: center;
+	opacity: 0.35;
+}
+
+.unify-tangents-icon {
+	background-image: url("editor:Icons/unify_tangent.png");
+	background-size: contain;
+	background-repeat: no-repeat;
+	background-position: center;
+	opacity: 0.35;
+}
+
+/* Hidden until proper icon art lands; previously used star.png as a placeholder. */
+.stacked-curves-icon,
+button.stacked-curves-icon,
+.button.stacked-curves-icon,
+.normalized-curves-icon,
+button.normalized-curves-icon,
+.button.normalized-curves-icon,
+.buffer-snapshot-icon,
+button.buffer-snapshot-icon,
+.button.buffer-snapshot-icon,
+.swap-buffer-icon {
+	display: none;
+}
+
+.frame-playback-range-icon {
+	background-image: url("editor:Icons/FramePlaybackRange.png");
+	background-size: contain;
+	background-repeat: no-repeat;
+	background-position: center;
+	opacity: 0.35;
+}
+
+.star-icon {
+	background-image: url("editor:Icons/star.png");
+	background-size: contain;
+	background-repeat: no-repeat;
+	background-position: center;
+	opacity: 0.35;
+}
+
+.copy-icon:hover,
+.paste-icon:hover,
+.eye-icon:hover,
+.fold-icon:hover,
+.expand-outline-icon:hover,
+.contract-outline-icon:hover,
+.folder-open-icon:hover,
+.frame-all-icon:hover,
+.frame-selected-curves-icon:hover,
+.fit-height-icon:hover,
+.snap-time-icon:hover,
+.snap-value-icon:hover,
+.linear-curve-icon:hover,
+.stepped-curve-icon:hover,
+.spline-curve-icon:hover,
+.smooth-lowpass-icon:hover,
+.smooth-peak-icon:hover,
+.simplify-curve-icon:hover,
+.draw-curve-icon:hover,
+.ease-ease-icon:hover,
+.ease-out-icon:hover,
+.ease-in-icon:hover,
+.toggle-keytool-icon:hover,
+.add-key-marker-icon:hover,
+.add-noise-icon:hover,
+.euler-filter-icon:hover,
+.lattice-icon:hover,
+.bone-icon:hover,
+.star-icon:hover,
+button.copy-icon:hover,
+button.paste-icon:hover,
+button.eye-icon:hover,
+button.fold-icon:hover,
+button.expand-outline-icon:hover,
+button.contract-outline-icon:hover,
+button.folder-open-icon:hover,
+button.frame-all-icon:hover,
+button.frame-selected-curves-icon:hover,
+button.fit-height-icon:hover,
+button.snap-time-icon:hover,
+button.snap-value-icon:hover,
+button.linear-curve-icon:hover,
+button.stepped-curve-icon:hover,
+button.spline-curve-icon:hover,
+button.smooth-lowpass-icon:hover,
+button.smooth-peak-icon:hover,
+button.simplify-curve-icon:hover,
+button.draw-curve-icon:hover,
+button.ease-ease-icon:hover,
+button.ease-out-icon:hover,
+button.ease-in-icon:hover,
+button.toggle-keytool-icon:hover,
+button.add-key-marker-icon:hover,
+button.add-noise-icon:hover,
+button.euler-filter-icon:hover,
+button.lattice-icon:hover,
+button.bone-icon:hover,
+button.star-icon:hover {
+	opacity: 1.0;
+	background-color: transparent !important;
+}
+
+.box-icon {
+	background-image: url("editor:Icons/box.png");
+	background-size: contain;
+	background-repeat: no-repeat;
+	background-position: center;
+	opacity: 0.35;
+}
+
+.box-icon:hover,
+button.box-icon:hover,
+.button.box-icon:hover {
+	opacity: 1.0;
+	background-color: transparent !important;
+}
+
+.computer-icon {
+	background-image: url("editor:Icons/computer.png");
+	background-size: contain;
+	background-repeat: no-repeat;
+	background-position: center;
+	opacity: 0.35;
+}
+
+.computer-icon:hover,
+button.computer-icon:hover,
+.button.computer-icon:hover {
+	opacity: 1.0;
+	background-color: transparent !important;
+}
+
+.link-icon {
+	background-image: url("editor:Icons/link.png");
+	background-size: contain;
+	background-repeat: no-repeat;
+	background-position: center;
+	opacity: 0.35;
+}
+
+.link-icon:hover,
+button.link-icon:hover,
+.button.link-icon:hover {
+	opacity: 1.0;
+	background-color: transparent !important;
+}
+
+.pin-icon {
+	background-image: url("editor:Icons/pin.png");
+	background-size: contain;
+	background-repeat: no-repeat;
+	background-position: center;
+	opacity: 0.35;
+}
+
+.pin-icon:hover,
+button.pin-icon:hover,
+.button.pin-icon:hover {
+	opacity: 1.0;
+	background-color: transparent !important;
+}
+
+.info-icon {
+	background-image: url("editor:Icons/info.png");
+	background-size: contain;
+	background-repeat: no-repeat;
+	background-position: center;
+	opacity: 0.35;
+}
+
+.info-icon:hover,
+button.info-icon:hover,
+.button.info-icon:hover {
+	opacity: 1.0;
+	background-color: transparent !important;
+}
+
+.game-controller-icon {
+	background-image: url("editor:Icons/game-controller.png");
+	background-size: contain;
+	background-repeat: no-repeat;
+	background-position: center;
+	opacity: 0.35;
+}
+
+.game-controller-icon:hover,
+button.game-controller-icon:hover,
+.button.game-controller-icon:hover {
+	opacity: 1.0;
+	background-color: transparent !important;
+}
+
+.mixer-icon {
+	background-image: url("editor:Icons/mixer.png");
+	background-size: contain;
+	background-repeat: no-repeat;
+	background-position: center;
+	opacity: 0.35;
+}
+
+.mixer-icon:hover,
+button.mixer-icon:hover,
+.button.mixer-icon:hover {
+	opacity: 1.0;
+	background-color: transparent !important;
+}
+
+.brush-icon {
+	background-image: url("editor:Icons/brush.png");
+	background-size: contain;
+	background-repeat: no-repeat;
+	background-position: center;
+	opacity: 0.35;
+}
+
+.brush-icon:hover,
+button.brush-icon:hover,
+.button.brush-icon:hover {
+	opacity: 1.0;
+	background-color: transparent !important;
+}
+
+.eraser-icon {
+	background-image: url("editor:Icons/eraser.png");
+	background-size: contain;
+	background-repeat: no-repeat;
+	background-position: center;
+	opacity: 0.35;
+}
+
+.eraser-icon:hover,
+button.eraser-icon:hover,
+.button.eraser-icon:hover {
+	opacity: 1.0;
+	background-color: transparent !important;
+}
+
+.gizmo-rotate-icon {
+	background-image: url("editor:Icons/GizmoRotate.png");
+	background-size: contain;
+	background-repeat: no-repeat;
+	background-position: center;
+	opacity: 0.35;
+}
+
+.gizmo-rotate-icon:hover,
+button.gizmo-rotate-icon:hover,
+.button.gizmo-rotate-icon:hover {
+	opacity: 1.0;
+	background-color: transparent !important;
+}
+
+.eyedropper-icon {
+	background-image: url("editor:Icons/colorpicker.png");
+	background-size: contain;
+	background-repeat: no-repeat;
+	background-position: center;
+	opacity: 0.35;
+}
+
+.eyedropper-icon:hover,
+button.eyedropper-icon:hover,
+.button.eyedropper-icon:hover {
+	opacity: 1.0;
+	background-color: transparent !important;
+}
+
+.arrow-up-icon {
+	background-image: url("editor:Icons/ArrowUp.png");
+	background-size: contain;
+	background-repeat: no-repeat;
+	background-position: center;
+	opacity: 0.35;
+}
+
+.arrow-up-icon:hover,
+button.arrow-up-icon:hover,
+.button.arrow-up-icon:hover {
+	opacity: 1.0;
+	background-color: transparent !important;
+}
+
+.arrow-down-icon {
+	background-image: url("editor:Icons/ArrowDown.png");
+	background-size: contain;
+	background-repeat: no-repeat;
+	background-position: center;
+	opacity: 0.35;
+}
+
+.arrow-down-icon:hover,
+button.arrow-down-icon:hover,
+.button.arrow-down-icon:hover {
+	opacity: 1.0;
+	background-color: transparent !important;
+}
+
+.trash-icon {
+	background-image: url("editor:Icons/trash.png");
+	background-size: contain;
+	background-repeat: no-repeat;
+	background-position: center;
+	opacity: 0.35;
+}
+
+.trash-icon:hover,
+button.trash-icon:hover,
+.button.trash-icon:hover {
+	opacity: 1.0;
+	background-color: transparent !important;
+}
+
+.stats-icon {
+	background-image: url("editor:Icons/stats.png");
+	background-size: contain;
+	background-repeat: no-repeat;
+	background-position: center;
+	opacity: 0.35;
+}
+
+.stats-icon:hover,
+button.stats-icon:hover,
+.button.stats-icon:hover {
+	opacity: 1.0;
+	background-color: transparent !important;
+}
+
+.pulse-icon {
+	background-image: url("editor:Icons/pulse.png");
+	background-size: contain;
+	background-repeat: no-repeat;
+	background-position: center;
+	opacity: 0.35;
+}
+
+.pulse-icon:hover,
+button.pulse-icon:hover,
+.button.pulse-icon:hover {
+	opacity: 1.0;
+	background-color: transparent !important;
+}
+
+.pie-chart-icon {
+	background-image: url("editor:Icons/pie-chart.png");
+	background-size: contain;
+	background-repeat: no-repeat;
+	background-position: center;
+	opacity: 0.35;
+}
+
+.pie-chart-icon:hover,
+button.pie-chart-icon:hover,
+.button.pie-chart-icon:hover {
+	opacity: 1.0;
+	background-color: transparent !important;
+}
+
+.film-icon {
+	background-image: url("editor:Icons/film.png");
+	background-size: contain;
+	background-repeat: no-repeat;
+	background-position: center;
+	opacity: 0.35;
+}
+
+.film-icon:hover,
+button.film-icon:hover,
+.button.film-icon:hover {
+	opacity: 1.0;
+	background-color: transparent !important;
+}
+
+.alarm-icon {
+	background-image: url("editor:Icons/alarm.png");
+	background-size: contain;
+	background-repeat: no-repeat;
+	background-position: center;
+	opacity: 0.35;
+}
+
+.alarm-icon:hover,
+button.alarm-icon:hover,
+.button.alarm-icon:hover {
+	opacity: 1.0;
+	background-color: transparent !important;
+}
+
+.alert-circle-icon {
+	background-image: url("editor:Icons/alert-circle.png");
+	background-size: contain;
+	background-repeat: no-repeat;
+	background-position: center;
+	opacity: 0.35;
+}
+
+.alert-circle-icon:hover,
+button.alert-circle-icon:hover,
+.button.alert-circle-icon:hover {
+	opacity: 1.0;
+	background-color: transparent !important;
+}
+
+.hardware-chip-icon {
+	background-image: url("editor:Icons/hardware-chip.png");
+	background-size: contain;
+	background-repeat: no-repeat;
+	background-position: center;
+	opacity: 0.35;
+}
+
+.hardware-chip-icon:hover,
+button.hardware-chip-icon:hover,
+.button.hardware-chip-icon:hover {
+	opacity: 1.0;
+	background-color: transparent !important;
+}
+
+.timer-icon {
+	background-image: url("editor:Icons/timer.png");
+	background-size: contain;
+	background-repeat: no-repeat;
+	background-position: center;
+	opacity: 0.35;
+}
+
+.timer-icon:hover,
+button.timer-icon:hover,
+.button.timer-icon:hover {
+	opacity: 1.0;
+	background-color: transparent !important;
+}
+
+.checkmark-icon {
+	background-image: url("editor:Icons/todolist.png");
+	background-size: contain;
+	background-repeat: no-repeat;
+	background-position: center;
+	opacity: 0.45;
+	border-width: 0px;
+	border-radius: 4px;
+	padding: 0;
+	background-color: transparent;
+	background-image-tint: rgba(255, 255, 255, 0.84);
+}
+
+.checkmark-icon:hover,
+button.checkmark-icon:hover,
+.button.checkmark-icon:hover {
+	opacity: 1.0;
+	background-color: transparent;
+	background-image-tint: rgba(255, 255, 255, 1.0);
+}
+
+.checkmark-circle-icon {
+	background-image: url("editor:Icons/checkmark-circle.png");
+	background-size: contain;
+	background-repeat: no-repeat;
+	background-position: center;
+	opacity: 0.55;
+	border-width: 0px;
+	border-radius: 4px;
+	padding: 0;
+	background-color: transparent;
+}
+
+.checkmark-circle-icon:hover,
+button.checkmark-circle-icon:hover,
+.button.checkmark-circle-icon:hover {
+	opacity: 1.0;
+	background-color: transparent;
+}
+
+.script-icon {
+	background-image: url("editor:Icons/log.png");
+	background-size: contain;
+	background-repeat: no-repeat;
+	background-position: center;
+	background-image-tint: rgba(255, 255, 255, 0.58);
+	background-color: transparent;
+	border-width: 0px;
+	border-style: none;
+	border-color: transparent;
+	opacity: 1.0;
+}
+
+.script-icon:hover,
+button.script-icon:hover,
+.button.script-icon:hover {
+	background-color: transparent;
+	background-image-tint: rgba(255, 255, 255, 1.0);
+}
+
+.book-icon {
+	background-image: url("editor:Icons/book.png");
+	background-size: contain;
+	background-repeat: no-repeat;
+	background-position: center;
+	background-image-tint: rgba(255, 255, 255, 0.58);
+	background-color: transparent;
+	border-width: 0px;
+	border-style: none;
+	border-color: transparent;
+	opacity: 1.0;
+}
+
+.book-icon:hover,
+button.book-icon:hover,
+.button.book-icon:hover {
+	background-color: transparent;
+	background-image-tint: rgba(255, 255, 255, 1.0);
+}
+
+.undo-icon {
+	background-image: url("editor:Icons/undo.png");
+	background-size: contain;
+	background-repeat: no-repeat;
+	background-position: center;
+	background-image-tint: rgba(255, 255, 255, 0.58);
+	background-color: transparent;
+	border-width: 0px;
+	border-style: none;
+	border-color: transparent;
+	opacity: 1.0;
+}
+
+.undo-icon:hover,
+button.undo-icon:hover,
+.button.undo-icon:hover {
+	background-color: transparent;
+	background-image-tint: rgba(255, 255, 255, 1.0);
+}
+
+/* Grid and List view toggle buttons - matching top toolbar button styling */
+.grid-view-icon {
+	background-image: url("editor:Icons/grid.png");
+	background-size: contain;
+	background-repeat: no-repeat;
+	background-position: center;
+	background-image-tint: #595959;
+	opacity: 1.0;
+	border-width: 0px;
+	border-style: none;
+	border-color: transparent;
+	outline: none;
+}
+
+.grid-view-icon:hover,
+button.grid-view-icon:hover,
+.button.grid-view-icon:hover {
+	background-image-tint: #CCCCCC;
+	opacity: 1.0;
+	background-color: transparent !important;
+	border-width: 0px;
+	border-style: none;
+	border-color: transparent;
+	outline: none;
+}
+
+.grid-view-icon:focus,
+button.grid-view-icon:focus,
+.button.grid-view-icon:focus {
+	outline: none;
+	border-width: 0px;
+}
+
+.grid-view-icon.active,
+button.grid-view-icon.active,
+.button.grid-view-icon.active {
+	background-image-tint: #808080;
+	opacity: 1.0;
+	border-width: 0px;
+	border-style: none;
+	border-color: transparent;
+	outline: none;
+}
+
+.list-view-icon {
+	background-image: url("editor:Icons/column-horizontal.png");
+	background-size: contain;
+	background-repeat: no-repeat;
+	background-position: center;
+	background-image-tint: #595959;
+	opacity: 1.0;
+	border-width: 0px;
+	border-style: none;
+	border-color: transparent;
+	outline: none;
+}
+
+.list-view-icon:hover,
+button.list-view-icon:hover,
+.button.list-view-icon:hover {
+	background-image-tint: #CCCCCC;
+	opacity: 1.0;
+	background-color: transparent !important;
+	border-width: 0px;
+	border-style: none;
+	border-color: transparent;
+	outline: none;
+}
+
+.list-view-icon:focus,
+button.list-view-icon:focus,
+.button.list-view-icon:focus {
+	outline: none;
+	border-width: 0px;
+}
+
+.list-view-icon.active,
+button.list-view-icon.active,
+.button.list-view-icon.active {
+	background-image-tint: #808080;
+	opacity: 1.0;
+	border-width: 0px;
+	border-style: none;
+	border-color: transparent;
+	outline: none;
+}
+
+/* Assets panel right pane container */
+.assets-right-pane {
+	position: relative;
+	background-color: #222222;
+}
+
+.assets-view-toggle-container {
+	position: absolute;
+	bottom: 20px;
+	right: 24px;
+	display: flex;
+	flex-direction: row;
+	gap: 4px;
+	z-index: 100;
+}
+
+.assets-view-toggle-toolbar {
+	/* Pinned to the bottom of .assets-right-pane so grid/list relayout during zoom does not shift this bar. */
+	position: absolute;
+	left: 0px;
+	right: 0px;
+	bottom: 0px;
+	z-index: 2;
+	width: 100%;
+	height: 28px;
+	min-height: 28px;
+	max-height: 28px;
+	display: none;
+	flex-direction: row;
+	align-items: center;
+	justify-content: flex-start;
+	gap: 8px;
+	padding: 0px 12px;
+	background-color: #272727;
+	border-top-width: 1px;
+	border-top-color: #2A2A2A;
+}
+
+.assets-view-toggle-toolbar-spacer {
+	flex-grow: 1;
+	flex-shrink: 1;
+	min-width: 8px;
+}
+
+.assets-view-toggle-toolbar-search {
+	display: flex;
+	flex-direction: row;
+	align-items: center;
+	flex-grow: 0;
+	flex-shrink: 0;
+	min-width: 0;
+}
+
+.assets-view-toggle-toolbar-right {
+	display: flex;
+	flex-direction: row;
+	align-items: center;
+	gap: 4px;
+}
+
+.assets-toolbar-zoom-slider {
+	margin-left: 4px;
+}
+
+/* Match top toolbar icon buttons: no background fill even when active */
+.assets-view-toggle-container .icon-button.active,
+.assets-view-toggle-container button.icon-button.active,
+.assets-view-toggle-container .button.icon-button.active {
+	background-color: transparent;
+	border-color: transparent;
+	border-width: 0px;
+}
+
+.assets-view-toggle-toolbar .icon-button.active,
+.assets-view-toggle-toolbar button.icon-button.active,
+.assets-view-toggle-toolbar .button.icon-button.active {
+	background-color: transparent;
+	border-color: transparent;
+	border-width: 0px;
+}
+
+.assets-view-toggle-toolbar .icon-button,
+.assets-view-toggle-toolbar button.icon-button,
+.assets-view-toggle-toolbar .button.icon-button {
+	width: 16px;
+	height: 16px;
+	min-width: 16px;
+	min-height: 16px;
+	padding: 0px;
+}
+
+.assets-view-toggle-toolbar .panel-search-bar {
+	position: relative;
+	left: unset;
+	right: unset;
+	bottom: unset;
+	top: unset;
+	flex-grow: 0;
+	flex-shrink: 0;
+	align-self: center;
+	height: 22px;
+	width: 320px;
+	margin-left: auto;
+}
+
+.assets-view-toggle-toolbar .panel-search-field {
+	width: 100%;
+	height: 100%;
+}
+
+/* ==========================================
+   Layout Button Styles - Isolated Styling
+   These buttons have unique colors independent of other UI elements
+   ========================================== */
+
+/* Base layout button structure */
+.layout-button,
+button.layout-button,
+.button.layout-button {
+	display: flex;
+	flex-direction: row;
+	align-items: center;
+	gap: 8px;
+	padding: 4px 12px;
+	height: 28px;
+	min-height: 28px;
+	border-radius: 4px;
+	border-width: 1px;
+	border-style: solid;
+	font-size: var(--ui_font_size_base);
+	cursor: pointer;
+	outline: none;
+	
+	/* Icon background */
+	background-size: 20px 20px;
+	background-repeat: no-repeat;
+	background-position: 8px 50%;
+}
+
+/* State Classes - no conflicts, no !important needed */
+button.layout-button.layout-button-base,
+.layout-button.layout-button-base {
+	background-color: #4D4D4D;
+	border-color: #3D3D3D;
+	color: #ffffff;
+}
+
+button.layout-button.layout-button-hover,
+.layout-button.layout-button-hover {
+	background-color: #242424;
+	border-color: #1a1a1a;
+	color: #ffffff;
+}
+
+button.layout-button.layout-button-pressed,
+.layout-button.layout-button-pressed {
+	background-color: #2a3a4a;
+	border-color: #1a2a3a;
+}
+
+button.layout-button.layout-button-selected,
+.layout-button.layout-button-selected {
+	background-color: #242424;
+	border-color: #1a1a1a;
+	color: #ffffff;
+}
+
+/* Default state uses base colors */
+button.layout-button,
+.layout-button {
+	background-color: #4D4D4D;
+	border-color: #3D3D3D;
+	color: #ffffff;
+}
+
+.layout-button .button-text {
+	margin-left: 28px;
+	color: inherit;
+	font-size: inherit;
+	pointer-events: none;
+}
+
+/* Layout icon images - scoped to layout buttons only */
+.layout-button.layout-left-icon { 
+	background-image: url("editor:Icons/layout-left.png"); 
+	opacity: 0.5;
+}
+.layout-button.layout-right-icon { 
+	background-image: url("editor:Icons/layout-right.png"); 
+	opacity: 0.5;
+}
+.layout-button.layout-3split-icon { 
+	background-image: url("editor:Icons/layout3split.png"); 
+	opacity: 0.5;
+}
+.layout-button.layout-top-icon { 
+	background-image: url("editor:Icons/layouttop.png"); 
+	opacity: 0.5;
+}
+
+/* Pseudo-class state overrides (automatic hover/active) */
+button.layout-button:hover,
+.layout-button:hover {
+	background-color: #242424;
+	border-color: #1a1a1a;
+	color: #ffffff;
+}
+
+button.layout-button:active,
+button.layout-button.pressed,
+.layout-button:active,
+.layout-button.pressed {
+	background-color: #242424;
+	border-color: #1a1a1a;
+}
+
+button.layout-button:focus,
+.layout-button:focus {
+	outline: none;
+}
+
+/* Selected button state */
+button.layout-button.active,
+.layout-button.active {
+	background-color: #242424;
+	border-color: #1a1a1a;
+	color: #ffffff;
+}
+
+button.layout-button.active:hover,
+.layout-button.active:hover {
+	background-color: #242424;
+	border-color: #1a1a1a;
+	color: #ffffff;
+}
+
+button.layout-button.active:active,
+button.layout-button.active.pressed,
+.layout-button.active:active,
+.layout-button.active.pressed {
+	background-color: #242424;
+	border-color: #1a1a1a;
+}
+
+/* Icon opacity on hover - 100% */
+.layout-button:hover.layout-left-icon,
+.layout-button:hover.layout-right-icon,
+.layout-button:hover.layout-3split-icon,
+.layout-button:hover.layout-top-icon {
+	opacity: 1.0;
+}
+
+/* Icon opacity on active/pressed - 75% */
+.layout-button:active.layout-left-icon,
+.layout-button.pressed.layout-left-icon,
+.layout-button:active.layout-right-icon,
+.layout-button.pressed.layout-right-icon,
+.layout-button:active.layout-3split-icon,
+.layout-button.pressed.layout-3split-icon,
+.layout-button:active.layout-top-icon,
+.layout-button.pressed.layout-top-icon {
+	opacity: 0.75;
+}
+
+/* Selected button icon - 75% */
+.layout-button.active.layout-left-icon,
+.layout-button.active.layout-right-icon,
+.layout-button.active.layout-3split-icon,
+.layout-button.active.layout-top-icon {
+	opacity: 0.75;
+}
+
+/* Selected button icon on hover - 100% */
+.layout-button.active:hover.layout-left-icon,
+.layout-button.active:hover.layout-right-icon,
+.layout-button.active:hover.layout-3split-icon,
+.layout-button.active:hover.layout-top-icon {
+	opacity: 1.0;
+}
+
+/* Docking (Approach B: real elements) */
+.dock-split.row {
+	display: flex;
+	flex-direction: row;
+	gap: 0px;
+}
+
+.dock-split {
+	flex-grow: 1;
+	min-width: 0;
+	min-height: 0;
+}
+
+.dock-split.col {
+	display: flex;
+	flex-direction: column;
+	gap: 0px;
+}
+
+.dock-leaf {
+	display: flex;
+	flex-direction: column;
+	flex-grow: 1;
+	border-width: 0px;
+	border-radius: 0px;
+	background-color: var(--ui_color_bg_tabbar);
+	overflow: hidden;
+	--antialias: 0;
+}
+
+.dock-leaf.overflow-visible {
+	overflow: visible;
+}
+
+.play-fullscreen-gameview .tabbar {
+	display: none;
+}
+
+.play-fullscreen-gameview .dock-split.row,
+.play-fullscreen-gameview .dock-split.col,
+.play-fullscreen-gameview .dock-leaf {
+	border-width: 0px;
+	background-color: var(--ui_color_bg);
+}
+
+.tabbar {
+	display: flex;
+	flex-direction: row;
+	flex-wrap: nowrap;
+	justify-content: flex-start;
+	gap: 4px;
+	height: 28px;
+	min-width: 0;
+	padding: 0px;
+	background-color: var(--ui_color_bg_tabbar);
+	overflow: hidden;
+	position: relative;
+	flex-shrink: 0;
+}
+
+/* Floating window visual distinction: slightly smaller tab bar */
+.floating .tabbar {
+	gap: 4px;
+	height: 22px;
+	padding: 1px 4px;
+}
+
+.tab {
+	display: flex;
+	flex-direction: row;
+	flex: 0 0 auto;
+	align-items: center;
+	justify-content: flex-start;
+	gap: 6px;
+	min-width: 0;
+	padding: 4px 10px 8px 10px;
+	margin: 3px 0px -4px 0px;
+	border-radius: var(--ui_radius_sm);
+	background-color: #191919;
+	color: #808080;
+	cursor: pointer;
+	overflow: hidden;
+	position: relative;
+	z-index: 0;
+}
+
+.tabbar.middle-panning {
+	cursor: grabbing;
+}
+
+.dock-tab-scroll {
+	position: absolute;
+	top: 3px;
+	width: 20px;
+	min-width: 20px;
+	height: 24px;
+	min-height: 24px;
+	padding: 0;
+	border: none;
+	border-radius: 0;
+	background-color: #191919;
+	background-size: 10px 10px;
+	background-repeat: no-repeat;
+	background-position: center;
+	background-image-tint: rgba(219, 219, 219, 0.8);
+	z-index: 100;
+}
+
+.dock-tab-scroll-left {
+	/* Overlap the shared edge so the controls form one continuous pill. */
+	right: 19px;
+	border-radius: var(--ui_radius_sm) 0 0 var(--ui_radius_sm);
+	background-image: url("editor:Icons/fold-left.png");
+}
+
+.dock-tab-scroll-right {
+	right: 0;
+	border-radius: 0 var(--ui_radius_sm) var(--ui_radius_sm) 0;
+	background-image: url("editor:Icons/fold-right.png");
+}
+
+.dock-tab-scroll:hover {
+	background-image-tint: var(--ui_color_accent);
+}
+
+.dock-tab-scroll.at-limit {
+	opacity: 1;
+	background-image-tint: rgba(145, 145, 145, 1.0);
+}
+
+/* Tab title (DockTab inner label); grows so title stays centered in remaining space */
+.tab .dock-tab-label {
+	flex: 1 1 auto;
+	min-width: 0;
+	overflow: hidden;
+	text-overflow: ellipsis;
+	text-align: center;
+	white-space: nowrap;
+}
+
+/* Tab icon (optional, shown before the label) */
+.tab .dock-tab-icon {
+	width: 15px;
+	height: 15px;
+	min-width: 15px;
+	min-height: 15px;
+	flex-shrink: 0;
+	pointer-events: none;
+	background-size: contain;
+	background-repeat: no-repeat;
+	background-position: center;
+	background-image-tint: #808080;
+	opacity: 1;
+}
+
+/* Which image a panel icon is lives in theme/dock-panel-icons.css. */
+
+.tab .dock-tab-icon.record-icon {
+	width: 15px;
+	height: 15px;
+	min-width: 15px;
+	min-height: 15px;
+	background-size: 22.5px 22.5px;
+}
+
+.tab.active .dock-tab-icon {
+	background-image-tint: #BFBFBF;
+}
+
+.tab:hover .dock-tab-icon {
+	background-image-tint: #E6E6E6;
+}
+
+.tab.dragging .dock-tab-icon {
+	background-image-tint: var(--ui_icon_tint_hover);
+}
+
+.no-tab-icons .dock-tab-icon {
+	display: none;
+}
+
+.tab:hover {
+	background-color: var(--ui_color_bg_hover);
+	color: #E6E6E6;
+}
+
+.tab.active {
+	margin: 3px 0px -4px 0px;
+	background-color: var(--ui_color_bg_panel);
+	color: #BFBFBF;
+}
+
+.tab.active:hover {
+	color: #E6E6E6;
+}
+
+/* Tab dragging visual feedback */
+.tab.dragging {
+	opacity: 0.7;
+	background-color: var(--ui_color_accent);
+	color: var(--ui_color_text_bright);
+	z-index: 100;
+}
+
+.tab.dragging:hover {
+	background-color: var(--ui_color_accent);
+}
+
+/* Ghost panel preview shown under cursor while dock-dragging a tab */
+.dock-drag-ghost {
+	background-color: var(--ui_color_bg_panel);
+	border: 2px solid var(--ui_color_accent);
+	border-radius: 4px;
+	opacity: 0.75;
+}
+
+.dock-drag-ghost-label {
+	color: var(--ui_color_text_bright);
+	font-size: 12px;
+	padding: 4px 8px;
+	background-color: var(--ui_color_bg_tabbar);
+}
+
+.dock-content {
+	display: flex;
+	flex-direction: column;
+	flex: 1 1 0%;
+	min-width: 0;
+	min-height: 0;
+	overflow: hidden;
+	/* Top-LEFT stays square: the tab bar's tabs sit flush against that end and
+	   overhang into it, so a radius there curves the panel out from under them
+	   and opens a notch beside the active tab. Nothing sits against the
+	   top-right, so it rounds with the rest. */
+	border-radius: 0px 6px 6px 6px;
+	background-color: var(--ui_color_bg_panel);
+	width: 100%;
+	height: 100%;
+}
+
+/* A floating leaf with a single tab has no tab bar, so this panel's top edge is
+   the window's own top edge and keeps the window's rounding. */
+.single-tab-floating .dock-content {
+	border-radius: 6px 6px 6px 6px;
+}
+
+/* Scene View and Game View round their own viewport on all four corners, which
+   only reads as one radius if the leaf stops rounding the bottom two underneath
+   it - otherwise the deeper of the two arcs wins and the bottom looks rounder
+   than the top. The top-right is the leaf's own outer corner above the toolbar,
+   so it follows the viewport's radius rather than the shared panel one. Every
+   other panel keeps the leaf's bottom radius above. */
+.dock-content-SceneView {
+	border-radius: 0px 5px 0px 0px;
+}
+
+.dock-content-GameView {
+	border-radius: 0px 5px 0px 0px;
+}
+
+/* When a panel requests it (e.g. Scene View camera bookmark preview), allow overflow so popups are not clipped */
+.dock-content.overflow-visible {
+	overflow: visible;
+}
+
+/* Flex behaviour tweaks to let split panes expand/shrink properly */
+.dockspace {
+	display: flex;
+	flex-direction: row;
+	flex-grow: 1;
+	min-width: 0;
+	min-height: 0;
+}
+
+.dock-leaf,
+.dock-content {
+	min-width: 0;
+	min-height: 0;
+}
+
+/* Selector not supported by our CSS engine; replaced by .pane below */
+.pane {
+	display: flex;
+	flex-direction: column;
+	flex-grow: 1;
+	flex-basis: 0px;
+	min-width: 0;
+	min-height: 0;
+}
+
+/* Splitter handle between panes - 4px line, 6px hit area. The box is the width
+   the line paints: a 1px box under a 4px line overhangs ~1.5px into each
+   neighbouring pane, covering the outer edge - and with it the outer part of a
+   pane's rounded corner, which is why a corner looked different docked than
+   maximized. */
+.splitter.row {
+	width: 4px;
+	cursor: col-resize;
+	background-color: var(--ui_color_bg_tabbar);
+	position: relative;
+	z-index: 100;
+	pointer-events: auto;
+}
+
+.splitter.col {
+	height: 4px;
+	cursor: row-resize;
+	background-color: var(--ui_color_bg_tabbar);
+	position: relative;
+	z-index: 100;
+	pointer-events: auto;
+}
+
+/* Asset panel splitter */
+#assets-splitter {
+	width: 0px;
+	background-color: var(--ui_color_bg_tabbar);
+	z-index: 100;
+}
+
+.mount {
+	display: flex;
+	flex-direction: column;
+	flex: 1 1 0%;
+	min-width: 0;
+	min-height: 0;
+	width: 100%;
+	height: 100%;
+}
+
+.scroll-row {
+	display: flex;
+	flex-direction: row;
+	flex-grow: 1;
+	min-width: 0;
+	min-height: 0;
+}
+
+.scroll-viewport {
+	display: flex;
+	flex-direction: column;
+	flex-grow: 1;
+	min-width: 0;
+	min-height: 0;
+}
+
+/* ======================================
+   ScrollView Scrollbars
+   ====================================== */
+
+.scrollbar {
+	/* Track color - matches panel background */
+	background-color: var(--ui_color_bg_panel);
+	/* Thumb border-radius controlled via custom property */
+	--scrollbar-thumb-radius: 4px;
+	/* Scrollbar thickness controlled via custom property */
+	--scrollbar-thickness: 6px;
+	z-index: 50;
+}
+
+.scrollbar-thumb {
+	background-color: var(--ui_color_bg_scrollbar_thumb);
+	border-radius: var(--scrollbar-thumb-radius);
+}
+
+.scrollbar:hover .scrollbar-thumb {
+	background-color: #4a4a4a;
+}
+
+.scrollbar.active .scrollbar-thumb {
+	background-color: #4a4a4a;
+}
+
+.scrollbar.horizontal {
+	margin-left: 6px;
+	margin-right: 6px;
+	margin-bottom: 6px;
+}
+
+.scrollbar.vertical {
+	margin-top: 6px;
+	margin-bottom: 6px;
+	margin-right: 6px;
+}
+
+/* Disable horizontal scrollbar in Inspector panel */
+.inspector-scrollview .scrollbar.horizontal {
+	display: none;
+}
+
+/* Dock overlay for debug zones - should not capture mouse input */
+#dock-overlay,
+.overlay {
+	pointer-events: none;
+	position: absolute;
+	top: 0;
+	left: 0;
+	right: 0;
+	bottom: 0;
+	width: 100%;
+	height: 100%;
+	z-index: 1000;
+}
+
+/* Icon buttons rest at opacity 0.35 (67 rules above set it) so their artwork
+   reads as inactive. `opacity` applies to the whole element including its
+   OUTLINE, so without this the keyboard focus ring inherits that 0.35 and the
+   one indicator that must be legible when it appears is the faintest thing on
+   the toolbar. :hover already restores full opacity for the same reason.
+
+   Placed last, and at .button.icon-button specificity, so it outranks the
+   per-icon `.button.<name>-icon` rules that set the resting value. */
+.icon-button:focus-visible,
+button.icon-button:focus-visible,
+.button.icon-button:focus-visible {
+	opacity: 1.0;
+}

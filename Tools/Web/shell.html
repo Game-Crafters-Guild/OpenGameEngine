@@ -1,0 +1,62 @@
+<!doctype html>
+<!-- Minimal emscripten shell (- -shell-file) for engine wasm targets: a
+     full-window canvas with id "canvas", the selector the WebGPU surface
+     bridge binds to, plus a boot loading screen (mirrors the deployed
+     webeditor.html) removed on runtime init. stdout/stderr go to the console. -->
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>GameEngine wasm</title>
+<style>
+  html, body { margin: 0; height: 100%; overflow: hidden; background: #000; }
+  canvas { display: block; width: 100vw; height: 100vh; }
+  /* Boot loading screen: shown until the wasm runtime initializes. */
+  #boot {
+    position: fixed; inset: 0; z-index: 10;
+    display: flex; flex-direction: column; align-items: center; justify-content: center;
+    gap: 14px; background: #000; color: #c4c7cc;
+    font: 14px system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  }
+  /* Hue cycles at 360deg / 12s, matching the project picker's logo animation. */
+  #boot svg { width: 72px; height: 72px; will-change: opacity, filter; animation: bootpulse 1.6s ease-in-out infinite, boothue 12s linear infinite; }
+  @keyframes bootpulse { 0%, 100% { opacity: .9; } 50% { opacity: .45; } }
+  @keyframes boothue { from { filter: hue-rotate(0deg); } to { filter: hue-rotate(360deg); } }
+  #bar { width: 260px; height: 4px; background: #222; border-radius: 2px; overflow: hidden; position: relative; }
+  /* transform-only so the compositor animates it while the main thread is busy
+     compiling/loading the wasm (a `left` animation would freeze during boot). */
+  #fill { position: absolute; left: 0; width: 40%; height: 100%; background: #4b8bf5; border-radius: 2px; will-change: transform; animation: bootslide 1.15s ease-in-out infinite; }
+  @keyframes bootslide { 0% { transform: translateX(-100%); } 100% { transform: translateX(250%); } }
+</style>
+</head>
+<body>
+<canvas id="canvas"></canvas>
+<div id="boot">
+  <svg viewBox="0 0 100 100" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
+    <defs>
+      <linearGradient id="gc" x1="0" y1="0" x2="1" y2="1">
+        <stop offset="0" stop-color="#ff6ec7"/>
+        <stop offset="1" stop-color="#ff9a3c"/>
+      </linearGradient>
+    </defs>
+    <polygon points="50,8 90,31 50,54 10,31" fill="url(#gc)"/>
+    <polygon points="10,31 50,54 50,94 10,71" fill="url(#gc)" opacity="0.7"/>
+    <polygon points="90,31 50,54 50,94 90,71" fill="url(#gc)" opacity="0.85"/>
+  </svg>
+  <div id="msg">Loading editor…</div>
+  <div id="bar"><div id="fill"></div></div>
+</div>
+<script>
+  var Module = {
+    canvas: document.getElementById('canvas'),
+    print: function (text) { console.log(text); },
+    printErr: function (text) { console.error(text); },
+    onRuntimeInitialized: function () {
+      var boot = document.getElementById('boot');
+      if (boot) boot.remove();
+    }
+  };
+</script>
+{{{ SCRIPT }}}
+</body>
+</html>

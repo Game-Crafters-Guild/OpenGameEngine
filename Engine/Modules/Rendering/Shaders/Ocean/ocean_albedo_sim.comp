@@ -1,0 +1,79 @@
+#version 450
+// Albedo bake. Writes, per texel of each camera-snapped albedo LOD layer, the
+// surface paint (rgb = colour, a = coverage) composited from the tagged albedo
+// sources (rectangular footprints). Like the flow bake, this is a closed-form
+// evaluation — each texel maps to a fixed world XZ via the shared cascade layout,
+// and the paint there is the over-composite of every source whose footprint
+// contains it — so no geometry pass is needed and it degrades to "transparent
+// everywhere" (no albedo override) when nothing is tagged.
+//
+// The albedo cascade has the foam cascade's resolution, LOD count and base scale
+// but snaps on its own schedule: the surface samples it with this layout and
+// blends baseColor toward rgb by a.
+
+#include "Ocean/ocean_cascade_common.glsl"
+
+layout(local_size_x = 8, local_size_y = 8, local_size_z = 1) in;
+
+// Must match kMaxOceanAlbedoSources in Ocean/OceanTypes.h.
+const int GE_OCEAN_MAX_ALBEDO = 8;
+
+struct OceanAlbedoSourceGPU
+{
+    vec4 OriginExtent; // xy = center XZ, zw = half-extent (X, Z)
+    vec4 Color;        // rgb = paint colour, a = blend weight
+};
+
+// std140 — must match OceanAlbedoParamsGPU in Ocean/OceanTypes.h.
+layout(std140, set = 0, binding = 0) uniform OceanAlbedoParams
+{
+    uint  uResolution;
+    uint  uLodCount;
+    uint  uSourceCount;
+    uint  uAlbedoPad0;
+
+    // Embedded OceanCascadeLayoutGPU: per-LOD vec4 (xy=origin, z=texel, w=scale)
+    // then a padded uint lane (LodCount + 3 pad).
+    vec4  uCascadeOriginScale[GE_OCEAN_LOD_CASCADES];
+    uvec4 uCascadeMeta; // x = LodCount
+
+    OceanAlbedoSourceGPU uSources[GE_OCEAN_MAX_ALBEDO];
+};
+
+layout(set = 0, binding = 1, rgba8) uniform writeonly image2DArray uAlbedoOut;
+
+void main()
+{
+    const ivec3 id = ivec3(gl_GlobalInvocationID);
+    if (uint(id.x) >= uResolution || uint(id.y) >= uResolution || uint(id.z) >= uLodCount)
+        return;
+
+    const vec4 layer = uCascadeOriginScale[id.z];
+    const vec2 worldXZ = OceanCascadeTexelToWorld(id.xy, layer.xy, layer.z);
+
+    // Over-composite every source whose footprint contains this texel (premultiply
+    // by source coverage so overlapping paints layer naturally). The stored value
+    // is straight-alpha (rgb, a) the surface then blends with mix().
+    vec3 accumRGB = vec3(0.0);
+    float accumA = 0.0;
+    uint count = min(uSourceCount, uint(GE_OCEAN_MAX_ALBEDO));
+    for (uint s = 0u; s < count; ++s)
+    {
+        OceanAlbedoSourceGPU src = uSources[s];
+        vec2 d = abs(worldXZ - src.OriginExtent.xy);
+        if (d.x > src.OriginExtent.z || d.y > src.OriginExtent.w)
+            continue; // outside this source's footprint
+        // Soften the rectangular edge so the paint fades in rather than snapping
+        // on, avoiding a hard albedo seam at the footprint boundary.
+        vec2 edge = vec2(1.0) - smoothstep(0.7, 1.0,
+                                           d / max(src.OriginExtent.zw, vec2(1e-3)));
+        float a = src.Color.a * min(edge.x, edge.y);
+        // src-over: result = src + dst*(1-srcA), tracked in premultiplied space.
+        accumRGB = src.Color.rgb * a + accumRGB * (1.0 - a);
+        accumA = a + accumA * (1.0 - a);
+    }
+
+    // Un-premultiply back to straight alpha for the surface mix().
+    vec3 outRGB = (accumA > 1e-4) ? accumRGB / accumA : vec3(0.0);
+    imageStore(uAlbedoOut, id, vec4(outRGB, accumA));
+}

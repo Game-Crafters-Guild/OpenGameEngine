@@ -1,0 +1,17 @@
+[scene name="CameralessMenu" version=1]
+; A Fullscreen UIDocument with NO ECS camera — a main-menu / pure-UI scene.
+; The Player composites its UIDocuments regardless of camera; the editor Game View
+; must match. Without the camera-less composite the Game View shows only its grey
+; clear here while the Player shows the menu.
+; Reuses the GameHudInteractive assets so the fixture adds no new content.
+
+[entity id="e_2000"]
+UIDocument.Enabled = true
+UIDocument.Layout = [path="UI/GameHudInteractive.uxml"]
+UIDocument.Style = [path="UI/GameHudInteractive.css"]
+UIDocument.SortOrder = 0
+UIDocument.RenderMode = Fullscreen
+Name.value = "Menu"
+Transform.position = (0, 0, 0)
+Transform.rotation = (0, 0, 0, 1)
+Transform.scale = (1, 1, 1)

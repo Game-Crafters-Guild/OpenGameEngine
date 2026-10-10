@@ -1,0 +1,29 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>@openengine/web examples</title>
+<style>
+html, body { margin: 0; background: #111; color: #eee; font: 15px/1.5 system-ui, sans-serif; }
+main { max-width: 760px; margin: 48px auto; padding: 0 24px; }
+a { color: #8cf; }
+li { margin: 12px 0; }
+.meta { color: #999; }
+</style>
+</head>
+<body>
+<main>
+<h1>@openengine/web examples</h1>
+<p>A WebGPU renderer and an entity-component world behind a small JavaScript API. Each example is one page: its engine calls in <code>main.js</code>, its controls in a script beside it. They need a browser with WebGPU: current Chrome or Edge.</p>
+<ul>
+<li><a href="../examples/model-viewer/index.html">Model viewer</a>: pick a sample model or open your own .glb, orbit it, set the time of day and the exposure, stand it on a floor, stop or start the turntable, play a model's animation clips at the speed you set, and show the frame rate. It opens on an animated fox.
+<span class="meta" data-lines="59" data-panel-lines="430">59 lines of engine calls in main.js; 430 lines of page and panel. Models: Khronos glTF Sample Assets, CC0 1.0, CC BY 4.0 and CC BY-NC 4.0 (non-commercial). Early access (alpha).</span></li>
+<li><a href="../examples/instancing/index.html">Instancing</a>: one model drawn up to 100,000 times on a spiral, every copy an entity; set the count with a slider and show the frame rate.
+<span class="meta" data-lines="59" data-panel-lines="166">59 lines of engine calls in main.js; 166 lines of page and panel. Model: Avocado, Khronos glTF Sample Assets, CC0 1.0. Early access (alpha).</span></li>
+</ul>
+<p class="meta" data-shared-lines="326">The pages share 326 lines of status, download bar, frame-rate and framing code in <code>examples/shared/</code>.</p>
+<p class="meta">Every asset's source and license is listed in <a href="../examples/ASSET_PROVENANCE.md">ASSET_PROVENANCE.md</a>. The pages load <code>coi-serviceworker.js</code> (MIT) to run the threaded build on hosts that cannot send isolation headers.</p>
+</main>
+</body>
+</html>

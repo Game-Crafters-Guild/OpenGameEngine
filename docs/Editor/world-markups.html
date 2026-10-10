@@ -1,0 +1,231 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>World Mark-ups — notes on places in the world</title>
+<style>
+  :root{
+    --bg:#0e1116; --panel:#161b22; --panel-light:#1c232c; --border:#2a323d;
+    --text:#d7dde5; --muted:#8b97a6; --accent:#5db0ff;
+    --danger:#ff6b6b; --bad:#ff6b6b; --ok:#5ad19b; --good:#5ad19b; --warn:#e8c468;
+    --mono:"SF Mono",ui-monospace,Menlo,Consolas,monospace;
+  }
+  *{box-sizing:border-box}
+  body{background:var(--bg);color:var(--text);font:15px/1.6 -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif;
+       margin:0;padding:0 0 80px}
+  .wrap{max-width:980px;margin:0 auto;padding:32px 24px}
+  h1{font-size:30px;margin:0 0 4px;letter-spacing:-.4px}
+  h2{font-size:22px;margin:42px 0 14px;padding-top:22px;border-top:1px solid var(--border)}
+  h3{font-size:17px;margin:26px 0 8px;color:#e9eef4}
+  p,li{color:var(--text)}
+  .lede{color:var(--muted);font-size:13px;text-transform:uppercase;letter-spacing:.12em;margin:0 0 26px}
+  a{color:var(--accent);text-decoration:none}
+  code{font-family:var(--mono);font-size:.88em;background:#11161d;border:1px solid var(--border);
+       border-radius:4px;padding:1px 5px}
+  .panel{border:1px solid var(--border);border-left-width:4px;border-radius:8px;background:var(--panel);
+         padding:14px 18px;margin:16px 0}
+  .panel.ok{border-left-color:var(--ok)} .panel.warn{border-left-color:var(--warn)}
+  .panel h4{margin:0 0 6px;font-size:14px;text-transform:uppercase;letter-spacing:.06em}
+  .panel.ok h4{color:var(--ok)} .panel.warn h4{color:var(--warn)}
+  .grid-2{display:grid;grid-template-columns:1fr 1fr;gap:16px}
+  @media(max-width:760px){.grid-2{grid-template-columns:1fr}}
+  table{border-collapse:collapse;width:100%;margin:16px 0;font-size:13.5px}
+  th,td{border:1px solid var(--border);padding:8px 11px;text-align:left;vertical-align:top}
+  th{background:var(--panel-light);color:#e9eef4}
+  tr:hover td{background:#12171e}
+  .muted{color:var(--muted)}
+  ul{padding-left:22px} li{margin:4px 0}
+  .step{border:1px solid var(--border);border-radius:8px;background:var(--panel);padding:12px 16px;margin:10px 0}
+  .step b{color:var(--accent)}
+  footer{max-width:980px;margin:40px auto 0;padding:18px 24px 0;border-top:1px solid var(--border);color:var(--muted);font-size:12.5px}
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <h1>World Mark-ups</h1>
+  <p class="lede">Feature guide · editor / working with an agent</p>
+
+  <p>A <b>mark-up</b> is a note on a place in the world: a box or a sphere with a title, a
+  status, tags, a description and a thread of comments. You and an AI agent connected to the
+  editor use mark-ups to talk about the scene by pointing at it. You mark "Village center",
+  the agent reads it and does the work; the agent proposes "Lake" and "Forest" as shapes, you
+  drag them where they belong and set them to <b>Requested</b>.</p>
+
+  <p>Mark-ups are editor-only. They are saved in the scene file, so a scene diff shows the
+  conversation, and a game export removes them: the exported scene has no mark-up, no title
+  and no note.</p>
+
+  <h2>What a mark-up carries</h2>
+  <table>
+    <tr><th>Part</th><th>What it is</th></tr>
+    <tr><td>Title</td><td>The entity's name.</td></tr>
+    <tr><td>Shape</td><td>A box or a sphere (a place), or a region (an area). The entity's transform places and sizes a box or a sphere: a box's scale is its full size, a sphere's scale is its diameter. Move and scale it with the transform tool like any entity. Regions are described below.</td></tr>
+    <tr><td>Status</td><td>One status from the project's status group. The defaults: <b>Proposed</b> (the agent drew it and asks), <b>Requested</b> (do the work), <b>InProgress</b> (shown as "In progress"), <b>Complete</b>, <b>Revision</b> (finished work asked for again) and <b>Problem</b>. A project can rename and recolor them.</td></tr>
+    <tr><td>Tags</td><td>Any number of free tags from the project's tag vocabulary.</td></tr>
+    <tr><td>Description and thread</td><td>Text of any length, and comments, each with its author and time. A status change is recorded in the thread, and so is an edit of the mark-up itself (moved, resized, rotated, renamed, a new shape, color or description); edits one author makes within two minutes of each other share one line, such as "You moved and resized it". In the comment field Enter adds the comment and Shift+Enter starts a new line; links in a comment open in the browser, and an entity the agent names shows as a chip: hovering it highlights the entity in the Scene View, a click selects it, and the frame glyph at its end frames it.</td></tr>
+    <tr><td>Author and updates</td><td>Who created it, who changed it last (you or the agent) and when. Your edits count as yours. What the agent does through the editor's debug port counts as the agent's, including an undo it asks for; the exception is input the agent simulates (<code>send_key</code>, <code>click_element</code>, <code>perform_drop</code>), which the editor handles as yours.</td></tr>
+  </table>
+
+  <h2>Regions</h2>
+  <p>A region is an area of ground: a forest, a district, a river with its banks. Its outline is a
+  closed spline of 3 to 256 points on the ground plane, in order around the area, that does not
+  cross itself; it is always closed. The agent writes one with <code>markup_create</code>
+  (<code>kind: "region"</code> and an <code>outline</code>); the outline is linear (drawn exactly as
+  sent) unless <code>type: "smooth"</code> asks for a smooth curve through the points. A region
+  stands <code>extrudeHeight</code> meters tall (1 to 100, 8 by default). Heights are ignored for
+  what is inside: a region is an area of ground.</p>
+  <p>A region can list up to 32 <b>members</b>, other mark-ups it includes or excludes. Inside a
+  region means inside its outline or any Include member, and not inside any Exclude member. A
+  clearing in a forest is an Exclude member; a lake can be an Exclude member of the forest and of
+  the village at once; a field joined to the forest is an Include member. A box counts its outline
+  seen from above, a sphere the circle beneath it, and a member region its own outline only (its
+  own members do not apply, so a list never loops). A region cannot list itself. When a member is
+  deleted, the region skips it; undo brings it back as a member, and saving the scene drops it
+  from the list. Duplicating a region together with its members gives a copy whose members are the
+  copies; duplicating it alone gives a copy that shares its members.</p>
+  <p><code>markup_update</code> with <code>kind: "region"</code> converts a box or a sphere to a
+  region, as one undo step and one way: the title, description, status, tags and thread stay. A box
+  with no <code>outline</code> keeps its outline seen from above and its height. With
+  <code>kind: "path"</code> and <code>points</code> (and <code>type</code>) it converts a box or a sphere to a
+  path the same way: a stand-in box for a road becomes the road and keeps its conversation.</p>
+  <p><b>Drawing a region yourself.</b> Right-click the Mark-up tool in the Scene View's tool strip
+  and choose <b>Region</b>. Drag around the area to paint a lasso: it closes where you release it,
+  and its points are thinned to follow your stroke within 1 % of its size (between 0.5 and 5 m),
+  so a 200 m lasso keeps one or a few dozen points, not hundreds. Or click the points one by one and press Enter, or
+  click the first point again, to close the outline; Escape cancels. An outline that crosses
+  itself is refused with a notice: draw it again without crossing. The new region is selected
+  with its points showing (the spline tool); drag a point to move it and press Delete to remove
+  the selected point, each one undo step. A region always stays closed: its spline's
+  Closed setting cannot be unticked, and an outline read open from a scene file or written open
+  through <code>set_component</code> is closed again, with a warning in the log.</p>
+  <p><b>The Region block of the inspector</b>, in a region's Mark-up section above its thread,
+  shows the outline's points, perimeter and
+  <b>Outline area</b> (the area inside the outline before its members apply, in hectares from
+  10,000 m&sup2;), the height (dragging the slider previews the walls; releasing
+  it is one undo step; the value beside it, in meters, takes a typed height from 1 to 100 m), <b>Edit outline</b> (selects the region and shows its points), and the
+  <b>Members</b> list: every other mark-up whose outline overlaps the region, and every member,
+  each with a checkbox (a member or not) and an <b>Include</b> | <b>Exclude</b> choice, the filled
+  one the member's mode (Exclude in amber; neither filled for a mark-up that is not a member). Each
+  change is one undo step. A member that was deleted reads "deleted (undo restores it)", one that no
+  longer overlaps "outside the region". A box's Mark-up Volume section has <b>Convert to region</b>:
+  the box becomes a region with the box's outline from above and its height, as one undo step.</p>
+  <p><b>What a region looks like.</b> A region draws as a translucent wall standing on the ground
+  along its outline, its height tall, with a lid that follows the ground at the wall's height, so
+  on a slope it reads as a band of even height. The walls stand on the terrain, not on the houses
+  and trees on it, and where the ground is under the sea they stand on the sea surface. The rim
+  brightens along the wall's top edge. The title's pill stands over the point inside the region
+  farthest from its outline, so it stays inside even a C-shaped region. While the outline crosses
+  itself the walls stand and the lid is left out; with fewer than three points it draws as a
+  line. Its row in the Mark-ups panel says so ("crosses itself", "outline needs three points"),
+  and the inspector names the fix. The members shape what a region draws: an Exclude member cuts a
+  hole through the lid, with walls standing around the hole, and an Include member extends the
+  walls and the lid over it (a sphere's circle drawn as a 32-sided outline). Moving, deleting or
+  restoring a member redraws the regions that list it. While the outline crosses itself the
+  members are not applied.</p>
+
+  <h2>Paths</h2>
+  <p>A path is a way along the ground: a river, a road, the route to the guards' base. It is a
+  spline of 2 to 256 points that is never closed, with no area: <code>markup_contains</code> refuses
+  a path. The agent writes one with <code>markup_create</code> (<code>kind: "path"</code> and
+  <code>points</code>, world [x, y, z] in meters in order along the way; <code>type: "smooth"</code>
+  for a curve through them, linear by default). Each point is stood on the terrain under it, so
+  the points Edit path offers are on the line you see; <code>y</code> counts only off the terrain.
+  It draws as a glowing band with a line along its middle, lying on the terrain across its whole
+  width, and the band keeps a few pixels of width at any distance (at least 1.5 m to either side,
+  wider far from the camera); its title's pill stands halfway along it. The Mark-up section of the
+  inspector shows its <b>Path</b> block: its points, its length along the ground, and <b>Edit
+  path</b>, which selects it and shows its points in the spline tool to drag, add and delete.
+  <code>markup_update</code> changes a path's title, status, notes, tags and color; it refuses
+  <code>points</code> (move them with Edit path).</p>
+
+  <h2>What you see in the Scene View</h2>
+  <p>Each mark-up draws as a translucent volume in its status color with an outline. On the
+  desktop editor the volume glows: a see-through body with a rim in its color, along a sphere's
+  silhouette and along a box's edges. In the browser editor the volume is a flat translucent fill instead.
+  Either way, the part behind terrain or other geometry draws dimmed, so a mark-up stays findable
+  from the far side of a hill. A pill above the volume shows its title beside a dot in the status
+  color.</p>
+  <ul>
+    <li><b>Highlight</b>: the selected mark-up draws a stronger fill (on the desktop, a stronger
+    rim) and a doubled outline, and its pill a border in the accent color. The one under the
+    pointer in the Mark-ups panel draws its outline in its full status color (on the desktop, with
+    a denser body and a rim between the resting and the selected one), and its pill a lighter plate bordered in that color. Both pills draw over
+    the others.</li>
+    <li><b>Inside a volume</b>: with the camera inside a mark-up (for a region, inside its outline
+    and below its top), it draws its outline only, and a volume's pill stays at the top of the
+    view.</li>
+    <li><b>Updates</b>: a mark-up the agent changed since you last looked has a red ring on the
+    corner of its label, the Activity badge's color. Selecting it marks it seen.</li>
+    <li><b>Framing</b>: double-click a row in the Mark-ups panel to frame the whole volume.</li>
+    <li><b>Labels</b>: a title shows while the volume is at least about 1/100 of a radian across
+    from the camera (a 20 m box until about 1.5 km away, a 2 m box until about 170 m), for at
+    most the 64 nearest mark-ups. A pill whose point is out of view is held at the edge of the
+    view, clear of the axis widget.</li>
+    <li><b>Many mark-ups</b>: the 64 nearest the camera (and the selected ones) draw a body (the
+    glow or the fill); the rest draw their outline only.</li>
+    <li>Hidden mark-ups draw nothing, and nothing draws in play mode. The Scene View's gizmo
+    toggle hides them with the other gizmos; an agent hides only them with
+    <code>set_gizmos_visibility</code> and <code>markups: false</code>.</li>
+  </ul>
+
+  <div class="panel warn"><h4>Limits</h4>
+  <ul>
+    <li>A mark-up belongs to a scene. One inside a blueprint or a subscene is refused when the scene loads, with a message that says to move it into the scene that places the instance.</li>
+    <li>Mark-ups are edited outside play mode. In play mode the Mark-up tool places nothing and the Mark-up and Mark-up Volume inspector sections are read-only, with a notice to stop play first; hiding and showing mark-ups in the Mark-ups panel still works.</li>
+    <li>Duplicating a mark-up copies its shape, title and status; the copy starts its own, empty thread.</li>
+    <li>Hiding a mark-up is your view, not a scene edit: it does not dirty the scene and is not undone. The editor remembers hidden mark-ups and what you have seen, per project and per scene. A mark-up you hide before the scene is first saved is remembered for the next session once the scene has been saved.</li>
+  </ul></div>
+
+  <h2>The agent's methods</h2>
+  <p>An agent reaches mark-ups through the editor's debug port: as MCP tools, or from a shell with
+  <code>node mcp/ge.mjs &lt;method&gt; --help</code> for each method's parameters. A method that
+  cannot act answers with an error that names the fix, and every method refuses in play mode.</p>
+  <table>
+    <tr><th>Method</th><th>Parameters</th><th>Answer</th></tr>
+    <tr><td><code>markup_list</code></td><td><code>status</code>, <code>author</code>, <code>since</code>, <code>changedBy</code>, <code>includeHidden</code> (all optional)</td><td>The scene's <code>revision</code> and one row per mark-up, newest change first: <code>entityId</code>, <code>tag</code>, <code>title</code>, <code>kind</code>, <code>status</code>, <code>tags</code>, <code>author</code>, <code>updatedBy</code>, <code>created</code>, <code>updated</code>, <code>revision</code>, <code>hidden</code>, <code>hasUpdate</code>, <code>center</code>, <code>radius</code>, <code>entryCount</code>. <code>kind</code> is <code>volume</code>, <code>region</code> or <code>path</code>; a region's <code>center</code> is the point inside it farthest from its outline, and its <code>radius</code> reaches its whole outline; a path's center and radius are those of the sphere around its line on the ground.</td></tr>
+    <tr><td><code>markup_get</code></td><td><code>entityId</code></td><td><code>markup</code>: the row, plus <code>description</code>, <code>entries</code> (kind <code>created</code>, <code>comment</code>, <code>statusChange</code> or <code>edit</code>; author, time, status, text; an edit's <code>changes</code>, its text the name a rename gave, its <code>color</code> the color a recolor gave) and <code>shape</code> (<code>shape</code>, <code>center</code>, <code>halfExtents</code>, <code>rotation</code> as [x, y, z, w]). A region's <code>shape</code> is <code>shape: "region"</code>, <code>outline</code> (the area's edge in world [x, z], at most 256 points within 0.1 m of the drawn curve: what <code>markup_contains</code> tests), <code>knots</code> (what <code>markup_update</code> takes back as <code>outline</code>), <code>type</code>, <code>extrudeHeight</code>, <code>area</code> (square meters), <code>perimeter</code>, <code>bounds</code>, <code>groundRange</code> (the lowest and highest heights the region stands on, in meters: its walls' feet and its lid) and <code>members</code>: each with its <code>entityId</code>, <code>mode</code> and <code>deleted</code>, and while it exists its <code>title</code>, <code>tag</code>, <code>kind</code> and <code>footprint</code> (an <code>outline</code>, or a <code>center</code> and <code>radius</code>). A path's <code>shape</code> is <code>shape: "path"</code>, <code>points</code> (world [x, y, z], on the terrain), <code>type</code> and <code>length</code> (meters along the ground, as the Scene View draws the line).</td></tr>
+    <tr><td><code>markup_create</code></td><td><code>title</code>; for a volume <code>center</code>, <code>halfExtents</code> and optional <code>shape</code> (box or sphere), <code>rotation</code>; for a region <code>kind: "region"</code>, <code>outline</code> ([[x, z], ...]) and optional <code>type</code> (linear or smooth), <code>extrudeHeight</code>, <code>members</code> ([{<code>entityId</code> or <code>tag</code>, <code>mode</code>: include or exclude}]), <code>exclusions</code> (polygons, each becoming an Exclude region under the new one); for a path <code>kind: "path"</code>, <code>points</code> ([[x, y, z], ...], 2 to 256) and optional <code>type</code>; optional <code>description</code>, <code>status</code> (default Proposed), <code>color</code>, <code>author</code></td><td>The new <code>entityId</code>, <code>exclusionIds</code> for the regions <code>exclusions</code> made, and the row as <code>markup</code>. One undo step, exclusions included. A refused outline names the fix: "An outline needs 3 to 256 points", "The outline crosses itself between points 4-5 and 9-10" (indices into <code>outline</code>), "The outline encloses no area".</td></tr>
+    <tr><td><code>markup_update</code></td><td><code>entityId</code>; any of <code>title</code>, <code>status</code>, <code>description</code>, <code>tags</code>, <code>color</code>, <code>shape</code>, <code>center</code>, <code>halfExtents</code>, <code>rotation</code>, <code>hidden</code>, <code>author</code>; on a region <code>outline</code>, <code>type</code>, <code>extrudeHeight</code>, <code>members</code> (the full list) and <code>exclusions</code> (added to the list); <code>kind: "region"</code> converts a volume, as does <code>kind: "path"</code> with <code>points</code></td><td>The row as <code>markup</code>. A status change is added to the thread; a tag name the project does not have joins its vocabulary. One undo step, exclusions and a conversion included; <code>hidden</code> is a view state outside it. <code>closed: false</code> is refused: a region is always closed.</td></tr>
+    <tr><td><code>markup_contains</code></td><td><code>entityId</code>, <code>points</code> ([[x, z], ...], at most 8192)</td><td><code>inside</code>, true or false per point in order, and <code>insideCount</code>: the editor's own test, members applied for a region, the outline from above for a box or a sphere; a path is refused. Use it rather than testing the outline yourself.</td></tr>
+    <tr><td><code>markup_comment</code></td><td><code>entityId</code>, <code>text</code>; optional <code>author</code></td><td>The new <code>entry</code>. A web address in <code>text</code> shows as a link; <code>[[entity:N]]</code> (an <code>entityId</code>) shows as a chip with that entity's name, which selects it on a click; its frame glyph frames it.</td></tr>
+    <tr><td><code>markup_frame</code></td><td><code>entityId</code>; optional <code>direction</code>, <code>distance</code></td><td>Points the Scene View camera at the mark-up's center (a region's: its row's center, raised half its height) from far enough that its bounding sphere fits the view, with a margin; <code>distance</code> overrides it. Moves the camera only.</td></tr>
+    <tr><td><code>markup_set_visible</code></td><td><code>entityId</code> or <code>all: true</code>, and <code>visible</code></td><td>The new states. A view state: no scene edit, no undo step.</td></tr>
+  </table>
+
+  <h3>Reading what changed</h3>
+  <p>Every answer carries the scene's <code>revision</code>, a number that grows with every change
+  to a mark-up. (A row's own <code>revision</code> is the mark-up's: the scene revision of its last
+  change.) To see what the user did since your last look, pass the revision your previous
+  answer returned as <code>since</code> with <code>changedBy: "User"</code>. <code>since</code> is
+  strict and is not a clock, so two changes in the same second are never lost. Every answer also
+  carries an <code>epoch</code>; when it differs from the one your last answer carried, the scene was
+  reopened or replaced, so list everything again instead of using <code>since</code>.</p>
+
+  <h3>Acting as the user</h3>
+  <p>Writes the port makes count as the agent's. A scripted demonstration that plays the user's part
+  passes <code>author: "User"</code> to <code>markup_create</code>, <code>markup_update</code> or
+  <code>markup_comment</code>.</p>
+
+  <h2>A plan in five steps</h2>
+  <div class="step"><b>1.</b> The agent marks the plan: <code>markup_create</code> for each place, with a description and status Proposed, then a comment asking you to adjust it.</div>
+  <div class="step"><b>2.</b> You drag and scale the shapes, comment, and set the ones that are right to Requested.</div>
+  <div class="step"><b>3.</b> The agent calls <code>markup_list</code> with <code>since</code> and <code>changedBy: "User"</code>, reads your changes with <code>markup_get</code>, and answers in the thread.</div>
+  <div class="step"><b>4.</b> The agent sets a mark-up to InProgress, does the work with the usual scene tools, and sets it to Complete with a closing comment.</div>
+  <div class="step"><b>5.</b> You review, and accept or set Revision with a comment. Either side can set Problem when a step is stuck.</div>
+
+  <h2>Changelog</h2>
+  <ul><li>2026-10-06: first version (the mark-up data and the agent's methods).</li>
+  <li>2026-10-07: what you see in the Scene View: the volumes, their labels, the highlight, the update ring; a double-click frames the whole volume.</li>
+  <li>2026-10-08: regions: an outline with members (include and exclude), <code>markup_contains</code>, the box-to-region conversion; the Scene View draws them in a later version.</li>
+  <li>2026-10-06: <code>markup_get</code> and <code>markup_update</code> answer the row as <code>markup</code> beside the scene's <code>revision</code>; <code>markup_frame</code> and <code>markup_set_visible</code> carry the revision and the epoch too; hidden and seen state is kept per scene.</li>
+  <li>2026-10-09: <code>markup_update</code> is one undo step, whatever it changes.</li>
+  <li>2026-10-09: paths: <code>kind: "path"</code> with points, a draped line in the Scene View, the Path block in the inspector.</li>
+  <li>2026-10-09: regions draw in the Scene View (walls and a lid on the ground) and are drawn with the Mark-up tool's Region shape; the inspector's Region section with the member list; Convert to region on a box; a new region stands on the ground under its label point.</li>
+  <li>2026-10-10: a box or a sphere converts to a path (<code>kind: "path"</code> with points), keeping its thread.</li></ul>
+
+</div>
+<footer>World Mark-ups guide · 2026-10-09</footer>
+</body>
+</html>

@@ -1,0 +1,378 @@
+#version 450
+
+// DDGI blend kernel (M2/M3): cosine-weighted Monte-Carlo hemisphere-irradiance
+// gather from this tick's traced rays into the persistent irradiance STATE
+// buffer (read_write SSBO — the atlas TEXTURE is a separate write-only
+// upload target, Includes/ddgi_common.glsl's doc / ddgi_upload.comp; this
+// split is mandatory on WebGPU, which has no read_write storage textures,
+// and is kept on every backend for one code path), blended against last
+// tick's value with a per-volume exponential hysteresis. Also gathers the
+// same rays' hit-distance into a per-texel depth-moment STATE buffer (M3,
+// mean + mean^2, for Includes/ddgi_probes.glsl's Chebyshev visibility test).
+//
+// One workgroup per probe, one thread per atlas texel (interior + border,
+// GE_DDGI_TILE x GE_DDGI_TILE = 8x8 = 64 threads). Every texel — border
+// included — independently decodes ITS OWN direction and re-gathers against
+// all rays; because octahedral decode is well-defined outside the unit
+// square (the fold in GE_OctDecode), a border texel's direction naturally
+// matches its wrapped interior counterpart's, so this needs no special-cased
+// border copy pass. Uniform-sphere ray set => the standard estimator
+// E(n) ~= (4*pi/N) * sum(max(dot(n,w_i),0) * L(w_i)).
+//
+// Depth moments use a DIFFERENT normalization than irradiance: they are a
+// weighted AVERAGE distance (divide by their own weight sum), not a
+// Monte-Carlo estimate of a radiometric integral (irradiance's 4*pi/N
+// scale) — averaging distance and integrating radiance are different
+// quantities. They also use a DIFFERENT weight: the irradiance cosine raised
+// to uParams1.x (DDGIVolume::DepthSharpness), which narrows the gather toward
+// the texel's own direction so the stored distance tracks the nearest
+// occluder there rather than a hemisphere average. At sharpness 1 the two
+// weights coincide and this is exactly the plain cosine-weighted mean.
+
+#include "Includes/ddgi_common.glsl"
+
+layout(local_size_x = GE_DDGI_TILE, local_size_y = GE_DDGI_TILE, local_size_z = 1) in;
+
+layout(std140, set = 0, binding = 0) uniform DDGIBlendParams
+{
+    vec4 uGridMinWS;
+    vec4 uGridSizeWS;
+    ivec4 uProbeCount;    // xyz = res; w = probeTotal
+    vec4 uParams0;        // x=minCellWS, y=normalBiasScale, z=hysteresis, w=intensity
+    uvec4 uDispatch0;     // x=probeBase, y=raysPerProbe, z=probesThisTick, w=frameIndex (ray-set rotation)
+    vec4 uTiming;         // x=update dt (ms) since this probe's last blend,
+                          // y=fireflyClamp (sigma), z=changeThreshold (sigma), w=snapAmount
+    vec4 uParams1;        // x=depthSharpness, y=depth atlas interior tile resolution
+                          //   (GE_DDGI_OCT_RES: this kernel also gathers the depth
+                          //   moments; anything else: ddgi_depth_blend.comp owns them
+                          //   and this kernel leaves DDGIDepthState untouched), zw=reserved
+} DDGIParams;
+
+// Per-texel variance-aware temporal policy, ported from the reference
+// library's blend kernel (gi_probes.js). Every one of these is a shaping
+// constant with no authored knob: the three that ARE authored (firefly clamp
+// band, change threshold, snap amount) ride in uTiming.yzw.
+//
+// The rationale for the whole block: under DDGIJitterMode::MonteCarlo the ray
+// set is re-rotated every tick, so a texel's fresh estimate always carries
+// Monte-Carlo noise (under Gated the estimate is deterministic and this
+// machinery sits quiet — every delta reads as pure noise until lighting or
+// geometry actually changes).
+// A single scalar hysteresis has to choose between absorbing that noise
+// (high, and the field then crawls after a real lighting change) and
+// reacting (low, and the field boils). Measuring each texel's own noise
+// scale lets it do both: changes smaller than the noise get the steady
+// retention, changes far outside it drop the retention and converge fast,
+// and a change beyond even that is treated as a firefly and clipped toward
+// the band rather than accepted.
+const float GE_DDGI_TEMPORAL_NOISE_H_BOOST = 0.25;   // steady texels borrow a little extra history
+const float GE_DDGI_TEMPORAL_MIN_CHANGE_H = 0.55;    // floor under the snapped retention
+const float GE_DDGI_TEMPORAL_VAR_EPS = 0.000025;     // absolute luma-variance floor (avoids /0 on black)
+const float GE_DDGI_TEMPORAL_VAR_REL = 0.0025;       // relative floor: luma^2 * this
+const float GE_DDGI_TEMPORAL_CHANGE_SIGMA0 = 0.75;   // below this many sigma, a delta is pure noise
+// Converging running mean. A fixed retention h passes (1 - h) of every tick's
+// Monte-Carlo noise into the field forever, so a rotating basis shimmers at
+// steady state no matter how high h is authored. Each texel therefore counts
+// the ticks it has been steady for, and its retention rises toward
+// n / (n + 1): the blend becomes an exact running mean of those ticks and its
+// noise falls as 1 / sqrt(n) instead of settling at a floor. The change
+// detector below is what keeps this from freezing a stale field: a real
+// change forgets history in proportion to how certain it is (n scales by
+// 1 - changeW), so the texel drops back to the authored retention and
+// converges again within a few ticks. The authored Hysteresis stays the
+// floor, so a low value still makes a texel fast. The cap is the lag a
+// change too small for the detector can accumulate: 64 samples cut the
+// steady noise 8x and bound that crawl to about a second of revisits.
+const float GE_DDGI_TEMPORAL_MAX_HISTORY = 64.0;     // n at which the running mean stops growing
+
+layout(std430, set = 0, binding = 1) readonly buffer DDGIRayBufferRO
+{
+    vec4 ge_ddgiRays[];  // xyz=radiance, w=hitT (unused by blend; classify/M3 reads it)
+};
+
+// Persistent irradiance state (read_write): one GE_DDGI_TILE x GE_DDGI_TILE
+// rgba block per probe, row-major within the tile, tiles laid out exactly
+// like the atlas texture GE_DDGIProbeTileOrigin addresses — the upload
+// kernel copies this buffer verbatim into the atlas.
+layout(std430, set = 0, binding = 2) buffer DDGIIrradianceState
+{
+    vec4 ge_ddgiIrradianceState[];
+};
+
+// xy = the diffuse moments (mean and mean^2 of the bounded hit distance),
+// zw = the reflection moments (the same of the true hit distance); see
+// GE_DDGIProbeMaxDistance in Includes/ddgi_common.glsl for who reads which.
+// Written here only under DDGIDepthResolution::Shared (see uParams1.y).
+layout(std430, set = 0, binding = 3) buffer DDGIDepthState
+{
+    vec4 ge_ddgiDepthState[];
+};
+
+// Per-irradiance-texel steady-tick count for the running mean below, and the
+// per-volume convergence signal ddgi_variability.comp reduces. Its own buffer
+// rather than a lane of the depth state: the depth tile may be a different
+// resolution from the irradiance tile (DDGIDepthResolution::Fine), and this
+// count belongs to an IRRADIANCE texel.
+layout(std430, set = 0, binding = 4) buffer DDGITemporalState
+{
+    float ge_ddgiTemporalState[];
+};
+
+// xyz = the world cell this slot's history belongs to (GE_DDGIProbeCellId),
+// w = 1 while this tick's blend reset the slot for a cell change, else 0.
+// Read at the top by every kernel of the tick that consumes per-slot state
+// and stamped here, LAST in the window's chain, so classify and the Fine
+// depth blend (declared ahead of this pass) see the same pre-scroll record;
+// the reflection lobes, declared after this pass, read the w flag instead.
+layout(std430, set = 0, binding = 5) buffer DDGIProbeCell
+{
+    vec4 ge_ddgiProbeCell[];
+};
+
+GE_DDGIGridInfo GE_DDGIBuildGridInfo()
+{
+    GE_DDGIGridInfo g;
+    g.gridMinWS = DDGIParams.uGridMinWS.xyz;
+    g.gridSizeWS = DDGIParams.uGridSizeWS.xyz;
+    g.probeCount = DDGIParams.uProbeCount.xyz;
+    g.probeTotal = DDGIParams.uProbeCount.w;
+    g.minCellWS = DDGIParams.uParams0.x;
+    g.normalBiasScale = DDGIParams.uParams0.y;
+    g.hysteresis = DDGIParams.uParams0.z;
+    g.intensity = DDGIParams.uParams0.w;
+    return g;
+}
+
+void main()
+{
+    uint probeLocal = gl_WorkGroupID.x;
+    int probeIdx = int(DDGIParams.uDispatch0.x) + int(probeLocal);
+    GE_DDGIGridInfo grid = GE_DDGIBuildGridInfo();
+#if defined(GE_COMPAT_PROFILE)
+    // Pre-declared (desktop declares these at their original spot below, past the
+    // early return this arm cannot use): the barrier-gated single-thread stamp at the
+    // bottom runs whether or not this workgroup's probe is active, and a WGSL scope
+    // closed before barrier() cannot leak a declaration past it.
+    uvec2 texel = gl_LocalInvocationID.xy;
+    bool cellChanged = false;
+    // Every invocation must reach barrier() below, so an out-of-range workgroup cannot
+    // early-return ahead of it: WGSL rejects a barrier under control flow it cannot prove
+    // workgroup-uniform. gl_WorkGroupID and the UBO reads are uniform across the
+    // workgroup, so probeActive is too; the guarded block below is skipped for an
+    // inactive probe and the shared barrier still runs for every thread.
+    bool probeActive = probeLocal < DDGIParams.uDispatch0.z && probeIdx < grid.probeTotal;
+    if (probeActive)
+    {
+#else
+    if (probeLocal >= DDGIParams.uDispatch0.z || probeIdx >= grid.probeTotal)
+        return;
+#endif
+
+    // Scroll detection: a slot handed to a new world cell carries another
+    // place's history. Read before any write in this workgroup; stamped at the
+    // end behind a barrier.
+#if defined(GE_COMPAT_PROFILE)
+    cellChanged = GE_DDGIProbeCellChanged(ge_ddgiProbeCell[probeIdx], grid, probeIdx);
+#else
+    bool cellChanged = GE_DDGIProbeCellChanged(ge_ddgiProbeCell[probeIdx], grid, probeIdx);
+
+    uvec2 texel = gl_LocalInvocationID.xy;  // 0..GE_DDGI_TILE-1, includes the border
+#endif
+    vec2 octUV = (vec2(texel) - float(GE_DDGI_BORDER) + 0.5) / float(GE_DDGI_OCT_RES);
+    vec3 texelDir = GE_OctDecode(octUV);
+
+    uint raysPerProbe = DDGIParams.uDispatch0.y;
+    uint rayBase = uint(probeIdx) * raysPerProbe;
+    mat3 basis = GE_DDGIRayBasis(DDGIParams.uDispatch0.w);
+    // Depth moments are gathered here only while they share this tile's
+    // resolution; a Fine depth atlas has its own kernel and its own state
+    // stride, and writing it from here would land at the wrong offsets.
+    bool gatherDepth = int(DDGIParams.uParams1.y) == GE_DDGI_OCT_RES;
+    const vec3 kLuma = vec3(0.2126, 0.7152, 0.0722);
+    vec3 gathered = vec3(0.0);
+    vec2 gatheredDepth = vec2(0.0);  // x = sum(dw*dist), y = sum(dw*dist^2)
+    vec2 gatheredReflectionDepth = vec2(0.0);  // the same, of the true distance
+    float depthWeightSum = 0.0;
+    // Clamped low rather than allowed to reach 0: pow(x, 0) is 1 for every
+    // ray, including the backfacing ones whose cosine weight is exactly 0,
+    // which would let geometry behind the texel set its occluder distance.
+    // The C++ range clamps this too; the shader guard keeps the kernel's math
+    // well-defined against any UBO it is handed.
+    float depthSharpness = max(DDGIParams.uParams1.x, 0.01);
+    // Cosine-weighted first and second moments of the rays' LUMINANCE. This is
+    // the ray-to-ray spread the temporal policy below measures its own noise
+    // scale from — accumulated here rather than in a second loop because it
+    // rides the identical weights.
+    float lumaAcc = 0.0;
+    float lumaAcc2 = 0.0;
+    float weightSum = 0.0;
+    float maxDist = GE_DDGIProbeMaxDistance(grid);
+    for (uint r = 0u; r < raysPerProbe; ++r)
+    {
+        vec4 ray = GE_DDGIFiniteRay(ge_ddgiRays[rayBase + r]);
+        // Ray directions are recomputed here rather than stored (halves the
+        // ray buffer's size): GE_DDGIRayDirection is a pure function of
+        // (rayIndex, raysPerProbe, basis) shared verbatim with
+        // ddgi_trace_hw.comp, so the two kernels can never disagree on what
+        // direction ray r pointed — both derive `basis` from the SAME
+        // frameIndex this tick.
+        vec3 rayDir = GE_DDGIRayDirection(r, raysPerProbe, basis);
+        float w = max(dot(texelDir, rayDir), 0.0);
+        gathered += ray.rgb * w;
+        weightSum += w;
+        float rayLuma = dot(ray.rgb, kLuma);
+        lumaAcc += rayLuma * w;
+        lumaAcc2 += rayLuma * rayLuma * w;
+        // Sky and far geometry share a local distance cap, keeping distant
+        // samples from overwhelming the moments of nearby occluders.
+        float dist = GE_DDGIBoundedProbeDistance(ray.w, maxDist);
+        float reflectionDist = GE_DDGIReflectionProbeDistance(ray.w, grid);
+        float dw = pow(w, depthSharpness);
+        gatheredDepth += vec2(dist, dist * dist) * dw;
+        gatheredReflectionDepth += vec2(reflectionDist, reflectionDist * reflectionDist) * dw;
+        depthWeightSum += dw;
+    }
+    // Monte-Carlo hemisphere estimator, in the engine's E/PI convention.
+    //
+    // The rays are uniform over the full sphere (spherical Fibonacci), so the
+    // unbiased estimator of E = integral(L cos) is (4*PI/N) * sum(L*cos). This
+    // stores E/PI, i.e. (4/N) * sum(L*cos) — matching ge_irradianceCube, which
+    // holds E/PI for exactly the same reason (sky_diffuse_convolve.comp) and is
+    // the form the Lambert consumer wants: ibl.glsl does `irr * baseColor` with
+    // no 1/PI of its own, and GE_SampleDDGIIrradiance REPLACES that cube sample,
+    // so the two must agree on units or DDGI reads PI times too bright.
+    //
+    // This is also what makes the field converge. The trace kernels' recursive
+    // term is `bounce = albedo * <this atlas>`, which is Lambert outgoing
+    // radiance albedo*E/PI only if the atlas is E/PI. Storing raw E instead
+    // made the per-cycle gain PI*albedo (~2.8 at the default material's
+    // baseColor of 1.0) — far above 1, so total irradiance grew every tick
+    // until the scene washed out, which is exactly the runaway this fixes.
+    // GE_DDGI_MAX_BOUNCE_ALBEDO caps the remaining gain strictly below 1.
+    float estimate = 4.0 / float(max(raysPerProbe, 1u));
+    // Intensity is NOT applied here — it belongs solely to the consumer
+    // (Includes/ddgi_probes.glsl's GE_DDGISampleC0/C1, "before it reaches the
+    // forward pass's ambient term" per DDGIVolume.h's tooltip), so it stays
+    // live-editable without a state rebuild. Applying it here too would
+    // silently square it (bake-time * consume-time) — a real bug this
+    // comment exists to prevent recurring; grid.intensity is populated in
+    // the UBO but deliberately unused in this kernel.
+    vec3 newIrr = gathered * estimate;
+    vec4 newDepth = vec4(gatheredDepth, gatheredReflectionDepth) / max(depthWeightSum, 1.0e-5);
+
+    uint stateBase = uint(probeIdx) * uint(GE_DDGI_TILE * GE_DDGI_TILE);
+    uint stateIdx = stateBase + texel.y * uint(GE_DDGI_TILE) + texel.x;
+    vec4 prevState = ge_ddgiIrradianceState[stateIdx];
+    // Reset poisoned history before arithmetic: mix(finite, NaN, 0) is NaN.
+    if (!GE_DDGIFinite(prevState))
+        prevState = vec4(0.0);
+    vec3 prevIrr = prevState.rgb;
+    vec4 prevDepth = gatherDepth ? ge_ddgiDepthState[stateIdx] : vec4(0.0);
+    if (!GE_DDGIFinite(prevDepth))
+        prevDepth = vec4(0.0);
+    // Steady-tick count for the running mean. Zero on a fresh allocation,
+    // which is exactly the unseeded case below.
+    float prevCount = min(max(ge_ddgiTemporalState[stateIdx], 0.0), GE_DDGI_TEMPORAL_MAX_HISTORY);
+    if (!GE_DDGIFinite(vec4(prevCount)))
+        prevCount = 0.0;
+
+    // Carry the luminance moments from the ray domain into the irradiance
+    // domain this buffer stores, so sigma and the state's own luminance are
+    // directly comparable. newIrr = (gathered/weightSum) * momentScale by
+    // construction, and luminance is linear, so the mean carries by that
+    // factor and the standard deviation by the same one (sd(cX) = c*sd(X)).
+    // For a cosine-weighted gather over a uniform sphere weightSum ~= N/4, so
+    // momentScale sits near 1 and the absolute variance floor above is in the
+    // units it was authored in.
+    float weightSumSafe = max(weightSum, 1.0e-5);
+    float momentScale = estimate * weightSumSafe;
+    float curLumaRaw = lumaAcc / weightSumSafe;
+    float curM2Raw = lumaAcc2 / weightSumSafe;
+    float curLuma = curLumaRaw * momentScale;
+    float curM2 = curM2Raw * momentScale * momentScale;
+    float curVar = max(curM2 - curLuma * curLuma, 0.0);
+
+    float prevLuma = dot(prevIrr, kLuma);
+    float prevM2 = prevState.w;
+    float prevVar = max(prevM2 - prevLuma * prevLuma, 0.0);
+
+    float lumaRef = max(max(curLuma, prevLuma), 0.0);
+    float varFloor = GE_DDGI_TEMPORAL_VAR_EPS + lumaRef * lumaRef * GE_DDGI_TEMPORAL_VAR_REL;
+    float sigma = sqrt(prevVar + curVar + varFloor);
+    float absDelta = abs(curLuma - prevLuma);
+
+    // How much this texel's change looks like a REAL lighting change rather
+    // than this tick's Monte-Carlo noise: 0 below sigma0, ramping to 1 at the
+    // authored threshold.
+    float sigma0 = sigma * GE_DDGI_TEMPORAL_CHANGE_SIGMA0;
+    float sigma1 = sigma * max(DDGIParams.uTiming.z, GE_DDGI_TEMPORAL_CHANGE_SIGMA0 + 0.01);
+    float changeW = clamp((absDelta - sigma0) / max(sigma1 - sigma0, 1.0e-6), 0.0, 1.0);
+
+    // Both retentions are built in the 60 Hz reference domain and normalized
+    // ONCE, at the end, for this probe's real revisit interval. Normalizing
+    // the slider first and subtracting the snap after it would apply the drop
+    // once per FRAME instead of once per reference interval, which makes a
+    // 120 Hz machine admit twice the fresh noise per second that a 60 Hz one
+    // does — visible as frame-rate-dependent flicker.
+    float rawNoiseH = grid.hysteresis + (1.0 - grid.hysteresis) * GE_DDGI_TEMPORAL_NOISE_H_BOOST;
+    // Running-mean retention for a steady texel; the authored value is its floor.
+    rawNoiseH = max(rawNoiseH, prevCount / (prevCount + 1.0));
+    float rawChangeH = max(grid.hysteresis - DDGIParams.uTiming.w, GE_DDGI_TEMPORAL_MIN_CHANGE_H);
+    float h = GE_DDGIHysteresisWeight(mix(rawNoiseH, rawChangeH, changeW), DDGIParams.uTiming.x);
+
+    // Firefly rejection: pull an outlier back toward a band of the texel's own
+    // sigma instead of accepting it, so one blown-out sample cannot smear a
+    // bright dot through the history. A genuine change (changeW -> 1) bypasses
+    // the clip — otherwise the clip would fight the snap it is meant to
+    // coexist with, and every real lighting change would arrive late.
+    float band = sigma * DDGIParams.uTiming.y;
+    float clipScale = min(1.0, band / max(absDelta, 1.0e-6));
+    vec3 clipped = prevIrr + (newIrr - prevIrr) * clipScale;
+    vec3 candidate = mix(clipped, newIrr, changeW);
+
+    // An unseeded texel takes the fresh estimate whole. The state buffer is
+    // cleared to zero on allocate (DDGIProbeFeature's clear-on-allocate), so
+    // exact black is the allocation sentinel — without this, the first update
+    // of a fresh grid would start a slow crawl up from zero and the field
+    // would take seconds to appear rather than one tick.
+    bool unseeded = cellChanged || dot(prevIrr, vec3(1.0)) < 1.0e-6;
+    if (unseeded)
+    {
+        candidate = newIrr;
+        h = 0.0;
+    }
+
+    vec3 blendedIrr = mix(candidate, prevIrr, h);
+    // Depth is strictly positive after any real update (a miss stores the
+    // local visibility bound), so zero is its own allocation sentinel — it cannot
+    // borrow the irradiance one, which a fully shadowed probe legitimately
+    // sits at. Either pair at zero marks the texel unseeded: state written by
+    // a kernel that filled only the bounded pair (a shader hot reload keeps the
+    // state) must not blend its zero reflection pair into the fresh estimate.
+    bool depthUnseeded = cellChanged || prevDepth.x < 1.0e-6 || prevDepth.z < 1.0e-6;
+    float depthH = depthUnseeded ? 0.0 : h;
+    vec4 blendedDepth = mix(newDepth, prevDepth, depthH);
+
+    // The luminance second moment rides in the state's free .w slot; it is
+    // history for the variance estimate above and never reaches a sampler
+    // (ddgi_upload.comp writes the atlas alpha as 1.0).
+    ge_ddgiIrradianceState[stateIdx] = vec4(blendedIrr, mix(curM2, prevM2, h));
+    // A detected change forgets history in proportion to its certainty; a
+    // steady tick adds one sample.
+    float newCount = unseeded ? 1.0 : min(prevCount * (1.0 - changeW) + 1.0, GE_DDGI_TEMPORAL_MAX_HISTORY);
+    ge_ddgiTemporalState[stateIdx] = newCount;
+    if (gatherDepth)
+        ge_ddgiDepthState[stateIdx] = blendedDepth;
+#if defined(GE_COMPAT_PROFILE)
+    }
+#endif
+
+    // Every thread has read the record by now; one thread stamps it.
+    barrier();
+#if defined(GE_COMPAT_PROFILE)
+    if (probeActive && texel.x == 0u && texel.y == 0u)
+#else
+    if (texel.x == 0u && texel.y == 0u)
+#endif
+        ge_ddgiProbeCell[probeIdx] = vec4(GE_DDGIProbeCellId(grid, probeIdx), cellChanged ? 1.0 : 0.0);
+}

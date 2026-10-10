@@ -1,0 +1,117 @@
+#version 450
+
+// Pass 2 of the two-frame FXAA: the SMAA T2x resolve shape, on FXAA'd frames.
+// Per output pixel:
+//   1. Sharpen the FXAA'd current sample against its 3x3 mean (negative-lobe
+//      unsharp) — counters the softening the edge jitter introduces. It is a
+//      function of this frame alone, so both frames of the blend carry it.
+//   2. Reproject the previous frame analytically from depth (current UNJITTERED
+//      inverse view-proj into the previous UNJITTERED view-proj — phase-stable
+//      both ways; a static camera maps a pixel to itself exactly).
+//   3. Blend: lerp(current, previous, 0.5) wherever the history reprojects
+//      on-screen; current only where it does not or no history exists.
+//
+// There is deliberately NO neighbourhood clamp, NO hard reject, and NO depth
+// term. The two jitter positions rasterize a sub-pixel edge into different
+// pixels, so at such an edge the two frames disagree in colour AND in depth
+// (one holds the surface, the other the background); every gate that keys on
+// that disagreement — a colour box, a depth tolerance, however wide — fires
+// there on alternate frames, and the output flickers between "blended" and
+// "raw" at every edge. SMAA T2x escapes this with a velocity delta, which is
+// zero for static geometry whatever the coverage; the LDR chain carries no
+// motion vectors, and depth is not a substitute. A constant 0.5 resolves a
+// static scene to the same (A+B)/2 every frame. Ghosting needs no gate to stay
+// bounded: the history is never an accumulation, only the previous frame's
+// sharpened render, so the worst case under object motion is one frame of
+// the previous sample; camera motion is handled by the reprojection.
+//
+// The history buffer stores the sharpened CURRENT frame, never the blend.
+// Layout: rgb = sharpened LDR, a = this frame's raster depth (reverse-Z).
+layout(local_size_x = 8, local_size_y = 8) in;
+
+layout(set = 0, binding = 0, rgba16f) uniform writeonly image2D uOutHistory;
+layout(set = 0, binding = 1, rgba16f) uniform writeonly image2D uOutColor;
+layout(set = 0, binding = 2) uniform sampler2D uCurrent; // FXAA'd current frame
+layout(set = 0, binding = 3) uniform sampler2D uDepth;   // resolved reverse-Z depth
+layout(set = 0, binding = 4) uniform sampler2D uHistory; // previous sharpened frame + depth
+
+layout(std140, set = 0, binding = 5) uniform FxaaResolveParams
+{
+    mat4 uInvViewProj;  // current frame, UNJITTERED (phase-stable reprojection)
+    mat4 uPrevViewProj; // previous frame, UNJITTERED
+    vec4 uExtent;       // xy = render size, zw = 1 / render size
+    // x = history valid (0/1), y = sharpen strength, zw = unused.
+    vec4 uParams0;
+    // xy = current-frame de-jitter as a viewport-UV offset. The frame was
+    // rasterized with a jittered projection, so its content sits a fraction of a pixel off the
+    // pixel grid; sampling the current colour at uv + this offset reconstructs
+    // it at the UNJITTERED pixel centre. Without it the 50/50 merge (and every
+    // rejected pixel) wobbles by the jitter each frame. zw unused.
+    vec4 uParams1;
+} Fxaa;
+
+#include "Includes/screen_position.glsl"
+
+void main()
+{
+    const ivec2 size = ivec2(Fxaa.uExtent.xy);
+    const ivec2 p = ivec2(gl_GlobalInvocationID.xy);
+    if (p.x >= size.x || p.y >= size.y)
+        return;
+
+    const vec2 texel = Fxaa.uExtent.zw;
+    const vec2 uv = (vec2(p) + 0.5) * texel;
+    // De-jittered sample position: realigns the jittered raster back to the
+    // pixel grid so the merge is stable (see uParams1). Colour taps use this;
+    // depth and reprojection stay on the true pixel uv (raster depth domain).
+    const vec2 cuv = uv + Fxaa.uParams1.xy;
+
+    // ── Current sample + 3x3 mean for the sharpen ──────────────────────────
+    const vec3 c = texture(uCurrent, cuv).rgb;
+    vec3 sum = c;
+    for (int y = -1; y <= 1; ++y)
+        for (int x = -1; x <= 1; ++x)
+        {
+            if (x == 0 && y == 0)
+                continue;
+            sum += texture(uCurrent, cuv + vec2(x, y) * texel).rgb;
+        }
+    const vec3 mean = sum * (1.0 / 9.0);
+    const vec3 currentSharp = max(c + (c - mean) * Fxaa.uParams0.y, vec3(0.0));
+
+    // ── Reproject the previous frame from depth ────────────────────────────
+    const float depth = texture(uDepth, uv).r;
+    const vec2 ndcXY = GE_ViewportUVToYUpNdc(uv);
+    // Valid when the point is in front of the previous camera; whether it is
+    // on-screen is the UV test below. Deliberately NO test on the reprojected
+    // depth: under reverse-Z the background is exactly 0.0, and a round trip
+    // through two matrices lands it a few ulp either side of zero, so a
+    // [0, 1] range test rejects background pixels at random — and at a
+    // jitter-straddled edge that is one phase only, which flickers.
+    vec2 prevUv = vec2(-1.0);
+    bool reprojectionValid = false;
+    const vec4 worldH = Fxaa.uInvViewProj * vec4(ndcXY, depth, 1.0);
+    if (abs(worldH.w) >= 1e-9)
+    {
+        const vec4 prevClip = Fxaa.uPrevViewProj * vec4(worldH.xyz / worldH.w, 1.0);
+        if (prevClip.w > 1e-6)
+        {
+            prevUv = GE_YUpNdcToViewportUV(prevClip.xy / prevClip.w);
+            reprojectionValid = true;
+        }
+    }
+
+    // ── Two-frame blend ────────────────────────────────────────────────────
+    // No far-plane exclusion: under reverse-Z the background is depth 0.0 and
+    // reprojects fine (the w guard above covers the degenerate case).
+    const bool historyValid = Fxaa.uParams0.x > 0.5;
+    const bool onScreen = reprojectionValid && GE_ViewportUVInside(prevUv);
+    const vec3 outColour = (historyValid && onScreen)
+                               ? 0.5 * (currentSharp + texture(uHistory, prevUv).rgb)
+                               : currentSharp;
+
+    imageStore(uOutColor, p, vec4(outColour, 1.0));
+    // History = sharpened CURRENT only (never the blend) -> no accumulation.
+    // Alpha carries the raster depth for tooling; the resolve does not read it.
+    imageStore(uOutHistory, p, vec4(currentSharp, depth));
+}

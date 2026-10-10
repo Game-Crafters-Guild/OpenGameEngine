@@ -1,0 +1,166 @@
+#version 450
+
+// Hillaire 2020 multiple-scattering LUT.
+// Keyed by (u = sunCosZenith mapped [-1,1]->[0,1], v = normalized height [0,1]).
+// Each texel integrates second-order scattered light (L2) and the multiscatter
+// feedback fraction (fms) over the full sphere of incoming directions, then sums
+// the geometric series Psi_ms = L2 / (1 - fms) to get the infinite-bounce factor.
+//
+// Physical inputs (densities, beta coefficients, scale heights, transmittance
+// LUT parameterization) are kept verbatim with sky_view_lut.comp so the
+// multiscatter term stays consistent with the single-scatter march that consumes
+// it. The sun illuminance is normalized to white (1,1,1) here; the sky-view
+// march applies the real sun color/intensity when it samples this LUT.
+
+layout(local_size_x = 8, local_size_y = 8, local_size_z = 1) in;
+
+layout(set = 0, binding = 0, rgba16f) uniform writeonly image2D oMultiscatterLUT;
+
+layout(set = 0, binding = 1) uniform sampler2D uTransmittanceLUT;
+
+#include "Includes/sky_atmosphere_ubo.glsl"
+#include "Includes/sky_ray_sphere.glsl"
+
+const float PI = 3.14159265359;
+const float kInvFourPi = 1.0 / (4.0 * PI);
+
+// Sphere-direction sampling grid. 8 azimuth x 8 zenith = 64 directions.
+const int kSqrtSamples = 8;
+const int kNumDirections = kSqrtSamples * kSqrtSamples;
+
+// Ray-march step count along each sphere direction. Lower than the sky-view
+// march (64) because this is an N-direction inner loop; 32 keeps the LUT cheap
+// while staying smooth (Hillaire uses ~20-40 here).
+const int kNumSteps = 32;
+
+// Same parameterization as sky_view_lut.comp: u = 0.5 + 0.5*cosZenith,
+// v = sqrt(normalizedHeight). 'height' is the absolute radius from planet center.
+vec3 GetTransmittance(float height, float zenithCos)
+{
+    float u_mu = 0.5 + 0.5 * zenithCos;
+    float rNorm = clamp((height - uAtmos.planetRadius) / (uAtmos.atmosphereRadius - uAtmos.planetRadius), 0.0, 1.0);
+    float u_r = sqrt(rNorm);
+    return texture(uTransmittanceLUT, vec2(u_mu, u_r)).rgb;
+}
+
+void main()
+{
+    ivec2 pixel = ivec2(gl_GlobalInvocationID.xy);
+    ivec2 size = imageSize(oMultiscatterLUT);
+    if (pixel.x >= size.x || pixel.y >= size.y) return;
+
+    // u -> sun cosine zenith in [-1,1]; v -> normalized height in [0,1].
+    vec2 uv = (vec2(pixel) + 0.5) / vec2(size);
+    float sunCosZenith = uv.x * 2.0 - 1.0;
+    float heightNorm = clamp(uv.y, 0.0, 1.0);
+
+    // Sample point on the planet 'up' axis at the requested altitude. The frame
+    // is built so 'up' = +Y; the sun direction is reconstructed purely from
+    // sunCosZenith (azimuth is irrelevant for an isotropic multiscatter LUT).
+    float atmoThickness = uAtmos.atmosphereRadius - uAtmos.planetRadius;
+    float radius = uAtmos.planetRadius + heightNorm * atmoThickness;
+    vec3 planetCenter = vec3(0.0);
+    vec3 up = vec3(0.0, 1.0, 0.0);
+    vec3 samplePos = planetCenter + up * radius;
+
+    float sinTheta = sqrt(max(0.0, 1.0 - sunCosZenith * sunCosZenith));
+    vec3 sunDir = normalize(vec3(sinTheta, sunCosZenith, 0.0));
+
+    // Accumulate over the full sphere of incoming directions.
+    vec3 L2 = vec3(0.0);   // second-order scattered radiance (sun-lit)
+    vec3 fms = vec3(0.0);  // multiscatter feedback fraction (uniform ambient = 1)
+
+    for (int iAz = 0; iAz < kSqrtSamples; ++iAz)
+    {
+        for (int iZen = 0; iZen < kSqrtSamples; ++iZen)
+        {
+            // Uniform-area sphere sampling: cosZenith uniform in [-1,1],
+            // azimuth uniform in [0, 2PI). Each cell has equal solid angle, so
+            // the per-direction weight is exactly 4*PI / N.
+            float u0 = (float(iAz) + 0.5) / float(kSqrtSamples);
+            float u1 = (float(iZen) + 0.5) / float(kSqrtSamples);
+            float cosZ = u1 * 2.0 - 1.0;
+            float sinZ = sqrt(max(0.0, 1.0 - cosZ * cosZ));
+            float phi = u0 * 2.0 * PI;
+            vec3 omega = vec3(sinZ * cos(phi), cosZ, sinZ * sin(phi));
+
+            // March the atmosphere from samplePos along omega.
+            float t0, t1;
+            if (!GE_RaySphereIntersect(samplePos, omega, planetCenter, uAtmos.atmosphereRadius, t0, t1))
+                continue;
+
+            float tStart = max(0.0, t0);
+            float tEnd = t1;
+
+            // Clip the march to the ground if the ray hits the planet.
+            float tg0, tg1;
+            if (GE_RaySphereIntersect(samplePos, omega, planetCenter, uAtmos.planetRadius, tg0, tg1))
+            {
+                if (tg0 > 0.0) tEnd = min(tEnd, tg0);
+            }
+
+            if (tEnd <= tStart)
+                continue;
+
+            float dt = (tEnd - tStart) / float(kNumSteps);
+            float t = tStart + 0.5 * dt;
+
+            vec3 pathTransmittance = vec3(1.0);
+
+            for (int i = 0; i < kNumSteps; ++i)
+            {
+                vec3 p = samplePos + omega * t;
+                float r = length(p - planetCenter);
+                float h = r - uAtmos.planetRadius;
+                if (h < 0.0) break;
+
+                float rhoRay = exp(-h / uAtmos.rayleighScaleHeight);
+                float rhoMie = exp(-h / uAtmos.mieScaleHeight);
+
+                vec3 sigmaS_Ray = uAtmos.betaRayleigh * rhoRay;
+                vec3 sigmaS_Mie = uAtmos.betaMie * rhoMie;
+                vec3 sigmaS = sigmaS_Ray + sigmaS_Mie;
+                // Mie absorption matches sky_view_lut.comp (sigmaE = scatter + 0.1*Mie).
+                vec3 sigmaE = sigmaS_Ray + sigmaS_Mie * 1.1;
+
+                vec3 stepTransmittance = exp(-sigmaE * dt);
+
+                // Transmittance from this sample point toward the sun (sun shadow).
+                vec3 upP = (p - planetCenter) / r;
+                float sunZenith = dot(upP, sunDir);
+                vec3 transToSun = GetTransmittance(r, sunZenith);
+
+                // Energy-conserving analytic integral of in-scattered light over
+                // the step: integral(sigmaS * T(s)) ds = sigmaS * (1 - stepT) / sigmaE.
+                // (sigmaS / sigmaE) is the single-scatter albedo of the step.
+                vec3 stepIntegral = (sigmaS - sigmaS * stepTransmittance) / max(sigmaE, vec3(1e-9));
+
+                // L2: incoming = sun illuminance (white) * transmittance-to-sun,
+                // scattered isotropically (1/4PI).
+                L2 += pathTransmittance * stepIntegral * transToSun * kInvFourPi;
+
+                // fms: incoming = uniform ambient radiance 1 (no sun transmittance),
+                // scattered isotropically. This is the fraction of ambient that
+                // scatters back toward the sample point.
+                fms += pathTransmittance * stepIntegral * kInvFourPi;
+
+                pathTransmittance *= stepTransmittance;
+
+                t += dt;
+            }
+        }
+    }
+
+    // Uniform-area solid-angle weight per direction.
+    float dOmega = 4.0 * PI / float(kNumDirections);
+    L2 *= dOmega;
+    fms *= dOmega;
+
+    // Infinite multiple-scattering geometric series: sum_{n>=0} fms^n * L2.
+    // Clamp fms < 1 so the sum stays finite (single-scatter albedo < 1 already
+    // guarantees this physically; the clamp guards numerical edge cases).
+    vec3 clampedFms = clamp(fms, vec3(0.0), vec3(0.9999));
+    vec3 psiMs = L2 / (vec3(1.0) - clampedFms);
+
+    imageStore(oMultiscatterLUT, pixel, vec4(psiMs, 1.0));
+}

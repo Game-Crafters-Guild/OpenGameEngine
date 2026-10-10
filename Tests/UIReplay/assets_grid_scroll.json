@@ -1,0 +1,76 @@
+{
+  "name": "assets_grid_scroll",
+  "windowIndex": 0,
+  "minFrames": 300,
+  "probe": {
+    "dumpIdsContaining": { "needle": "assets", "frame": 20 },
+    "scrollViewUnderId": "assets-grid",
+    "gridViewUnderId": "assets-grid",
+    "requireGridViewLive": true,
+    "scrollbarVUnderId": "assets-grid",
+    "visualPatchElementIds": { "enabled": true, "max": 12 }
+  },
+  "asserts": [
+    {
+      "kind": "scrollOnlyPathAtLeast",
+      "frameStart": 70,
+      "frameEnd": 120,
+      "minFrames": 2
+    },
+    {
+      "kind": "paintOffsetsMatch",
+      "elementId": "assets-grid",
+      "requiredClass": "grid-cell",
+      "frameStart": 70,
+      "frameEnd": 120,
+      "maxMismatchCount": 0
+    },
+    {
+      "kind": "visibleTextNotFullyClipped",
+      "subtreeId": "assets-grid",
+      "scrollViewUnderId": "assets-grid",
+      "requiredClasses": ["grid-title"],
+      "frameStart": 70,
+      "frameEnd": 120,
+      "minVisiblePx": 2.0,
+      "maxChecks": 1500
+    },
+    {
+      "kind": "visibleTextNotFullyClipped",
+      "subtreeId": "assets-grid",
+      "scrollViewUnderId": "assets-grid",
+      "requiredClasses": ["grid-cell"],
+      "frameStart": 70,
+      "frameEnd": 120,
+      "minVisiblePx": 2.0,
+      "maxChecks": 1500
+    }
+  ],
+  "events": [
+    { "frame": 2, "type": "mouseMove", "target": { "kind": "elementId", "id": "tab:Assets", "relX": 0.5, "relY": 0.5 } },
+    { "frame": 3, "type": "mouseDown", "button": 0 },
+    { "frame": 4, "type": "mouseUp", "button": 0 },
+
+    { "frame": 6, "type": "mouseMove", "target": { "kind": "visibleElementByClass", "class": "grid-view-icon", "relX": 0.5, "relY": 0.5 } },
+    { "frame": 7, "type": "mouseDown", "button": 0 },
+    { "frame": 8, "type": "mouseUp", "button": 0 },
+
+    { "frame": 40, "type": "mouseMove", "target": { "kind": "elementId", "id": "assets-grid", "relX": 0.5, "relY": 0.5 } },
+    { "frame": 41, "type": "keyDown", "key": 341, "mods": 2 },
+    { "frame": 42, "type": "scroll", "dx": 0.0, "dy": -8.0 },
+    { "frame": 44, "type": "scroll", "dx": 0.0, "dy": -8.0 },
+    { "frame": 46, "type": "scroll", "dx": 0.0, "dy": -8.0 },
+    { "frame": 48, "type": "scroll", "dx": 0.0, "dy": -8.0 },
+    { "frame": 50, "type": "scroll", "dx": 0.0, "dy": -8.0 },
+    { "frame": 52, "type": "scroll", "dx": 0.0, "dy": -8.0 },
+    { "frame": 54, "type": "keyUp", "key": 341, "mods": 0 },
+
+    { "frame": 60, "type": "scroll", "dx": 0.0, "dy": 30.0 },
+    { "frame": 62, "type": "scroll", "dx": 0.0, "dy": 30.0 },
+
+    { "frame": 70, "type": "scroll", "dx": 0.0, "dy": -8.0 },
+    { "frame": 75, "type": "scroll", "dx": 0.0, "dy": -8.0 },
+    { "frame": 80, "type": "scroll", "dx": 0.0, "dy": -8.0 },
+    { "frame": 85, "type": "scroll", "dx": 0.0, "dy": -8.0 }
+  ]
+}

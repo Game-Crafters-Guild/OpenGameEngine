@@ -1,0 +1,123 @@
+#version 450
+
+#include "Includes/storage_access.glsl"
+
+// Compact Visible Transforms Compute Shader
+// Compacts visible instance transforms into a dense buffer for efficient vertex shader access
+
+layout(local_size_x = 64, local_size_y = 1, local_size_z = 1) in;
+
+// Input structures
+struct GPUInstance {
+#include "Includes/gpu_instance_fields.glsl"
+};
+
+// Output structure for visible instance data
+struct VisibleInstanceTransform {
+    mat4 transform;
+    vec3 position;      // Extracted position for easy access
+    float scale;        // Uniform scale factor
+    vec3 color;         // Instance color for visualization
+    uint originalIndex; // Original instance index for debugging
+};
+
+// Buffers
+layout(set = 0, binding = 0, std430) restrict readonly buffer InstanceBuffer {
+    GPUInstance instances[];
+};
+
+layout(set = 0, binding = 1, std430) restrict readonly buffer VisibilityBuffer {
+    uint visibilityResults[];
+};
+
+layout(set = 0, binding = 2, std430) restrict GE_STORAGE_WRITEONLY buffer VisibleTransformsBuffer {
+    VisibleInstanceTransform visibleTransforms[];
+};
+
+// Atomic counter for compacting visible instances (SSBO for atomic operations)
+// Note: coherent and restrict qualifiers ensure proper atomic behavior
+layout(set = 0, binding = 3, std430) coherent restrict buffer VisibleCountBuffer {
+    uint visibleCount;
+};
+
+layout(push_constant) uniform PushConstants {
+    uint totalInstanceCount;
+    uint maxVisibleInstances;
+    uint padding1;
+    uint padding2;
+} pushConstants;
+
+// Simple hash function for deterministic colors (matches vertex shader)
+float hash(uint x) {
+    x = ((x >> 16u) ^ x) * 0x45d9f3bu;
+    x = ((x >> 16u) ^ x) * 0x45d9f3bu;
+    x = (x >> 16u) ^ x;
+    return float(x) / 4294967295.0;
+}
+
+// Extract uniform scale from transform matrix
+float extractScale(mat4 transform) {
+    vec3 scaleVec = vec3(
+        length(transform[0].xyz),
+        length(transform[1].xyz),
+        length(transform[2].xyz)
+    );
+    return (scaleVec.x + scaleVec.y + scaleVec.z) / 3.0; // Average scale
+}
+
+// Extract position from transform matrix
+vec3 extractPosition(mat4 transform) {
+    return transform[3].xyz;
+}
+
+// Generate instance color based on index (MUST match vertex shader logic exactly)
+vec3 generateInstanceColor(uint instanceIndex) {
+    uint colorIndex = instanceIndex % 8u;
+    if (colorIndex == 0u) return vec3(1.0, 0.0, 0.0);      // Red
+    else if (colorIndex == 1u) return vec3(0.0, 1.0, 0.0); // Green
+    else if (colorIndex == 2u) return vec3(1.0, 1.0, 1.0); // White (FIXED: was blue in vertex shader)
+    else if (colorIndex == 3u) return vec3(1.0, 1.0, 0.0); // Yellow
+    else if (colorIndex == 4u) return vec3(1.0, 0.0, 1.0); // Magenta
+    else if (colorIndex == 5u) return vec3(0.0, 1.0, 1.0); // Cyan
+    else if (colorIndex == 6u) return vec3(1.0, 0.5, 0.0); // Orange
+    else return vec3(0.5, 0.0, 1.0);                       // Purple
+}
+
+void main() {
+    uint instanceIndex = gl_GlobalInvocationID.x;
+
+    // Bounds check
+    if (instanceIndex >= pushConstants.totalInstanceCount) {
+        return;
+    }
+
+    // Check if this instance is visible
+    uint visible = visibilityResults[instanceIndex];
+    if (visible == 0u) {
+        return; // Instance is culled, skip it
+    }
+
+    // Get the instance data
+    GPUInstance instance = instances[instanceIndex];
+
+    // CORRECT APPROACH: Use atomic increment to get unique slots
+    // The visibleCount buffer is already reset to 0 by the CPU before this shader runs
+    // Each visible instance gets a unique slot using atomic increment
+    uint visibleSlot = atomicAdd(visibleCount, 1u);
+
+    // Bounds check for output buffer
+    if (visibleSlot >= pushConstants.maxVisibleInstances) {
+        return; // Output buffer is full
+    }
+
+    // Create the visible instance transform entry
+    VisibleInstanceTransform visibleTransform;
+    visibleTransform.transform = instance.transform;
+    visibleTransform.position = extractPosition(instance.transform);
+    visibleTransform.scale = extractScale(instance.transform);
+    visibleTransform.color = generateInstanceColor(instanceIndex);
+    visibleTransform.originalIndex = instanceIndex;
+
+    // Write to the output buffer
+    visibleTransforms[visibleSlot] = visibleTransform;
+}

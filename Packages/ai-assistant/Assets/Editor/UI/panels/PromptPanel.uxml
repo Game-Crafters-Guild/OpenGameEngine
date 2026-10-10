@@ -1,0 +1,45 @@
+<UIElement id="PromptPanelContainer" class="prompt-panel-root">
+  <UIElement class="prompt-panel-toolbar">
+    <Button id="PromptSettingsToggle" class="icon-button prompt-panel-settings-button" />
+  </UIElement>
+
+  <UIElement id="PromptProviderSettings" class="prompt-panel-provider-settings hidden">
+    <Button id="PromptClearSession" class="icon-button prompt-panel-icon-button trash-icon" />
+  </UIElement>
+
+  <SplitView class="prompt-panel-body">
+    <pane class="pane" weight="1">
+      <ScrollView id="PromptHistoryScroll" class="prompt-panel-history-scroll">
+        <UIElement id="PromptHistoryList" class="prompt-panel-history-list" focusable="true">
+          <Label id="PromptContinuedSession" class="prompt-panel-continued hidden" />
+          <Label id="PromptHistoryEmpty" class="prompt-panel-history-empty" text="Your conversation appears here. Send a prompt below: the reply streams in under it, and prompts sent while it runs wait their turn." />
+        </UIElement>
+      </ScrollView>
+    </pane>
+
+    <UIElement id="PromptPanelInputSplitter" class="prompt-panel-input-splitter" focusable="true" />
+
+    <UIElement id="PromptInputPane" class="pane prompt-panel-input-pane">
+      <UIElement class="prompt-panel-input-column">
+        <UIElement id="PromptInputRow" class="prompt-panel-input-row">
+          <UIElement class="prompt-panel-input-field">
+            <ScrollView id="PromptInputScroll" class="prompt-panel-input-scroll">
+              <PromptTextArea id="PromptInputText" class="script-editor-textarea prompt-panel-input" value="" />
+            </ScrollView>
+            <Button id="PromptInputClear" class="icon-button prompt-panel-input-clear xclose-icon prompt-panel-input-clear-hidden" focusable="false" />
+            <Label id="PromptInputPlaceholder" class="prompt-panel-input-placeholder" text="Type a prompt, Up for history" />
+          </UIElement>
+          <UIElement id="PromptInputControls" class="prompt-panel-input-controls">
+            <Dropdown id="PromptModeDropdown" class="prompt-panel-mode prompt-panel-input-task hidden" />
+            <Button id="PromptSessionButton" class="secondary hidden" text="Session…" focusable="false" />
+            <Dropdown id="PromptProviderDropdown" class="prompt-panel-task prompt-panel-input-task" />
+            <Button id="PromptModelButton" class="secondary hidden" text="Opus (latest) · High" focusable="false" />
+            <Button id="PromptSendButton" class="icon-button prompt-panel-send-button" />
+          </UIElement>
+        </UIElement>
+      </UIElement>
+    </UIElement>
+  </SplitView>
+
+  <Label id="PromptStatusLabel" class="prompt-panel-status" text="Ready" />
+</UIElement>

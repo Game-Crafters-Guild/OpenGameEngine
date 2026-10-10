@@ -1,0 +1,7 @@
+.primary {
+    background-color: orange;
+    width: 300px;
+    height: 150px;
+    border: 2px solid black;
+    padding: 10px;
+}

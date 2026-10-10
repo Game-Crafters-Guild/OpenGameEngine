@@ -1,0 +1,295 @@
+/* Debugger Monitors panel — grouped checkbox list + grid of mini charts. */
+
+.monitors-panel {
+    display: flex;
+    flex-direction: column;
+    width: 100%;
+    height: 100%;
+    background-color: var(--ui_color_bg_panel);
+    padding: 6px;
+    gap: 6px;
+    color: var(--ui_color_text_primary);
+}
+
+.monitors-toolbar {
+    display: flex;
+    flex-direction: row;
+    align-items: center;
+    gap: 6px;
+    flex: 0 0 auto;
+}
+
+.monitors-btn-pause {
+    flex: 0 0 auto;
+    width: 80px;
+    color: var(--ui_color_text_primary);
+}
+
+.monitors-btn-pause.paused {
+    opacity: 1.0;
+}
+
+.monitors-btn-clear {
+    flex: 0 0 auto;
+    width: 80px;
+    color: var(--ui_color_text_primary);
+}
+
+.monitors-hdr-status {
+    flex: 1 1 auto;
+    min-width: 0;
+    font-size: 12px;
+    color: var(--ui_color_text_secondary);
+}
+
+.monitors-body {
+    display: flex;
+    flex-direction: row;
+    flex: 1 1 auto;
+    gap: 8px;
+    min-height: 0;
+}
+
+/* ---- Left: list ---- */
+
+.monitors-left {
+    display: flex;
+    flex-direction: column;
+    width: 280px;
+    min-width: 220px;
+    flex: 0 0 auto;
+    background-color: var(--ui_color_bg_grid);
+    border-radius: 4px;
+}
+
+.monitors-list-header {
+    display: flex;
+    flex-direction: row;
+    align-items: center;
+    padding: 6px 8px;
+    border-bottom-width: 1px;
+    border-bottom-color: var(--ui_color_border);
+    flex: 0 0 auto;
+}
+
+.monitors-list-header-name {
+    flex: 1 1 auto;
+    font-size: 12px;
+    color: var(--ui_color_text_secondary);
+}
+
+.monitors-list-header-value {
+    width: 80px;
+    text-align: right;
+    font-size: 12px;
+    color: var(--ui_color_text_secondary);
+}
+
+.monitors-list-scroll {
+    flex: 1 1 auto;
+    min-width: 0;
+    min-height: 0;
+    overflow-x: hidden;
+    overflow-y: auto;
+}
+
+.monitors-list {
+    display: flex;
+    flex-direction: column;
+    padding: 4px 4px 8px 4px;
+    gap: 1px;
+    min-width: 0;
+}
+
+.monitors-group-header {
+    font-size: 12px;
+    color: var(--ui_color_text_primary);
+    padding: 4px 6px 2px 4px;
+    cursor: pointer;
+}
+
+.monitors-group-header:hover {
+    color: var(--ui_color_accent_blue);
+}
+
+.monitors-group-header-spaced {
+    padding-top: 8px;
+}
+
+.monitors-row {
+    display: flex;
+    flex-direction: row;
+    align-items: center;
+    padding: 2px 6px 2px 14px;
+    height: 20px;
+    flex: 0 0 auto;
+}
+
+.monitors-row-check {
+    flex: 0 0 auto;
+}
+
+.monitors-row-spacer {
+    flex: 1 1 auto;
+}
+
+.monitors-row-value {
+    /* Both axes px-fixed: SetText's impact inference routes per-frame value
+       updates through the content-only pipeline (render-side drain + range
+       upload, no layout) — an auto axis would take the layout path. */
+    width: 80px;
+    height: 16px;
+    text-align: right;
+    font-size: 12px;
+    color: var(--ui_color_text_secondary);
+}
+
+/* ---- Right: charts grid ---- */
+
+.monitors-right {
+    display: flex;
+    flex-direction: column;
+    flex: 1 1 auto;
+    min-width: 0;
+    min-height: 0;
+}
+
+.monitors-charts-grid {
+    display: flex;
+    flex-direction: row;
+    flex-wrap: wrap;
+    flex: 1 1 auto;
+    gap: 6px;
+    overflow-y: auto;
+    align-content: flex-start;
+}
+
+.monitors-chart-strip {
+    display: flex;
+    flex-direction: column;
+    flex: 1 1 200px;
+    min-width: 180px;
+    min-height: 140px;
+    max-height: 480px;
+    background-color: var(--ui_color_bg_grid);
+    border-width: 1px;
+    border-color: transparent;
+    border-radius: 4px;
+    padding: 4px 6px;
+    transition: background-color 0.16s ease, border-color 0.16s ease, opacity 0.12s ease, transform 0.16s ease;
+}
+
+.monitors-charts-grid.sparse .monitors-chart-strip {
+    min-height: 280px;
+}
+
+.monitors-chart-strip.drag-source {
+    border-color: rgba(255, 255, 255, 0.4);
+}
+
+.monitors-chart-strip.dragging {
+    opacity: 0.78;
+    transform: scale(1.015);
+}
+
+.monitors-chart-strip.swap-target {
+    background-color: rgba(58, 143, 255, 0.14);
+    border-color: var(--ui_color_accent_blue);
+    transform: scale(0.985);
+}
+
+.monitors-chart-strip.drop-before {
+    background-color: rgba(58, 143, 255, 0.14);
+}
+
+.monitors-chart-strip.drop-after {
+    background-color: rgba(58, 143, 255, 0.14);
+}
+
+.monitors-chart-strip.drop-new-row {
+    background-color: rgba(58, 143, 255, 0.18);
+}
+
+.monitors-chart-row-start {
+    display: none;
+    flex: 0 0 100%;
+    width: 100%;
+    min-width: 100%;
+    height: 0;
+    min-height: 0;
+    max-height: 0;
+    padding: 0;
+    margin: 0;
+    border-width: 0;
+    overflow: hidden;
+}
+
+.monitors-chart-row-start.active {
+    display: block;
+}
+
+.monitors-chart-strip.row-break {
+    max-width: none;
+}
+
+.monitors-chart-header {
+    display: flex;
+    flex-direction: row;
+    align-items: baseline;
+    flex: 0 0 auto;
+    padding: 2px 2px 4px 2px;
+}
+
+.monitors-chart-drag-handle {
+    cursor: grab;
+}
+
+.monitors-chart-strip.dragging .monitors-chart-drag-handle {
+    cursor: grabbing;
+}
+
+.monitors-chart-drag-ghost {
+    padding: 6px 10px;
+    min-width: 120px;
+    max-width: 260px;
+    border-width: 1px;
+    border-color: var(--ui_color_accent_blue);
+    border-radius: 4px;
+    background-color: rgba(30, 36, 44, 0.94);
+    color: var(--ui_color_text_primary);
+    font-size: 12px;
+    box-shadow: 0 8px 18px rgba(0, 0, 0, 0.32);
+    opacity: 0.96;
+    pointer-events: none;
+}
+
+.monitors-chart-drop-indicator {
+    pointer-events: none;
+    border-radius: 4px;
+    background-color: rgba(58, 143, 255, 0.18);
+}
+
+.monitors-chart-name {
+    font-size: 12px;
+    color: var(--ui_color_text_primary);
+    flex: 0 0 auto;
+}
+
+.monitors-chart-header-spacer {
+    flex: 1 1 auto;
+}
+
+.monitors-chart-value {
+    /* px-fixed both axes for the content-only SetText path (see
+       .monitors-row-value). */
+    width: 80px;
+    height: 16px;
+    text-align: right;
+    font-size: 12px;
+    color: var(--ui_color_text_secondary);
+}
+
+.monitors-chart {
+    flex: 1 1 auto;
+    min-height: 80px;
+}

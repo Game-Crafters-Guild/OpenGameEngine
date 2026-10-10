@@ -1,0 +1,55 @@
+#version 450
+
+#include "Includes/storage_access.glsl"
+
+// Visibility Compaction Compute Shader
+// Compacts frustum and occlusion culling results into a final visibility buffer
+
+layout(local_size_x = 64, local_size_y = 1, local_size_z = 1) in;
+
+// Buffers
+layout(set = 0, binding = 0, std430) restrict readonly buffer FrustumResultsBuffer {
+    uint frustumResults[];
+};
+
+layout(set = 0, binding = 1, std430) restrict readonly buffer OcclusionResultsBuffer {
+    uint occlusionResults[];
+};
+
+layout(set = 0, binding = 2, std430) restrict GE_STORAGE_WRITEONLY buffer VisibilityBuffer {
+    uint visibilityResults[];  // 1 = visible, 0 = culled
+};
+
+layout(push_constant) uniform PushConstants {
+    uint instanceCount;
+    uint enableOcclusionCulling;
+    uint padding1;
+    uint padding2;
+} pushConstants;
+
+void main() {
+    uint instanceIndex = gl_GlobalInvocationID.x;
+
+    // Bounds check
+    if (instanceIndex >= pushConstants.instanceCount) {
+        return;
+    }
+
+    // Get frustum culling result
+    uint frustumVisible = frustumResults[instanceIndex];
+
+    // If frustum culled, mark as not visible
+    if (frustumVisible == 0u) {
+        visibilityResults[instanceIndex] = 0u;
+        return;
+    }
+
+    // Check occlusion culling if enabled
+    if (pushConstants.enableOcclusionCulling != 0u) {
+        uint occlusionVisible = occlusionResults[instanceIndex];
+        visibilityResults[instanceIndex] = (frustumVisible != 0u && occlusionVisible != 0u) ? 1u : 0u;
+    } else {
+        // Only frustum culling enabled - just copy frustum results
+        visibilityResults[instanceIndex] = frustumVisible;
+    }
+}

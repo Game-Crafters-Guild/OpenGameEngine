@@ -1,0 +1,51 @@
+{
+  "_example": "Open in the Node Graph (Kind: Animation). Double-click the State Machine, then click the Idle→Walk wire to edit duration and Speed conditions. Assign clips on the Idle Clip Player and on the Walk Blend Space 1D samples.",
+  "kind": "animation",
+  "viewport": {
+    "panX": 40.0,
+    "panY": 20.0,
+    "zoom": 1.0
+  },
+  "nodes": [
+    {
+      "id": "sm",
+      "typeId": "StateMachine",
+      "positionX": 80.0,
+      "positionY": 140.0,
+      "pins": [
+        {
+          "id": "poseOut",
+          "direction": "out",
+          "dataType": "pose",
+          "displayName": "Pose"
+        }
+      ],
+      "extensions": {
+        "subgraph": "{\"kind\":\"animation\",\"viewport\":{\"panX\":0.0,\"panY\":0.0,\"zoom\":1.0},\"nodes\":[{\"id\":\"entry\",\"typeId\":\"Entry\",\"positionX\":40.0,\"positionY\":160.0,\"pins\":[{\"id\":\"out\",\"direction\":\"out\",\"dataType\":\"transition\",\"displayName\":\"Out\"}],\"parameters\":{\"title\":\"Entry\"}},{\"id\":\"idle\",\"typeId\":\"State\",\"positionX\":280.0,\"positionY\":80.0,\"pins\":[{\"id\":\"in\",\"direction\":\"in\",\"dataType\":\"transition\",\"displayName\":\"In\"},{\"id\":\"out\",\"direction\":\"out\",\"dataType\":\"transition\",\"displayName\":\"Out\"}],\"parameters\":{\"title\":\"Idle\"},\"extensions\":{\"subgraph\":\"{\\\"kind\\\":\\\"animation\\\",\\\"viewport\\\":{\\\"panX\\\":0.0,\\\"panY\\\":0.0,\\\"zoom\\\":1.0},\\\"nodes\\\":[{\\\"id\\\":\\\"clip\\\",\\\"typeId\\\":\\\"ClipPlayer\\\",\\\"positionX\\\":80.0,\\\"positionY\\\":120.0,\\\"pins\\\":[{\\\"id\\\":\\\"poseOut\\\",\\\"direction\\\":\\\"out\\\",\\\"dataType\\\":\\\"pose\\\",\\\"displayName\\\":\\\"Pose\\\"}],\\\"parameters\\\":{\\\"clipGuid\\\":\\\"\\\",\\\"speed\\\":1.0,\\\"looping\\\":true}},{\\\"id\\\":\\\"out\\\",\\\"typeId\\\":\\\"OutputPose\\\",\\\"positionX\\\":420.0,\\\"positionY\\\":120.0,\\\"pins\\\":[{\\\"id\\\":\\\"pose\\\",\\\"direction\\\":\\\"in\\\",\\\"dataType\\\":\\\"pose\\\",\\\"displayName\\\":\\\"Pose\\\"}]}],\\\"links\\\":[{\\\"id\\\":\\\"l0\\\",\\\"sourceNodeId\\\":\\\"clip\\\",\\\"sourcePinId\\\":\\\"poseOut\\\",\\\"targetNodeId\\\":\\\"out\\\",\\\"targetPinId\\\":\\\"pose\\\"}]}\"}},{\"id\":\"walk\",\"typeId\":\"State\",\"positionX\":280.0,\"positionY\":260.0,\"pins\":[{\"id\":\"in\",\"direction\":\"in\",\"dataType\":\"transition\",\"displayName\":\"In\"},{\"id\":\"out\",\"direction\":\"out\",\"dataType\":\"transition\",\"displayName\":\"Out\"}],\"parameters\":{\"title\":\"Walk\"},\"extensions\":{\"subgraph\":\"{\\\"kind\\\":\\\"animation\\\",\\\"viewport\\\":{\\\"panX\\\":0.0,\\\"panY\\\":0.0,\\\"zoom\\\":1.0},\\\"nodes\\\":[{\\\"id\\\":\\\"bs\\\",\\\"typeId\\\":\\\"BlendSpace1D\\\",\\\"positionX\\\":80.0,\\\"positionY\\\":120.0,\\\"pins\\\":[{\\\"id\\\":\\\"poseOut\\\",\\\"direction\\\":\\\"out\\\",\\\"dataType\\\":\\\"pose\\\",\\\"displayName\\\":\\\"Pose\\\"}],\\\"parameters\\\":{\\\"parameter\\\":\\\"Speed\\\"},\\\"extensions\\\":{\\\"blendSpace1D\\\":{\\\"samples\\\":[{\\\"position\\\":0.0,\\\"label\\\":\\\"Walk\\\"},{\\\"position\\\":1.5,\\\"label\\\":\\\"Run\\\"}]}}},{\\\"id\\\":\\\"out\\\",\\\"typeId\\\":\\\"OutputPose\\\",\\\"positionX\\\":440.0,\\\"positionY\\\":120.0,\\\"pins\\\":[{\\\"id\\\":\\\"pose\\\",\\\"direction\\\":\\\"in\\\",\\\"dataType\\\":\\\"pose\\\",\\\"displayName\\\":\\\"Pose\\\"}]}],\\\"links\\\":[{\\\"id\\\":\\\"l0\\\",\\\"sourceNodeId\\\":\\\"bs\\\",\\\"sourcePinId\\\":\\\"poseOut\\\",\\\"targetNodeId\\\":\\\"out\\\",\\\"targetPinId\\\":\\\"pose\\\"}]}\"}}],\"links\":[{\"id\":\"e0\",\"sourceNodeId\":\"entry\",\"sourcePinId\":\"out\",\"targetNodeId\":\"idle\",\"targetPinId\":\"in\"},{\"id\":\"t_idle_walk\",\"sourceNodeId\":\"idle\",\"sourcePinId\":\"out\",\"targetNodeId\":\"walk\",\"targetPinId\":\"in\",\"duration\":0.2,\"conditions\":[{\"param\":\"Speed\",\"op\":\"greaterThan\",\"value\":0.15}]},{\"id\":\"t_walk_idle\",\"sourceNodeId\":\"walk\",\"sourcePinId\":\"out\",\"targetNodeId\":\"idle\",\"targetPinId\":\"in\",\"duration\":0.2,\"conditions\":[{\"param\":\"Speed\",\"op\":\"lessThan\",\"value\":0.1}]}]}"
+      }
+    },
+    {
+      "id": "out",
+      "typeId": "OutputPose",
+      "positionX": 420.0,
+      "positionY": 140.0,
+      "pins": [
+        {
+          "id": "pose",
+          "direction": "in",
+          "dataType": "pose",
+          "displayName": "Pose"
+        }
+      ]
+    }
+  ],
+  "links": [
+    {
+      "id": "l0",
+      "sourceNodeId": "sm",
+      "sourcePinId": "poseOut",
+      "targetNodeId": "out",
+      "targetPinId": "pose"
+    }
+  ]
+}

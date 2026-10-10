@@ -1,0 +1,130 @@
+.web-panel {
+  display: flex;
+  flex-direction: column;
+  width: 100%;
+  height: 100%;
+  background-color: #1e1e1e;
+}
+
+.web-container {
+  display: flex;
+  flex-direction: column;
+  width: 100%;
+  height: 100%;
+  min-height: 0;
+  padding: 8px;
+  gap: 0;
+}
+
+.web-tab-bar {
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+  gap: 3px;
+  padding: 0 0 4px 0;
+}
+
+.web-tab-bar.hidden {
+  display: none;
+}
+
+.web-tab {
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+  height: 20px;
+  background-color: #2d2d30;
+  border: 1px solid #3c3c3c;
+  border-radius: 3px;
+}
+
+.web-tab:hover {
+  background-color: #3a3a3d;
+  border-color: #555555;
+}
+
+.web-tab.active {
+  background-color: #3c3c3c;
+  border-color: #555555;
+}
+
+.button.web-tab-label {
+  min-height: 0;
+  padding: 1px 2px 1px 6px;
+  font-size: 12px;
+  color: #cccccc;
+  background-color: transparent !important;
+  border: none;
+  border-radius: 0;
+}
+
+.button.web-tab-close {
+  min-height: 0;
+  width: 16px;
+  height: 16px;
+  padding: 0;
+  margin-right: 2px;
+  background-size: 9px 9px;
+  background-color: transparent !important;
+  border: none;
+  border-radius: 0;
+}
+
+.button.web-tab-label:hover {
+  color: #ffffff;
+  background-color: transparent !important;
+}
+
+.button.web-tab-close:hover {
+  background-color: transparent !important;
+  background-image-tint: rgba(255, 82, 82, 1.0) !important;
+}
+
+
+.web-controls {
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+  gap: 8px;
+  padding: 8px;
+  background-color: #252526;
+  border-radius: 4px;
+}
+
+.web-url-field {
+  flex: 1;
+  width: 100%;
+  padding: 6px 8px;
+  background-color: #3c3c3c;
+  border: 1px solid #555555;
+  border-radius: 3px;
+  color: #cccccc;
+  font-size: 13px;
+}
+
+.web-url-field:focus {
+  border-color: #007acc;
+  outline: none;
+}
+
+.web-error {
+  color: #f48771;
+  font-size: 12px;
+  padding: 4px 8px;
+  min-height: 0;
+}
+
+.web-error:empty {
+  display: none;
+}
+
+.web-view-container {
+  flex: 1;
+  min-height: 300px;
+  height: 100%;
+  min-width: 0;
+  background-color: #1e1e1e;
+  border: 0px solid var(--ui_color_border_subtle);
+  border-radius: 4px;
+  overflow: hidden;
+}

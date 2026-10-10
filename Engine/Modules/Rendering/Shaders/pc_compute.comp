@@ -1,0 +1,13 @@
+#version 450
+
+layout(push_constant) uniform PushConsts {
+    int a;
+    float b;
+} pc;
+
+layout(local_size_x = 1, local_size_y = 1, local_size_z = 1) in;
+
+void main() {
+    // No-op compute shader; used to verify push constant stage mask is compute-only via reflection
+}
+

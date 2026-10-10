@@ -1,0 +1,15 @@
+{
+  "schemaVersion": 3,
+  "materialName": "OpenPBR - Oren-Nayar Clay",
+  "lightingModel": "StandardPBR",
+  "alphaMode": "Opaque",
+  "doubleSided": false,
+  "surfaceShader": "Surfaces/standard_pbr.glsl",
+  "properties": {
+    "baseColor": [0.78, 0.42, 0.28, 1.0],
+    "metallic": 0.0,
+    "roughness": 0.95,
+    "diffuseRoughness": 1.0
+  },
+  "textures": {}
+}

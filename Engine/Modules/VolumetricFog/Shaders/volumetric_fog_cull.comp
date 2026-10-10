@@ -1,0 +1,98 @@
+#version 450
+
+#include "volumetric_fog_common.glsl"
+
+// One list per 8x8x8 fog brick, independent of surface depth and view-Z
+// clusters. The consumer uses this same brick size, including partial bricks.
+layout(local_size_x = 64, local_size_y = 1, local_size_z = 1) in;
+const uint kCapacity = 64u;
+struct FogCullLight
+{
+#include "Includes/light_packed_fields.glsl"
+};
+layout(set = 0, binding = 8, std430) readonly buffer FogCullLights
+{
+    uvec4 lightHeader;
+    FogCullLight lights[];
+};
+layout(set = 0, binding = 6, std430) buffer FogCullIndices
+{
+    uint indices[];
+};
+layout(set = 0, binding = 7, std430) buffer FogCullClusters
+{
+    uvec4 clusterHeader;
+    uvec2 clusters[];
+};
+shared uint hitCount;
+shared vec4 brickSphere;
+
+void main()
+{
+    uint lane = gl_LocalInvocationID.x;
+    uvec3 brick = gl_WorkGroupID;
+    uvec3 bricks = gl_NumWorkGroups;
+    uint clusterId = brick.x + bricks.x * (brick.y + bricks.y * brick.z);
+    uint firstIndex = clusterId * kCapacity;
+    if (lane == 0u)
+    {
+        hitCount = 0u;
+        if (clusterId == 0u)
+            clusterHeader = uvec4(bricks, kCapacity);
+        vec3 lo = vec3(brick * 8u) / fog.uGridParams.xyz;
+        vec3 hi = min(vec3((brick + 1u) * 8u) / fog.uGridParams.xyz, vec3(1.0));
+        vec2 centerUv = (lo.xy + hi.xy) * 0.5;
+        float nearDistance = FogSliceDistance(lo.z);
+        float farDistance = FogSliceDistance(hi.z);
+        vec3 ray = FogWorldRayFromUv(centerUv);
+        vec3 origin = FogRayOriginFromUv(centerUv);
+        float angularRadius = 0.0;
+        float originRadius = 0.0;
+        for (int y = 0; y < 2; ++y)
+        {
+            for (int x = 0; x < 2; ++x)
+            {
+                vec2 uv = vec2(x == 0 ? lo.x : hi.x, y == 0 ? lo.y : hi.y);
+                angularRadius = max(angularRadius, length(FogWorldRayFromUv(uv) - ray));
+                originRadius = max(originRadius, length(FogRayOriginFromUv(uv) - origin));
+            }
+        }
+        // The spherical cap bulges beyond its corner AABB. Bound the whole
+        // angular interval by its chord radius instead; the same expression
+        // handles orthographic rays through the origin-radius term.
+        float radius = originRadius + farDistance * angularRadius +
+                       0.5 * (farDistance - nearDistance);
+        brickSphere = vec4(origin + ray * (0.5 * (nearDistance + farDistance)),
+                           radius + 1.0e-4 * max(farDistance, 1.0));
+    }
+    barrier();
+
+    for (uint i = lane; i < lightHeader.x; i += 64u)
+    {
+        FogCullLight light = lights[i];
+        uint type = light.meta.x;
+        if (light.meta.w == 0u || light.spotParams.y <= 0.0 ||
+            (type != 1u && type != 2u && type != 4u))
+            continue;
+        float radius = max(light.posRange.w, 0.001);
+        if (type == 4u)
+        {
+            float width = max(light.colorAreaWidth.w, 0.001);
+            float height = max(light.areaParams.x, 0.001);
+            float emitterRadius = max(light.areaParams.y, 0.001);
+            if (light.meta.z == 0u) radius += 0.5 * length(vec2(width, height));
+            else if (light.meta.z == 1u || light.meta.z == 2u) radius += emitterRadius;
+            else radius += length(vec2(emitterRadius, 0.5 * height));
+        }
+        if (distance(light.posRange.xyz, brickSphere.xyz) > radius + brickSphere.w)
+            continue;
+        uint slot = atomicAdd(hitCount, 1u);
+        if (slot < kCapacity)
+            indices[firstIndex + slot] = i;
+    }
+    barrier();
+    // Preserve the TRUE count. On overflow the consumer scans all lights;
+    // it never renders an arbitrary atomic-race shortlist or drops lights.
+    if (lane == 0u)
+        clusters[clusterId] = uvec2(firstIndex, hitCount);
+}

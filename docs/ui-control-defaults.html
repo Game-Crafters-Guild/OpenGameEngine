@@ -1,0 +1,190 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>UI control defaults — the default stylesheet and slider colors</title>
+<style>
+  :root{
+    --bg:#0e1116; --panel:#161b22; --panel-light:#1c232c; --border:#2a323d;
+    --text:#d7dde5; --muted:#8b97a6; --accent:#5db0ff;
+    --danger:#ff6b6b; --bad:#ff6b6b; --ok:#5ad19b; --good:#5ad19b; --warn:#e8c468;
+    --mono:"SF Mono",ui-monospace,Menlo,Consolas,monospace;
+  }
+  *{box-sizing:border-box}
+  body{background:var(--bg);color:var(--text);font:15px/1.6 -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif;
+       margin:0;padding:0 0 80px}
+  .wrap{max-width:980px;margin:0 auto;padding:32px 24px}
+  h1{font-size:30px;margin:0 0 4px;letter-spacing:-.4px}
+  h2{font-size:22px;margin:42px 0 14px;padding-top:22px;border-top:1px solid var(--border)}
+  h3{font-size:17px;margin:26px 0 8px;color:#e9eef4}
+  p,li{color:var(--text)}
+  .lede{color:var(--muted);font-size:13px;text-transform:uppercase;letter-spacing:.12em;margin:0 0 26px}
+  a{color:var(--accent);text-decoration:none}
+  code{font-family:var(--mono);font-size:.88em;background:#11161d;border:1px solid var(--border);
+       border-radius:4px;padding:1px 5px}
+  pre{font-family:var(--mono);font-size:12.5px;line-height:1.5;background:#0b0f14;border:1px solid var(--border);
+      border-radius:8px;padding:14px 16px;overflow:auto}
+  pre code{background:none;border:none;padding:0}
+  .panel{border:1px solid var(--border);border-left-width:4px;border-radius:8px;background:var(--panel);
+         padding:14px 18px;margin:16px 0}
+  .panel.ok{border-left-color:var(--ok)} .panel.warn{border-left-color:var(--warn)}
+  .panel h4{margin:0 0 6px;font-size:14px;text-transform:uppercase;letter-spacing:.06em}
+  .panel.ok h4{color:var(--ok)} .panel.warn h4{color:var(--warn)}
+  table{border-collapse:collapse;width:100%;margin:16px 0;font-size:13.5px}
+  th,td{border:1px solid var(--border);padding:8px 11px;text-align:left;vertical-align:top}
+  th{background:var(--panel-light);color:#e9eef4}
+  tr:hover td{background:#12171e}
+  .swatch{display:inline-block;width:12px;height:12px;border-radius:3px;border:1px solid var(--border);
+          vertical-align:-1px;margin-right:6px}
+  .muted{color:var(--muted)}
+  ul{padding-left:22px} li{margin:4px 0}
+  footer{max-width:980px;margin:40px auto 0;padding:18px 24px 0;border-top:1px solid var(--border);color:var(--muted);font-size:12.5px}
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <h1>UI control defaults</h1>
+  <p class="lede">Usage guide · game UI and editor UI styling</p>
+
+  <p>A game UI document ships only its own stylesheet. So that a <code>&lt;slider&gt;</code>,
+  <code>&lt;toggle&gt;</code> or <code>&lt;checkbox&gt;</code> you have not styled is still
+  visible and usable, the UI module has a <b>default stylesheet</b> that every UI manager loads
+  under your sheets, the way a browser's built-in sheet sits under every page. It gives each
+  control the parts that would otherwise draw nothing: a slider's track and thumb, a toggle's
+  knob, a checkbox's box and a scrollbar's thumb. It also defines the <code>hidden</code>
+  class, which controls put on parts they are not showing.</p>
+
+  <p>The sheet is compiled into the engine, so every game and every exported build has it with
+  nothing to copy. It is engine code: an edit to
+  <code>Engine/Modules/UI/Assets/defaults.css</code> takes a rebuild, and it is not
+  hot-reloaded.</p>
+
+  <h2>Your rules always win</h2>
+
+  <p>The default stylesheet's rules have the cascade's lowest tier, the <b>user-agent
+  origin</b>. A rule in your theme or document that sets the same property wins over the default
+  whatever its selector: a type selector like <code>slider</code> or a single class beats the
+  default's <code>.slider-thumb</code> or <code>.toggle:checked</code>, and it does not matter in
+  which order the sheets were loaded. Between your own rules, the normal cascade applies:
+  specificity, then the later rule.</p>
+
+<pre><code>/* Wins over the default .toggle:checked { justify-content: flex-end }, which is more specific. */
+toggle { justify-content: center; }
+
+/* On a toggle's knob, wins over the default .toggle-knob wherever this sheet is loaded. */
+.volume-knob { background-color: #F4C542; }</code></pre>
+
+  <h2>Recoloring controls</h2>
+
+  <p>Every color in the default sheet is a custom property set on <code>:root</code>. Set the
+  property on <code>:root</code> to recolor every control of that kind, or on one control (or
+  any ancestor) to recolor only that part of the UI.</p>
+
+  <table>
+    <tr><th>Property</th><th>Default</th><th>What it colors</th></tr>
+    <tr><td><code>--slider-track-fill</code></td><td><span class="swatch" style="background:#3B85E0"></span><code>#3B85E0</code></td><td>The slider's track from the start to the thumb</td></tr>
+    <tr><td><code>--slider-track</code></td><td><span class="swatch" style="background:#595959"></span><code>#595959</code></td><td>The rest of the slider's track</td></tr>
+    <tr><td><code>--slider-tick</code></td><td><span class="swatch" style="background:#BFBFBF"></span><code>#BFBFBF</code></td><td>The slider's step ticks, when shown</td></tr>
+    <tr><td><code>--ui_color_slider_thumb</code></td><td><span class="swatch" style="background:#FFFFFF"></span><code>#FFFFFF</code></td><td>The slider's thumb (<code>.slider-thumb</code>)</td></tr>
+    <tr><td><code>--ui_color_toggle_knob</code></td><td><span class="swatch" style="background:#DDDDDD"></span><code>#DDDDDD</code></td><td>The toggle's knob (<code>.toggle-knob</code>)</td></tr>
+    <tr><td><code>--ui_color_checkbox_box</code></td><td><span class="swatch" style="background:#202020"></span><code>#202020</code></td><td>An unchecked checkbox's box (<code>.checkbox-box</code>)</td></tr>
+    <tr><td><code>--ui_color_checkbox_box_checked</code></td><td><span class="swatch" style="background:#3B85E0"></span><code>#3B85E0</code></td><td>A checked checkbox's box</td></tr>
+    <tr><td><code>--ui_color_checkbox_box_border</code></td><td><span class="swatch" style="background:#777777"></span><code>#777777</code></td><td>The checkbox box's 1px border</td></tr>
+    <tr><td><code>--ui_color_scrollbar_thumb</code></td><td><span class="swatch" style="background:#808080"></span><code>#808080</code></td><td>A scrollbar's thumb (<code>.scrollbar-thumb</code>)</td></tr>
+  </table>
+
+<pre><code>:root {
+    --game-accent: #F4C542;
+    --slider-track-fill: var(--game-accent);   /* every slider */
+}
+
+.volume-slider {
+    --slider-track: #2B2F3A;                   /* this slider only */
+}</code></pre>
+
+  <p>A <code>var()</code> inside one of these properties resolves in the scope of the element that
+  uses it, not the element that declared it. With the rules above, a slider inside a panel that
+  sets its own <code>--game-accent</code> fills with the panel's accent, although
+  <code>--slider-track-fill</code> was declared on <code>:root</code>. Every CSS property that uses
+  a variable behaves the same way in this engine, so a slider's track and its thumb always agree.</p>
+
+  <h3>The slider track</h3>
+
+  <p>A slider paints its track itself rather than through child elements, so its three track
+  colors are the properties <code>--slider-track-fill</code>, <code>--slider-track</code> and
+  <code>--slider-tick</code>, read from the slider. The slider element's own
+  <code>background-color</code> and border colors are not track colors; set the track
+  properties instead.</p>
+
+  <p>The track properties take any color <code>background-color</code> takes: hex, a color
+  name, <code>rgb()</code>/<code>rgba()</code>, <code>hsl()</code>/<code>hsla()</code>, or a
+  <code>var()</code> that resolves to one. A value that is not a color leaves that part of the
+  track undrawn.</p>
+
+  <h3>The thumb, knob and box</h3>
+
+  <p>These are child elements with ordinary classes, so any property can be restyled on them,
+  sizes included: <code>.slider-thumb</code> (8×8 px by default), <code>.toggle-knob</code>
+  (12×12 px), <code>.checkbox-box</code> (16×16 px) and <code>.scrollbar-thumb</code>. A checked
+  toggle moves its knob to the end with <code>.toggle:checked { justify-content: flex-end; }</code>;
+  a rule of yours on the toggle's <code>justify-content</code> replaces that.</p>
+
+  <h3>Selected text</h3>
+
+  <p>Every text control (a <code>&lt;textinput&gt;</code>, a <code>&lt;textarea&gt;</code> and
+  the controls built on them) fills selected text with the <code>selection-color</code>
+  property. It is inherited like <code>color</code>, so one declaration on <code>:root</code>
+  recolors every field, and a declaration on a panel recolors only the fields inside it. A
+  control's border never changes its selection: a field with a gray border or a red error border
+  selects in the same color as every other field.</p>
+
+<pre><code>:root {
+    selection-color: #F4C542;      /* every text control */
+}
+
+.chat-panel {
+    selection-color: #6FCF97;      /* only the fields in the chat panel */
+}</code></pre>
+
+  <p>A control draws the color at 40% of its alpha while it has the focus, so the text stays
+  legible over it. A text area keeps its selection after it loses the focus and draws it at 27%;
+  a single-line field hides its selection until it has the focus again. An <code>rgba()</code>
+  color is scaled the same way. Without a stylesheet the selection is <code>#3A8FFF</code>; the editor theme
+  sets it to its accent.</p>
+
+  <h2>The editor theme</h2>
+
+  <p>The editor does not rely on the default sheet's colors: its theme defines its own slider
+  tokens (<code>--ui_color_slider_track_fill</code>, <code>--ui_color_slider_track</code>,
+  <code>--ui_color_slider_tick</code> in <code>theme/tokens.css</code>) and maps them onto the
+  track properties, so changing the game defaults never recolors editor sliders. The editor's
+  item size sliders set their own neutral gray track the same way.</p>
+
+  <h2>Resizing items with the scroll wheel</h2>
+
+  <p>In the editor, <b>Resize Items</b> (default Ctrl+Scroll, Cmd+Scroll on macOS) makes the
+  items of the Hierarchy and the Assets panel bigger on wheel up and smaller on wheel down, over
+  the items or over the panel's size slider. The slider's tooltip names the current chord.
+  Rebind it under <i>Keyboard Shortcuts › View Navigation › Resize Items</i>; the binding needs
+  a modifier, so a plain wheel always scrolls. See
+  <a href="EditorKeyboardShortcuts.md">Editor keyboard shortcuts</a>.</p>
+
+  <p>A game UI grid view resizes its icons with the same gesture. In a shipped game it is
+  Ctrl+wheel (Cmd+wheel on macOS); while the game runs in the editor's Play mode, it follows the
+  editor's Resize Items binding instead.</p>
+
+  <h2>Changelog</h2>
+  <ul>
+    <li><b>2026-10-08</b> — The <code>selection-color</code> property.</li>
+    <li><b>2026-09-24</b> — The track properties take every color form; where a
+    <code>var()</code> resolves.</li>
+    <li><b>2026-09-23</b> — First version: the default stylesheet, the user-agent precedence
+    rule, the slider track properties and the resize gesture.</li>
+  </ul>
+
+</div>
+<footer>UI control defaults · v1 · 2026-09-23</footer>
+</body>
+</html>

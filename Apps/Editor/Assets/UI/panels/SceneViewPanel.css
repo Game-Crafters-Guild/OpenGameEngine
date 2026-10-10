@@ -1,0 +1,752 @@
+.sceneview-toolbar {
+	display: flex;
+	flex-direction: row;
+	align-items: center;
+	gap: 6px;
+
+	padding: 4px 6px;
+	height: 36px;
+	min-height: 36px;
+
+	background-color: var(--ui_color_bg_toolbar);
+	border-bottom-width: 1px;
+	border-bottom-color: var(--ui_color_border);
+}
+
+.sceneview-toolbar-buttons {
+	display: flex;
+	flex-direction: row;
+	align-items: center;
+	gap: 6px;
+}
+
+/* Match the authored 35% white icon weight with an opaque gray tint across the
+   complete horizontal toolbar. Using an opaque CSS color instead of element
+   opacity keeps the icons stable when the UI blend space changes. */
+.sceneview-toolbar .button.icon-button {
+	background-image-tint: var(--ui_icon_tint_standard);
+	opacity: 1.0;
+}
+
+.sceneview-toolbar .button.icon-button.icon-active {
+	background-image-tint: var(--ui_icon_tint_active);
+}
+
+.sceneview-toolbar .button.icon-button:hover {
+	background-image-tint: var(--ui_icon_tint_hover);
+}
+
+/* Camera bookmark uses its own button class instead of icon-button, so include
+   it explicitly. Idle and selected share --camera-bookmark-* with numbered slots. */
+.sceneview-toolbar .button.camera-bookmarks-slot.cambookmark-icon {
+	background-image-tint: #FFFFFF;
+	opacity: var(--camera-bookmark-idle-opacity, 0.24);
+}
+
+.sceneview-toolbar .button.camera-bookmarks-slot.cambookmark-icon.active {
+	background-image-tint: var(--camera-bookmark-active, #A8A8A8);
+	opacity: 1.0;
+}
+
+.sceneview-toolbar .button.camera-bookmarks-slot.cambookmark-icon:hover {
+	background-image-tint: var(--ui_icon_tint_hover);
+	opacity: 1.0;
+}
+
+/* Keep the camera-bookmark add action at the same quieter resting brightness
+   as the bookmark slot; the generic Scene View icon rule is brighter. */
+.sceneview-toolbar .camera-bookmarks .plus-icon {
+	background-image-tint: var(--ui_icon_tint_default);
+	opacity: 1.0;
+}
+
+.sceneview-toolbar .camera-bookmarks .plus-icon:hover {
+	background-image-tint: var(--ui_icon_tint_hover);
+	opacity: 1.0;
+}
+
+.sceneview-toolbar-buttons.hidden {
+	display: none;
+}
+
+/* Draggable spacer used to insert a one-button-wide gap between toolbar
+   sections. A faint reorder handle distinguishes it from a disabled button. */
+.button.toolbar-spacer-btn {
+	width: 24px;
+	height: 24px;
+	min-width: 24px;
+	min-height: 24px;
+	padding: 0;
+	background-image: url("editor:Icons/reorder-two.png");
+	background-size: 12px 12px;
+	background-position: center;
+	background-repeat: no-repeat;
+	background-color: transparent;
+	border-width: 1px;
+	border-color: transparent;
+	border-radius: 4px;
+	opacity: 0.22;
+}
+
+/* Increase contrast without turning the spacer into a solid button. */
+.button.toolbar-spacer-btn:hover {
+	background-color: rgba(255, 255, 255, 0.06);
+	border-color: rgba(255, 255, 255, 0.14);
+	opacity: 0.72;
+}
+
+.button.toolbar-spacer-btn.dragging {
+	background-color: rgba(255, 255, 255, 0.10);
+	border-color: rgba(255, 255, 255, 0.22);
+	opacity: 1.0;
+}
+
+/* Inline tool mode buttons in the horizontal toolbar.
+ *
+ * These reuse the `.scene-tool-btn` class (same as the floating vertical tool
+ * overlay), because that class deliberately avoids `.icon-button` to stay out
+ * of Button.css's `:active { background-color: transparent }` enforcement.
+ * Size is overridden here to fit the toolbar row. */
+.inline-tool-buttons .scene-tool-btn,
+.inline-tool-buttons button.scene-tool-btn,
+.inline-tool-buttons .button.scene-tool-btn {
+	width: 24px;
+	height: 24px;
+	min-width: 24px;
+	min-height: 24px;
+	padding: 4px;
+	background-size: 16px 16px;
+}
+
+/* Perf overlay label in the Scene View toolbar.
+   The text updates every frame via SetTextVisualOnly(), so keep its layout rect stable by
+   making it consume remaining space instead of content-sizing. */
+.sceneview-perf {
+	flex-grow: 1;
+	min-width: 0;
+	/* Ensure the label has a stable non-zero height even when the text is empty.
+	   Without this, Yoga can give it h=0 (content-sized), and then SetTextVisualOnly()
+	   can't patch visuals until a later heavy layout pass. */
+	align-self: stretch;
+	display: flex;
+	align-items: center;
+	text-align: right;
+	font-family: var(--ui_font_mono);
+	font-size: var(--ui_font_size_base);
+	color: var(--ui_color_text_muted);
+	overflow: hidden;
+}
+
+/* Note: Camera bookmarks buttons are styled in theme/scene-view.css */
+
+/* Camera Bookmark Preview Popup */
+.camera-bookmarks-preview {
+	position: absolute;
+	width: 128px;
+	height: 72px;
+	background-color: #444;
+	border-radius: 12px;
+	overflow: hidden;
+	border-width: 2px;
+	border-color: #8D8D8D;
+	box-shadow: var(--popup-shadow, 0 -1px 24px rgba(0, 0, 0, 0.25));
+	pointer-events: none;
+	visibility: hidden;
+	z-index: 10002;
+}
+
+.camera-bookmarks-preview.visible {
+	visibility: visible;
+}
+
+.camera-bookmarks-preview-image {
+	width: 100%;
+	height: 100%;
+	min-width: 128px;
+	min-height: 72px;
+	background-image: engine("editor_camera_bookmark_preview");
+	background-size: contain;
+	background-position: center;
+	background-repeat: no-repeat;
+}
+
+/* Spacer to push items to the right */
+.toolbar-spacer {
+	flex: 1;
+}
+
+/* ─── Scene Tool Overlay (floating panel on top of the viewport) ─── */
+.scene-tool-overlay.hidden {
+	display: none;
+}
+
+/* Inward nudge for the floating tool overlay when the 2D rulers occupy the
+   left band. Top stays where it is — the overlay normally sits well below the
+   top ruler — only the left inset needs to clear the vertical ruler. */
+.scene-tool-overlay.rulers-visible {
+	left: 32px;
+}
+
+.scene-tool-overlay {
+	position: absolute;
+	top: 110px;
+	left: 14px;
+	display: flex;
+	flex-direction: column;
+	align-items: center;
+	gap: 2px;
+	padding-top: 4px;
+	padding-bottom: 4px;
+	padding-left: 4px;
+	padding-right: 4px;
+	background-color: rgba(30, 30, 30, 0.85);
+	border-radius: 6px;
+	border-width: 1px;
+	border-color: rgba(255, 255, 255, 0.28);
+	z-index: 100;
+}
+
+/* Horizontal layout variant — applied while the overlay is docked near the
+   bottom edge of the viewport (or otherwise placed in horizontal mode). */
+.scene-tool-overlay.horizontal {
+	flex-direction: row;
+}
+
+/* Borderless variant — hides the border while keeping the background fill
+   and rounded corners. Toggled from the Scene View settings panel. */
+.scene-tool-overlay.borderless {
+	border-width: 0;
+}
+
+/* ─── Scene View ruler overlay (top + left rulers in 2D mode) ─── */
+/* Fills the viewport; no pointer events so pan/orbit input passes through.
+   Z-index sits below the rotation gizmo and tool overlay so those interactive
+   widgets remain on top of the ruler bands. */
+.scene-view-ruler-overlay {
+	position: absolute;
+	top: 0;
+	left: 0;
+	width: 100%;
+	height: 100%;
+	min-width: 0;
+	min-height: 0;
+	pointer-events: none;
+	z-index: 50;
+}
+
+.scene-view-ruler-overlay.hidden {
+	display: none;
+}
+
+/* ─── Viewport rotation gizmo (corner-anchored axis orientation widget) ─── */
+.viewport-rotation-gizmo {
+	position: absolute;
+	width: 80px;
+	height: 80px;
+	z-index: 100;
+	/* Axis labels (X/Y/Z) use the element's resolved font, so make it bold. */
+	font-weight: 700;
+}
+
+/* Corner placement — one class is toggled on by ViewportRotationGizmo::Tick()
+   based on the user's SceneViewSettings::GetRotationGizmoCorner(). */
+.viewport-rotation-gizmo.corner-top-right {
+	top: 14px;
+	right: 14px;
+}
+
+.viewport-rotation-gizmo.corner-top-left {
+	top: 14px;
+	left: 14px;
+}
+
+.viewport-rotation-gizmo.corner-bottom-right {
+	bottom: 14px;
+	right: 14px;
+}
+
+.viewport-rotation-gizmo.corner-bottom-left {
+	bottom: 14px;
+	left: 14px;
+}
+
+/* When the 2D ruler bands are visible, shift edge-anchored overlays inward
+   by the ruler thickness (18px band + 14px base inset = 32px) so they don't
+   sit on top of the ticks/labels. The right and bottom edges have no ruler,
+   so those sides keep the 10px base inset. */
+.viewport-rotation-gizmo.rulers-visible.corner-top-left    { top: 32px; left: 32px; }
+.viewport-rotation-gizmo.rulers-visible.corner-top-right   { top: 32px; }
+.viewport-rotation-gizmo.rulers-visible.corner-bottom-left { left: 32px; }
+
+/* Same nudge on top-anchored gizmos when both rulers and the FPS label
+   coincide. The fps-active class already shifts top from 10 to 42; rulers
+   add another 18px on top of that when the user has both visible. */
+.viewport-rotation-gizmo.rulers-visible.corner-top-right.fps-active,
+.viewport-rotation-gizmo.rulers-visible.corner-top-left.fps-active {
+	top: 64px;
+}
+
+/* When the FPS/perf label overlaps the gizmo (user dragged it into a top
+   corner), nudge top-anchored gizmos down so the two widgets don't clash.
+   Toggled from ViewportRotationGizmo::Tick() based on rect overlap. */
+.viewport-rotation-gizmo.corner-top-right.fps-active,
+.viewport-rotation-gizmo.corner-top-left.fps-active {
+	top: 46px;
+}
+
+/* Thin horizontal divider inside the overlay */
+.scene-tool-divider {
+	height: 1px;
+	align-self: stretch;
+	background-color: rgba(255, 255, 255, 0.31);
+	margin-top: 2px;
+	margin-bottom: 2px;
+}
+
+/* Vertical divider used when the overlay is in horizontal orientation. */
+.scene-tool-overlay.horizontal .scene-tool-divider {
+	width: 1px;
+	height: auto;
+	align-self: stretch;
+	margin-top: 0;
+	margin-bottom: 0;
+	margin-left: 2px;
+	margin-right: 2px;
+}
+
+/* Individual tool button in the overlay */
+.scene-tool-btn,
+button.scene-tool-btn,
+.button.scene-tool-btn {
+	width: 28px;
+	height: 28px;
+	min-width: 28px;
+	min-height: 28px;
+	padding: 4px;
+	border-width: 0;
+	border-color: transparent;
+	border-radius: var(--ui_radius_sm);
+	background-color: transparent;
+	background-size: 18px 18px;
+	background-repeat: no-repeat;
+	background-position: center;
+	opacity: 0.50;
+}
+
+.scene-tool-btn:hover,
+button.scene-tool-btn:hover,
+.button.scene-tool-btn:hover,
+.scene-tool-btn:active,
+button.scene-tool-btn:active,
+.button.scene-tool-btn:active {
+	background-color: rgba(255, 255, 255, 0.28);
+	border-color: transparent;
+	opacity: 0.85;
+}
+
+.scene-tool-btn.icon-active,
+button.scene-tool-btn.icon-active,
+.button.scene-tool-btn.icon-active {
+	background-color: var(--ui_color_scene_tool_active, var(--ui_color_accent_blue));
+	border-color: transparent;
+	opacity: 0.50;
+}
+
+.scene-tool-btn.icon-active:hover,
+button.scene-tool-btn.icon-active:hover,
+.button.scene-tool-btn.icon-active:hover,
+.scene-tool-btn.icon-active:active,
+button.scene-tool-btn.icon-active:active,
+.button.scene-tool-btn.icon-active:active {
+	background-color: var(--ui_color_scene_tool_active_hover, var(--ui_color_accent_blue_hover));
+	border-color: transparent;
+	opacity: 1.0;
+}
+
+/* Tool icons; each class is self-contained so a button keeps its image
+   wherever it is dragged to. */
+.select-tool-icon    { background-image: url("editor:Icons/arrowmouse.png"); background-size: 16px 16px; background-repeat: no-repeat; background-position: center; }
+.translate-tool-icon { background-image: url("editor:Icons/GiszmoTranslate.png"); background-size: 16px 16px; background-repeat: no-repeat; background-position: center; }
+.rotate-tool-icon    { background-image: url("editor:Icons/GizmoRotate.png"); background-size: 16px 16px; background-repeat: no-repeat; background-position: center; }
+.scale-tool-icon     { background-image: url("editor:Icons/Giszmo_scale.png"); background-size: 16px 16px; background-repeat: no-repeat; background-position: center; }
+.ruler-tool-icon     { background-image: url("editor:Icons/Ruler.png"); background-size: 16px 16px; background-repeat: no-repeat; background-position: center; }
+/* The spline tool's registered button (SceneView/SplineToolStripEntry.cpp) keeps its own
+   active color. Every Button carries .button, so the shared active rule's .button variant
+   (0,3,0) is the one to outrank. */
+.button.scene-tool-btn.spline-tool-btn.icon-active {
+	background-color: var(--ui_color_spline_tool_active);
+}
+.button.scene-tool-btn.spline-tool-btn.icon-active:hover {
+	background-color: var(--ui_color_spline_tool_active_hover);
+}
+.scene-tool-btn.ruler-tool-icon.icon-active,
+button.scene-tool-btn.ruler-tool-icon.icon-active,
+.button.scene-tool-btn.ruler-tool-icon.icon-active {
+	background-color: #D9A22A;
+	background-image-tint: rgba(255, 255, 255, 1.0);
+}
+.scene-tool-btn.ruler-tool-icon.icon-active:hover,
+button.scene-tool-btn.ruler-tool-icon.icon-active:hover,
+.button.scene-tool-btn.ruler-tool-icon.icon-active:hover {
+	background-color: #EAB542;
+	background-image-tint: rgba(255, 255, 255, 1.0);
+}
+
+/* A registered tool strip entry's badge button and its unread count. The count sits beside
+   the button in the host, so the resting button's opacity does not dim it; it widens with
+   its digits. */
+.scene-tool-badge-host {
+	position: relative;
+}
+
+.scene-tool-badge {
+	position: absolute;
+	top: -4px;
+	right: -6px;
+	min-width: 16px;
+	height: 16px;
+	padding-left: 4px;
+	padding-right: 4px;
+	border-radius: 8px;
+	background-color: var(--ui_color_badge_background);
+	color: var(--ui_color_text_bright);
+	font-size: 12px;
+	font-weight: 700;
+	text-align: center;
+	pointer-events: none;
+}
+
+/* Space toggle: global (default) / local (when icon-active) */
+.tool-space-icon { background-image: url("editor:Icons/global.png"); }
+.tool-space-icon.icon-active { background-image: url("editor:Icons/local.png"); }
+
+/* 2D/3D view toggle button */
+.view2d-icon,
+button.view2d-icon,
+.button.view2d-icon {
+	background-image: url("editor:Icons/3d.png");
+	background-size: 20px 20px;
+	background-repeat: no-repeat;
+	background-position: center;
+	opacity: 0.5;
+}
+
+.view2d-icon.icon-active,
+button.view2d-icon.icon-active,
+.button.view2d-icon.icon-active {
+	background-image: url("editor:Icons/2d.png");
+	opacity: 1.0;
+}
+
+/* Hover rules come after .icon-active so hover feedback wins on both states. */
+.view2d-icon:hover,
+button.view2d-icon:hover,
+.button.view2d-icon:hover,
+.view2d-icon.icon-active:hover,
+button.view2d-icon.icon-active:hover,
+.button.view2d-icon.icon-active:hover {
+	background-color: rgba(255, 255, 255, 0.28);
+	opacity: 1.0;
+}
+
+/* Pixel-perfect 2D toggle button (displays current pixel scale as text label) */
+.pixelperfect-toggle,
+button.pixelperfect-toggle,
+.button.pixelperfect-toggle {
+	font-size: 11px;
+	font-weight: 600;
+	color: rgba(255, 255, 255, 0.74);
+	opacity: 0.85;
+}
+
+.pixelperfect-toggle.icon-active,
+button.pixelperfect-toggle.icon-active,
+.button.pixelperfect-toggle.icon-active {
+	color: rgba(255, 255, 255, 1.0);
+	opacity: 1.0;
+}
+
+.pixelperfect-toggle:hover,
+button.pixelperfect-toggle:hover,
+.button.pixelperfect-toggle:hover,
+.pixelperfect-toggle.icon-active:hover,
+button.pixelperfect-toggle.icon-active:hover,
+.button.pixelperfect-toggle.icon-active:hover {
+	background-color: rgba(255, 255, 255, 0.28);
+	color: rgba(255, 255, 255, 1.0);
+	opacity: 1.0;
+}
+
+/* Transform space toggle button (global/local) */
+.transform-space-icon,
+button.transform-space-icon,
+.button.transform-space-icon {
+	background-image: url("editor:Icons/global.png");
+	background-size: 16px 16px;
+	background-repeat: no-repeat;
+	background-position: center;
+	opacity: 0.5;
+}
+
+.transform-space-icon.icon-active,
+button.transform-space-icon.icon-active,
+.button.transform-space-icon.icon-active {
+	background-image: url("editor:Icons/local.png");
+	opacity: 1.0;
+}
+
+.transform-space-icon:hover,
+button.transform-space-icon:hover,
+.button.transform-space-icon:hover,
+.transform-space-icon.icon-active:hover,
+button.transform-space-icon.icon-active:hover,
+.button.transform-space-icon.icon-active:hover {
+	background-color: rgba(255, 255, 255, 0.28);
+	opacity: 1.0;
+}
+
+/* Grid toggle button */
+.grid-icon,
+button.grid-icon,
+.button.grid-icon {
+	background-image: url("editor:Icons/grid-icon.png");
+	background-size: 16px 16px;
+	background-repeat: no-repeat;
+	background-position: center;
+	opacity: 0.5;
+}
+
+.grid-icon.icon-active,
+button.grid-icon.icon-active,
+.button.grid-icon.icon-active {
+	opacity: 1.0;
+}
+
+.grid-icon:hover,
+button.grid-icon:hover,
+.button.grid-icon:hover,
+.grid-icon.icon-active:hover,
+button.grid-icon.icon-active:hover,
+.button.grid-icon.icon-active:hover {
+	background-color: rgba(255, 255, 255, 0.28);
+	opacity: 1.0;
+}
+
+/* Grid snap toggle button */
+.snap-icon,
+button.snap-icon,
+.button.snap-icon {
+	background-image: url("editor:Icons/magnet.png");
+	background-size: 16px 16px;
+	background-repeat: no-repeat;
+	background-position: center;
+	opacity: 0.5;
+}
+
+.snap-icon.icon-active,
+button.snap-icon.icon-active,
+.button.snap-icon.icon-active {
+	opacity: 1.0;
+}
+
+.snap-icon:hover,
+button.snap-icon:hover,
+.button.snap-icon:hover,
+.snap-icon.icon-active:hover,
+button.snap-icon.icon-active:hover,
+.button.snap-icon.icon-active:hover {
+	background-color: rgba(255, 255, 255, 0.28);
+	opacity: 1.0;
+}
+
+/* Pick mode toggle button (exact pick vs model-root pick) */
+.pick-mode-icon {
+	background-image: url("editor:Icons/arrowmouse.png");
+	background-size: 16px 16px;
+	background-repeat: no-repeat;
+	background-position: center;
+	opacity: 0.5;
+}
+
+.pick-mode-icon.icon-active {
+	opacity: 1.0;
+}
+
+.pick-mode-icon:hover {
+	background-color: rgba(255, 255, 255, 0.28);
+	opacity: 1.0;
+}
+
+/* Gizmo toggle button */
+.gizmo-icon,
+button.gizmo-icon,
+.button.gizmo-icon {
+	background-image: url("editor:Icons/Gizmo.svg");
+	background-size: 16px 16px;
+	background-repeat: no-repeat;
+	background-position: center;
+	/* The icon's own alpha is authored for the active state; the resting state
+	   scales back down from it, so the two move independently. */
+	opacity: 0.42;
+}
+
+.gizmo-icon.icon-active,
+button.gizmo-icon.icon-active,
+.button.gizmo-icon.icon-active {
+	opacity: 1.0;
+}
+
+.gizmo-icon:hover,
+button.gizmo-icon:hover,
+.button.gizmo-icon:hover,
+.gizmo-icon.icon-active:hover,
+button.gizmo-icon.icon-active:hover,
+.button.gizmo-icon.icon-active:hover {
+	background-color: rgba(255, 255, 255, 0.28);
+	opacity: 1.0;
+}
+
+/* Scene View camera quick-settings popup button */
+.camera-settings-icon,
+button.camera-settings-icon,
+.button.camera-settings-icon {
+	background-image: url("editor:Icons/videocam.png");
+	background-size: 16px 16px;
+	background-repeat: no-repeat;
+	background-position: center;
+	opacity: 0.5;
+}
+
+.camera-settings-icon:hover,
+button.camera-settings-icon:hover,
+.button.camera-settings-icon:hover {
+	background-color: rgba(255, 255, 255, 0.28);
+	opacity: 1.0;
+}
+
+/* Perspective / Orthographic projection toggle */
+.projection-icon,
+button.projection-icon,
+.button.projection-icon {
+	background-image: url("editor:Icons/camera.png");
+	background-size: 16px 16px;
+	background-repeat: no-repeat;
+	background-position: center;
+	opacity: 0.5;
+}
+
+/* Like the global/local space toggle: the active state does not get a
+   distinct accent color or opacity bump — it would ideally swap icons, but
+   falls back to the same look as idle so we don't draw a highlight. */
+.projection-icon:hover,
+button.projection-icon:hover,
+.button.projection-icon:hover {
+	opacity: 1.0;
+}
+
+/* Four-view layout toggle */
+.quad-view-icon,
+button.quad-view-icon,
+.button.quad-view-icon {
+	background-image: url("editor:Icons/layout3split.png");
+	background-size: 16px 16px;
+	background-repeat: no-repeat;
+	background-position: center;
+	opacity: 0.5;
+}
+
+.quad-view-icon.icon-active,
+button.quad-view-icon.icon-active,
+.button.quad-view-icon.icon-active {
+	opacity: 1.0;
+}
+
+.quad-view-icon:hover,
+button.quad-view-icon:hover,
+.button.quad-view-icon:hover,
+.quad-view-icon.icon-active:hover,
+button.quad-view-icon.icon-active:hover,
+.button.quad-view-icon.icon-active:hover {
+	background-color: rgba(255, 255, 255, 0.28);
+	opacity: 1.0;
+}
+
+/* Post-processing toggle button */
+.post-process-icon,
+button.post-process-icon,
+.button.post-process-icon {
+	background-image: url("editor:Icons/post.png");
+	background-size: 16px 16px;
+	background-repeat: no-repeat;
+	background-position: center;
+	opacity: 0.15;
+}
+
+.post-process-icon.icon-active,
+button.post-process-icon.icon-active,
+.button.post-process-icon.icon-active {
+	opacity: 0.35;
+}
+
+.post-process-icon:hover,
+button.post-process-icon:hover,
+.button.post-process-icon:hover,
+.post-process-icon.icon-active:hover,
+button.post-process-icon.icon-active:hover,
+.button.post-process-icon.icon-active:hover {
+	background-color: rgba(255, 255, 255, 0.28);
+	opacity: 1.0;
+}
+
+/* Rotation gizmo toggle button (top-right axis orientation widget) */
+.nav-gizmo-icon,
+button.nav-gizmo-icon,
+.button.nav-gizmo-icon {
+	background-image: url("editor:Icons/navgizmo.png");
+	background-size: 16px 16px;
+	background-repeat: no-repeat;
+	background-position: center;
+	opacity: 0.15;
+}
+
+.nav-gizmo-icon.icon-active,
+button.nav-gizmo-icon.icon-active,
+.button.nav-gizmo-icon.icon-active {
+	opacity: 0.35;
+}
+
+.nav-gizmo-icon:hover,
+button.nav-gizmo-icon:hover,
+.button.nav-gizmo-icon:hover,
+.nav-gizmo-icon.icon-active:hover,
+button.nav-gizmo-icon.icon-active:hover,
+.button.nav-gizmo-icon.icon-active:hover {
+	background-color: rgba(255, 255, 255, 0.28);
+	opacity: 1.0;
+}
+
+/* Tool overlay toggle button */
+.tool-overlay-icon,
+button.tool-overlay-icon,
+.button.tool-overlay-icon {
+	background-image: url("editor:Icons/layout-left.png");
+	background-size: 16px 16px;
+	background-position: center center;
+	opacity: 0.15;
+}
+
+.tool-overlay-icon.icon-active,
+button.tool-overlay-icon.icon-active,
+.button.tool-overlay-icon.icon-active {
+	opacity: 0.35;
+}
+
+.tool-overlay-icon:hover,
+button.tool-overlay-icon:hover,
+.button.tool-overlay-icon:hover,
+.tool-overlay-icon.icon-active:hover,
+button.tool-overlay-icon.icon-active:hover,
+.button.tool-overlay-icon.icon-active:hover {
+	background-color: rgba(255, 255, 255, 0.28);
+	opacity: 1.0;
+}

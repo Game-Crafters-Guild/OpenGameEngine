@@ -1,0 +1,16 @@
+/* RenderPipelineStandInNotice (Apps/Editor/Include/Editor/RenderPipeline/RenderPipelineStandInNotice.h).
+ *
+ * Where its notices sit in a view. Their look is the shared notice control's opaque kinds
+ * (controls/InspectorNotice/InspectorNotice.css): the refusal its warning, the waiting note its
+ * information. Each notice requests this sheet for its own subtree.
+ */
+
+/* The refusal and the waiting note, in the view's overlay layer (ViewOverlayLayer.css), which
+   centers them along the viewport's top edge over the drawn view. Their text is a sentence or two:
+   it wraps inside a readable width, and is never wider than the layer. */
+.render-pipeline-notice {
+	width: 640px;
+	max-width: 100%;
+	margin: 0 0 6px 0;
+	pointer-events: none;
+}

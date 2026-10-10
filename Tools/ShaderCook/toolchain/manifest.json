@@ -1,0 +1,53 @@
+{
+  "comment": "Pinned host tools for Tools/ShaderCook/shadercook.py. Fetched by setup.py into <host>/, which is gitignored. Binaries are hosted as release assets because neither tool publishes an upstream prebuilt for these hosts, and because a multi-megabyte binary per host does not belong in git history.",
+  "repo": "Game-Crafters-Guild/OpenEngine-Toolchain",
+  "releaseTag": "shadercook-toolchain-v1",
+  "tools": {
+    "naga": {
+      "version": "29.0.4",
+      "source": "crates.io naga-cli v29.0.4",
+      "buildRecipe": "cargo install naga-cli --version '^29' --locked",
+      "license": "MIT OR Apache-2.0 (same as wgpu)",
+      "pinRationale": "The version pin is load-bearing: naga 29.x is the WGSL frontend inside the engine's pinned wgpu-native v29.0.1.1 (cmake/ports/wgpu-native), so WGSL this translator emits is WGSL the desktop backend validates. Bump the two together, never separately."
+    },
+    "tint": {
+      "commit": "36cf1fae0cd8a81a4fb4580751648b80b2e6255c",
+      "source": "dawn.googlesource.com/dawn",
+      "buildRecipe": "shallow clone at the pinned commit, fetch_dawn_dependencies.py, Release, ninja tint_cmd_tint_cmd with all GPU backends off",
+      "license": "BSD-3-Clause (Dawn)",
+      "pinRationale": "Tint is the WGSL frontend inside Chrome: what it accepts is what ships. It is the cook's second gate after naga - it errors on uniformity violations naga only warns about."
+    }
+  },
+  "hosts": {
+    "macos-arm64": {
+      "naga": {
+        "asset": "naga-29.0.4-macos-arm64",
+        "size": 5397856,
+        "sha256": "8312eba5c64fa2e264ad8872bbf775aadefb973112cf9b0f1ce6101be944c855"
+      },
+      "tint": {
+        "asset": "tint-36cf1fae0-macos-arm64",
+        "size": 4245256,
+        "sha256": "fa3974be525e7abe04fd746abd74213203623fc1972a19d98f3264fda87086d2"
+      }
+    },
+    "windows-x64": {
+      "naga": {
+        "asset": "naga-29.0.4-windows-x64.exe",
+        "size": 5151232,
+        "sha256": "1251ee41550a56474808855e424927ad3ee3820a2f92c1789dc23dd009a7d90e"
+      },
+      "tint": {
+        "asset": "tint-36cf1fae0-windows-x64.exe",
+        "size": 3202048,
+        "sha256": "58623e83b49240cd05daaaf00174e760660d467934c68d71b420925bb09b425f"
+      }
+    },
+    "linux-x64": {
+      "unavailable": "No hosted build yet - nobody has built naga and tint for linux-x64. Build both with the buildRecipe in this file, upload them to the shadercook-toolchain-v1 release as naga-29.0.4-linux-x64 and tint-36cf1fae0-linux-x64, then add their size and sha256 here."
+    },
+    "macos-x64": {
+      "unavailable": "No hosted build yet - the project has no x86-64 Mac. Build both with the buildRecipe in this file, upload them to the shadercook-toolchain-v1 release as naga-29.0.4-macos-x64 and tint-36cf1fae0-macos-x64, then add their size and sha256 here."
+    }
+  }
+}

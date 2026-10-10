@@ -1,0 +1,2707 @@
+/* Dropdown control styling (used by UIDemoPanel and other dropdowns) */
+.dropdown {
+	display: flex;
+	flex-direction: column;
+	min-width: 100px;
+	position: relative;
+}
+
+.dropdown-header {
+	display: flex;
+	flex-direction: row;
+	align-items: center;
+	gap: 4px;
+	padding: 4px 6px 4px 10px;
+	border-width: 1px;
+	border-radius: var(--ui_radius_sm);
+	border-color: var(--ui_color_dropdown_outline);
+	background-color: #202020;
+	cursor: pointer;
+	font-size: 13px;
+}
+
+.dropdown-header:hover {
+	background-color: #262626;
+	border-color: var(--ui_color_dropdown_outline_hover);
+}
+
+.dropdown.open .dropdown-header {
+	background-color: var(--ui_color_bg_selected);
+	color: var(--ui_color_text_bright);
+}
+
+.dropdown-header-label {
+	flex: 1 1 auto;
+	min-width: 0;
+}
+
+/* The selected option's icon. Present only on a dropdown whose options declare
+   icon classes; which image it shows is one of those classes, never anything
+   named in C++. Inert to the pointer so the header keeps one hover surface. */
+.dropdown-header-icon {
+	width: 16px;
+	height: 16px;
+	min-width: 16px;
+	flex-shrink: 0;
+	background-size: contain;
+	background-repeat: no-repeat;
+	background-position: center;
+	background-image-tint: var(--ui_icon_tint_standard);
+	pointer-events: none;
+}
+
+.dropdown-chevron {
+	width: 8px;
+	height: 8px;
+	min-width: 8px;
+	min-height: 8px;
+	flex-shrink: 0;
+	background-image: url("editor:Icons/dropdownsmall.png");
+	background-size: contain;
+	background-repeat: no-repeat;
+	background-position: center;
+	opacity: 0.55;
+}
+
+.dropdown.open .dropdown-chevron {
+	background-image: url("editor:Icons/dropdownsmallup.png");
+	opacity: 0.85;
+}
+
+.dropdown-items {
+	display: none;
+	position: absolute;
+	top: 100%;
+	left: 0px;
+	margin-top: 2px;
+	border-width: 1px;
+	border-radius: var(--ui_radius_sm);
+	border-color: var(--ui_color_border_subtle);
+	background-color: #202020;
+	width: 100%;
+	overflow: hidden;
+	z-index: 1000;
+	box-shadow: var(--popup-shadow, 0 -1px 24px rgba(0, 0, 0, 0.25));
+}
+
+.dropdown-items.fit-content {
+	width: auto;
+	min-width: 100%;
+}
+
+.dropdown.open-upward > .dropdown-items {
+	top: auto;
+	bottom: 100%;
+	margin-top: 0;
+	margin-bottom: 2px;
+}
+
+/* Anchored popover panels (Scene View camera settings and similar quick-settings
+   popups). Shares the dropdown surface treatment via theme tokens. */
+.popover-panel {
+	display: flex;
+	flex-direction: column;
+	gap: 6px;
+	background-color: var(--ui_color_bg_panel);
+	border-width: 1px;
+	border-color: var(--ui_color_border_panel);
+	border-radius: var(--ui_radius_md);
+	padding: 10px 12px;
+	box-shadow: var(--popup-shadow, 0 -1px 24px rgba(0, 0, 0, 0.25));
+}
+
+/* Fill color for the PopoverArrow triangle; carried via border-color (not
+   background-color, which would make the base painter draw a rect behind the
+   triangle). */
+.popover-arrow {
+	border-color: var(--ui_color_bg_panel);
+}
+
+.popover-section-header {
+	font-size: var(--ui_font_size_small);
+	color: var(--ui_color_text_dim);
+	margin-top: var(--ui_spacing_sm);
+}
+
+.popover-row {
+	display: flex;
+	flex-direction: row;
+	align-items: center;
+	gap: var(--ui_spacing_md);
+}
+
+.popover-row-label {
+	width: 104px;
+	font-size: var(--ui_font_size_small);
+	color: var(--ui_color_text_muted);
+}
+
+.popover-row-value {
+	width: 72px;
+}
+
+/* Value-anchor labels under a popover slider (SceneCameraSettingsPopup's
+ * exposure ticks) and the caption legend beneath them. The row mirrors
+ * .popover-row's columns via spacer elements so the strip/caption occupy
+ * exactly the slider's column; TickLabelStrip positions each label at its
+ * paired slider's value->x mapping post-layout. Negative top margin tucks
+ * the row against the one above it (the panel's flex gap is 6px). */
+.popover-tick-row {
+	display: flex;
+	flex-direction: row;
+	align-items: flex-start;
+	gap: var(--ui_spacing_md);
+	margin-top: -6px;
+}
+
+/* The slider column: the popup slider and the tick strip both carry this
+   class so they stay column-aligned; the strip only overrides the height. */
+.popover-row-slider {
+	flex: 1 1 auto;
+	min-width: 80px;
+}
+
+.popover-tick-strip {
+	height: 12px;
+}
+
+.popover-tick-label,
+.popover-tick-legend {
+	font-size: var(--ui_font_size_small);
+	color: var(--ui_color_text_dim);
+}
+
+/* Popup-specific value-column layout. Switch sizing is the toggle.css default. */
+.popover-row-toggle {
+	display: flex;
+	flex-grow: 1;
+	min-width: 0;
+	align-items: center;
+	justify-content: flex-start;
+}
+
+/* In UI mode, we currently rely on the standard flow layout pattern from
+ * UISystemDesign.md: the root dropdown carries an "open" class and the
+ * items container simply becomes a visible flex column under the header.
+ *
+ * We also support the items container carrying its own "open" class so
+ * themes can target either selector.
+ */
+.dropdown.open .dropdown-items,
+.dropdown-items.open {
+	display: flex;
+	flex-direction: column;
+}
+
+/* Full-screen transparent overlay that catches outside clicks to close. */
+.context-menu-blocker {
+	position: absolute;
+	top: 0;
+	left: 0;
+	right: 0;
+	bottom: 0;
+	/* Explicit size as well as edge anchors: without it the overlay shrinks to
+	   fit the menu panel, so presses and hover outside the panel's bounds fall
+	   through to the UI underneath instead of the blocker. */
+	width: 100%;
+	height: 100%;
+	background-color: transparent;
+	color: #FFFFFF;
+}
+
+.context-menu-panel {
+	position: absolute;
+	width: auto;
+	/* The native backend sizes its menu as max(180, widestTitle + 96) —
+	   ContextMenu_mac.mm's kMinMenuWidth/kMenuChromeWidth. The row paddings
+	   below add up to that same 96px of chrome, so both backends open at the
+	   same width for the same titles. */
+	min-width: 180px;
+}
+
+.dropdown-separator {
+	height: 1px;
+	background-color: rgba(255, 255, 255, 0.27);
+	margin: 2px 0;
+}
+
+.dropdown-item {
+	display: flex;
+	flex-direction: row;
+	align-items: center;
+	margin: 1px 4px;
+	padding: 2px 10px 2px 24px;
+	border-radius: 4px;
+	cursor: pointer;
+	font-size: 13px;
+	/* Resting rows are de-emphasized by color, not opacity: context-menu rows
+	   carry child icons and submenu arrows that need their own state tints. */
+	color: var(--ui_color_dropdown_item_text);
+	background-repeat: no-repeat;
+	background-position: 7px 8px;
+	background-size: 10px 8px;
+}
+
+/* A context menu follows the platform menu's rhythm, not the combo box's that
+   .dropdown-item above encodes — borrowing those metrics is what made the
+   in-engine menu read as too loose beside a native one. These are AppKit's
+   NSMenu numbers: a 6px panel corner, 4px of panel padding above and below the
+   rows, rows inset 5px from the panel edge so the highlight floats rather than
+   running into the border. A checked row wears its mark inline in the label, so
+   the row's leading space is the icon column and nothing else. */
+.context-menu {
+	border-radius: 6px;
+	padding: 4px 0px;
+	/* NSMenu's dark surface: warmer and lighter than the dropdown's #202020,
+	   with a faint light border where the dropdown uses a dark one. Matched
+	   against the native menu side by side — the vibrancy material reads
+	   brighter than its base color, hence lighter than AppKit's nominal hex. */
+	background-color: #313134;
+	border-color: rgba(255, 255, 255, 0.14);
+}
+
+.context-menu .dropdown-item {
+	margin: 0px 5px;
+	/* Trailing 44px is NSMenu's key-equivalent/arrow reserve: 10px margins +
+	   8px lead + 24px icon column + 44px trail = the native 96px chrome. The
+	   submenu chevron sits inside that reserve (negative margin below), at the
+	   menu's edge the way NSMenu places it. */
+	/* 2px vertical = the native 22px row (18px line + 2+2), measured against
+	   NSMenu side by side; 3px read visibly taller than the OS menu. */
+	padding: 2px 44px 2px 8px;
+	border-radius: 4px;
+	background-position: 6px 7px;
+	/* A menu item reads at full strength, as the platform's does. The 0.5 the
+	   dropdown carries is a closed combo box dimming its unselected rows; on a
+	   menu it made every command look disabled. */
+	opacity: 1;
+	/* Native menus set labelColor — white at ~85% — not full white; #FFFFFF
+	   reads visibly denser at 13px. Hover keeps the bright white the accent
+	   bar needs. */
+	color: rgba(255, 255, 255, 0.85);
+	/* SF at 13pt tracks a hair looser than Roboto; this closes most of the
+	   perceived density gap until menus can use the platform font. */
+	letter-spacing: 0.1px;
+}
+
+/* Which leaves disabled items needing to say so themselves. UIContextMenu has
+   always added this class, but nothing styled it: at the inherited 0.5 an
+   unavailable command looked exactly like an available one. */
+.context-menu .dropdown-item.disabled {
+	/* One knob, not two multiplied ones: the disabled look is entirely the
+	   swapped text/tint color; the row composites at full opacity. Menu
+	   rows use the menu-scoped disabled shade — the global one is tuned
+	   for panel fields and stays untouched. */
+	color: var(--ui_color_menu_text_disabled);
+	opacity: 1;
+}
+
+.context-menu .dropdown-item.disabled .context-menu-item-icon,
+.context-menu .dropdown-item.disabled .dropdown-item-arrow {
+	background-image-tint: var(--ui_color_menu_text_disabled);
+}
+
+/* Restated at the context-menu's own specificity: the row override above ties
+   with (and, coming later, beats) the base .dropdown-item:hover rule, which
+   silently cost leaf items their hover highlight — submenu parents kept theirs
+   through the open-state class. Full-strength accent, not the pressed shade:
+   NSMenu's selection is the vivid system accent, and the pressed variant read
+   muddier beside the native menu. submenu-open keeps a parent lit while the
+   cursor is inside its submenu, exactly as the native menu does. */
+.context-menu .dropdown-item:hover,
+.context-menu .dropdown-item.submenu-open {
+	background-color: var(--ui_color_accent);
+	color: var(--ui_color_text_bright);
+	opacity: 1;
+}
+
+/* The scoped hover above out-ranks the base .dropdown-item.disabled
+   suppression, so without this a disabled row lit at full strength under
+   the cursor. Same specificity tier, later in the file: inert rows show no
+   hover feedback at all. */
+.context-menu .dropdown-item.disabled:hover {
+	background-color: transparent;
+	color: var(--ui_color_menu_text_disabled);
+	opacity: 1;
+}
+
+.context-menu .dropdown-separator {
+	margin: 4px 0px;
+	/* A hairline barely off the menu surface (#313134): thirteen levels above
+	   it, carrying the same faint blue cast. An opaque colour rather than white
+	   at low alpha, which composited to around #686868 and read as a bright
+	   rule. */
+	background-color: #3E3E41;
+}
+
+/* Query field above the rows. The panel is fit-content, so the field's own
+   min-width is what stops a short menu from opening too narrow to type in —
+   the native menu widens the same way. */
+/* Focused but untouched: the field is focused on open so typing filters
+   straight away, and the accent ring would otherwise claim the eye before the
+   user has asked for search at all. Clicking it or typing drops the class. */
+.context-menu > .context-menu-search.awaiting-input:focus-within {
+	border-color: transparent;
+}
+
+.context-menu > .context-menu-search {
+	margin: 2px 5px 4px 5px;
+	height: 22px;
+	min-width: 180px;
+	flex-shrink: 0;
+}
+
+/* Which submenu a filtered row came from. Trailing and muted, so the command
+   name still reads first. */
+.context-menu-item-path {
+	margin-left: 16px;
+	flex-shrink: 0;
+	font-size: 12px;
+	color: var(--ui_color_text_muted);
+	opacity: 0.7;
+}
+
+.context-menu .dropdown-item:hover .context-menu-item-path {
+	color: var(--ui_color_text_bright);
+	opacity: 0.85;
+}
+
+/* Lines up with the row labels, which start past the reserved icon column. */
+.context-menu-no-matches {
+	margin: 0px 5px;
+	padding: 2px 12px 2px 32px;
+	color: var(--ui_color_text_muted);
+	opacity: 0.7;
+}
+
+.dropdown-item > label {
+	flex-grow: 1;
+}
+
+/* One option's icon in the popup. Every row of an annotated dropdown carries
+   the slot, so a row whose option declares no icon still lines its text up.
+   The row's own background-image is the selection check, which is why the
+   option icon is a child element and not a second background. */
+.dropdown-item-icon {
+	width: 16px;
+	height: 16px;
+	min-width: 16px;
+	flex-shrink: 0;
+	margin-right: 6px;
+	background-size: contain;
+	background-repeat: no-repeat;
+	background-position: center;
+	background-image-tint: var(--ui_icon_tint_standard);
+	pointer-events: none;
+}
+
+.context-menu-item-icon {
+	width: 16px;
+	height: 16px;
+	flex-shrink: 0;
+	margin-right: 8px;
+	background-size: contain;
+	background-repeat: no-repeat;
+	background-position: center;
+	background-image-tint: var(--ui_icon_tint_standard);
+}
+
+/* Type icons at menu-strength: the standard tint reads too dim against the
+   menu surface. */
+.context-menu .context-menu-item-icon {
+	background-image-tint: #FFFFFF;
+	opacity: 0.8;
+}
+
+/* A menu level that shows a check is a selection: the chosen row reads at
+   full white and the rest recede, so the current value pops at a glance.
+   Hover restores full strength on any row. */
+.context-menu .dropdown-item.row-selected {
+	color: #FFFFFF;
+}
+
+/* Dimmed-unchecked stays clearly ABOVE the disabled look (0.6 row opacity +
+   muted color): these rows are live choices, and the two states must never
+   read the same. */
+.context-menu .dropdown-item.dim-unselected {
+	color: rgba(255, 255, 255, 0.62);
+}
+
+.context-menu .dropdown-item.dim-unselected .context-menu-item-icon {
+	opacity: 0.5;
+}
+
+.context-menu .dropdown-item.dim-unselected:hover {
+	color: var(--ui_color_text_bright);
+}
+
+.context-menu .dropdown-item.dim-unselected:hover .context-menu-item-icon {
+	opacity: 0.8;
+}
+
+/* The check sits at the row's trailing edge (the icon column keeps the item's
+   own icon); leaves have no chevron, so the reserve is free. Accent hover
+   shade: derived from the accent but a step brighter, so the mark pops. */
+
+/* The empty slot on unselected rows of a selection group: a bare outline box
+   at the check's footprint — "selectable, not selected". Drawn, not an icon:
+   the unchecked-box asset carries a faint check inside its outline. */
+
+/* Trailing color swatch: a row's current color (tag dots, picker rows). The
+   fill comes inline from SetItemColor; the border keeps dark colors visible
+   on the menu surface. */
+.context-menu .dropdown-item-swatch {
+	position: absolute;
+	right: 12px;
+	top: 6px;
+	width: 12px;
+	height: 12px;
+	border-width: 1px;
+	border-color: rgba(255, 255, 255, 0.25);
+	border-radius: 3px;
+}
+
+.context-menu .dropdown-item-check-slot {
+	position: absolute;
+	right: 12px;
+	top: 5px;
+	width: 12px;
+	height: 12px;
+	border-width: 1px;
+	border-color: rgba(255, 255, 255, 0.18);
+	border-radius: 3px;
+}
+
+.context-menu .dropdown-item-check {
+	position: absolute;
+	right: 11px;
+	top: 0px;
+	width: 14px;
+	/* The row's own height, not a fixed 24: centring a taller box inside a 22px
+	   row drops the mark a pixel below the label. */
+	height: 100%;
+	background-image: url("editor:Icons/checked.png");
+	/* Both axes explicit: a single value can resolve height as auto against
+	   the canvas, rendering larger than the box it is drawn into. */
+	background-size: 14px 14px;
+	background-repeat: no-repeat;
+	background-position: center;
+	background-image-tint: var(--ui_color_accent_blue_hover);
+}
+
+/* On the accent bar the blue mark loses its contrast: the hovered row's check
+   goes white, like its text. */
+.context-menu .dropdown-item:hover .dropdown-item-check {
+	background-image-tint: var(--ui_color_text_bright);
+}
+
+.dropdown-item:hover {
+	background-color: var(--ui_color_accent_pressed);
+	color: var(--ui_color_text_bright);
+}
+
+/* The chevron tracks the row's text state. Type icons deliberately do not:
+   the hover bar is the highlight, and tinting the icon on top reads as a
+   second effect (and washes out colored icons). */
+.dropdown-item:hover .dropdown-item-arrow {
+	background-image-tint: var(--ui_icon_tint_hover);
+}
+
+/* Selected item: native-menu-style check in the shared leading gutter. */
+.dropdown-item.selected {
+	color: var(--ui_color_text_bright);
+	background-image: url("editor:Icons/checked.png");
+	background-image-tint: rgba(255, 255, 255, 0.95);
+}
+
+/* Disabled rows are inert: UIContextMenu registers no handlers for them, so
+   suppress the hover feedback the base class would otherwise still paint.
+   These tie the :hover rules above on specificity and win by coming after
+   them, so the hovered case needs no selector of its own. */
+.dropdown-item.disabled {
+	color: var(--ui_color_text_disabled);
+	background-color: transparent;
+	cursor: not-allowed;
+}
+
+.dropdown-item.disabled .context-menu-item-icon,
+.dropdown-item.disabled .dropdown-item-arrow {
+	background-image-tint: var(--ui_color_text_disabled);
+}
+
+/* Shared search field with optional filter chevron. Panel searches and modal
+   SearchDialog instances use the same sibling structure and interaction CSS. */
+.search-field-with-filter {
+	background-color: #222222;
+	border: 1px solid transparent;
+	border-radius: 4px;
+	color: var(--ui_color_text);
+	font-size: var(--ui_font_size_base);
+	overflow: visible;
+}
+
+.search-field-with-filter:focus-within {
+	border-color: var(--ui_color_accent);
+}
+
+.search-field-with-filter-input,
+.panel-search-field {
+	width: 100%;
+	height: 100%;
+	padding-right: 32px;
+	position: relative;
+	z-index: 10;
+}
+
+.search-field-with-filter.has-search-filter .search-field-with-filter-input,
+.panel-search-bar.has-search-filter .panel-search-field {
+	padding-right: 52px;
+}
+
+.search-field-with-filter-input TextInput,
+.panel-search-field TextInput {
+	background-color: transparent;
+	border: none;
+	color: var(--ui_color_text);
+	font-size: var(--ui_font_size_base);
+	padding: 4px 24px 4px 8px;
+	height: 100%;
+	width: 100%;
+}
+
+.search-field-with-filter-input TextInput:focus,
+.panel-search-field TextInput:focus {
+	outline: none;
+	border: none;
+	background-color: transparent;
+}
+
+.search-field-with-filter-placeholder {
+	position: absolute;
+	left: 8px;
+	right: 32px;
+	top: 0;
+	height: 100%;
+	min-width: 0;
+	display: flex;
+	align-items: center;
+	/* A hint, not a value: a step down from the typed text and italic, so an empty field
+	   never reads as one holding text. */
+	color: var(--ui_color_text_dim);
+	font-style: italic;
+	white-space: nowrap;
+	overflow: hidden;
+	text-overflow: ellipsis;
+	pointer-events: none;
+	z-index: 11;
+}
+
+.search-field-with-filter-placeholder.hidden {
+	display: none;
+}
+
+.search-field-with-filter.has-search-filter .search-field-with-filter-placeholder {
+	right: 52px;
+}
+
+.search-field-with-filter-icon,
+.panel-search-icon {
+	position: absolute;
+	right: 6px;
+	top: 50%;
+	margin-top: -6px;
+	width: 12px;
+	height: 12px;
+	background-image: url("editor:Icons/search.png");
+	background-size: 12px 12px;
+	background-repeat: no-repeat;
+	background-position: center;
+	opacity: 0.5;
+	pointer-events: none !important;
+	z-index: 1;
+}
+
+.search-field-with-filter-dropdown.dropdown,
+.panel-search-filter.dropdown {
+	position: absolute;
+	right: 24px;
+	top: 50%;
+	margin-top: -9px;
+	width: 16px;
+	height: 18px;
+	min-width: 16px;
+	z-index: 21;
+	opacity: 0;
+	pointer-events: none;
+}
+
+.search-field-with-filter.active .search-field-with-filter-dropdown.dropdown,
+.search-field-with-filter:focus-within .search-field-with-filter-dropdown.dropdown,
+.search-field-with-filter-dropdown.dropdown.open,
+.panel-search-bar.active .panel-search-filter.dropdown,
+.panel-search-bar:focus-within .panel-search-filter.dropdown,
+.panel-search-filter.dropdown.open {
+	opacity: 1;
+	pointer-events: auto;
+}
+
+.search-field-with-filter-dropdown.dropdown.hidden {
+	display: none;
+}
+
+.search-field-with-filter-dropdown.dropdown > .dropdown-header,
+.panel-search-filter.dropdown > .dropdown-header {
+	width: 16px;
+	height: 18px;
+	min-height: 18px;
+	padding: 5px 4px;
+	gap: 0;
+	background-color: transparent;
+	border-color: transparent;
+}
+
+.search-field-with-filter-dropdown.dropdown > .dropdown-header:hover,
+.search-field-with-filter-dropdown.dropdown.open > .dropdown-header,
+.panel-search-filter.dropdown > .dropdown-header:hover,
+.panel-search-filter.dropdown.open > .dropdown-header {
+	background-color: transparent;
+	border-color: transparent;
+}
+
+.search-field-with-filter-dropdown.dropdown > .dropdown-header > .dropdown-header-label,
+.panel-search-filter.dropdown > .dropdown-header > .dropdown-header-label {
+	display: none;
+}
+
+.search-field-with-filter-dropdown.dropdown > .dropdown-header > .dropdown-chevron,
+.panel-search-filter.dropdown > .dropdown-header > .dropdown-chevron {
+	width: 8px;
+	height: 8px;
+	min-width: 8px;
+	min-height: 8px;
+	opacity: 0.55;
+}
+
+.search-field-with-filter-dropdown.dropdown > .dropdown-header:hover > .dropdown-chevron,
+.panel-search-filter.dropdown > .dropdown-header:hover > .dropdown-chevron {
+	opacity: 1;
+}
+
+.search-field-with-filter.search-filter-active .search-field-with-filter-dropdown.dropdown > .dropdown-header > .dropdown-chevron,
+.panel-search-bar.search-filter-active .panel-search-filter.dropdown > .dropdown-header > .dropdown-chevron {
+	opacity: 0.7;
+	background-image-tint: var(--ui_color_accent);
+}
+
+.search-field-with-filter-dropdown.dropdown > .dropdown-items,
+.panel-search-filter.dropdown > .dropdown-items {
+	left: auto;
+	right: 0;
+	width: 170px;
+	min-width: 170px;
+}
+
+.search-field-with-filter-clear,
+button.search-field-with-filter-clear,
+.button.search-field-with-filter-clear,
+.button.icon-button.search-field-with-filter-clear,
+.panel-search-clear,
+button.panel-search-clear,
+.button.panel-search-clear,
+.button.icon-button.panel-search-clear {
+	position: absolute;
+	right: 4px;
+	top: 50%;
+	margin-top: -8px;
+	width: 16px;
+	height: 16px;
+	min-width: 16px;
+	min-height: 16px;
+	padding: 0;
+	background-color: transparent;
+	border-width: 0;
+	border-style: none;
+	background-size: 12px 12px;
+	background-position: center;
+	opacity: 0.7;
+	z-index: 20;
+}
+
+.search-field-with-filter-clear:hover,
+button.search-field-with-filter-clear:hover,
+.button.search-field-with-filter-clear:hover,
+.button.icon-button.search-field-with-filter-clear:hover,
+.panel-search-clear:hover,
+button.panel-search-clear:hover,
+.button.panel-search-clear:hover,
+.button.icon-button.panel-search-clear:hover {
+	background-color: transparent;
+	opacity: 1;
+}
+
+.search-field-with-filter-icon.icon-active,
+.panel-search-icon.icon-active {
+	opacity: 1 !important;
+}
+
+.search-field-with-filter.has-query .search-field-with-filter-icon,
+.panel-search-bar.has-query .panel-search-icon {
+	display: none;
+}
+
+.search-field-with-filter:hover .search-field-with-filter-icon,
+.search-field-with-filter:focus-within .search-field-with-filter-icon,
+.search-field-with-filter.active .search-field-with-filter-icon,
+.panel-search-bar:hover .panel-search-icon,
+.panel-search-bar:focus-within .panel-search-icon,
+.panel-search-bar.active .panel-search-icon {
+	opacity: 1 !important;
+}
+
+/* Selected text fills with the accent in every text control, whatever its border.
+   selection-color inherits, so declaring it on each tree's root reaches every
+   field, text area and the script editor; a container may restate it for the
+   fields beneath it. */
+:root {
+	selection-color: var(--ui_color_accent);
+}
+
+/* Editable text carries the accent border; context-specific rules override it
+   where a field is borderless (search and path fields) or themed differently. */
+TextInput, textarea, .text-input {
+	border-color: var(--ui_color_accent);
+}
+
+/* A disabled text area reads as one, as a disabled numeric field does (FloatField.css):
+   the text stays legible but dims, and the edit accent goes. */
+textarea:disabled {
+	color: var(--ui_color_text_disabled);
+	border-color: transparent;
+}
+
+/* Editable text uses the same interaction feedback in inspectors, settings,
+   popovers, and standalone controls. Context-specific rules can still override
+   the border (for example borderless search and path fields). */
+TextInput:hover,
+TextInput:focus {
+	border-color: var(--ui_color_accent);
+	color: #FFFFFF;
+}
+
+/* Label scrubbing adds only transient state classes. The label brightens and
+   the enclosing row highlights every numeric input regardless of DOM shape. */
+Label.dragging {
+	color: #FFFFFF;
+}
+
+.dragging .float-field-input,
+.dragging .int-field-input {
+	border-color: var(--ui_color_accent);
+	color: #FFFFFF;
+}
+
+.dropdown-item-arrow {
+	width: 10px;
+	height: 10px;
+	flex-shrink: 0;
+	margin-left: 8px;
+	background-image: url("editor:Icons/arrow-right.png");
+	background-size: contain;
+	background-repeat: no-repeat;
+	background-position: center;
+	background-image-tint: var(--ui_icon_tint_standard);
+}
+
+/* Value box: min-width 70px for Inspector numeric values */
+.value-box.float-field .float-field-input,
+.value-box.int-field .int-field-input,
+.inspector-field .float-field .float-field-input,
+.inspector-field .int-field .int-field-input,
+/* Int/float fields created directly under .inspector-field (e.g. Physics Layer) */
+.inspector-field .float-field-input,
+.inspector-field .int-field-input {
+	min-width: 70px;
+}
+
+/* ...but when a field's suffix hugs the value (SuffixAlignment::AfterText), the
+   editor must shrink to its content. Lift the floor for that mode. Placed after the
+   rule above so the source-order cascade lets it win. */
+.inspector-field .has-suffix.suffix-after-text > .field-editor {
+	min-width: 0;
+}
+
+/* Vector3 components must shrink further than a standalone float field so X/Y/Z
+   can coexist in a narrow inspector column. Tight horizontal padding gives the
+   numeric text more usable interior space before the box hits its min-width.
+   No overflow rules needed: a TextInput always clips its own glyphs to its box
+   when they overflow (and scrolls while editing), so long formatted values
+   never draw over the next axis label. */
+.inspector-vector3 .float-field .float-field-input,
+.vector3-field .float-field-input {
+	min-width: 40px;
+	padding: 4px 8px;
+}
+/* Value box: accent border + white text when focus */
+.value-box.float-field .float-field-input:focus,
+.value-box.int-field .int-field-input:focus,
+.value-box.float-field.focused .float-field-input,
+.value-box.int-field.focused .int-field-input,
+.settings-row-value .float-field-input:focus,
+.settings-row-value.focused .float-field-input,
+.settings-row-value.float-field .float-field-input:focus,
+.settings-row-value .int-field-input:focus,
+.settings-row-value.focused .int-field-input,
+.settings-row-value.int-field .int-field-input:focus,
+/* Transform (and other Vector3) in Inspector: X/Y/Z component inputs */
+.inspector-vector3 .float-field .float-field-input:focus,
+.inspector-vector3 .float-field.focused .float-field-input,
+.vector3-field.inspector-vector3 .float-field-input:focus,
+.vector3-field.inspector-vector3.focused .float-field-input {
+	border-color: var(--ui_color_accent);
+	color: #FFFFFF;
+}
+
+/* Value box: hover = accent outline only (same as selected), no background */
+.value-box.float-field:hover .float-field-input,
+.value-box.int-field:hover .int-field-input,
+/* Compound (.float-field/.int-field) so this outranks the transparent-border
+   base rule .settings-row-value.float-field .float-field-input (same 3-class
+   weight would otherwise lose on source order). Mirrors the inspector above. */
+.settings-row-value.float-field:hover .float-field-input,
+.settings-row-value.int-field:hover .int-field-input,
+/* Per-component only: hover one X/Y/Z input, not all three */
+.inspector-vector3 .float-field:hover .float-field-input {
+	border-color: var(--ui_color_accent);
+	color: #FFFFFF;
+}
+
+/* Subtle accents to distinguish the two demo dropdowns */
+.dropdown-ui .dropdown-header {
+	border-color: var(--ui_color_accent_green);
+}
+
+.dropdown-native .dropdown-header {
+	border-color: var(--ui_color_accent_blue);
+}
+
+/* Boolean controls: Checkbox and Toggle */
+checkbox,
+.checkbox {
+	display: flex;
+	flex-direction: row;
+	align-items: center;
+	gap: 8px;
+	padding: 2px 2px;
+	cursor: pointer;
+}
+
+/* Visual box for the classic checkbox */
+.checkbox-box {
+	width: 18px;
+	height: 18px;
+	border-width: 2px;
+	border-radius: var(--ui_radius_sm);
+	border-color: #777777;
+	background-color: #202020;
+}
+
+.checkbox-label {
+	flex-grow: 1;
+	/* Keep the label visually centered next to the 18px box. */
+	align-self: center;
+}
+
+/* Hover state for unchecked checkbox */
+checkbox:hover .checkbox-box,
+.checkbox:hover .checkbox-box {
+	border-color: #A0A0A0;
+	background-color: var(--ui_color_bg_panel);
+}
+
+/* Checked state fills the box */
+checkbox:checked .checkbox-box,
+.checkbox:checked .checkbox-box,
+.checkbox.checked .checkbox-box {
+	background-color: var(--ui_color_accent_blue);
+	border-color: var(--ui_color_accent_blue);
+	background-image: url("editor:Icons/checkbox-checkmark.svg");
+	background-size: contain;
+	background-repeat: no-repeat;
+	background-position: center;
+}
+
+/* Hover state when checked: slightly brighten compared to the base
+ * checked color so there is still feedback while active. */
+checkbox:checked:hover .checkbox-box,
+.checkbox:checked:hover .checkbox-box,
+.checkbox.checked:hover .checkbox-box {
+	background-color: var(--ui_color_accent_blue_hover);
+	border-color: var(--ui_color_accent_blue_hover);
+}
+
+/* Pressed feedback slightly darkens the box */
+.checkbox.pressed .checkbox-box {
+	background-color: var(--ui_color_bg_hover);
+}
+
+/* ======================================
+   Log Panel Styles
+   ====================================== */
+
+.log-panel-container {
+	display: flex;
+	flex-direction: column;
+	flex-grow: 1;
+	min-width: 0;
+	min-height: 0;
+}
+
+/* LogPanel: primary row (filters ± inline actions) + optional secondary row (narrow width). */
+.log-toolbar-stack {
+	display: flex;
+	flex-direction: column;
+	flex-shrink: 0;
+	width: 100%;
+	min-width: 0;
+}
+
+.log-toolbar-stack.log-toolbar-stack--compact .log-toolbar-primary {
+}
+
+.log-toolbar-secondary:not(.log-toolbar-secondary-hidden) {
+}
+
+.log-toolbar.log-toolbar-secondary.log-toolbar-secondary-hidden {
+	display: none;
+}
+
+.log-toolbar {
+	display: flex;
+	flex-direction: row;
+	flex-wrap: nowrap;
+	align-items: center;
+	justify-content: flex-start;
+	gap: 8px;
+	width: 100%;
+	min-width: 0;
+	padding: 4px 8px;
+	background-color: #222222;
+	flex-shrink: 0;
+	min-height: 32px;
+}
+
+/* Fixed gap between severity filters and the centered Clear / Pause / Copy block */
+.log-toolbar-copy-filters-gap {
+	flex-shrink: 0;
+	width: 12px;
+	min-width: 12px;
+	height: 1px;
+}
+
+/* DEBUG / INFO / WARNING / ERROR on the left — always one row (no wrapping) */
+.log-toolbar-filters {
+	display: flex;
+	flex-direction: row;
+	align-items: center;
+	justify-content: flex-start;
+	flex-wrap: nowrap;
+	gap: 8px;
+	flex: 0 0 auto;
+	flex-shrink: 0;
+	box-sizing: border-box;
+}
+
+/* Fills space between filters and search; centers Clear / Pause / Copy on the wide single-row layout.
+   Below the compact width threshold, LogPanel moves this slot (and search) to the secondary toolbar row instead. */
+.log-toolbar-center-slot {
+	display: flex;
+	flex-direction: row;
+	align-items: center;
+	justify-content: center;
+	flex: 1 0 auto;
+	flex-shrink: 0;
+	/* Approx. Clear + Pause + Copy + gaps at small button size */
+	min-width: 220px;
+	box-sizing: border-box;
+}
+
+/* Clear / Pause / Copy */
+.log-toolbar-main-actions {
+	display: flex;
+	flex-direction: row;
+	align-items: center;
+	gap: 8px;
+	flex-shrink: 0;
+}
+
+/* Severity filter chips (text-only; active = same fill + border as .secondary:hover) */
+.log-toolbar .log-filter-toggle {
+	/* Explicit 110px basis: `fit-content` isn't recognized by YogaLayout and falls through
+	   to width:auto, which with max-width:none lets the chips (and their filter row) grow
+	   past the toolbar and push Clear/Pause/Copy + search off-screen. */
+	flex: 0 0 110px;
+	width: 110px;
+	min-width: 110px;
+	max-width: 110px;
+	padding-left: 10px;
+	padding-right: 10px;
+	box-sizing: border-box;
+	position: relative;
+	display: flex;
+	align-items: center;
+	justify-content: center;
+}
+
+/* Icon out of flow so the level label can stay truly centered in the chip */
+.log-toolbar .log-filter-toggle-check {
+	position: absolute;
+	left: 10px;
+	top: 50%;
+	margin-top: -5px;
+	width: 10px;
+	height: 10px;
+	flex-shrink: 0;
+}
+
+.log-toolbar .log-filter-toggle-label {
+	flex: 0 0 auto;
+	width: auto;
+	min-width: 0;
+	text-align: center;
+}
+
+/* Tint checked.png to match each level’s label text (same hex as .log-debug / border) */
+.log-toolbar .log-filter-toggle.log-filter-level-debug .log-filter-toggle-check {
+	background-image-tint: rgba(156, 220, 254, 1);
+}
+
+.log-toolbar .log-filter-toggle.log-filter-level-info .log-filter-toggle-check {
+	background-image-tint: rgba(212, 212, 212, 1);
+}
+
+.log-toolbar .log-filter-toggle.log-filter-level-warning .log-filter-toggle-check {
+	background-image-tint: rgba(220, 220, 170, 1);
+}
+
+.log-toolbar .log-filter-toggle.log-filter-level-error .log-filter-toggle-check {
+	background-image-tint: rgba(244, 135, 113, 1);
+}
+
+/* Level filter off (unchecked): dim colored border and label together */
+.log-toolbar .log-filter-toggle:not(.checked) {
+	opacity: 0.42;
+}
+
+.log-toolbar .log-filter-toggle:not(.checked):hover {
+	opacity: 0.56;
+}
+
+.log-toolbar .log-filter-toggle.checked,
+.log-toolbar .log-filter-toggle.checked:hover,
+.log-toolbar .log-filter-toggle.checked:active,
+.log-toolbar .log-filter-toggle.checked.pressed {
+	opacity: 1;
+}
+
+/* Enabled (checked): 10% fill; border at 70% opacity (same hue as label) */
+.log-toolbar .log-filter-toggle.log-filter-level-debug.checked,
+.log-toolbar .log-filter-toggle.log-filter-level-debug.checked:hover,
+.log-toolbar .log-filter-toggle.log-filter-level-debug.checked:active,
+.log-toolbar .log-filter-toggle.log-filter-level-debug.checked.pressed {
+	background-color: rgba(156, 220, 254, 0.1);
+	border-color: rgba(156, 220, 254, 0.7);
+}
+
+.log-toolbar .log-filter-toggle.log-filter-level-info.checked,
+.log-toolbar .log-filter-toggle.log-filter-level-info.checked:hover,
+.log-toolbar .log-filter-toggle.log-filter-level-info.checked:active,
+.log-toolbar .log-filter-toggle.log-filter-level-info.checked.pressed {
+	background-color: rgba(212, 212, 212, 0.1);
+	border-color: rgba(245, 245, 245, 0.7);
+}
+
+.log-toolbar .log-filter-toggle.log-filter-level-warning.checked,
+.log-toolbar .log-filter-toggle.log-filter-level-warning.checked:hover,
+.log-toolbar .log-filter-toggle.log-filter-level-warning.checked:active,
+.log-toolbar .log-filter-toggle.log-filter-level-warning.checked.pressed {
+	background-color: rgba(220, 220, 170, 0.1);
+	border-color: rgba(255, 255, 194, 0.7);
+}
+
+.log-toolbar .log-filter-toggle.log-filter-level-error.checked,
+.log-toolbar .log-filter-toggle.log-filter-level-error.checked:hover,
+.log-toolbar .log-filter-toggle.log-filter-level-error.checked:active,
+.log-toolbar .log-filter-toggle.log-filter-level-error.checked.pressed {
+	background-color: rgba(244, 135, 113, 0.1);
+	border-color: rgba(244, 135, 113, 0.7);
+}
+
+/* Border matches log text color per chip (override .secondary hover/active border) */
+.log-toolbar .log-filter-toggle.log-filter-level-debug,
+.log-toolbar .log-filter-toggle.log-filter-level-debug:hover,
+.log-toolbar .log-filter-toggle.log-filter-level-debug:active,
+.log-toolbar .log-filter-toggle.log-filter-level-debug.pressed {
+	border-color: #9cdcfe;
+}
+
+.log-toolbar .log-filter-toggle.log-filter-level-info,
+.log-toolbar .log-filter-toggle.log-filter-level-info:hover,
+.log-toolbar .log-filter-toggle.log-filter-level-info:active,
+.log-toolbar .log-filter-toggle.log-filter-level-info.pressed {
+	border-color: #d4d4d4;
+}
+
+.log-toolbar .log-filter-toggle.log-filter-level-warning,
+.log-toolbar .log-filter-toggle.log-filter-level-warning:hover,
+.log-toolbar .log-filter-toggle.log-filter-level-warning:active,
+.log-toolbar .log-filter-toggle.log-filter-level-warning.pressed {
+	border-color: #dcdcaa;
+}
+
+.log-toolbar .log-filter-toggle.log-filter-level-error,
+.log-toolbar .log-filter-toggle.log-filter-level-error:hover,
+.log-toolbar .log-filter-toggle.log-filter-level-error:active,
+.log-toolbar .log-filter-toggle.log-filter-level-error.pressed {
+	border-color: #f48771;
+}
+
+/* Match log line colors; scoped above .button-text { color: inherit } from Button.css */
+.log-toolbar .log-filter-toggle .log-debug {
+	color: #9cdcfe;
+}
+
+.log-toolbar .log-filter-toggle .log-info {
+	color: #d4d4d4;
+}
+
+.log-toolbar .log-filter-toggle .log-warning {
+	color: #dcdcaa;
+}
+
+.log-toolbar .log-filter-toggle .log-error {
+	color: #f48771;
+}
+
+.log-toolbar .panel-search-bar {
+	/* Shared panel search uses absolute in side panes; log toolbar keeps it in flex flow */
+	position: relative;
+	left: unset;
+	right: unset;
+	bottom: unset;
+	top: unset;
+	flex-grow: 0;
+	flex-shrink: 1;
+	align-self: center;
+	height: 22px;
+	min-width: 160px;
+	max-width: 320px;
+	width: 320px;
+	margin-left: auto;
+}
+
+.log-toolbar .panel-search-field {
+	width: 100%;
+	height: 100%;
+}
+
+.log-search-field {
+	flex-grow: 1;
+	min-height: 32px;
+	padding: 6px 8px;
+	background-color: #2a2a2a;
+	border: 1px solid #444444;
+	border-radius: 4px;
+	color: var(--ui_color_text);
+	font-size: var(--ui_font_size_base);
+}
+
+.log-search-field:focus {
+	border-color: var(--ui_color_accent_blue);
+	outline: none;
+}
+
+.log-clear-button,
+.log-pause-button,
+.log-copy-button {
+	width: 70px;
+	height: 24px;
+	flex-shrink: 0;
+	box-sizing: border-box;
+}
+
+.log-clear-button {
+	order: -3;
+	margin-right: 8px;
+}
+
+.log-pause-button {
+	order: -2;
+	margin-right: 8px;
+}
+
+.log-copy-button {
+	order: -1;
+}
+
+.log-view {
+	display: flex;
+	flex-direction: column;
+	flex-grow: 1;
+	min-width: 0;
+	min-height: 0;
+	background-color: var(--ui_color_bg_panel);
+}
+
+.log-view .scrollbar {
+	background-color: var(--ui_color_bg_panel);
+}
+
+.log-view .list-virtual-content {
+	background-color: var(--ui_color_bg_panel);
+}
+
+.log-scroll {
+	display: flex;
+	flex-direction: column;
+	flex-grow: 1;
+	min-height: 0;
+}
+
+.log-line {
+	font-family: var(--ui_font_mono);
+	font-size: var(--ui_font_size_base);
+	color: var(--ui_color_text_primary);
+	padding: 2px 6px;
+	white-space: nowrap;
+	cursor: pointer;
+}
+
+.log-line:hover {
+	background-color: var(--ui_color_bg_hover_alt);
+}
+
+.log-line.selected {
+	background-color: var(--ui_color_bg_selected);
+}
+
+/* Log level color coding */
+.log-trace {
+	color: #808080;
+}
+
+.log-debug {
+	color: #9cdcfe;
+}
+
+.log-info {
+	color: var(--ui_color_text_primary);
+}
+
+.log-warning {
+	color: #dcdcaa;
+}
+
+.log-error {
+	color: #f48771;
+}
+
+.log-critical {
+	color: #ff5555;
+	font-weight: bold;
+}
+
+/* ======================================
+   Log Detail Pane (Stack Trace)
+   ====================================== */
+
+.log-split-body {
+	display: flex;
+	flex-direction: column;
+	flex-grow: 1;
+	min-width: 0;
+	min-height: 0;
+}
+
+.log-split-body--side-by-side {
+	flex-direction: row;
+}
+
+.log-detail-splitter {
+	flex-shrink: 0;
+}
+
+.log-detail-pane {
+	display: flex;
+	flex-direction: column;
+	flex-grow: 1;
+	min-height: 200px;
+	background-color: var(--ui_color_bg_dockspace);
+}
+
+.log-split-body--side-by-side .log-detail-pane {
+	min-width: 240px;
+	min-height: 0;
+	border-top: none;
+	border-left: 1px solid var(--ui_color_border_panel);
+}
+
+.log-detail-pane--hidden {
+	display: none;
+}
+
+.log-detail-header {
+	display: flex;
+	flex-direction: row;
+	align-items: center;
+	padding: 4px 8px;
+	background-color: var(--ui_color_bg_tabbar);
+	flex-shrink: 0;
+}
+
+.log-detail-title {
+	font-weight: bold;
+	font-size: var(--ui_font_size_base);
+	color: var(--ui_color_text_bright);
+	margin-right: 12px;
+}
+
+.log-detail-source {
+	font-family: var(--ui_font_mono);
+	font-size: 14px;
+	color: var(--ui_color_text_dim);
+	flex-grow: 1;
+	min-width: 0;
+}
+
+.log-detail-scroll {
+	flex-grow: 1;
+	min-height: 0;
+}
+
+.log-detail-frames {
+	display: flex;
+	flex-direction: column;
+	padding: 4px 8px;
+	min-width: 0;
+}
+
+.log-detail-frame {
+	font-family: var(--ui_font_mono);
+	font-size: 14px;
+	color: var(--ui_color_text_dim);
+	padding: 2px 8px;
+	white-space: normal;
+	word-break: break-all;
+}
+
+.log-detail-frame--source {
+	color: var(--ui_color_text_bright);
+	font-weight: bold;
+}
+
+.log-detail-frame--clickable {
+	cursor: pointer;
+	color: #9cdcfe;
+}
+
+.log-detail-frame--clickable:hover {
+	background-color: var(--ui_color_bg_hover_alt);
+}
+
+/* Backtrace frame row (used by LogPanel's detail pane).
+   Splitting [idx] module!symbol and file:line into separate spans keeps deep
+   absolute paths from producing a Label wider than the panel and stalling layout. */
+
+.stack-trace-frame-row {
+	display: flex;
+	flex-direction: column;
+	padding: 2px 0;
+	flex: 0 0 auto;
+	min-width: 0;
+}
+
+.stack-trace-frame-row--clickable {
+	cursor: pointer;
+}
+
+.stack-trace-frame-row--clickable:hover {
+	background-color: var(--ui_color_bg_hover_alt);
+}
+
+.stack-trace-frame-header {
+	display: flex;
+	flex-direction: row;
+	align-items: baseline;
+	flex-wrap: wrap;
+	flex: 0 0 auto;
+	min-width: 0;
+}
+
+.stack-trace-frame-source {
+	display: flex;
+	flex-direction: row;
+	padding-left: 24px;
+	flex: 0 0 auto;
+	min-width: 0;
+}
+
+.stack-trace-frame-span {
+	font-family: var(--ui_font_script);
+	font-size: 14px;
+	padding: 0;
+	white-space: pre;
+}
+
+.stack-trace-frame-span.wrap {
+	flex: 1 1 auto;
+	min-width: 0;
+	white-space: normal;
+	word-break: break-all;
+}
+
+/* ======================================
+   Script Editor Panel Styles
+   ====================================== */
+
+.script-editor-container {
+	display: flex;
+	flex-direction: column;
+	flex-grow: 1;
+	flex-shrink: 1;
+	min-width: 0;
+	min-height: 0;
+	height: 100%;
+	width: 100%;
+	background-color: #1e1e1e;
+	overflow: visible;
+	position: relative;
+}
+
+.script-editor-toolbar {
+	display: flex;
+	flex-direction: row;
+	align-items: center;
+	justify-content: space-between;
+	gap: 8px;
+	padding: 4px 8px;
+	background-color: #222222;
+	flex-shrink: 0;
+	min-height: 32px;
+	min-width: 0;
+	overflow: visible;
+	position: relative;
+	width: 100%;
+	box-sizing: border-box;
+}
+
+.script-editor-toolbar-left {
+	display: flex;
+	flex-direction: row;
+	align-items: center;
+	gap: 4px;
+	flex-shrink: 0;
+}
+
+.script-editor-search-container {
+	display: flex;
+	flex-direction: row;
+	align-items: center;
+	flex-grow: 1;
+	height: 22px;
+	position: relative;
+	background-color: #1a1a1a;
+	border: 1px solid transparent;
+	border-radius: 4px;
+}
+
+.script-editor-search-container:hover,
+.script-editor-search-container:focus-within,
+.script-editor-search-container.active {
+	border: 1px solid #666;
+}
+
+.script-editor-search-container.search-accent-focus:focus-within {
+	border-color: var(--ui_color_accent);
+}
+
+.script-editor-search-field {
+	width: 100%;
+	height: 100%;
+	padding-right: 32px;
+	position: relative;
+	z-index: 10;
+}
+
+.script-editor-search-field TextInput {
+	background-color: transparent;
+	border: none;
+	color: var(--ui_color_text);
+	font-size: var(--ui_font_size_base);
+	padding: 4px 24px 4px 8px;
+	height: 100%;
+	width: 100%;
+}
+
+.script-editor-search-field TextInput:focus {
+	outline: none;
+	border: none;
+	background-color: transparent;
+}
+
+.script-editor-search-icon {
+	position: absolute;
+	right: 6px;
+	top: 50%;
+	margin-top: -6px;
+	width: 12px;
+	height: 12px;
+	background-image: url("editor:Icons/search.png");
+	background-size: 12px 12px;
+	background-repeat: no-repeat;
+	background-position: center;
+	opacity: 0.5;
+	pointer-events: none !important;
+	z-index: 1;
+}
+
+.script-editor-search-clear,
+button.script-editor-search-clear,
+.button.script-editor-search-clear,
+.button.icon-button.script-editor-search-clear {
+	position: absolute;
+	right: 4px;
+	top: 50%;
+	margin-top: -8px;
+	width: 16px;
+	height: 16px;
+	min-width: 16px;
+	min-height: 16px;
+	padding: 0;
+	background-color: transparent;
+	border-width: 0;
+	border-style: none;
+	background-size: 12px 12px;
+	background-position: center;
+	opacity: 0.7;
+	z-index: 20;
+}
+
+.script-editor-search-clear:hover,
+button.script-editor-search-clear:hover,
+.button.script-editor-search-clear:hover,
+.button.icon-button.script-editor-search-clear:hover {
+	background-color: transparent;
+	opacity: 1.0;
+}
+
+/* Note: line numbers button styling is inherited from .script-editor-save-button to match states. */
+
+.script-editor-search-icon.icon-active {
+	opacity: 1 !important;
+}
+
+.script-editor-search-container.has-query .script-editor-search-icon {
+	display: none;
+}
+
+.script-editor-search-container:hover .script-editor-search-icon {
+	opacity: 1 !important;
+}
+
+.script-editor-search-container:focus-within .script-editor-search-icon,
+.script-editor-search-container.active .script-editor-search-icon {
+	opacity: 1 !important;
+}
+
+.script-editor-unsaved-indicator {
+	flex-shrink: 0;
+	font-size: var(--ui_font_size_base);
+	color: var(--ui_color_text);
+	font-weight: 500;
+	padding: 0;
+	margin: 0;
+	margin-left: 4px;
+	width: 8px;
+	min-width: 8px;
+	max-width: 8px;
+	display: flex;
+	align-items: center;
+}
+
+.script-editor-unsaved-indicator.hidden {
+	display: none;
+}
+
+.script-editor-toolbar-left > .script-editor-save-button {
+	margin-left: 0;
+	flex-shrink: 0;
+	flex-grow: 0;
+	position: relative;
+	z-index: 100;
+}
+
+.script-editor-text-scale-dropdown {
+	min-width: 74px;
+	width: 74px;
+	flex-shrink: 0;
+}
+
+.script-editor-text-scale-dropdown > .dropdown-header {
+	height: 24px;
+	min-height: 24px;
+	padding: 2px 6px 2px 8px;
+	background-color: transparent;
+	border-color: transparent;
+	font-size: 12px;
+}
+
+.script-editor-text-scale-dropdown > .dropdown-header:hover,
+.script-editor-text-scale-dropdown.open > .dropdown-header {
+	background-color: #2b2b2b;
+	border-color: var(--ui_color_border_subtle);
+}
+
+.script-editor-text-scale-dropdown .dropdown-items {
+	min-width: 74px;
+}
+
+.script-editor-text-scale-dropdown .dropdown-item {
+	font-size: 13px;
+	padding-top: 4px;
+	padding-bottom: 4px;
+}
+
+/* Save button - ensure it's always visible regardless of docking position */
+#ScriptEditorSaveButton {
+	width: 24px;
+	height: 24px;
+	min-width: 24px;
+	min-height: 24px;
+	max-width: 24px;
+	max-height: 24px;
+	flex-shrink: 0;
+	flex-grow: 0;
+	flex-basis: 24px;
+	padding: 0;
+	background-image: url("editor:Icons/save.png");
+	background-size: 18px 18px;
+	background-repeat: no-repeat;
+	background-position: center;
+	background-color: transparent;
+	border-width: 0;
+	opacity: 0.35;
+	position: relative;
+	z-index: 100;
+	overflow: visible;
+	visibility: visible;
+	display: block;
+}
+
+.script-editor-save-button,
+.script-editor-save-button.icon-button,
+.script-editor-save-button.save-icon,
+button.script-editor-save-button.icon-button.save-icon,
+.button.script-editor-save-button.icon-button.save-icon,
+.script-editor-save-button.linenumbers-icon,
+button.script-editor-save-button.icon-button.linenumbers-icon,
+.button.script-editor-save-button.icon-button.linenumbers-icon,
+.dock-content .script-editor-save-button,
+.dock-leaf .script-editor-save-button,
+.panel .script-editor-save-button,
+.dock-content button.script-editor-save-button,
+.dock-leaf button.script-editor-save-button,
+.panel button.script-editor-save-button {
+	width: 24px;
+	height: 24px;
+	min-width: 24px;
+	min-height: 24px;
+	max-width: 24px;
+	max-height: 24px;
+	flex-shrink: 0;
+	flex-grow: 0;
+	flex-basis: 24px;
+	padding: 0;
+	background-image: url("editor:Icons/save.png");
+	background-size: 18px 18px;
+	background-repeat: no-repeat;
+	background-position: center;
+	background-color: transparent;
+	border-width: 0;
+	opacity: 0.35;
+	position: relative;
+	z-index: 100;
+	overflow: visible;
+	visibility: visible;
+	display: block;
+}
+
+/* Line numbers icon uses the same button states as save icon, but a different background-image. */
+.script-editor-save-button.linenumbers-icon,
+button.script-editor-save-button.icon-button.linenumbers-icon,
+.button.script-editor-save-button.icon-button.linenumbers-icon {
+	background-image: url("editor:Icons/list.png");
+}
+
+/* Wrap toggle icon shares the save-button styling, different background image. */
+.script-editor-save-button.wrap-icon,
+button.script-editor-save-button.icon-button.wrap-icon,
+.button.script-editor-save-button.icon-button.wrap-icon {
+	background-image: url("editor:Icons/reorder-two.png");
+}
+
+#ScriptEditorSaveButton:hover,
+.script-editor-save-button:hover,
+.script-editor-save-button.icon-button:hover,
+.script-editor-save-button.save-icon:hover,
+button.script-editor-save-button.icon-button.save-icon:hover,
+.button.script-editor-save-button.icon-button.save-icon:hover,
+.script-editor-save-button.linenumbers-icon:hover,
+button.script-editor-save-button.icon-button.linenumbers-icon:hover,
+.button.script-editor-save-button.icon-button.linenumbers-icon:hover,
+.script-editor-save-button.linenumbers-icon.icon-active,
+button.script-editor-save-button.icon-button.linenumbers-icon.icon-active,
+.button.script-editor-save-button.icon-button.linenumbers-icon.icon-active,
+.script-editor-save-button.wrap-icon:hover,
+button.script-editor-save-button.icon-button.wrap-icon:hover,
+.button.script-editor-save-button.icon-button.wrap-icon:hover,
+.script-editor-save-button.wrap-icon.icon-active,
+button.script-editor-save-button.icon-button.wrap-icon.icon-active,
+.button.script-editor-save-button.icon-button.wrap-icon.icon-active {
+	opacity: 1.0;
+	background-color: transparent;
+}
+
+.script-editor-save-button .button-text {
+	display: none;
+}
+
+.script-editor-scroll {
+	display: flex;
+	flex-direction: column;
+	flex-grow: 1;
+	flex-shrink: 1;
+	min-width: 0;
+	min-height: 0;
+	width: 100%;
+	background-color: #1e1e1e;
+}
+
+/* Ensure scroll areas have consistent dark background to prevent gaps during scrolling */
+.script-editor-scroll .scroll-viewport {
+	background-color: #1e1e1e;
+}
+
+.script-editor-scroll .scroll-content {
+	min-height: 100%;
+	background-color: #1e1e1e;
+}
+
+.script-editor-textarea {
+	position: relative;
+	width: 100%;
+	min-width: 100%;
+	flex-grow: 1;
+	flex-shrink: 1;
+	min-height: 0;
+	padding: 8px 8px 8px 28px;
+	background-color: transparent;
+	color: #d4d4d4;
+	font-family: var(--ui_font_script);
+	font-size: 14px;
+	line-height: var(--script_line_height, normal);
+	border: none;
+	white-space: pre-wrap;
+	overflow-wrap: break-word;
+	word-wrap: break-word;
+	box-sizing: border-box;
+}
+
+/* Line numbers: expand left padding to make room for the gutter */
+.script-editor-textarea.show-line-numbers {
+	padding-left: 76px; /* 28px fold gutter + 48px line number gutter (includes gap) */
+}
+
+/* Word wrap toggle: `.nowrap` disables soft-wrap so long lines scroll horizontally. */
+.script-editor-textarea.nowrap {
+	white-space: pre;
+	overflow-wrap: normal;
+	word-wrap: normal;
+}
+
+.script-editor-textarea:focus {
+	outline: none;
+	background-color: #1e1e1e;
+}
+
+/* UI Control styles should live in `Apps/Editor/Assets/UI/controls/` and be
+ * attached by controls themselves (RequestSubtreeStyleAssetPath), rather than
+ * growing this file. See `UI/controls/Button.css`, `Foldout.css`, etc. */
+
+/* Button Control Styles
+   Default button styling following Material Design / Bootstrap patterns */
+
+button,
+.button {
+    display: flex;
+    flex-direction: row;
+    align-items: center;
+    justify-content: center;
+    padding: 8px 16px;
+    min-height: 32px;
+    border-radius: var(--ui_radius_sm);
+    border-width: 1px;
+    border-color: var(--ui_color_border_subtle);
+    background-color: var(--ui_color_border_subtle);
+    color: var(--ui_color_text);
+    cursor: pointer;
+    font-size: var(--ui_font_size_base);
+}
+
+button:hover,
+.button:hover {
+    background-color: #4A4A4A;
+    border-color: #4A4A4A;
+}
+
+button:active,
+button.active,
+button.pressed,
+.button:active,
+.button.active,
+.button.pressed {
+    background-color: var(--ui_color_bg_hover);
+    border-color: var(--ui_color_border_subtle);
+}
+
+/* Keyboard focus only, matching Button.css. This sheet is global; Button.css is
+   a subtree sheet the Button control attaches, so it never reaches a plain
+   element that only carries `class="button"` — hence the rule lives in both. */
+button:focus-visible,
+.button:focus-visible {
+    outline: 2px solid var(--ui_color_accent_blue);
+    outline-offset: 2px;
+}
+
+button.layout-button:focus,
+.layout-button:focus {
+    outline: none;
+    outline-offset: 0px;
+}
+
+/* Layout buttons opt out of generic button styling */
+button.layout-button,
+.button.layout-button,
+.layout-button {
+    display: flex;
+    flex-direction: row;
+    align-items: center;
+    gap: 8px;
+    padding: 4px 12px;
+    height: 28px;
+    min-height: 28px;
+    border-radius: 4px;
+    border-width: 0px;
+    border-style: none;
+    border-color: transparent;
+    background-color: #333333;
+    color: #BDBDBD;
+    font-size: var(--ui_font_size_base);
+    cursor: pointer;
+    transition: none;
+    outline: none;
+    outline-offset: 0px;
+}
+
+/* Override layout-button state classes from core.css */
+button.layout-button.layout-button-base,
+.button.layout-button.layout-button-base,
+.layout-button.layout-button-base,
+button.layout-button.layout-button-hover,
+.button.layout-button.layout-button-hover,
+.layout-button.layout-button-hover,
+button.layout-button.layout-button-pressed,
+.button.layout-button.layout-button-pressed,
+.layout-button.layout-button-pressed,
+button.layout-button.layout-button-selected,
+.button.layout-button.layout-button-selected,
+.layout-button.layout-button-selected {
+    background-color: #333333;
+    border-color: transparent;
+    color: #BDBDBD;
+}
+
+button.layout-button.layout-button-hover,
+.button.layout-button.layout-button-hover,
+.layout-button.layout-button-hover,
+button.layout-button.layout-button-selected,
+.button.layout-button.layout-button-selected,
+.layout-button.layout-button-selected {
+    background-color: #242424;
+    color: #F2F2F2;
+}
+
+button.layout-button.layout-button-selected:hover,
+.button.layout-button.layout-button-selected:hover,
+.layout-button.layout-button-selected:hover {
+    background-color: #121212;
+    color: #F2F2F2;
+}
+
+/* Final overrides: ensure layout buttons ignore generic + secondary variants */
+button.layout-button.secondary,
+.button.layout-button.secondary,
+.layout-button.secondary {
+    background-color: #333333;
+    border-color: transparent;
+    color: #BDBDBD;
+}
+
+button.layout-button.secondary:hover,
+.button.layout-button.secondary:hover,
+.layout-button.secondary:hover {
+    background-color: #242424;
+    border-color: transparent;
+    color: #F2F2F2;
+}
+
+button.layout-button.secondary:active,
+button.layout-button.secondary.active,
+button.layout-button.secondary.pressed,
+.button.layout-button.secondary:active,
+.button.layout-button.secondary.active,
+.button.layout-button.secondary.pressed,
+.layout-button.secondary:active,
+.layout-button.secondary.active,
+.layout-button.secondary.pressed {
+    background-color: #121212;
+    border-color: transparent;
+    color: #F2F2F2;
+}
+
+button.layout-button.secondary.active:hover,
+.button.layout-button.secondary.active:hover,
+.layout-button.secondary.active:hover {
+    background-color: #121212;
+    color: #F2F2F2;
+    border-color: transparent;
+}
+
+button.layout-button.secondary:focus,
+.button.layout-button.secondary:focus,
+.layout-button.secondary:focus {
+    outline: none;
+    outline-offset: 0px;
+}
+
+button.layout-button:hover,
+.button.layout-button:hover,
+.layout-button:hover,
+button.layout-button:active,
+.button.layout-button:active,
+.layout-button:active,
+button.layout-button.pressed,
+.button.layout-button.pressed,
+.layout-button.pressed,
+button.layout-button.active,
+.button.layout-button.active,
+.layout-button.active,
+button.layout-button.active:hover,
+.button.layout-button.active:hover,
+.layout-button.active:hover,
+button.layout-button.active:active,
+.button.layout-button.active:active,
+.layout-button.active:active,
+button.layout-button.active.pressed,
+.button.layout-button.active.pressed,
+.layout-button.active.pressed,
+button.layout-button:focus,
+.button.layout-button:focus,
+.layout-button:focus {
+    outline: none;
+    outline-offset: 0px;
+    border-width: 0px;
+    border-style: none;
+    border-color: transparent;
+}
+
+button.layout-button:hover,
+.button.layout-button:hover,
+.layout-button:hover,
+button.layout-button.active,
+.button.layout-button.active,
+.layout-button.active,
+button.layout-button.active:hover,
+.button.layout-button.active:hover,
+.layout-button.active:hover {
+    background-color: #242424;
+    border-color: transparent;
+    color: #F2F2F2;
+}
+
+button.layout-button.active:hover,
+.button.layout-button.active:hover,
+.layout-button.active:hover {
+    background-color: #121212;
+}
+
+button.layout-button:active,
+.button.layout-button:active,
+.layout-button:active,
+button.layout-button.pressed,
+.button.layout-button.pressed,
+.layout-button.pressed,
+button.layout-button.active:active,
+.button.layout-button.active:active,
+.layout-button.active:active,
+button.layout-button.active.pressed,
+.button.layout-button.active.pressed,
+.layout-button.active.pressed {
+    background-color: #121212;
+    border-color: transparent;
+    color: #F2F2F2;
+}
+
+button:disabled,
+.button:disabled,
+.button.disabled {
+    background-color: var(--ui_color_bg_hover);
+    border-color: var(--ui_color_bg_selected);
+    color: var(--ui_color_text_disabled);
+    cursor: not-allowed;
+}
+
+/* Button text child */
+.button-text {
+    color: inherit;
+    font-size: inherit;
+    pointer-events: none;
+}
+
+/* Primary variant */
+button.primary,
+.button.primary {
+    background-color: var(--ui_color_accent_blue);
+    border-color: var(--ui_color_accent_blue);
+    color: var(--ui_color_text_bright);
+}
+
+button.primary:hover,
+.button.primary:hover {
+    background-color: var(--ui_color_accent_blue_hover);
+    border-color: var(--ui_color_accent_blue_hover);
+}
+
+button.primary:active,
+button.primary.active,
+button.primary.pressed,
+.button.primary:active,
+.button.primary.active,
+.button.primary.pressed {
+    background-color: var(--ui_color_accent_blue_pressed);
+    border-color: var(--ui_color_accent_blue_pressed);
+}
+
+/* Secondary variant */
+button.secondary,
+.button.secondary {
+    background-color: transparent;
+    border-color: var(--ui_color_border_subtle);
+    color: var(--ui_color_text);
+}
+
+button.secondary:hover,
+.button.secondary:hover {
+    background-color: rgba(255, 255, 255, 0.192);
+    border-color: #4A4A4A;
+}
+
+button.secondary:active,
+button.secondary.active,
+button.secondary.pressed,
+.button.secondary:active,
+.button.secondary.active,
+.button.secondary.pressed {
+    background-color: rgba(255, 255, 255, 0.31);
+    border-color: var(--ui_color_border_subtle);
+}
+
+/* Icon buttons with .active (e.g. loop, sync-playhead, record) – no white fill, match play/stop */
+button.icon-button.secondary.active,
+.button.icon-button.secondary.active,
+button.loop-icon.secondary.active,
+.button.loop-icon.secondary.active,
+button.sync-playhead-icon.secondary.active,
+.button.sync-playhead-icon.secondary.active,
+button.record-icon.secondary.active,
+.button.record-icon.secondary.active {
+    background-color: transparent;
+    border-color: transparent;
+}
+
+/* Icon buttons
+ *
+ * Important: this must come AFTER the generic button variants (notably
+ * `.secondary:hover`) so icon buttons don't pick up the light hover fill.
+ */
+.icon-button,
+button.icon-button,
+.button.icon-button {
+	width: 24px;
+	height: 24px;
+	padding: 4px;
+	min-width: 24px;
+	min-height: 24px;
+	background-color: transparent;
+	border-width: 0px;
+	border-style: none;
+	border-color: transparent;
+}
+
+.icon-button:hover,
+.icon-button:active,
+.icon-button.pressed,
+button.icon-button:hover,
+button.icon-button:active,
+button.icon-button.pressed,
+.button.icon-button:hover,
+.button.icon-button:active,
+.button.icon-button.pressed,
+.icon-button.secondary:hover,
+.icon-button.secondary:active,
+.icon-button.secondary.pressed,
+button.icon-button.secondary:hover,
+button.icon-button.secondary:active,
+button.icon-button.secondary.pressed,
+.button.icon-button.secondary:hover,
+.button.icon-button.secondary:active,
+.button.icon-button.secondary.pressed {
+	background-color: transparent;
+	border-color: transparent;
+	border-width: 0px;
+}
+
+/* Success variant */
+button.success,
+.button.success {
+    background-color: #28A745;
+    border-color: #28A745;
+    color: var(--ui_color_text_bright);
+}
+
+button.success:hover,
+.button.success:hover {
+    background-color: #34CE57;
+    border-color: #34CE57;
+}
+
+/* Danger variant */
+button.danger,
+.button.danger {
+    background-color: #DC3545;
+    border-color: #DC3545;
+    color: var(--ui_color_text_bright);
+}
+
+button.danger:hover,
+.button.danger:hover {
+    background-color: #E04555;
+    border-color: #E04555;
+}
+
+/* Small size variant */
+button.small,
+.button.small {
+    padding: 4px 8px;
+    min-height: 24px;
+    font-size: var(--ui_font_size_small);
+}
+
+/* Large size variant */
+button.large,
+.button.large {
+    padding: 12px 24px;
+    min-height: 40px;
+    font-size: var(--ui_font_size_header);
+}
+
+/* Code-folding UI (ScriptTextArea fold markers)
+ * NOTE: We reuse `.foldout-chevron` for the icon visuals. */
+
+/* Foldout button container */
+.code-foldout-button {
+    position: absolute;
+    width: 28px;
+    height: 16px;
+    background-color: transparent;
+    border-width: 0;
+    padding: 0 8px;
+    box-sizing: border-box;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+    z-index: 100;
+    pointer-events: auto;
+}
+
+.code-foldout-button .code-foldout-marker {
+	/* Keep the Foldout's internal structure, but make it act like a tiny icon-only toggle. */
+	display: flex;
+	flex-direction: column;
+	align-items: center;
+	justify-content: center;
+}
+
+.code-foldout-button .code-foldout-marker .foldout-header {
+	padding: 0;
+	background-color: transparent;
+	border-radius: 0;
+	gap: 0;
+}
+
+.code-foldout-button .code-foldout-marker .foldout-title {
+	display: none;
+}
+
+.code-foldout-button .code-foldout-marker .foldout-content {
+	display: none;
+	padding: 0;
+}
+
+
+.code-foldout-button:hover {
+    background-color: transparent;
+    border-color: transparent;
+}
+/* Foldout icon inside button - fixed 12px size */
+.code-foldout-button .foldout-chevron {
+    position: relative; /* Override absolute positioning so flex centering works */
+    width: 12px;
+    height: 12px;
+    background-size: 12px 12px;
+    background-repeat: no-repeat;
+    background-position: center;
+    background-color: transparent;
+    border-width: 0;
+    padding: 0;
+    opacity: 0.5;
+}
+
+.code-foldout-button:hover .foldout-chevron {
+    opacity: 1.0;
+}
+
+/* ------------------------------------------------
+   Drag/drop rejection tooltip (DropFeedback.reason)
+   ------------------------------------------------ */
+
+.dnd-tooltip {
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	background-color: rgba(10, 10, 10, 0.92);
+	border-width: 0px;
+	height: 24px;
+	min-width: 200px;
+	border-color: rgba(255, 255, 255, 0.31);
+	border-radius: var(--ui_radius_md);
+	padding: 4px 12px;
+	box-shadow: 0 6px 20px rgba(0, 0, 0, 0.35);
+	max-width: 400px;
+}
+
+.dnd-tooltip .dnd-tooltip-text {
+	width: 100%;
+	font-size: var(--ui_font_size_list);
+	color: rgba(255, 255, 255, 0.96);
+	text-align: center;
+	padding: 0;
+	margin: 0;
+}
+
+/* ------------------------------------------------
+   Hover tooltip
+   ------------------------------------------------ */
+
+.tooltip-wrapper {
+	display: none;
+	position: absolute;
+	flex-direction: column;
+	align-items: flex-start;
+	gap: 0;
+	z-index: 9600;
+}
+
+.tooltip {
+	display: flex;
+	flex-direction: column;
+	align-items: center;
+	justify-content: center;
+	background-color: rgba(18, 18, 18, 0.97);
+	border-radius: var(--ui_radius_md);
+	padding: 6px 10px;
+	box-shadow: none;
+	min-width: 60px;
+	margin: 0;
+	overflow: hidden;
+}
+
+.tooltip-text {
+	display: flex;
+	align-items: center;
+	font-size: 14px;
+	line-height: 20px;
+	color: rgba(255, 255, 255, 0.96);
+	text-align: center;
+	padding: 1px 0 0 0;
+	margin: 0;
+	/* No width on purpose: long text wraps against the engine-side max-width
+	   on #ui-tooltip (TooltipOverlay::kMaxTooltipWidth). A percent width here
+	   resolves against the pre-clamp available width and lets the label
+	   escape the bubble instead of wrapping. */
+	overflow: hidden;
+}
+
+.tooltip-arrow {
+	width: 10px;
+	height: 10px;
+	margin: 0;
+	padding: 0;
+	background-size: contain;
+	background-repeat: no-repeat;
+	background-position: center;
+	background-color: transparent;
+	background-image-tint: rgba(255, 80, 80, 0.95);
+	align-self: center;
+}
+
+.tooltip-arrow-up {
+	background-image: url("editor:Icons/fold-up.png");
+}
+
+.tooltip-arrow-down {
+	background-image: url("editor:Icons/fold-down.png");
+}
+
+.tooltip-arrow-left {
+	background-image: url("editor:Icons/fold-left.png");
+}
+
+.tooltip-arrow-right {
+	background-image: url("editor:Icons/fold-right.png");
+}
+
+/* Drag/drop ghost (payload display label) */
+.dnd-ghost {
+	display: flex;
+	flex-direction: row;
+	align-items: center;
+	gap: 8px;
+	height: 24px;
+	background-color: rgba(13, 13, 13, 0.72);
+	border-radius: var(--ui_radius_md);
+	padding: 6px 12px;
+	box-shadow: 0 4px 20px rgba(0, 0, 0, 0.25);
+	opacity: 0.5;
+}
+
+.dnd-ghost.dnd-ghost-multi {
+	opacity: 0.65;
+	/* Subtle “stack” feel (SortableJS multi-drag style) */
+	box-shadow: 0 6px 20px rgba(0, 0, 0, 0.25), 3px 3px 0 rgba(255, 255, 255, 0.06);
+}
+
+.dnd-ghost .dnd-ghost-icon {
+	width: 24px;
+	min-width: 24px;
+	height: 24px;
+	margin: 0 4px 0 4px;
+	background-size: contain;
+	background-repeat: no-repeat;
+	background-position: center;
+	opacity: 0.9;
+}
+
+.dnd-ghost .dnd-ghost-icon.dnd-ghost-icon-thumbnail {
+	width: 64px;
+	min-width: 64px;
+	height: 64px;
+	border-radius: 4px;
+}
+
+.dnd-ghost.dnd-ghost-has-thumbnail {
+	background-color: transparent;
+	box-shadow: none;
+	height: auto;
+	padding: 0;
+	opacity: 1.0;
+}
+
+.dnd-ghost.dnd-ghost-has-thumbnail .dnd-ghost-icon {
+	opacity: 1.0;
+}
+
+.dnd-ghost.dnd-ghost-has-thumbnail .dnd-ghost-text {
+	background-color: rgba(13, 13, 13, 0.72);
+	border-radius: var(--ui_radius_md);
+	padding: 6px 12px;
+}
+
+.dnd-ghost .dnd-ghost-icon.dnd-ghost-icon-asset-file {
+	background-image: url("editor:Icons/codeicon.png");
+	/* Align drag ghost asset icon with neutral asset icon tint */
+	background-image-tint: rgba(150, 150, 150, 1.0);
+}
+
+.dnd-ghost .dnd-ghost-icon.dnd-ghost-icon-asset-folder {
+	background-image: url("editor:Icons/Folder@64px.png");
+	/* Match folder icon tint used in grid/list/tree */
+	background-image-tint: rgba(150, 150, 150, 1.0);
+}
+
+.dnd-ghost .dnd-ghost-icon.dnd-ghost-icon-entity {
+	background-image: url("editor:Icons/cube.svg");
+	background-image-tint: rgba(255, 255, 255, 0.87);
+}
+
+/* Center ghost text vertically in the rounded box (match icon row height) */
+.dnd-ghost .dnd-ghost-text {
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	align-self: center;
+	min-height: 24px;
+	height: 24px;
+	line-height: 24px;
+	font-size: var(--ui_font_size_list);
+	color: rgba(255, 255, 255, 0.96);
+	margin: 0 4px 0 4px;
+	padding: 0;
+}
+
+.dnd-ghost .dnd-ghost-badge {
+	margin-left: 4px;
+	margin-right: 4px;
+	padding: 2px 6px;
+	border-width: 1px;
+	border-color: rgba(255, 255, 255, 0.31);
+	border-radius: 999px;
+	background-color: rgba(255, 255, 255, 0.24);
+	color: rgba(255, 255, 255, 0.96);
+	font-size: calc(var(--ui_font_size_list) * 0.85);
+}
+
+.dnd-ghost .dnd-ghost-badge.hidden {
+	display: none;
+}
+
+/* Hierarchy drags mirror a compact tree row: actual entity preview + row text.
+   Keep these after the generic thumbnail rules because entity previews can also
+   be model thumbnails, but should remain row-sized rather than expanding to 64px. */
+.dnd-ghost.dnd-ghost-entity-row,
+.dnd-ghost.dnd-ghost-entity-row.dnd-ghost-has-thumbnail {
+	height: 22px;
+	gap: 6px;
+	padding: 2px 8px;
+	background-color: rgba(12, 12, 12, 0.82);
+	box-shadow: 0 4px 20px rgba(0, 0, 0, 0.25);
+	opacity: 0.85;
+}
+
+.dnd-ghost.dnd-ghost-entity-row.dnd-ghost-multi {
+	box-shadow: 0 6px 20px rgba(0, 0, 0, 0.25), 3px 3px 0 rgba(255, 255, 255, 0.06);
+	opacity: 0.85;
+}
+
+.dnd-ghost.dnd-ghost-entity-row .dnd-ghost-icon,
+.dnd-ghost.dnd-ghost-entity-row .dnd-ghost-icon.dnd-ghost-icon-thumbnail {
+	width: 16px;
+	min-width: 16px;
+	height: 16px;
+	margin: 0;
+	border-radius: 2px;
+	opacity: 1.0;
+}
+
+.dnd-ghost.dnd-ghost-entity-row .dnd-ghost-text,
+.dnd-ghost.dnd-ghost-entity-row.dnd-ghost-has-thumbnail .dnd-ghost-text {
+	height: 22px;
+	min-height: 22px;
+	line-height: 22px;
+	justify-content: flex-start;
+	margin: 0;
+	padding: 0;
+	background-color: transparent;
+}
+
+/* ── Script editor code completion popup ─────────────────────────────────── */
+.completion-popup {
+	background-color: #1e1e1e;
+	border: 1px solid #454545;
+	border-radius: 3px;
+	overflow: hidden;
+	flex-direction: column;
+	box-shadow: var(--popup-shadow, 0 -1px 24px rgba(0, 0, 0, 0.25));
+}
+
+/* Popup drop shadows are on by default. The shadow geometry/opacity is driven by the
+   `--popup-shadow` custom property, which SettingsPanel::ApplySavedPopupShadowStyle sets
+   on the UI root from User Settings ▸ Appearance. Each opt-out class disables one popup
+   type. The asset/component picker (SearchDialog) gets its shadow here rather than in the
+   subtree-scoped SearchDialog.css so the root property + opt-out selectors can reach it. */
+.search-dialog-panel {
+	box-shadow: var(--popup-shadow, 0 -1px 24px rgba(0, 0, 0, 0.25));
+}
+
+.no-dropdown-shadow .dropdown-items {
+	box-shadow: none;
+}
+
+.no-picker-shadow .search-dialog-panel {
+	box-shadow: none;
+}
+
+.no-completion-shadow .completion-popup {
+	box-shadow: none;
+}
+
+.completion-item {
+	display: flex;
+	align-items: center;
+	padding-left: 8px;
+	padding-right: 8px;
+	font-size: 13px;
+	color: #d4d4d4;
+	white-space: nowrap;
+}
+
+.completion-item:hover {
+	background-color: #2a2d2e;
+}
+
+.completion-item.completion-item-selected {
+	background-color: #094771;
+	color: #ffffff;
+}
+
+/* ── Script editor members / functions outline ───────────────────────────── */
+.script-functions-section {}
+
+.script-function-row {
+	flex-direction: row;
+	align-items: center;
+	padding-top: 1px;
+	padding-bottom: 1px;
+	padding-left: 4px;
+	padding-right: 4px;
+	cursor: default;
+}
+
+.script-function-row:hover {
+	background-color: #2a2d2e;
+}
+
+.script-function-row:hover .script-function-line,
+.script-function-row:hover .script-function-label {
+	color: #ffffff;
+}
+
+.script-function-line {
+	font-size: 11px;
+	color: #6e7681;
+	min-width: 32px;
+	text-align: right;
+	padding-right: 6px;
+	font-family: monospace;
+}
+
+.script-function-label {
+	font-size: 12px;
+	color: #9cdcfe;
+	flex: 1;
+	cursor: default;
+}
+
+.script-function-label:focus {
+	color: #ffffff;
+	background-color: #094771;
+	outline: none;
+}
+
+/* Rows scroll; the search row above them does not. Without a bound here a
+   filter that matches a hundred commands clips at the viewport clamp instead
+   of scrolling. */
+.context-menu > .context-menu-rows {
+	overflow-y: auto;
+	flex-shrink: 1;
+	min-height: 0;
+}
+
+/* Chevrons read small against a menu row's text; the combo box's 10px is tuned
+   for a denser control. */
+.context-menu .dropdown-item .dropdown-item-arrow {
+	margin-right: -34px;
+}
+
+.context-menu .dropdown-item-arrow {
+	width: 13px;
+	height: 13px;
+}
+
+/* The submenu chevron is the U+203A glyph, matching NSMenu's bold compact
+   angle; the image the base class carries is suppressed. Pinned to the row's
+   trailing edge absolutely — the glyph label doesn't ride the text label's
+   flex growth the image element did. */
+.context-menu .dropdown-item-arrow.dropdown-item-arrow-glyph {
+	background-image: none;
+	width: auto;
+	height: auto;
+	position: absolute;
+	right: 12px;
+	/* Baseline-rendered glyph: the negative top optically centers it in the
+	   24px row (0 sat visibly low). */
+	top: -3px;
+	height: 24px;
+	line-height: 24px;
+	margin-left: 0px;
+	margin-right: 0px;
+	font-size: 18px;
+	font-weight: bold;
+	color: rgba(255, 255, 255, 0.75);
+}
+
+.context-menu .dropdown-item:hover .dropdown-item-arrow-glyph {
+	color: var(--ui_color_text_bright);
+}
+
+/* The clear button sat 4px off the field's edge, which reads as crowding
+   against the menu's own border a few pixels further out. Full-row hit target:
+   the glyph is 16px but a 16px click target next to a dead gutter is why the X
+   read as broken — clicks that visually hit the X landed beside it. The
+   background stays glyph-sized and centered, so it looks unchanged. */
+.context-menu-search .button.search-field-with-filter-clear {
+	right: 0px;
+	width: 26px;
+	height: 22px;
+	margin-top: -11px;
+	background-size: 10px 10px;
+	background-position: center;
+	background-repeat: no-repeat;
+	/* The enlarged box is a hit target only — no button chrome, just the X. */
+	background-color: transparent;
+	border-width: 0;
+	border-style: none;
+	/* Hit-test compares z-index flat across stacking contexts, so the base
+	   rule's 20 loses to the menu overlay's own ordering and presses fall
+	   through to the input underneath. High enough to win inside the menu. */
+	z-index: 10000;
+}
+
+.context-menu-search .button.search-field-with-filter-clear:hover {
+	background-color: transparent;
+	opacity: 1;
+}
+
+.context-menu-search .search-field-with-filter-input {
+	padding-right: 36px;
+}

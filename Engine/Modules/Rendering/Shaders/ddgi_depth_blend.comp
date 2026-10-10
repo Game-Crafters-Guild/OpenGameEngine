@@ -1,0 +1,120 @@
+#version 450
+
+// DDGI depth-moment blend kernel for DDGIDepthResolution::Fine: the depth
+// half of ddgi_blend.comp, run at its own tile resolution. Gathers this tick's
+// traced hit distances into per-texel (mean, mean^2) moments over a
+// GE_DDGI_DEPTH_OCT_RES_FINE octahedral tile — 14x14 interior against the
+// irradiance tile's 6x6 — so the Chebyshev test resolves an occluder's
+// direction about 2.3x more finely. Under Shared the fused ddgi_blend.comp
+// gathers the moments in the irradiance tile and this kernel is never
+// dispatched; the two are never both active for one cascade.
+//
+// The temporal retention is the plain interval-normalized hysteresis
+// (GE_DDGIHysteresisWeight), not the irradiance kernel's per-texel variance
+// policy: that policy is keyed on the irradiance texel's luminance moments,
+// which a depth texel of a different tile resolution has no counterpart for.
+// Distance is a smooth, low-noise quantity next to radiance, so a fixed
+// retention holds it steady without the adaptive machinery.
+//
+// One workgroup per probe, one thread per depth atlas texel (interior +
+// border, GE_DDGI_DEPTH_TILE_FINE^2 = 256 threads). Border texels decode
+// their own wrapped direction exactly as ddgi_blend.comp's do.
+
+#include "Includes/ddgi_common.glsl"
+
+layout(local_size_x = GE_DDGI_DEPTH_TILE_FINE, local_size_y = GE_DDGI_DEPTH_TILE_FINE, local_size_z = 1) in;
+
+// Same block as ddgi_blend.comp's DDGIBlendParams, so the C++ side fills one
+// struct for both kernels.
+layout(std140, set = 0, binding = 0) uniform DDGIBlendParams
+{
+    vec4 uGridMinWS;
+    vec4 uGridSizeWS;
+    ivec4 uProbeCount;    // xyz = res; w = probeTotal
+    vec4 uParams0;        // x=minCellWS, y=normalBiasScale, z=hysteresis, w=intensity
+    uvec4 uDispatch0;     // x=probeBase, y=raysPerProbe, z=probesThisTick, w=frameIndex (ray-set rotation)
+    vec4 uTiming;         // x=update dt (ms) since this probe's last blend
+    vec4 uParams1;        // x=depthSharpness, y=depth atlas interior tile resolution
+} DDGIParams;
+
+layout(std430, set = 0, binding = 1) readonly buffer DDGIRayBufferRO
+{
+    vec4 ge_ddgiRays[];  // xyz=radiance (unused here), w=hitT (<0 = miss)
+};
+
+// One GE_DDGI_DEPTH_TILE_FINE^2 vec4 block per probe, row-major within the
+// tile: the same layout as ddgi_blend.comp's depth state (xy = diffuse
+// moments, zw = reflection moments).
+layout(std430, set = 0, binding = 2) buffer DDGIDepthState
+{
+    vec4 ge_ddgiDepthState[];
+};
+
+// Pre-scroll cell record (ddgi_blend.comp stamps it after this pass).
+layout(std430, set = 0, binding = 3) readonly buffer DDGIProbeCellRO
+{
+    vec4 ge_ddgiProbeCell[];
+};
+
+GE_DDGIGridInfo GE_DDGIBuildGridInfo()
+{
+    GE_DDGIGridInfo g;
+    g.gridMinWS = DDGIParams.uGridMinWS.xyz;
+    g.gridSizeWS = DDGIParams.uGridSizeWS.xyz;
+    g.probeCount = DDGIParams.uProbeCount.xyz;
+    g.probeTotal = DDGIParams.uProbeCount.w;
+    g.minCellWS = DDGIParams.uParams0.x;
+    g.normalBiasScale = DDGIParams.uParams0.y;
+    g.hysteresis = DDGIParams.uParams0.z;
+    g.intensity = DDGIParams.uParams0.w;
+    return g;
+}
+
+void main()
+{
+    uint probeLocal = gl_WorkGroupID.x;
+    int probeIdx = int(DDGIParams.uDispatch0.x) + int(probeLocal);
+    GE_DDGIGridInfo grid = GE_DDGIBuildGridInfo();
+    if (probeLocal >= DDGIParams.uDispatch0.z || probeIdx >= grid.probeTotal)
+        return;
+
+    uvec2 texel = gl_LocalInvocationID.xy;
+    vec2 octUV = (vec2(texel) - float(GE_DDGI_BORDER) + 0.5) / float(GE_DDGI_DEPTH_OCT_RES_FINE);
+    vec3 texelDir = GE_OctDecode(octUV);
+
+    uint raysPerProbe = DDGIParams.uDispatch0.y;
+    uint rayBase = uint(probeIdx) * raysPerProbe;
+    mat3 basis = GE_DDGIRayBasis(DDGIParams.uDispatch0.w);
+    // Floored above 0 for the same reason ddgi_blend.comp floors it: pow(0, 0)
+    // is 1, which would hand backfacing rays authority over the moments.
+    float depthSharpness = max(DDGIParams.uParams1.x, 0.01);
+    float maxDist = GE_DDGIProbeMaxDistance(grid);
+    vec4 gathered = vec4(0.0);  // xy = sum(w*dist), sum(w*dist^2) bounded; zw = the same, true distance
+    float weightSum = 0.0;
+    for (uint r = 0u; r < raysPerProbe; ++r)
+    {
+        vec4 ray = GE_DDGIFiniteRay(ge_ddgiRays[rayBase + r]);
+        vec3 rayDir = GE_DDGIRayDirection(r, raysPerProbe, basis);
+        float w = pow(max(dot(texelDir, rayDir), 0.0), depthSharpness);
+        // Match the shared-resolution blend's local bound for hits and misses.
+        float dist = GE_DDGIBoundedProbeDistance(ray.w, maxDist);
+        float reflectionDist = GE_DDGIReflectionProbeDistance(ray.w, grid);
+        gathered += vec4(dist, dist * dist, reflectionDist, reflectionDist * reflectionDist) * w;
+        weightSum += w;
+    }
+    vec4 newDepth = gathered / max(weightSum, 1.0e-5);
+
+    uint tileTexels = uint(GE_DDGI_DEPTH_TILE_FINE * GE_DDGI_DEPTH_TILE_FINE);
+    uint stateIdx = uint(probeIdx) * tileTexels + texel.y * uint(GE_DDGI_DEPTH_TILE_FINE) + texel.x;
+    vec4 prevDepth = ge_ddgiDepthState[stateIdx];
+    if (!GE_DDGIFinite(prevDepth))
+        prevDepth = vec4(0.0);
+    // Depth is strictly positive after any real update (a miss stores the
+    // local visibility bound), so zero is the allocation sentinel: an unseeded texel
+    // takes the fresh estimate whole. Either pair at zero counts, for the same
+    // reason as ddgi_blend.comp's sentinel.
+    bool unseeded = prevDepth.x < 1.0e-6 || prevDepth.z < 1.0e-6 ||
+                    GE_DDGIProbeCellChanged(ge_ddgiProbeCell[probeIdx], grid, probeIdx);
+    float h = unseeded ? 0.0 : GE_DDGIHysteresisWeight(grid.hysteresis, DDGIParams.uTiming.x);
+    ge_ddgiDepthState[stateIdx] = mix(newDepth, prevDepth, h);
+}

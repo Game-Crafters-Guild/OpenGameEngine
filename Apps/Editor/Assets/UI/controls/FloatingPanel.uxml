@@ -1,0 +1,9 @@
+<UIElement class="floating-panel">
+  <UIElement id="floating-panel-titlebar" class="floating-panel-titlebar">
+    <UIElement id="floating-panel-icon" class="floating-panel-icon dock-tab-icon floating-panel-icon-hidden" />
+    <Label id="floating-panel-title" class="floating-panel-title" />
+    <Button id="floating-panel-close" class="floating-panel-close icon-button xclose-icon" />
+  </UIElement>
+  <UIElement id="floating-panel-body" class="floating-panel-body" />
+  <UIElement id="floating-panel-resize" class="floating-panel-resize" />
+</UIElement>

@@ -1,0 +1,168 @@
+#version 450
+
+#include "Includes/storage_access.glsl"
+// Sorted transparent drain (transparency-scale S2): the fused
+// gather → key-build → sort → scatter dispatch that turns the CPU-staged
+// record list into per-run DrawIndexedIndirectCount streams, ordered
+// back-to-front on the GPU.
+//
+// One single-workgroup dispatch does all four phases over shared memory:
+//  1. GATHER: for each live record, fetch its GPUScene bounding centre and
+//     compute viewDepth = dot(centre - cameraPos, cameraForward). No CPU
+//     centre pass, no readback.
+//  2. KEY: pack the 64-bit sort key runSlot(16) ▸ ~sortableDepth(32) ▸
+//     recordIndex(16) — the exact GLSL mirror of SortedTransparentKey.h's
+//     MakeSortedTransparentKey (change both in the same commit; the drain
+//     device test cross-checks the packing). The run's draw slot rides the
+//     priority field, so ONE sort both partitions the array into contiguous
+//     runs and orders each run back-to-front; the record-index tiebreak makes
+//     every key unique (F4 — dense per-view record index, never the GPUScene
+//     instance index).
+//  3. SORT: the shared-memory bitonic network
+//     (Includes/sorted_transparent_sort_network.glsl).
+//  4. SCATTER: sorted position p emits one VkDrawIndexedIndirectCommand with
+//     firstInstance = p and indirection[p] = the record's GPUScene instance
+//     index — the GE_INSTANCED vertex path then fetches the full GPUInstance
+//     (sectors, custom0, flags, materialIndex) through the standard
+//     buffer_reference indirection. Per-run counts are copied from the
+//     CPU-known run table so the count buffer never needs host-visible
+//     indirect memory. No atomics anywhere: slot placement is a pure function
+//     of the sorted position, so within-run sorted order is preserved by
+//     construction.
+//
+// Bounds contract (F6): dispatch exactly ONE workgroup (vkCmdDispatch(1,1,1));
+// liveCount is clamped to kCapacity both CPU-side (views past the capacity
+// take the CPU-sorted drain instead) and here (belt and braces); padding keys
+// are generated IN REGISTER (never read from the records buffer), so the
+// records binding only needs liveCount elements; args/indirection bindings
+// hold kCapacity entries and are written only in [0, liveCount); counts holds
+// kCapacity entries, written only in [0, runCount).
+
+layout(local_size_x = 256) in;
+
+// Must match kSortedTransparentSortCapacity (SortedTransparentKey.h) and the
+// standalone primitive's kCapacity (sorted_transparent_sort.comp).
+const uint kCapacity = 2048u;
+
+// Mirror of SortedTransparentRecordGPU (SortedTransparentRuns.h) — ABI,
+// change both in the same commit.
+struct SortedTransparentRecord
+{
+    uint instanceIndex;
+    uint indexCount;
+    uint firstIndex;
+    int vertexOffset;
+    uint runSlot;
+};
+
+struct GPUInstance
+{
+#include "Includes/gpu_instance_fields.glsl"
+};
+
+layout(std430, set = 0, binding = 0) readonly buffer RecordsBuffer
+{
+    SortedTransparentRecord records[];
+};
+layout(std430, set = 0, binding = 1) readonly buffer InstanceBuffer
+{
+    GPUInstance instances[];
+};
+// VkDrawIndexedIndirectCommand stream, five uints per slot; vertexOffset is
+// int32 carried as a bit pattern.
+layout(std430, set = 0, binding = 2) GE_STORAGE_WRITEONLY buffer DrawArgsBuffer
+{
+    uint drawArgs[];
+};
+layout(std430, set = 0, binding = 3) GE_STORAGE_WRITEONLY buffer DrawCountsBuffer
+{
+    uint drawCounts[];
+};
+layout(std430, set = 0, binding = 4) GE_STORAGE_WRITEONLY buffer IndirectionBuffer
+{
+    uint indirection[];
+};
+layout(std430, set = 0, binding = 5) readonly buffer RunCountsBuffer
+{
+    uint runCounts[];
+};
+
+layout(push_constant) uniform DrainPC
+{
+    vec3 uCameraPos;     // world-space camera position (full precision source
+                         // is GPUInstance.boundingCenter, also world space)
+    uint uLiveCount;     // staged record count, <= kCapacity (clamped again below)
+    vec3 uCameraForward; // normalized view forward
+    uint uRunCount;      // number of runs (contiguous slot regions)
+};
+
+shared uvec2 sKeys[kCapacity];
+shared uint sVals[kCapacity];
+
+#include "Includes/sorted_transparent_sort_network.glsl"
+
+// GLSL mirror of SortedTransparentKey.h::FloatToSortableUint — monotonic
+// IEEE-754 float -> uint transform (negatives flip all bits, positives flip
+// the sign bit) so unsigned compare matches float compare.
+uint FloatToSortableUint(float f)
+{
+    const uint bits = floatBitsToUint(f);
+    const uint mask = ((bits & 0x80000000u) != 0u) ? 0xFFFFFFFFu : 0x80000000u;
+    return bits ^ mask;
+}
+
+// GLSL mirror of SortedTransparentKey.h::MakeSortedTransparentKey.
+uvec2 MakeSortedTransparentKey(float viewDepth, uint runSlot, uint recordIndex)
+{
+    const uint depthField = ~FloatToSortableUint(viewDepth); // farther -> smaller
+    return uvec2(((depthField & 0xFFFFu) << 16) | (recordIndex & 0xFFFFu),
+                 ((runSlot & 0xFFFFu) << 16) | (depthField >> 16));
+}
+
+void main()
+{
+    const uint lid = gl_LocalInvocationID.x;
+    const uint threads = gl_WorkGroupSize.x;
+    const uint live = min(uLiveCount, kCapacity); // F6 clamp
+
+    // GATHER + KEY. Padding slots get the max key in-register — the records
+    // buffer is never read past `live`.
+    for (uint i = lid; i < kCapacity; i += threads)
+    {
+        if (i < live)
+        {
+            const SortedTransparentRecord rec = records[i];
+            const vec3 center = instances[rec.instanceIndex].boundingCenter;
+            const float viewDepth = dot(center - uCameraPos, uCameraForward);
+            sKeys[i] = MakeSortedTransparentKey(viewDepth, rec.runSlot, i);
+            sVals[i] = i;
+        }
+        else
+        {
+            sKeys[i] = uvec2(0xFFFFFFFFu, 0xFFFFFFFFu);
+            sVals[i] = 0xFFFFFFFFu;
+        }
+    }
+
+    SortSharedBitonic(lid, threads);
+
+    // SCATTER. Sorted position p draws record sVals[p]; the tail past `live`
+    // is dead space the per-run counts clamp off (padding keys are the global
+    // maximum, so live records occupy exactly [0, live)).
+    for (uint p = lid; p < live; p += threads)
+    {
+        const SortedTransparentRecord rec = records[sVals[p]];
+        const uint base = p * 5u;
+        drawArgs[base + 0u] = rec.indexCount;
+        drawArgs[base + 1u] = 1u; // instanceCount: one record = one instance
+        drawArgs[base + 2u] = rec.firstIndex;
+        drawArgs[base + 3u] = uint(rec.vertexOffset);
+        drawArgs[base + 4u] = p; // firstInstance -> gl_InstanceIndex -> indirection slot
+        indirection[p] = rec.instanceIndex;
+    }
+
+    // Per-run draw counts (CPU-known; routed through this dispatch so the
+    // count buffer stays device-local).
+    for (uint runIdx = lid; runIdx < uRunCount; runIdx += threads)
+        drawCounts[runIdx] = runCounts[runIdx];
+}

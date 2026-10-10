@@ -1,0 +1,208 @@
+#version 450
+#include "Ocean/ocean_common.glsl"
+#include "Ocean/ocean_spray_gpu_common.glsl"
+#if defined(GE_COMPAT_PROFILE)
+// ocean_common.glsl compiles uOceanFoam out under the compat profile to keep the
+// surface's fragment stage inside WebGPU's 16-sampler cap. Shape() still needs the
+// foam cascade's resolution to find the layer holding a point, and this compute
+// stage has its own budget, so it declares the texture at the desktop binding.
+layout(set = 2, binding = 3) uniform sampler2DArray uOceanFoam;
+#endif
+layout(local_size_x = 64) in;
+layout(std430, set = 0, binding = 1) buffer Particles
+{
+    SprayParticle particles[];
+};
+layout(set = 0, binding = 4) uniform sampler2D sceneDepth;
+// Prefix of the engine ShadowData block; the complete buffer is bound unchanged.
+layout(std140, set = 0, binding = 5) uniform ShadowData
+{
+    mat4 shadowVP[4];
+    vec4 shadowSplits;
+    vec4 shadowParams;
+};
+layout(set = 0, binding = 6) uniform sampler2DArrayShadow shadowMap;
+layout(set = 0, binding = 7) uniform samplerCube irradianceCube;
+// Prefix of the engine EnvData block; the complete buffer is bound unchanged.
+layout(std140, set = 0, binding = 8) uniform EnvData
+{
+    float iblIntensity;
+};
+#include "Ocean/ocean_sun_shadow.glsl"
+
+// Light a droplet scatters toward the camera: the sun where the shadow map
+// sees it, plus the water surface's own ambient (procedural sky, replaced by
+// the environment irradiance as the IBL intensity rises).
+vec3 SprayRadiance(vec3 world)
+{
+    float sun = (resourceFlags.w & GE_OCEAN_SPRAY_SUN_SHADOWS) != 0u ? OceanSunVisibility(world) : 1.0;
+    vec3 ambient = OceanSkyAmbient();
+    if ((resourceFlags.w & GE_OCEAN_SPRAY_IBL) != 0u)
+        ambient = OceanBlendIblAmbient(ambient, textureLod(irradianceCube, vec3(0.0, 1.0, 0.0), 0.0).rgb,
+                                       iblIntensity);
+    return lightColor.rgb * sun + ambient;
+}
+float GustNoise(vec3 p)
+{
+    ivec3 cell = ivec3(floor(p));
+    vec3 f = fract(p);
+    f = f * f * (3.0 - 2.0 * f);
+    float value = 0.0;
+    for (int z = 0; z < 2; ++z)
+        for (int y = 0; y < 2; ++y)
+            for (int x = 0; x < 2; ++x)
+            {
+                ivec3 c = cell + ivec3(x, y, z);
+                float n = SprayRandom(uint(c.x) * 73856093u ^ uint(c.y) * 19349663u ^ uint(c.z) * 83492791u);
+                vec3 w = mix(1.0 - f, f, vec3(x, y, z));
+                value += n * w.x * w.y * w.z;
+            }
+    return value;
+}
+vec3 Shape(vec2 xz, out int layer)
+{
+    layer = 0;
+    for (uint i = 0u; i < uOceanCascades[GE_OCEAN_CASCADE_FOAM].Meta.x; ++i)
+    {
+        vec2 uv = (xz - uOceanCascades[GE_OCEAN_CASCADE_FOAM].OriginScale[i].xy) /
+                  (uOceanCascades[GE_OCEAN_CASCADE_FOAM].OriginScale[i].z * float(textureSize(uOceanFoam, 0).x));
+        layer = int(i);
+        if (all(greaterThanEqual(uv, vec2(0))) && all(lessThanEqual(uv, vec2(1))))
+            break;
+    }
+    vec3 disp;
+    if (uWaveMode == 1u && uFFTCascadeCount > 0u)
+        disp = OceanShapeDisplacementFiltered(xz, 0.25);
+    else
+    {
+        vec3 position, normal;
+        float foamScore;
+        EvaluateGerstner(xz, position, normal, foamScore);
+        disp = position - vec3(xz.x, uSeaLevel, xz.y);
+    }
+    if (uDynamicWavesAvailable != 0u)
+    {
+        float scale = uDynWavesAmplitude * OceanSampleWaveMask(xz).x;
+        disp.y += clamp(OceanSampleDynWaveHeight(xz) * scale, -uDynWavesDisplacementClamp,
+                        uDynWavesDisplacementClamp);
+        const float e = 0.5;
+        vec2 gradient =
+            vec2(OceanSampleDynWaveHeight(xz + vec2(e, 0)) - OceanSampleDynWaveHeight(xz - vec2(e, 0)),
+                 OceanSampleDynWaveHeight(xz + vec2(0, e)) - OceanSampleDynWaveHeight(xz - vec2(0, e))) *
+            scale / (2 * e);
+        disp.xz -= gradient * uDynWavesHorizontalDisplacement;
+    }
+    return disp;
+}
+void main()
+{
+    uint id = gl_GlobalInvocationID.x;
+    if (id >= uint(controls.x))
+        return;
+    SprayParticle p = particles[id];
+    if (controls.z > 0.5)
+    {
+        p.positionAge = vec4(0);
+        p.velocityLife = vec4(0);
+        p.look = vec4(0);
+        p.radiance = vec4(0);
+    }
+    p.positionAge.xyz -= shift.xyz;
+    float dt = windTime.w;
+    bool alive = p.velocityLife.w > 0 && p.positionAge.w < p.velocityLife.w;
+    if (alive)
+    {
+        p.positionAge.w += dt;
+        float drag = mix(1.5, 4.0, p.look.w);
+        p.velocityLife.xyz += (vec3(windTime.x, 0, windTime.z) - p.velocityLife.xyz) * min(dt * drag, 1);
+        float phase = p.look.w * 6.2831853;
+        vec3 turbulence = vec3(sin(p.positionAge.z * 1.7 + uTime * 2.1 + phase),
+                               0.3 * cos(p.positionAge.x * 1.3 - uTime * 1.7 + phase),
+                               sin(p.positionAge.x * 1.5 - uTime * 1.9 + phase));
+        p.velocityLife.xyz += turbulence * dt * (0.5 + length(windTime.xz) * 0.04);
+        p.velocityLife.y -= 9.81 * dt;
+        p.positionAge.xyz += p.velocityLife.xyz * dt;
+        int lod;
+        // Invert horizontal displacement before testing the particle against water.
+        vec2 gridXZ = p.positionAge.xz;
+        for (int iteration = 0; iteration < 2; ++iteration)
+            gridXZ = p.positionAge.xz - Shape(gridXZ, lod).xz;
+        float height = appearance.w + Shape(gridXZ, lod).y;
+        if (p.positionAge.y < height - 0.02 && p.velocityLife.y < 0)
+            p.velocityLife.w = 0;
+    }
+    else if (dt > 0)
+    {
+        uint seed = SprayHash(id + resourceFlags.z * 65537u);
+        if (SprayRandom(seed) < clamp(emission.x * dt / max(controls.x, 1), 0, 1))
+        {
+            float angle = 6.2831853 * SprayRandom(seed + 1u),
+                  radius = emission.y * sqrt(SprayRandom(seed + 2u));
+            vec2 xz = camera.xz + radius * vec2(cos(angle), sin(angle));
+            int lod;
+            vec3 disp = Shape(xz, lod);
+            if (lod >= 0)
+            {
+                if (OceanSampleClip(xz) > 0.5)
+                {
+                    particles[id] = p;
+                    return;
+                }
+                float e = layers[lod].z;
+                int ignored;
+                vec3 dx = (Shape(xz + vec2(e, 0), ignored) - Shape(xz - vec2(e, 0), ignored)) / (2 * e);
+                vec3 dz = (Shape(xz + vec2(0, e), ignored) - Shape(xz - vec2(0, e), ignored)) / (2 * e);
+                float jacobian = (1 + dx.x) * (1 + dz.z) - dx.z * dz.x;
+                float breaking = clamp((1 - jacobian) * 2, 0, 1);
+                float fresh = OceanSampleFoamData(xz).b;
+                // Compression and old foam alone also occur on wave flanks and
+                // in troughs. Require an elevated local maximum along the wind
+                // before allowing either crest or contact spray to detach.
+                vec2 windDir = normalize(windTime.xz + vec2(1e-5, 0));
+                float crestSpan = clamp(length(windTime.xz) * 0.12, 0.75, 2.0);
+                float upwind = Shape(xz - windDir * crestSpan, ignored).y;
+                float downwind = Shape(xz + windDir * crestSpan, ignored).y;
+                float prominence = min(disp.y - upwind, disp.y - downwind);
+                float crest =
+                    smoothstep(0.002, 0.06 * crestSpan, prominence) * smoothstep(0.03, 0.25, disp.y);
+                // Advected, slowly changing gusts produce irregular bursts along
+                // the crest. Individual births retain independent random timing.
+                float gust = smoothstep(
+                    0.28, 0.72, GustNoise(vec3((xz - windTime.xz * uTime * 0.2) * 0.3, uTime * 0.65)));
+                vec3 world = vec3(xz.x + disp.x, appearance.w + disp.y, xz.y + disp.z);
+                float contact = 0;
+                if (interaction.x > 0.5)
+                {
+                    vec4 clip = viewProjection * vec4(world, 1);
+                    vec2 suv = clip.xy / max(clip.w, 1e-5) * 0.5 + 0.5;
+                    suv.y = 1 - suv.y;
+                    if (clip.w > 0 && all(greaterThan(suv, vec2(0))) && all(lessThan(suv, vec2(1))))
+                    {
+                        float z = textureLod(sceneDepth, suv, 0).r;
+                        float delta = abs(z - clip.z / clip.w) * clip.w * clip.w / max(viewport.z, 0.001);
+                        contact = (1 - smoothstep(0, interaction.y, delta)) * fresh;
+                    }
+                }
+                float energy = SprayRandom(seed + 8u) < interaction.z ? breaking * max(fresh, 0.35) : contact;
+                energy *= crest * gust;
+                if (energy >= controls.w && SprayRandom(seed + 3u) < energy)
+                {
+                    p.positionAge = vec4(world + vec3(0, 0.03, 0), 0);
+                    float launch = mix(0.2, 0.65, SprayRandom(seed + 9u));
+                    p.velocityLife =
+                        vec4(windTime.x * launch,
+                             emission.w * (0.3 + SprayRandom(seed + 4u) * 0.7) + breaking * 0.35,
+                             windTime.z * launch, emission.z * (0.45 + SprayRandom(seed + 5u) * 0.95));
+                    p.velocityLife.xz += OceanSampleFlow(xz);
+                    float sizeVariation = 0.35 + pow(SprayRandom(seed + 6u), 2.0) * 0.9;
+                    float startSize = appearance.x * sizeVariation;
+                    p.look = vec4(startSize, min(appearance.y * sizeVariation, startSize * 2.0),
+                                  appearance.z * sqrt(energy), SprayRandom(seed + 7u));
+                }
+            }
+        }
+    }
+    if (p.velocityLife.w > 0 && p.positionAge.w < p.velocityLife.w)
+        p.radiance = vec4(SprayRadiance(p.positionAge.xyz), 0.0);
+    particles[id] = p;
+}

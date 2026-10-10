@@ -1,0 +1,878 @@
+{
+  "version": 3,
+  "cmakeMinimumRequired": {
+    "major": 3,
+    "minor": 20,
+    "patch": 0
+  },
+  "configurePresets": [
+
+    {
+      "name": "vs2022-x64",
+      "generator": "Visual Studio 17 2022",
+      "binaryDir": "build/${presetName}",
+      "architecture": { "value": "x64" },
+      "cacheVariables": {
+        "CMAKE_CXX_STANDARD": "20",
+        "CMAKE_TOOLCHAIN_FILE": "$env{VCPKG_ROOT}/scripts/buildsystems/vcpkg.cmake",
+        "VCPKG_TARGET_TRIPLET": "x64-windows",
+        "CMAKE_EXPORT_COMPILE_COMMANDS": "ON",
+        "BUILD_TESTING": "OFF",
+        "RENDERING_ENABLE_GPU_CULLING": "OFF"
+      },
+      "environment": {
+        "VCPKG_FEATURE_FLAGS": "manifests,binarycaching",
+        "VCPKG_BINARY_SOURCES": "clear;default,readwrite;$penv{VCPKG_BINARY_SOURCES}"
+      }
+    },
+    {
+      "name": "vs2022-x64-unity",
+      "generator": "Visual Studio 17 2022",
+      "binaryDir": "build/${presetName}",
+      "architecture": { "value": "x64" },
+      "cacheVariables": {
+        "CMAKE_CXX_STANDARD": "20",
+        "CMAKE_TOOLCHAIN_FILE": "$env{VCPKG_ROOT}/scripts/buildsystems/vcpkg.cmake",
+        "VCPKG_TARGET_TRIPLET": "x64-windows",
+        "CMAKE_EXPORT_COMPILE_COMMANDS": "ON",
+        "BUILD_TESTING": "OFF",
+        "CMAKE_UNITY_BUILD": "ON",
+        "RENDERING_ENABLE_GPU_CULLING": "OFF"
+      },
+      "environment": {
+        "VCPKG_FEATURE_FLAGS": "manifests,binarycaching",
+        "VCPKG_BINARY_SOURCES": "clear;default,readwrite;$penv{VCPKG_BINARY_SOURCES}"
+      }
+    },
+    {
+      "name": "vs2022-x64-fallback",
+      "generator": "Visual Studio 17 2022",
+      "binaryDir": "build/${presetName}",
+      "architecture": { "value": "x64" },
+      "cacheVariables": {
+        "CMAKE_CXX_STANDARD": "20",
+        "VCPKG_TARGET_TRIPLET": "x64-windows",
+        "CMAKE_EXPORT_COMPILE_COMMANDS": "ON",
+        "BUILD_TESTING": "OFF"
+      },
+      "environment": {
+        "VCPKG_FEATURE_FLAGS": "manifests,binarycaching",
+        "VCPKG_BINARY_SOURCES": "clear;default,readwrite;$penv{VCPKG_BINARY_SOURCES}"
+      }
+    }
+,
+    {
+      "name": "vs2022-x64-local",
+      "generator": "Visual Studio 17 2022",
+      "binaryDir": "build/${presetName}",
+      "architecture": { "value": "x64" },
+      "cacheVariables": {
+        "CMAKE_CXX_STANDARD": "20",
+        "CMAKE_TOOLCHAIN_FILE": "dependencies/vcpkg/scripts/buildsystems/vcpkg.cmake",
+        "VCPKG_TARGET_TRIPLET": "x64-windows",
+        "CMAKE_EXPORT_COMPILE_COMMANDS": "ON",
+        "BUILD_TESTING": "OFF",
+        "RENDERING_ENABLE_GPU_CULLING": "OFF"
+      },
+      "environment": {
+        "MSBUILDDISABLENODEREUSE": "1",
+        "VCPKG_FEATURE_FLAGS": "manifests,binarycaching",
+        "VCPKG_BINARY_SOURCES": "clear;default,readwrite;$penv{VCPKG_BINARY_SOURCES}"
+      }
+    }
+,
+    {
+      "name": "vs2022-x64-local-unity",
+      "generator": "Visual Studio 17 2022",
+      "binaryDir": "build/${presetName}",
+      "architecture": { "value": "x64" },
+      "cacheVariables": {
+        "CMAKE_CXX_STANDARD": "20",
+        "CMAKE_TOOLCHAIN_FILE": "dependencies/vcpkg/scripts/buildsystems/vcpkg.cmake",
+        "VCPKG_TARGET_TRIPLET": "x64-windows",
+        "CMAKE_EXPORT_COMPILE_COMMANDS": "ON",
+        "BUILD_TESTING": "OFF",
+        "RENDERING_ENABLE_GPU_CULLING": "OFF",
+        "CMAKE_UNITY_BUILD": "ON"
+      },
+      "environment": {
+        "MSBUILDDISABLENODEREUSE": "1",
+        "VCPKG_FEATURE_FLAGS": "manifests,binarycaching",
+        "VCPKG_BINARY_SOURCES": "clear;default,readwrite;$penv{VCPKG_BINARY_SOURCES}"
+      }
+    }
+,
+    {
+      "name": "vs2022-x64-local-unity-examples",
+      "generator": "Visual Studio 17 2022",
+      "binaryDir": "build/${presetName}",
+      "architecture": { "value": "x64" },
+      "cacheVariables": {
+        "CMAKE_CXX_STANDARD": "20",
+        "CMAKE_TOOLCHAIN_FILE": "dependencies/vcpkg/scripts/buildsystems/vcpkg.cmake",
+        "VCPKG_TARGET_TRIPLET": "x64-windows",
+        "CMAKE_EXPORT_COMPILE_COMMANDS": "ON",
+        "BUILD_TESTING": "OFF",
+        "BUILD_EXAMPLES": "ON",
+        "RENDERING_ENABLE_GPU_CULLING": "OFF",
+        "CMAKE_UNITY_BUILD": "ON"
+      },
+      "environment": {
+        "MSBUILDDISABLENODEREUSE": "1",
+        "VCPKG_FEATURE_FLAGS": "manifests,binarycaching",
+        "VCPKG_BINARY_SOURCES": "clear;default,readwrite;$penv{VCPKG_BINARY_SOURCES}"
+      }
+    }
+	,
+    {
+      "name": "vs2022-x64-local-unity-tests",
+      "generator": "Visual Studio 17 2022",
+      "binaryDir": "build/${presetName}",
+      "architecture": { "value": "x64" },
+      "cacheVariables": {
+        "CMAKE_CXX_STANDARD": "20",
+        "CMAKE_TOOLCHAIN_FILE": "dependencies/vcpkg/scripts/buildsystems/vcpkg.cmake",
+        "VCPKG_TARGET_TRIPLET": "x64-windows",
+        "CMAKE_EXPORT_COMPILE_COMMANDS": "ON",
+        "BUILD_TESTING": "ON",
+        "RENDERING_ENABLE_GPU_CULLING": "OFF",
+        "CMAKE_UNITY_BUILD": "ON"
+      },
+      "environment": {
+        "MSBUILDDISABLENODEREUSE": "1",
+        "VCPKG_FEATURE_FLAGS": "manifests,binarycaching",
+        "VCPKG_BINARY_SOURCES": "clear;default,readwrite;$penv{VCPKG_BINARY_SOURCES}"
+      }
+    }
+	,
+	    {
+	      "name": "vs2022-x64-local-asan",
+	      "generator": "Visual Studio 17 2022",
+	      "binaryDir": "build/${presetName}",
+	      "architecture": { "value": "x64" },
+	      "cacheVariables": {
+	        "CMAKE_CXX_STANDARD": "20",
+	        "CMAKE_TOOLCHAIN_FILE": "dependencies/vcpkg/scripts/buildsystems/vcpkg.cmake",
+	        "VCPKG_TARGET_TRIPLET": "x64-windows",
+	        "CMAKE_EXPORT_COMPILE_COMMANDS": "ON",
+	        "BUILD_TESTING": "OFF",
+	        "RENDERING_ENABLE_GPU_CULLING": "OFF",
+	        "ENABLE_ASAN": "ON"
+	      },
+	      "environment": {
+	        "MSBUILDDISABLENODEREUSE": "1",
+	        "VCPKG_FEATURE_FLAGS": "manifests,binarycaching",
+	        "VCPKG_BINARY_SOURCES": "clear;default,readwrite;$penv{VCPKG_BINARY_SOURCES}"
+	      }
+	    }
+	,
+    {
+      "name": "vs2026-x64",
+      "generator": "Visual Studio 18 2026",
+      "binaryDir": "build/${presetName}",
+      "architecture": { "value": "x64" },
+      "cacheVariables": {
+        "CMAKE_CXX_STANDARD": "20",
+        "CMAKE_TOOLCHAIN_FILE": "$env{VCPKG_ROOT}/scripts/buildsystems/vcpkg.cmake",
+        "VCPKG_TARGET_TRIPLET": "x64-windows",
+        "CMAKE_EXPORT_COMPILE_COMMANDS": "ON",
+        "BUILD_TESTING": "OFF",
+        "RENDERING_ENABLE_GPU_CULLING": "OFF"
+      },
+      "environment": {
+        "VCPKG_FEATURE_FLAGS": "manifests,binarycaching",
+        "VCPKG_BINARY_SOURCES": "clear;default,readwrite;$penv{VCPKG_BINARY_SOURCES}"
+      }
+    },
+    {
+      "name": "vs2026-x64-unity",
+      "generator": "Visual Studio 18 2026",
+      "binaryDir": "build/${presetName}",
+      "architecture": { "value": "x64" },
+      "cacheVariables": {
+        "CMAKE_CXX_STANDARD": "20",
+        "CMAKE_TOOLCHAIN_FILE": "$env{VCPKG_ROOT}/scripts/buildsystems/vcpkg.cmake",
+        "VCPKG_TARGET_TRIPLET": "x64-windows",
+        "CMAKE_EXPORT_COMPILE_COMMANDS": "ON",
+        "BUILD_TESTING": "OFF",
+        "CMAKE_UNITY_BUILD": "ON",
+        "RENDERING_ENABLE_GPU_CULLING": "OFF"
+      },
+      "environment": {
+        "VCPKG_FEATURE_FLAGS": "manifests,binarycaching",
+        "VCPKG_BINARY_SOURCES": "clear;default,readwrite;$penv{VCPKG_BINARY_SOURCES}"
+      }
+    },
+    {
+      "name": "vs2026-x64-fallback",
+      "generator": "Visual Studio 18 2026",
+      "binaryDir": "build/${presetName}",
+      "architecture": { "value": "x64" },
+      "cacheVariables": {
+        "CMAKE_CXX_STANDARD": "20",
+        "VCPKG_TARGET_TRIPLET": "x64-windows",
+        "CMAKE_EXPORT_COMPILE_COMMANDS": "ON",
+        "BUILD_TESTING": "OFF"
+      },
+      "environment": {
+        "VCPKG_FEATURE_FLAGS": "manifests,binarycaching",
+        "VCPKG_BINARY_SOURCES": "clear;default,readwrite;$penv{VCPKG_BINARY_SOURCES}"
+      }
+    }
+,
+    {
+      "name": "vs2026-x64-local",
+      "generator": "Visual Studio 18 2026",
+      "binaryDir": "build/${presetName}",
+      "architecture": { "value": "x64" },
+      "cacheVariables": {
+        "CMAKE_CXX_STANDARD": "20",
+        "CMAKE_TOOLCHAIN_FILE": "dependencies/vcpkg/scripts/buildsystems/vcpkg.cmake",
+        "VCPKG_TARGET_TRIPLET": "x64-windows",
+        "CMAKE_EXPORT_COMPILE_COMMANDS": "ON",
+        "BUILD_TESTING": "OFF",
+        "RENDERING_ENABLE_GPU_CULLING": "OFF"
+      },
+      "environment": {
+        "MSBUILDDISABLENODEREUSE": "1",
+        "VCPKG_FEATURE_FLAGS": "manifests,binarycaching",
+        "VCPKG_BINARY_SOURCES": "clear;default,readwrite;$penv{VCPKG_BINARY_SOURCES}"
+      }
+    }
+,
+    {
+      "name": "vs2026-x64-local-unity",
+      "generator": "Visual Studio 18 2026",
+      "binaryDir": "build/${presetName}",
+      "architecture": { "value": "x64" },
+      "cacheVariables": {
+        "CMAKE_CXX_STANDARD": "20",
+        "CMAKE_TOOLCHAIN_FILE": "dependencies/vcpkg/scripts/buildsystems/vcpkg.cmake",
+        "VCPKG_TARGET_TRIPLET": "x64-windows",
+        "CMAKE_EXPORT_COMPILE_COMMANDS": "ON",
+        "BUILD_TESTING": "OFF",
+        "RENDERING_ENABLE_GPU_CULLING": "OFF",
+        "CMAKE_UNITY_BUILD": "ON"
+      },
+      "environment": {
+        "MSBUILDDISABLENODEREUSE": "1",
+        "VCPKG_FEATURE_FLAGS": "manifests,binarycaching",
+        "VCPKG_BINARY_SOURCES": "clear;default,readwrite;$penv{VCPKG_BINARY_SOURCES}"
+      }
+    }
+,
+    {
+      "name": "vs2026-arm64-local",
+      "generator": "Visual Studio 18 2026",
+      "binaryDir": "build/${presetName}",
+      "architecture": { "value": "ARM64" },
+      "cacheVariables": {
+        "CMAKE_CXX_STANDARD": "20",
+        "CMAKE_TOOLCHAIN_FILE": "dependencies/vcpkg/scripts/buildsystems/vcpkg.cmake",
+        "VCPKG_TARGET_TRIPLET": "arm64-windows",
+        "CMAKE_EXPORT_COMPILE_COMMANDS": "ON",
+        "BUILD_TESTING": "OFF",
+        "RENDERING_ENABLE_GPU_CULLING": "OFF"
+      },
+      "environment": {
+        "MSBUILDDISABLENODEREUSE": "1",
+        "VCPKG_FEATURE_FLAGS": "manifests,binarycaching",
+        "VCPKG_BINARY_SOURCES": "clear;default,readwrite;$penv{VCPKG_BINARY_SOURCES}"
+      }
+    }
+,
+    {
+      "name": "vs2026-arm64-local-unity",
+      "generator": "Visual Studio 18 2026",
+      "binaryDir": "build/${presetName}",
+      "architecture": { "value": "ARM64" },
+      "cacheVariables": {
+        "CMAKE_CXX_STANDARD": "20",
+        "CMAKE_TOOLCHAIN_FILE": "dependencies/vcpkg/scripts/buildsystems/vcpkg.cmake",
+        "VCPKG_TARGET_TRIPLET": "arm64-windows",
+        "CMAKE_EXPORT_COMPILE_COMMANDS": "ON",
+        "BUILD_TESTING": "OFF",
+        "RENDERING_ENABLE_GPU_CULLING": "OFF",
+        "CMAKE_UNITY_BUILD": "ON"
+      },
+      "environment": {
+        "MSBUILDDISABLENODEREUSE": "1",
+        "VCPKG_FEATURE_FLAGS": "manifests,binarycaching",
+        "VCPKG_BINARY_SOURCES": "clear;default,readwrite;$penv{VCPKG_BINARY_SOURCES}"
+      }
+    }
+,
+    {
+      "name": "vs2026-arm64-local-unity-tests",
+      "generator": "Visual Studio 18 2026",
+      "binaryDir": "build/${presetName}",
+      "architecture": { "value": "ARM64" },
+      "cacheVariables": {
+        "CMAKE_CXX_STANDARD": "20",
+        "CMAKE_TOOLCHAIN_FILE": "dependencies/vcpkg/scripts/buildsystems/vcpkg.cmake",
+        "VCPKG_TARGET_TRIPLET": "arm64-windows",
+        "CMAKE_EXPORT_COMPILE_COMMANDS": "ON",
+        "BUILD_TESTING": "ON",
+        "RENDERING_ENABLE_GPU_CULLING": "OFF",
+        "CMAKE_UNITY_BUILD": "ON"
+      },
+      "environment": {
+        "MSBUILDDISABLENODEREUSE": "1",
+        "VCPKG_FEATURE_FLAGS": "manifests,binarycaching",
+        "VCPKG_BINARY_SOURCES": "clear;default,readwrite;$penv{VCPKG_BINARY_SOURCES}"
+      }
+    }
+,
+    {
+      "name": "vs2026-arm64-local-unity-examples",
+      "generator": "Visual Studio 18 2026",
+      "binaryDir": "build/${presetName}",
+      "architecture": { "value": "ARM64" },
+      "cacheVariables": {
+        "CMAKE_CXX_STANDARD": "20",
+        "CMAKE_TOOLCHAIN_FILE": "dependencies/vcpkg/scripts/buildsystems/vcpkg.cmake",
+        "VCPKG_TARGET_TRIPLET": "arm64-windows",
+        "CMAKE_EXPORT_COMPILE_COMMANDS": "ON",
+        "BUILD_TESTING": "OFF",
+        "BUILD_EXAMPLES": "ON",
+        "RENDERING_ENABLE_GPU_CULLING": "OFF",
+        "CMAKE_UNITY_BUILD": "ON"
+      },
+      "environment": {
+        "MSBUILDDISABLENODEREUSE": "1",
+        "VCPKG_FEATURE_FLAGS": "manifests,binarycaching",
+        "VCPKG_BINARY_SOURCES": "clear;default,readwrite;$penv{VCPKG_BINARY_SOURCES}"
+      }
+    }
+,
+    {
+      "name": "vs2026-x64-local-unity-examples",
+      "generator": "Visual Studio 18 2026",
+      "binaryDir": "build/${presetName}",
+      "architecture": { "value": "x64" },
+      "cacheVariables": {
+        "CMAKE_CXX_STANDARD": "20",
+        "CMAKE_TOOLCHAIN_FILE": "dependencies/vcpkg/scripts/buildsystems/vcpkg.cmake",
+        "VCPKG_TARGET_TRIPLET": "x64-windows",
+        "CMAKE_EXPORT_COMPILE_COMMANDS": "ON",
+        "BUILD_TESTING": "OFF",
+        "BUILD_EXAMPLES": "ON",
+        "RENDERING_ENABLE_GPU_CULLING": "OFF",
+        "CMAKE_UNITY_BUILD": "ON"
+      },
+      "environment": {
+        "MSBUILDDISABLENODEREUSE": "1",
+        "VCPKG_FEATURE_FLAGS": "manifests,binarycaching",
+        "VCPKG_BINARY_SOURCES": "clear;default,readwrite;$penv{VCPKG_BINARY_SOURCES}"
+      }
+    }
+	,
+    {
+      "name": "vs2026-x64-local-unity-tests",
+      "generator": "Visual Studio 18 2026",
+      "binaryDir": "build/${presetName}",
+      "architecture": { "value": "x64" },
+      "cacheVariables": {
+        "CMAKE_CXX_STANDARD": "20",
+        "CMAKE_TOOLCHAIN_FILE": "dependencies/vcpkg/scripts/buildsystems/vcpkg.cmake",
+        "VCPKG_TARGET_TRIPLET": "x64-windows",
+        "CMAKE_EXPORT_COMPILE_COMMANDS": "ON",
+        "BUILD_TESTING": "ON",
+        "RENDERING_ENABLE_GPU_CULLING": "OFF",
+        "CMAKE_UNITY_BUILD": "ON"
+      },
+      "environment": {
+        "MSBUILDDISABLENODEREUSE": "1",
+        "VCPKG_FEATURE_FLAGS": "manifests,binarycaching",
+        "VCPKG_BINARY_SOURCES": "clear;default,readwrite;$penv{VCPKG_BINARY_SOURCES}"
+      }
+    }
+	,
+	    {
+	      "name": "vs2026-x64-local-asan",
+	      "generator": "Visual Studio 18 2026",
+	      "binaryDir": "build/${presetName}",
+	      "architecture": { "value": "x64" },
+	      "cacheVariables": {
+	        "CMAKE_CXX_STANDARD": "20",
+	        "CMAKE_TOOLCHAIN_FILE": "dependencies/vcpkg/scripts/buildsystems/vcpkg.cmake",
+	        "VCPKG_TARGET_TRIPLET": "x64-windows",
+	        "CMAKE_EXPORT_COMPILE_COMMANDS": "ON",
+	        "BUILD_TESTING": "ON",
+	        "RENDERING_ENABLE_GPU_CULLING": "OFF",
+	        "ENABLE_ASAN": "ON"
+	      },
+	      "environment": {
+	        "MSBUILDDISABLENODEREUSE": "1",
+	        "VCPKG_FEATURE_FLAGS": "manifests,binarycaching",
+	        "VCPKG_BINARY_SOURCES": "clear;default,readwrite;$penv{VCPKG_BINARY_SOURCES}"
+	      }
+	    }
+	,
+    {
+      "name": "ninja-x64-local",
+      "generator": "Ninja Multi-Config",
+      "binaryDir": "build/${presetName}",
+      "cacheVariables": {
+        "CMAKE_CXX_STANDARD": "20",
+        "CMAKE_TOOLCHAIN_FILE": "dependencies/vcpkg/scripts/buildsystems/vcpkg.cmake",
+        "VCPKG_TARGET_TRIPLET": "x64-windows",
+        "CMAKE_EXPORT_COMPILE_COMMANDS": "ON",
+        "BUILD_TESTING": "OFF",
+        "RENDERING_ENABLE_GPU_CULLING": "OFF"
+      },
+      "environment": {
+        "VCPKG_FEATURE_FLAGS": "manifests,binarycaching",
+        "VCPKG_BINARY_SOURCES": "clear;default,readwrite;$penv{VCPKG_BINARY_SOURCES}"
+      }
+    },
+    {
+      "name": "linux-x64",
+      "generator": "Ninja",
+      "binaryDir": "build/${presetName}",
+      "cacheVariables": {
+        "CMAKE_CXX_STANDARD": "20",
+        "CMAKE_TOOLCHAIN_FILE": "$env{VCPKG_ROOT}/scripts/buildsystems/vcpkg.cmake",
+        "VCPKG_TARGET_TRIPLET": "x64-linux",
+        "VCPKG_OVERLAY_TRIPLETS": "${sourceDir}/cmake/triplets",
+        "CMAKE_EXPORT_COMPILE_COMMANDS": "ON",
+        "BUILD_TESTING": "OFF",
+        "RENDERING_ENABLE_GPU_CULLING": "OFF"
+      },
+      "environment": {
+        "VCPKG_FEATURE_FLAGS": "manifests,binarycaching"
+      }
+    },
+    {
+      "name": "linux-x64-unity",
+      "generator": "Ninja",
+      "binaryDir": "build/${presetName}",
+      "cacheVariables": {
+        "CMAKE_CXX_STANDARD": "20",
+        "CMAKE_TOOLCHAIN_FILE": "$env{VCPKG_ROOT}/scripts/buildsystems/vcpkg.cmake",
+        "VCPKG_TARGET_TRIPLET": "x64-linux",
+        "VCPKG_OVERLAY_TRIPLETS": "${sourceDir}/cmake/triplets",
+        "CMAKE_EXPORT_COMPILE_COMMANDS": "ON",
+        "BUILD_TESTING": "OFF",
+        "RENDERING_ENABLE_GPU_CULLING": "OFF",
+        "CMAKE_UNITY_BUILD": "ON"
+      },
+      "environment": {
+        "VCPKG_FEATURE_FLAGS": "manifests,binarycaching"
+      }
+    },
+    {
+      "name": "linux-x64-local",
+      "generator": "Ninja",
+      "binaryDir": "build/${presetName}",
+      "cacheVariables": {
+        "CMAKE_CXX_STANDARD": "20",
+        "CMAKE_TOOLCHAIN_FILE": "dependencies/vcpkg/scripts/buildsystems/vcpkg.cmake",
+        "VCPKG_TARGET_TRIPLET": "x64-linux",
+        "VCPKG_OVERLAY_TRIPLETS": "${sourceDir}/cmake/triplets",
+        "CMAKE_EXPORT_COMPILE_COMMANDS": "ON",
+        "BUILD_TESTING": "OFF",
+        "RENDERING_ENABLE_GPU_CULLING": "OFF"
+      },
+      "environment": {
+        "VCPKG_FEATURE_FLAGS": "manifests,binarycaching",
+        "VCPKG_BINARY_SOURCES": "clear;default,readwrite;$penv{VCPKG_BINARY_SOURCES}"
+      }
+    },
+    {
+      "name": "linux-x64-local-unity",
+      "generator": "Ninja",
+      "binaryDir": "build/${presetName}",
+      "cacheVariables": {
+        "CMAKE_CXX_STANDARD": "20",
+        "CMAKE_TOOLCHAIN_FILE": "dependencies/vcpkg/scripts/buildsystems/vcpkg.cmake",
+        "VCPKG_TARGET_TRIPLET": "x64-linux",
+        "VCPKG_OVERLAY_TRIPLETS": "${sourceDir}/cmake/triplets",
+        "CMAKE_EXPORT_COMPILE_COMMANDS": "ON",
+        "BUILD_TESTING": "OFF",
+        "RENDERING_ENABLE_GPU_CULLING": "OFF",
+        "CMAKE_UNITY_BUILD": "ON"
+      },
+      "environment": {
+        "VCPKG_FEATURE_FLAGS": "manifests,binarycaching",
+        "VCPKG_BINARY_SOURCES": "clear;default,readwrite;$penv{VCPKG_BINARY_SOURCES}"
+      }
+    },
+    {
+      "name": "steamdeck-x64",
+      "displayName": "Steam Deck x64",
+      "description": "Steam Deck / SteamOS target build using VCPKG_ROOT and the Steam Deck x64 triplet",
+      "generator": "Ninja",
+      "binaryDir": "build/${presetName}",
+      "cacheVariables": {
+        "CMAKE_CXX_STANDARD": "20",
+        "CMAKE_BUILD_TYPE": "RelWithDebInfo",
+        "CMAKE_TOOLCHAIN_FILE": "$env{VCPKG_ROOT}/scripts/buildsystems/vcpkg.cmake",
+        "VCPKG_TARGET_TRIPLET": "x64-steamdeck",
+        "VCPKG_OVERLAY_TRIPLETS": "${sourceDir}/cmake/triplets",
+        "VCPKG_OVERLAY_PORTS": "${sourceDir}/cmake/ports;${sourceDir}/cmake/steamdeck-ports",
+        "CMAKE_EXPORT_COMPILE_COMMANDS": "ON",
+        "BUILD_TESTING": "OFF",
+        "BUILD_EDITOR": "OFF",
+        "BUILD_PLAYER": "ON",
+        "ENABLE_SCRIPTING": "OFF",
+        "GE_STEAMDECK_BUILD": "ON",
+        "RENDERING_ENABLE_GPU_CULLING": "OFF"
+      },
+      "environment": {
+        "VCPKG_FEATURE_FLAGS": "manifests,binarycaching"
+      }
+    },
+    {
+      "name": "steamdeck-x64-unity",
+      "displayName": "Steam Deck x64 Unity",
+      "description": "Steam Deck / SteamOS target build with unity builds enabled",
+      "generator": "Ninja",
+      "binaryDir": "build/${presetName}",
+      "cacheVariables": {
+        "CMAKE_CXX_STANDARD": "20",
+        "CMAKE_BUILD_TYPE": "RelWithDebInfo",
+        "CMAKE_TOOLCHAIN_FILE": "$env{VCPKG_ROOT}/scripts/buildsystems/vcpkg.cmake",
+        "VCPKG_TARGET_TRIPLET": "x64-steamdeck",
+        "VCPKG_OVERLAY_TRIPLETS": "${sourceDir}/cmake/triplets",
+        "VCPKG_OVERLAY_PORTS": "${sourceDir}/cmake/ports;${sourceDir}/cmake/steamdeck-ports",
+        "CMAKE_EXPORT_COMPILE_COMMANDS": "ON",
+        "BUILD_TESTING": "OFF",
+        "BUILD_EDITOR": "OFF",
+        "BUILD_PLAYER": "ON",
+        "ENABLE_SCRIPTING": "OFF",
+        "GE_STEAMDECK_BUILD": "ON",
+        "RENDERING_ENABLE_GPU_CULLING": "OFF",
+        "CMAKE_UNITY_BUILD": "ON"
+      },
+      "environment": {
+        "VCPKG_FEATURE_FLAGS": "manifests,binarycaching"
+      }
+    },
+    {
+      "name": "steamdeck-runtime4",
+      "inherits": "steamdeck-x64-local",
+      "displayName": "Steam Deck x64 (Steam Runtime 4 container)",
+      "description": "The Steam Deck x64 settings under their own build directory, for Tools/Scripts/build-steamdeck-docker.sh: the Steam Runtime 4 container's compilers and sysroot must not share a CMake cache with a native SteamOS or older container build",
+      "binaryDir": "build/${presetName}"
+    },
+    {
+      "name": "steamdeck-runtime4-unity",
+      "inherits": "steamdeck-x64-local-unity",
+      "displayName": "Steam Deck x64 Unity (Steam Runtime 4 container)",
+      "description": "Unity-build variant of steamdeck-runtime4, for build-steamdeck-docker.sh --unity",
+      "binaryDir": "build/${presetName}"
+    },
+    {
+      "name": "steamdeck-x64-local",
+      "displayName": "Steam Deck x64 Local",
+      "description": "Steam Deck / SteamOS target build using the repo-managed vcpkg checkout",
+      "generator": "Ninja",
+      "binaryDir": "build/${presetName}",
+      "cacheVariables": {
+        "CMAKE_CXX_STANDARD": "20",
+        "CMAKE_BUILD_TYPE": "RelWithDebInfo",
+        "CMAKE_TOOLCHAIN_FILE": "dependencies/vcpkg/scripts/buildsystems/vcpkg.cmake",
+        "VCPKG_TARGET_TRIPLET": "x64-steamdeck",
+        "VCPKG_OVERLAY_TRIPLETS": "${sourceDir}/cmake/triplets",
+        "VCPKG_OVERLAY_PORTS": "${sourceDir}/cmake/ports;${sourceDir}/cmake/steamdeck-ports",
+        "CMAKE_EXPORT_COMPILE_COMMANDS": "ON",
+        "BUILD_TESTING": "OFF",
+        "BUILD_EDITOR": "OFF",
+        "BUILD_PLAYER": "ON",
+        "ENABLE_SCRIPTING": "OFF",
+        "GE_STEAMDECK_BUILD": "ON",
+        "RENDERING_ENABLE_GPU_CULLING": "OFF"
+      },
+      "environment": {
+        "VCPKG_FEATURE_FLAGS": "manifests,binarycaching",
+        "VCPKG_BINARY_SOURCES": "clear;default,readwrite;$penv{VCPKG_BINARY_SOURCES}"
+      }
+    },
+    {
+      "name": "steamdeck-x64-local-unity",
+      "displayName": "Steam Deck x64 Local Unity",
+      "description": "Steam Deck / SteamOS target build using repo-managed vcpkg with unity builds enabled",
+      "generator": "Ninja",
+      "binaryDir": "build/${presetName}",
+      "cacheVariables": {
+        "CMAKE_CXX_STANDARD": "20",
+        "CMAKE_BUILD_TYPE": "RelWithDebInfo",
+        "CMAKE_TOOLCHAIN_FILE": "dependencies/vcpkg/scripts/buildsystems/vcpkg.cmake",
+        "VCPKG_TARGET_TRIPLET": "x64-steamdeck",
+        "VCPKG_OVERLAY_TRIPLETS": "${sourceDir}/cmake/triplets",
+        "VCPKG_OVERLAY_PORTS": "${sourceDir}/cmake/ports;${sourceDir}/cmake/steamdeck-ports",
+        "CMAKE_EXPORT_COMPILE_COMMANDS": "ON",
+        "BUILD_TESTING": "OFF",
+        "BUILD_EDITOR": "OFF",
+        "BUILD_PLAYER": "ON",
+        "ENABLE_SCRIPTING": "OFF",
+        "GE_STEAMDECK_BUILD": "ON",
+        "RENDERING_ENABLE_GPU_CULLING": "OFF",
+        "CMAKE_UNITY_BUILD": "ON"
+      },
+      "environment": {
+        "VCPKG_FEATURE_FLAGS": "manifests,binarycaching",
+        "VCPKG_BINARY_SOURCES": "clear;default,readwrite;$penv{VCPKG_BINARY_SOURCES}"
+      }
+    },
+    {
+      "name": "macos-arm64-local",
+      "generator": "Xcode",
+      "binaryDir": "build/${presetName}",
+      "cacheVariables": {
+        "CMAKE_CXX_STANDARD": "20",
+        "CMAKE_TOOLCHAIN_FILE": "dependencies/vcpkg/scripts/buildsystems/vcpkg.cmake",
+        "VCPKG_TARGET_TRIPLET": "arm64-osx",
+        "CMAKE_XCODE_ATTRIBUTE_CODE_SIGN_IDENTITY": "-",
+        "CMAKE_XCODE_ATTRIBUTE_OTHER_CODE_SIGN_FLAGS": "--deep",
+        "ENABLE_SCRIPTING": "ON",
+        "BUILD_TESTING": "OFF",
+        "RENDERING_ENABLE_GPU_CULLING": "OFF"
+      },
+      "environment": {
+        "VCPKG_FEATURE_FLAGS": "manifests,binarycaching",
+        "VCPKG_BINARY_SOURCES": "clear;default,readwrite;$penv{VCPKG_BINARY_SOURCES}"
+      }
+    },
+    {
+      "name": "macos-x64-local",
+      "generator": "Xcode",
+      "binaryDir": "build/${presetName}",
+      "cacheVariables": {
+        "CMAKE_CXX_STANDARD": "20",
+        "CMAKE_TOOLCHAIN_FILE": "dependencies/vcpkg/scripts/buildsystems/vcpkg.cmake",
+        "VCPKG_TARGET_TRIPLET": "x64-osx",
+        "CMAKE_XCODE_ATTRIBUTE_CODE_SIGN_IDENTITY": "-",
+        "CMAKE_XCODE_ATTRIBUTE_OTHER_CODE_SIGN_FLAGS": "--deep",
+        "ENABLE_SCRIPTING": "ON",
+        "BUILD_TESTING": "OFF",
+        "RENDERING_ENABLE_GPU_CULLING": "OFF"
+      },
+      "environment": {
+        "VCPKG_FEATURE_FLAGS": "manifests,binarycaching",
+        "VCPKG_BINARY_SOURCES": "clear;default,readwrite;$penv{VCPKG_BINARY_SOURCES}"
+      }
+    },
+    {
+      "name": "macos-arm64-ninja",
+      "generator": "Ninja",
+      "binaryDir": "build/${presetName}",
+      "cacheVariables": {
+        "CMAKE_BUILD_TYPE": "DebugFast",
+        "CMAKE_CXX_STANDARD": "20",
+        "CMAKE_TOOLCHAIN_FILE": "dependencies/vcpkg/scripts/buildsystems/vcpkg.cmake",
+        "VCPKG_TARGET_TRIPLET": "arm64-osx",
+        "CMAKE_EXPORT_COMPILE_COMMANDS": "ON",
+        "ENABLE_SCRIPTING": "ON",
+        "BUILD_TESTING": "OFF",
+        "RENDERING_ENABLE_GPU_CULLING": "OFF"
+      },
+      "environment": {
+        "VCPKG_FEATURE_FLAGS": "manifests,binarycaching",
+        "VCPKG_BINARY_SOURCES": "clear;default,readwrite;$penv{VCPKG_BINARY_SOURCES}"
+      }
+    },
+    {
+      "name": "macos-arm64-editor-fast",
+      "displayName": "macOS ARM64 Editor (fast incremental)",
+      "description": "Ninja Editor-only development build with ccache and no standalone Player",
+      "inherits": "macos-arm64-ninja",
+      "binaryDir": "build/${presetName}",
+      "cacheVariables": {
+        "BUILD_EDITOR": "ON",
+        "BUILD_PLAYER": "OFF",
+        "GE_SKIP_VCPKG_VERIFY": "ON",
+        "CMAKE_C_COMPILER_LAUNCHER": "ccache",
+        "CMAKE_CXX_COMPILER_LAUNCHER": "ccache",
+        "CMAKE_UNITY_BUILD": "OFF"
+      },
+      "environment": {
+        "CCACHE_MAXSIZE": "20G"
+      }
+    },
+    {
+      "name": "macos-arm64-full-clean",
+      "displayName": "macOS ARM64 full clean build",
+      "description": "Clean Ninja build of the complete Editor and Player configuration with unity and ccache",
+      "inherits": "macos-arm64-ninja",
+      "binaryDir": "build/${presetName}",
+      "cacheVariables": {
+        "BUILD_EDITOR": "ON",
+        "BUILD_PLAYER": "ON",
+        "GE_SKIP_VCPKG_VERIFY": "ON",
+        "CMAKE_C_COMPILER_LAUNCHER": "ccache",
+        "CMAKE_CXX_COMPILER_LAUNCHER": "ccache",
+        "CMAKE_UNITY_BUILD": "ON"
+      },
+      "environment": {
+        "CCACHE_MAXSIZE": "20G"
+      }
+    },
+    {
+      "name": "macos-x64-ninja",
+      "generator": "Ninja",
+      "binaryDir": "build/${presetName}",
+      "cacheVariables": {
+        "CMAKE_BUILD_TYPE": "DebugFast",
+        "CMAKE_CXX_STANDARD": "20",
+        "CMAKE_TOOLCHAIN_FILE": "dependencies/vcpkg/scripts/buildsystems/vcpkg.cmake",
+        "VCPKG_TARGET_TRIPLET": "x64-osx",
+        "CMAKE_EXPORT_COMPILE_COMMANDS": "ON",
+        "ENABLE_SCRIPTING": "ON",
+        "BUILD_TESTING": "OFF",
+        "RENDERING_ENABLE_GPU_CULLING": "OFF"
+      },
+      "environment": {
+        "VCPKG_FEATURE_FLAGS": "manifests,binarycaching",
+        "VCPKG_BINARY_SOURCES": "clear;default,readwrite;$penv{VCPKG_BINARY_SOURCES}"
+      }
+    },
+    {
+      "name": "ninja-x64-sccache",
+      "generator": "Ninja Multi-Config",
+      "binaryDir": "build/${presetName}",
+      "cacheVariables": {
+        "CMAKE_CXX_STANDARD": "20",
+        "CMAKE_TOOLCHAIN_FILE": "$env{VCPKG_ROOT}/scripts/buildsystems/vcpkg.cmake",
+        "VCPKG_TARGET_TRIPLET": "x64-windows",
+        "CMAKE_EXPORT_COMPILE_COMMANDS": "ON",
+        "BUILD_TESTING": "OFF",
+        "CMAKE_C_COMPILER_LAUNCHER": "sccache",
+        "CMAKE_CXX_COMPILER_LAUNCHER": "sccache",
+        "CMAKE_MSVC_DEBUG_INFORMATION_FORMAT": "$<$<CONFIG:Debug>:ProgramDatabase>$<$<CONFIG:DebugFast,RelWithDebInfo>:Embedded>"
+      },
+      "environment": {
+        "VCPKG_FEATURE_FLAGS": "manifests,binarycaching",
+        "VCPKG_BINARY_SOURCES": "clear;default,readwrite;$penv{VCPKG_BINARY_SOURCES}"
+      }
+    },
+    {
+      "name": "ninja-x64-sccache-unity",
+      "generator": "Ninja Multi-Config",
+      "binaryDir": "build/${presetName}",
+      "cacheVariables": {
+        "CMAKE_CXX_STANDARD": "20",
+        "CMAKE_TOOLCHAIN_FILE": "$env{VCPKG_ROOT}/scripts/buildsystems/vcpkg.cmake",
+        "VCPKG_TARGET_TRIPLET": "x64-windows",
+        "CMAKE_EXPORT_COMPILE_COMMANDS": "ON",
+        "BUILD_TESTING": "OFF",
+        "CMAKE_UNITY_BUILD": "ON",
+        "CMAKE_C_COMPILER_LAUNCHER": "sccache",
+        "CMAKE_CXX_COMPILER_LAUNCHER": "sccache",
+        "CMAKE_MSVC_DEBUG_INFORMATION_FORMAT": "$<$<CONFIG:Debug>:ProgramDatabase>$<$<CONFIG:DebugFast,RelWithDebInfo>:Embedded>"
+      },
+      "environment": {
+        "VCPKG_FEATURE_FLAGS": "manifests,binarycaching",
+        "VCPKG_BINARY_SOURCES": "clear;default,readwrite;$penv{VCPKG_BINARY_SOURCES}"
+      }
+    },
+    {
+      "name": "wasm-debug",
+      "displayName": "WebAssembly Debug (threaded)",
+      "description": "Emscripten wasm32 build via the pinned emsdk (Tools/emsdk/setup.sh). Threaded ABI; engine-core modules only in Phase 4.",
+      "generator": "Ninja",
+      "binaryDir": "build/${presetName}",
+      "cacheVariables": {
+        "CMAKE_BUILD_TYPE": "Debug",
+        "CMAKE_CXX_STANDARD": "20",
+        "CMAKE_TOOLCHAIN_FILE": "dependencies/vcpkg/scripts/buildsystems/vcpkg.cmake",
+        "VCPKG_TARGET_TRIPLET": "wasm32-emscripten",
+        "VCPKG_CHAINLOAD_TOOLCHAIN_FILE": "${sourceDir}/Tools/emsdk/emsdk/upstream/emscripten/cmake/Modules/Platform/Emscripten.cmake",
+        "GE_WASM": "ON",
+        "ENABLE_SCRIPTING": "OFF",
+        "BUILD_EDITOR": "OFF",
+        "BUILD_PLAYER": "OFF",
+        "BUILD_TESTING": "OFF"
+      },
+      "environment": {
+        "VCPKG_FEATURE_FLAGS": "manifests,binarycaching",
+        "VCPKG_BINARY_SOURCES": "clear;default,readwrite;$penv{VCPKG_BINARY_SOURCES}"
+      }
+    },
+    {
+      "name": "wasm-release",
+      "inherits": "wasm-debug",
+      "displayName": "WebAssembly Release (threaded)",
+      "description": "The preset that builds WebEditor, whose shader cook needs the pinned naga and tint (Tools/ShaderCook/toolchain/setup.py) alongside the pinned emsdk.",
+      "binaryDir": "build/${presetName}",
+      "cacheVariables": {
+        "CMAKE_BUILD_TYPE": "Release"
+      }
+    },
+    {
+      "name": "wasm-debug-singlethread",
+      "inherits": "wasm-debug",
+      "displayName": "WebAssembly Debug (single-threaded fallback)",
+      "description": "No-COOP/COEP fallback ABI: no -pthread anywhere, JobSystem runs inline (0 workers).",
+      "binaryDir": "build/${presetName}",
+      "cacheVariables": {
+        "VCPKG_TARGET_TRIPLET": "wasm32-emscripten-nothreads",
+        "GE_WASM_SINGLE_THREAD": "ON"
+      }
+    },
+    {
+      "name": "wasm-release-singlethread",
+      "inherits": "wasm-debug-singlethread",
+      "displayName": "WebAssembly Release (single-threaded fallback)",
+      "description": "The single-threaded ABI in Release: the WebLibrary module's st build (opengine-core.st).",
+      "binaryDir": "build/${presetName}",
+      "cacheVariables": {
+        "CMAKE_BUILD_TYPE": "Release"
+      }
+    }
+  ],
+  "buildPresets": [
+	    { "name": "wasm-debug", "configurePreset": "wasm-debug" },
+	    { "name": "wasm-release", "configurePreset": "wasm-release" },
+	    { "name": "wasm-debug-singlethread", "configurePreset": "wasm-debug-singlethread" },
+	    { "name": "wasm-release-singlethread", "configurePreset": "wasm-release-singlethread" },
+	    { "name": "vs2022-x64-local-unity", "configurePreset": "vs2022-x64-local-unity", "configuration": "DebugFast" },
+	    { "name": "vs2022-x64-local-unity-examples", "configurePreset": "vs2022-x64-local-unity-examples", "configuration": "DebugFast" },
+	    { "name": "vs2022-x64-local-unity-tests", "configurePreset": "vs2022-x64-local-unity-tests", "configuration": "DebugFast" },
+	    { "name": "vs2022-x64-local", "configurePreset": "vs2022-x64-local", "configuration": "DebugFast" },
+	    { "name": "vs2022-x64-local-asan", "configurePreset": "vs2022-x64-local-asan", "configuration": "Debug" },
+	    { "name": "vs2026-arm64-local", "configurePreset": "vs2026-arm64-local", "configuration": "DebugFast" },
+	    { "name": "vs2026-arm64-local-unity", "configurePreset": "vs2026-arm64-local-unity", "configuration": "DebugFast" },
+	    { "name": "vs2026-arm64-local-unity-tests", "configurePreset": "vs2026-arm64-local-unity-tests", "configuration": "DebugFast" },
+	    { "name": "vs2026-arm64-local-unity-examples", "configurePreset": "vs2026-arm64-local-unity-examples", "configuration": "DebugFast" },
+	    { "name": "vs2026-x64-local-unity", "configurePreset": "vs2026-x64-local-unity", "configuration": "DebugFast" },
+	    { "name": "vs2026-x64-local-unity-examples", "configurePreset": "vs2026-x64-local-unity-examples", "configuration": "DebugFast" },
+	    { "name": "vs2026-x64-local-unity-tests", "configurePreset": "vs2026-x64-local-unity-tests", "configuration": "DebugFast" },
+	    { "name": "vs2026-x64-local", "configurePreset": "vs2026-x64-local", "configuration": "DebugFast" },
+	    { "name": "vs2026-x64-local-asan", "configurePreset": "vs2026-x64-local-asan", "configuration": "Debug" },
+	    { "name": "ninja-x64-local", "configurePreset": "ninja-x64-local", "configuration": "DebugFast" },
+	    { "name": "linux-x64", "configurePreset": "linux-x64" },
+	    { "name": "linux-x64-unity", "configurePreset": "linux-x64-unity" },
+	    { "name": "linux-x64-local", "configurePreset": "linux-x64-local" },
+	    { "name": "linux-x64-local-unity", "configurePreset": "linux-x64-local-unity" },
+	    { "name": "steamdeck-x64", "configurePreset": "steamdeck-x64" },
+	    { "name": "steamdeck-x64-unity", "configurePreset": "steamdeck-x64-unity" },
+	    { "name": "steamdeck-x64-local", "configurePreset": "steamdeck-x64-local" },
+	    { "name": "steamdeck-x64-local-unity", "configurePreset": "steamdeck-x64-local-unity" },
+	    { "name": "macos-arm64-local", "configurePreset": "macos-arm64-local", "configuration": "DebugFast" },
+	    { "name": "macos-x64-local", "configurePreset": "macos-x64-local", "configuration": "DebugFast" },
+	    { "name": "macos-arm64-ninja", "configurePreset": "macos-arm64-ninja" },
+	    { "name": "macos-arm64-editor-fast", "configurePreset": "macos-arm64-editor-fast", "targets": [ "Editor" ], "jobs": 10 },
+	    { "name": "macos-arm64-full-clean", "configurePreset": "macos-arm64-full-clean", "cleanFirst": true, "jobs": 10 },
+	    { "name": "macos-x64-ninja", "configurePreset": "macos-x64-ninja" },
+	    { "name": "ninja-x64-sccache-unity", "configurePreset": "ninja-x64-sccache-unity", "configuration": "DebugFast" },
+	    { "name": "ninja-x64-sccache", "configurePreset": "ninja-x64-sccache", "configuration": "DebugFast" },
+
+      { "name": "editor-debug", "configurePreset": "vs2022-x64-local", "configuration": "Debug", "targets": [ "Editor" ] },
+      { "name": "editor-debugfast", "configurePreset": "vs2022-x64-local", "configuration": "DebugFast", "targets": [ "Editor" ] },
+      { "name": "editor-release", "configurePreset": "vs2022-x64-local", "configuration": "Release", "targets": [ "Editor" ] },
+      { "name": "physics-demo-debug", "configurePreset": "vs2022-x64-local-unity-examples", "configuration": "Debug", "targets": [ "PhysicsFallingSpheresDemo" ] },
+      { "name": "editor-debug-vs2026", "configurePreset": "vs2026-x64-local", "configuration": "Debug", "targets": [ "Editor" ] },
+      { "name": "editor-debugfast-vs2026", "configurePreset": "vs2026-x64-local", "configuration": "DebugFast", "targets": [ "Editor" ] },
+      { "name": "editor-release-vs2026", "configurePreset": "vs2026-x64-local", "configuration": "Release", "targets": [ "Editor" ] },
+      { "name": "editor-debug-vs2026-arm64", "configurePreset": "vs2026-arm64-local", "configuration": "Debug", "targets": [ "Editor" ] },
+      { "name": "editor-debugfast-vs2026-arm64", "configurePreset": "vs2026-arm64-local", "configuration": "DebugFast", "targets": [ "Editor" ] },
+      { "name": "editor-release-vs2026-arm64", "configurePreset": "vs2026-arm64-local", "configuration": "Release", "targets": [ "Editor" ] },
+      { "name": "physics-demo-debug-vs2026", "configurePreset": "vs2026-x64-local-unity-examples", "configuration": "Debug", "targets": [ "PhysicsFallingSpheresDemo" ] },
+      { "name": "player-steamdeck-runtime4", "configurePreset": "steamdeck-runtime4", "targets": [ "Player" ] },
+      { "name": "player-steamdeck-runtime4-unity", "configurePreset": "steamdeck-runtime4-unity", "targets": [ "Player" ] },
+      { "name": "player-steamdeck", "configurePreset": "steamdeck-x64-local", "targets": [ "Player" ] },
+      { "name": "player-steamdeck-unity", "configurePreset": "steamdeck-x64-local-unity", "targets": [ "Player" ] }
+  ]
+}

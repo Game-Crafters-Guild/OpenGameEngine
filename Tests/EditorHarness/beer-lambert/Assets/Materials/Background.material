@@ -1,0 +1,18 @@
+{
+  "alphaMode": "Opaque",
+  "doubleSided": true,
+  "lightingModel": "StandardPBR",
+  "materialName": "BeerLambertBackground",
+  "properties": {
+    "baseColor": [1.0, 1.0, 1.0, 1.0],
+    "metallic": 0.0,
+    "roughness": 0.85
+  },
+  "schemaVersion": 3,
+  "surfaceShader": "Surfaces/standard_pbr.glsl",
+  "textures": {
+    "albedoMap": {
+      "path": "Textures/checker.png"
+    }
+  }
+}

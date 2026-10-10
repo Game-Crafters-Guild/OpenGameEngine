@@ -1,0 +1,101 @@
+{
+  "alphaMode": "Opaque",
+  "lightingModel": "StandardPBR",
+  "materialName": "Preview Sphere Test",
+  "properties": {
+    "anisotropy": 0.5,
+    "anisotropyRotation": 0.0,
+    "ao": 1.0,
+    "attenuationColor": [
+      1.0,
+      1.0,
+      1.0
+    ],
+    "attenuationDistance": 0.0,
+    "baseColor": [
+      0.07999999821186066,
+      0.2800000011920929,
+      1.0,
+      1.0
+    ],
+    "clearCoat": 1.0,
+    "clearCoatIor": 1.5,
+    "clearCoatRoughness": 0.029999999329447746,
+    "coatDarkening": 0.0,
+    "diffuseRoughness": 0.0,
+    "emissionLuminance": 203.0,
+    "emissive": [
+      0.0,
+      0.0,
+      0.0
+    ],
+    "enableAnisotropy": false,
+    "enableClearCoat": false,
+    "enableCoatNormal": false,
+    "enableFuzz": false,
+    "enableIridescence": false,
+    "enableSheen": false,
+    "enableSubsurface": false,
+    "enableTransmission": false,
+    "enableTransmissionThick": false,
+    "flipbookColumns": 1.4500000476837158,
+    "flipbookFps": 0.03999999910593033,
+    "flipbookRows": 0.47999998927116394,
+    "fuzzColor": [
+      0.5,
+      0.5,
+      0.5
+    ],
+    "fuzzRoughness": 0.30000001192092896,
+    "metallic": 0.05000000074505806,
+    "opacity": 1.0,
+    "refractionDistance": 1.0,
+    "roughness": 0.2800000011920929,
+    "sheenColor": [
+      0.5,
+      0.5,
+      0.5
+    ],
+    "sheenRoughness": 0.30000001192092896,
+    "specularColor": [
+      1.0,
+      1.0,
+      1.0
+    ],
+    "specularIor": 1.5,
+    "specularWeight": 1.0,
+    "subsurfaceColor": [
+      0.8999999761581421,
+      0.30000001192092896,
+      0.20000000298023224
+    ],
+    "thickness": 0.5,
+    "thinFilmIor": 1.2999999523162842,
+    "thinFilmThickness": 300.0,
+    "thinFilmWeight": 1.0,
+    "transmissionColor": [
+      1.0,
+      1.0,
+      1.0
+    ],
+    "transmissionWeight": 1.0
+  },
+  "schemaVersion": 3,
+  "shaderGraphPublicProperties": [
+    {
+      "graphName": "uRimColor",
+      "materialPropertyKeys": [
+        "flipbookColumns",
+        "flipbookRows",
+        "flipbookFps"
+      ],
+      "type": "vec3"
+    }
+  ],
+  "surfaceShader": "PreviewSphereTest.glsl",
+  "textures": {
+    "albedoMap": null,
+    "metallicRoughnessMap": null,
+    "normalMap": null
+  }
+}

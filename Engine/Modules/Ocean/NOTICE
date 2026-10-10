@@ -1,0 +1,50 @@
+Ocean module — third-party attribution
+=======================================
+
+The wave-spectrum, FFT, foam, and water-shading algorithms in this Ocean module
+are engine-native implementations whose behavior is modeled on the Crest ocean
+system by Wave Harmonic. The concentric patch types, patch placement, checkerboard
+triangulation, grid snapping, and smooth LOD-transition logic in the ocean surface
+mesh are adapted from Crest's OceanBuilder and OceanVertHelpers under the MIT
+License. Foam2.png and WaveNormals.png from the same pinned source are included as
+crest_foam.png and crest_wave_normals.png in Apps/Editor/Assets/Examples/Materials/Ocean.
+The foam relief, bubble parallax, and two-phase flow sampling in ocean_surface.glsl
+are adapted from Crest's OceanFoam.hlsl and OceanNormalMapping.hlsl under MIT.
+A copy of the license accompanies the example textures.
+
+The temporal hard/soft shadow fields and continuous spline ribbon input model
+follow Crest's LodDataMgrShadow and spline-input concepts. Their render-graph,
+CSM, tile-binning, underwater BVH, per-body material, and GPU spray integrations
+are engine-native implementations.
+
+Reference (algorithmic source):
+
+- Repository: https://github.com/wave-harmonic/crest
+- Tag pinned: `4.23.0`
+- Commit pinned: `db0658ff0b2e93e4a9e28cc2867509658b0ecc00`
+- License: MIT
+
+Crest license
+-------------
+
+MIT License
+
+Copyright (c) 2019 Wave Harmonic and contributors
+
+Permission is hereby granted, free of charge, to any person obtaining a copy
+of this software and associated documentation files (the "Software"), to deal
+in the Software without restriction, including without limitation the rights
+to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+copies of the Software, and to permit persons to whom the Software is
+furnished to do so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in all
+copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+SOFTWARE.

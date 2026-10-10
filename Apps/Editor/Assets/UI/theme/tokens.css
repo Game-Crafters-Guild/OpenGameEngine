@@ -1,0 +1,214 @@
+:root {
+  /* Core colors */
+  --ui_color_bg_root: transparent;
+  --ui_color_bg_panel: #272727;
+  --ui_color_bg_dockspace: transparent;
+  --ui_color_bg_tabbar: #1D1D1C;
+  --ui_color_bg_toolbar: #262727;
+  --ui_color_bg_grid: #222222;
+  --ui_color_bg_scrollbar_thumb: #383838;
+
+  --ui_color_bg_hover: #2A2A2A;
+  --ui_color_bg_hover_alt: #242424;
+  --ui_color_bg_item_hover: #2E2E2E;
+  --ui_color_bg_selected: #333333;
+  /* Backdrop for anything framing a rendered image: graph node preview plates,
+     texture drop slots, the shader graph's preview panel. */
+  --ui_color_bg_plate: #2A2A2C;
+
+  --ui_color_border: #272727;
+  --ui_color_border_subtle: #3A3A3A;
+  --ui_color_border_panel: #2f2f2f;
+  /* The outline of a status plate on the asset grid's background (the folder bake
+     status): 3.2:1 against the grid (#222222). The plate's fill is barely lighter
+     than the grid, so the outline is its edge. */
+  --ui_color_notice_outline: #707070;
+  --ui_color_dropdown_outline: var(--ui_color_border_subtle);
+  --ui_color_dropdown_outline_hover: #4A4A4A;
+  /* The toggle knob while the control refuses input: a step down from the
+     resting knob so the switch reads as off-limits while its position is still
+     legible against the track. */
+  --ui_color_toggle_knob_disabled: #9A9A9A;
+  /* The dash that stands for a mixed value: the entities of a multi-selection
+     disagree (the inspector section's enable dot). */
+  --ui_color_mixed_indicator: #AAAAAA;
+  /* The hollow ring of an enable dot that is off (EnableDot). The colour is
+     4.3:1 against the inspector header at rest (#222222) and 3.4:1 against a
+     selected header (#333333); the ring's anti-aliased edge renders below it. */
+  --ui_color_enable_dot_off: #858585;
+  /* The off ring and the mixed dash of an enable dot whose entity is inactive:
+     muted, and still 3.6:1 against the inspector header at rest (#222222). */
+  --ui_color_enable_dot_muted: #787878;
+  /* The disc behind an enable dot's mark while the pointer is on it: a neutral
+     plate, so the mark itself never changes while the dot shows it is a target
+     of its own, apart from the header's collapse click. */
+  --ui_color_enable_dot_hover_plate: rgba(255, 255, 255, 0.08);
+  /* Frame and handles of a control that paints its own canvas while refusing
+     edits (the 9-slice editor). Held at the disabled-text level so the canvas
+     still reads while nothing on it offers a grab. A canvas control cannot take
+     a colour from the cascade the way a styled box does, so it reads this token
+     by name — keep the value here, not in the control. */
+  --ui_color_canvas_disabled_ink: #666666;
+
+  --ui_color_text: #E5E5E5;
+  --ui_color_text_muted: #E0E0E0;
+  --ui_color_text_bright: #FFFFFF;
+  --ui_color_text_dim: #b2b2b2;
+  --ui_color_text_disabled: #666666;
+  /* Status banners drawn over a view's 3D content (ViewOverlayLayer.css): a translucent
+     dark pill and its text. */
+  --ui_color_view_banner_background: rgba(0, 0, 0, 0.55);
+  --ui_color_view_banner_text: #f0f0f0;
+  /* A view banner pill singled out by the pointer elsewhere (a hovered Mark-ups panel row):
+     a lighter plate under the same text. Its opacity is the resting plate's, so it sits
+     0.55 x 80 = 44 levels above the resting plate over any background. */
+  --ui_color_view_banner_background_hover: rgba(80, 80, 80, 0.55);
+  /* The view banner pill's 1 px rim, so the plate keeps its shape on a black sky. */
+  --ui_color_view_banner_border: rgba(255, 255, 255, 0.2);
+  /* The settings of a switched-off component (its section body), which stay
+     editable: labels and values a step down from --ui_color_text_dim and the
+     panel's white, still 4.9:1 and 6.8:1 against the panel and the field plates. */
+  --ui_color_switched_off_label: #949494;
+  --ui_color_switched_off_value: #A8A8A8;
+  /* A step back from full white without naming a grey: it composites over whatever surface it
+     sits on, so it keeps the same relationship on the inspector body, an asset panel and a
+     nested card. Inspector sub-headings and asset-inspector copy take it. */
+  --ui_color_text_soft: rgba(255, 255, 255, 0.7);
+  /* Context menus only: their disabled rows read against the lighter menu
+     surface at full opacity, so they take a step brighter than the global. */
+  --ui_color_menu_text_disabled: #7A7A7A;
+  /* Resting text of a .dropdown-item row — shared by dropdown popups and
+     context menus, which both build rows from that class. Hover and selected
+     rows use --ui_color_text_bright, disabled rows --ui_color_text_disabled. */
+  --ui_color_dropdown_item_text: var(--ui_color_text_dim);
+  /* Default panel copy matches the normal Hierarchy row brightness. */
+  --ui_color_text_primary: #BDBDBD;
+  --ui_color_text_secondary: #BDBDBD;
+
+  /* Accents */
+  --ui_color_accent: #006FFF;
+  --ui_color_accent_highlight: rgba(0, 111, 255, 0.3);
+  --ui_color_accent_translucent: rgba(0, 111, 255, 0.2);
+  --ui_color_accent_green: #4CAF50;
+  --ui_color_accent_blue: #006FFF;
+  --ui_color_accent_blue_hover: #4C9AFF;
+  --ui_color_accent_blue_pressed: #0053BF;
+  --ui_color_accent_pressed: var(--ui_color_accent_blue_pressed);
+  /* The accent held at a muted strength: a control that is switched ON but
+     disabled still has to read as on, without claiming the attention a live
+     accent does. */
+  --ui_color_accent_blue_disabled: #2A4360;
+  /* The accent of something switched on but not in effect: the switches in a
+     switched-off component's settings, and the entity toggle and enable dots of
+     an entity whose parent is off. Muted, and still 3.2:1 against the panel
+     (#272727) and 3.4:1 against the inspector header (#222222). Fixed, like the
+     disabled accent: a custom accent colour does not move it. */
+  --ui_color_accent_blue_inactive: #3575C9;
+  --ui_color_picker_accent: #2760AC;
+  --ui_color_picker_accent_hover: #2B6BBF;
+  --ui_color_picker_accent_pressed: #225599;
+  --ui_color_project_picker_button: #2E81ED;
+  --ui_color_project_picker_button_hover: #6CA6F2;
+  --ui_color_project_picker_button_pressed: #2260B1;
+
+  /* Slider track: the filled part, the rest of the rail, and the step ticks (theme/slider.css). */
+  --ui_color_slider_track_fill: #3B85E0;
+  --ui_color_slider_track: #595959;
+  --ui_color_slider_tick: #BFBFBF;
+
+  /* Neutral sliders: a grey track and thumb for sliders that size chrome instead of editing a
+     value (the item size sliders) and for the "Gray sliders" preference. */
+  --ui_color_slider_neutral_track: #3A3A3A;
+  --ui_color_slider_neutral_track_fill: #6E6E6E;
+  --ui_color_slider_neutral_thumb: #AEAEAE;
+  --ui_color_slider_neutral_thumb_hover: #BCBCBC;
+  --ui_color_slider_neutral_thumb_focus: #C0C0C0;
+  --ui_color_slider_neutral_thumb_glow: #626262;
+  --ui_color_slider_neutral_thumb_glow_hover: #767676;
+  --ui_color_slider_neutral_thumb_glow_focus: #7E7E7E;
+
+  /* Axis colors: Vector3 field labels on hover/drag and the model orientation legend. */
+  --ui_color_axis_x: #FF6B6B;
+  --ui_color_axis_y: #69DB7C;
+  --ui_color_axis_z: #74C0FC;
+
+  /* Version control diff states. Single source of truth for Assets, Hierarchy,
+     Inspector and the Diff panel; mirrored by Editor::SceneDiffStateColorArgb
+     for the runtime tints that CSS cannot reach. */
+  --ui_color_vcs_added: #9DFF00;
+  --ui_color_vcs_removed: #FF9500;
+  --ui_color_vcs_modified: #549BFF;
+  --ui_color_vcs_unchanged: #888888;
+
+  /* Inspector warnings: amber text on an amber wash over the panel (.inspector-warning and the
+     inspector notice, controls/InspectorNotice/InspectorNotice.css). */
+  --ui_color_warning_text: #e0b050;
+  --ui_color_warning_background: rgba(215, 161, 59, 0.12);
+  /* Text that says something did not happen (an action refused or failed): the badge's red
+     lightened to read as 12 px text on a panel (5.4:1 on #272727). */
+  --ui_color_error_text: #FF6B6B;
+  /* A layer that sits over scrolled content casts this along its top edge (the AI
+     Assistant's input pane over its conversation). */
+  --ui_shadow_layer_above: 0 -4px 10px rgba(0, 0, 0, 0.35);
+
+  /* A count badge over a button (the Scene View tool strip's Activity badge); white text
+     on it is 4.9:1. */
+  --ui_color_badge_background: #D13438;
+  /* Text on a light fill the user chose (a mark-up's status pill). */
+  --ui_color_text_on_light: #000000;
+  /* A mark-up status the project's vocabulary does not hold; black text on it is 5.3:1. */
+  --ui_color_markup_unknown_status: #808080;
+  /* A row with an update its reader has not seen (the Mark-ups panel's Activity tab). */
+  --ui_color_markup_unread_background: rgba(93, 176, 255, 0.10);
+  /* The spline tool's active button on the Scene View tool strips. */
+  --ui_color_spline_tool_active: #E87B35;
+  --ui_color_spline_tool_active_hover: #F09050;
+
+  /* Typography */
+  /* Keep UI fonts limited to families we actually ship/load to avoid repeated failed disk lookups. */
+  --ui_font_family: "Roboto", sans-serif;
+  /* Theme default face for surfaces that must not follow the user-selected Editor UI font (e.g. modals). */
+  --ui_font_family_default: "Roboto", sans-serif;
+  /* Cross-platform monospace stack. "Roboto Mono" ships with the editor so
+     it's available on every platform without relying on system fonts; the
+     remaining fonts are per-OS defaults that the engine finds via
+     TryResolveSystemFontFile. The trailing `monospace` generic is mapped
+     by the engine to the OS default as a final safety net. */
+  --ui_font_mono: "Roboto Mono", "Cascadia Code", "Consolas", "Menlo", "DejaVu Sans Mono", monospace;
+  /* Script editor: defaults to mono stack; runtime prefs may override via --ui_font_script only. */
+  --ui_font_script: "Roboto Mono", "Cascadia Code", "Consolas", "Menlo", "DejaVu Sans Mono", monospace;
+  --ui_font_size_base: 14px;
+  --ui_font_size_list: 13px;
+  --ui_font_size_small: 12px;
+  --ui_font_size_header: 16px;
+
+  /* One height for every heading bar in the Inspector, component-level and section-level alike.
+     Named once because the two are read as one ladder: a section bar a few pixels taller than the
+     component bar above it reads as a different kind of thing rather than a nested one. */
+  --inspector-header-height: 28px;
+
+  /* Spacing (scales with base font size) */
+  --ui_spacing_xs: 4px;
+  --ui_spacing_sm: 6px;
+  --ui_spacing_md: 8px;
+  --ui_spacing_lg: 12px;
+  --ui_spacing_xl: 16px;
+
+  /* Tree icons */
+  --ui_tree_icon_size: 16px;
+  /* Linear vs icon: ~15px @16px icon → 28px @64px; matches TreeFoldoutGlyphSizePxForTreeIconSize. */
+  --ui_tree_foldout_size: 15px;
+  --ui_tree_icon_padding: 28px;
+  --ui_tree_icon_padding_rtl: 20px;
+
+  /* Radii */
+  --ui_radius_sm: 4px;
+  --ui_radius_md: 6px;
+
+  /* Opaque icon colors matching the authored 20%/80% white appearance over
+     editor chrome. Keeping alpha at 1 makes icon weight blend-space invariant. */
+  --ui_icon_tint_default: #808080;
+  --ui_icon_tint_standard: #A2A2A2;
+  --ui_icon_tint_active:  #E8E8E8;
+  --ui_icon_tint_hover:   #ffffff;
+}

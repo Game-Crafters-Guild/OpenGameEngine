@@ -1,0 +1,25 @@
+{
+  "schemaVersion": 3,
+  "materialName": "Lookdev - Studio Softbox Panel",
+  "lightingModel": "StandardPBR",
+  "alphaMode": "Opaque",
+  "doubleSided": false,
+  "surfaceShader": "Surfaces/standard_pbr.glsl",
+  "properties": {
+    "baseColor": [
+      0.02,
+      0.02,
+      0.02,
+      1.0
+    ],
+    "metallic": 0.0,
+    "roughness": 1.0,
+    "emissive": [
+      1.0,
+      0.98,
+      0.94
+    ],
+    "emissionLuminance": 60000.0
+  },
+  "textures": {}
+}

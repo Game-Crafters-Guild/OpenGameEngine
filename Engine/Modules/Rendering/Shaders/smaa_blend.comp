@@ -1,0 +1,60 @@
+#version 450
+
+// SMAA pass 3 of 3: neighborhood blending. Each pixel gathers its four blend
+// fractions — top/left from its own weights, bottom/right from the neighbor
+// that owns the shared edge (weights convention in smaa_weights.comp) — and
+// mixes along the dominant axis. Bilinear taps at the fractional offset
+// reproduce the coverage integral in one fetch per direction.
+
+layout(local_size_x = 8, local_size_y = 8) in;
+
+layout(set = 0, binding = 0, rgba16f) uniform writeonly image2D uOutColor;
+layout(set = 0, binding = 1) uniform sampler2D uSceneColor;
+layout(set = 0, binding = 2) uniform sampler2D uWeights;
+
+void main()
+{
+    const ivec2 size = imageSize(uOutColor);
+    const ivec2 p = ivec2(gl_GlobalInvocationID.xy);
+    if (p.x >= size.x || p.y >= size.y)
+        return;
+
+    const vec2 texel = 1.0 / vec2(size);
+    const vec2 uv = (vec2(p) + 0.5) * texel;
+
+    const vec4 wSelf = texelFetch(uWeights, p, 0);
+    const vec4 wBottom = (p.y + 1 < size.y) ? texelFetch(uWeights, p + ivec2(0, 1), 0) : vec4(0.0);
+    const vec4 wRight = (p.x + 1 < size.x) ? texelFetch(uWeights, p + ivec2(1, 0), 0) : vec4(0.0);
+
+    // a = blend fraction toward (top, bottom, left, right).
+    const vec4 a = vec4(wSelf.r, wBottom.g, wSelf.b, wRight.a);
+    const float sumV = a.x + a.y;
+    const float sumH = a.z + a.w;
+    if (max(sumV, sumH) < 1e-5)
+    {
+        imageStore(uOutColor, p, vec4(texelFetch(uSceneColor, p, 0).rgb, 1.0));
+        return;
+    }
+
+    // Dominant axis only — mixing both would double-blend corners. Two
+    // bilinear taps, one per side, at the fractional coverage offset: a tap
+    // at distance a toward a neighbor returns (1-a)*self + a*neighbor, i.e.
+    // exactly the coverage mix; the taps are then weighted by each side's
+    // share of the total.
+    vec3 c;
+    if (sumV >= sumH)
+    {
+        const float wTop = a.x / sumV;
+        const vec3 tapTop = texture(uSceneColor, uv + vec2(0.0, -a.x) * texel).rgb;
+        const vec3 tapBot = texture(uSceneColor, uv + vec2(0.0, a.y) * texel).rgb;
+        c = wTop * tapTop + (1.0 - wTop) * tapBot;
+    }
+    else
+    {
+        const float wLeft = a.z / sumH;
+        const vec3 tapLeft = texture(uSceneColor, uv + vec2(-a.z, 0.0) * texel).rgb;
+        const vec3 tapRight = texture(uSceneColor, uv + vec2(a.w, 0.0) * texel).rgb;
+        c = wLeft * tapLeft + (1.0 - wLeft) * tapRight;
+    }
+    imageStore(uOutColor, p, vec4(c, 1.0));
+}

@@ -1,0 +1,5 @@
+<uielement id="hud-root" class="hud-root">
+    <uielement id="hud-panel" class="hud-panel">
+        <label id="hud-label" class="hud-label" text="HP  100 / 100" />
+    </uielement>
+</uielement>

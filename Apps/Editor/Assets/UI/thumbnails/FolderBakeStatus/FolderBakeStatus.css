@@ -1,0 +1,36 @@
+/* FolderBakeStatus (Apps/Editor/Include/Thumbnails/FolderBakeStatus.h).
+ *
+ * The status is the control's element, a row under the asset browser's views; the plate, its text
+ * and its dismiss button come from FolderBakeStatus.uxml beside this sheet. The control requests this sheet for its own subtree. The button's look is the shared small
+ * button (controls/Button.css); this sheet only places it.
+ */
+
+/* A row under the views, at their right edge, that the views give up only while it shows. */
+.folder-bake-status {
+	flex-shrink: 0;
+	align-self: flex-end;
+	margin: 4px 8px;
+	max-width: 90%;
+}
+
+.folder-bake-status-plate {
+	display: flex;
+	flex-direction: row;
+	align-items: center;
+	gap: 8px;
+	padding: 4px 8px;
+	border-radius: 4px;
+	background-color: var(--ui_color_bg_plate);
+	border-width: 1px;
+	border-color: var(--ui_color_notice_outline);
+}
+
+.folder-bake-status-text {
+	font-size: 12px;
+	color: var(--ui_color_text);
+	flex-shrink: 1;
+}
+
+.folder-bake-status-dismiss {
+	flex-shrink: 0;
+}

@@ -1,0 +1,4 @@
+<UIElement class="eztree-stats-root">
+  <Label id="EZTreeStatsSummary" class="eztree-stats-summary" text="No Tree Generator entities in the scene." />
+  <UIElement id="EZTreeStatsRows" class="eztree-stats-rows" />
+</UIElement>

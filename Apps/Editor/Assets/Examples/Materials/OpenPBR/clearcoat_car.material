@@ -1,0 +1,17 @@
+{
+  "schemaVersion": 3,
+  "materialName": "OpenPBR - Clearcoat Car Paint",
+  "lightingModel": "StandardPBR",
+  "alphaMode": "Opaque",
+  "doubleSided": false,
+  "surfaceShader": "Surfaces/standard_pbr.glsl",
+  "properties": {
+    "baseColor": [0.55, 0.04, 0.04, 1.0],
+    "metallic": 0.0,
+    "roughness": 0.5,
+    "enableClearCoat": true,
+    "clearCoat": 1.0,
+    "clearCoatRoughness": 0.03
+  },
+  "textures": {}
+}

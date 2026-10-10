@@ -1,0 +1,47 @@
+{
+  "name": "smoke_present_resize_fuzz",
+  "windowIndex": 0,
+  "minFrames": 520,
+  "probe": {
+    "elementId": "dock",
+    "pixelHash": {
+      "enabled": true,
+      "frameStart": 140,
+      "frameEnd": 460,
+      "everyNFrames": 1,
+      "maxPending": 1,
+      "readbackDelayFrames": 4,
+      "failOnAllBlack": true,
+      "failIfMeanByteBelow": 5.0,
+      "failIfNonZeroBytesBelow": 256,
+      "dumpPpm": false,
+      "center": true,
+      "sampleWidth": 64,
+      "sampleHeight": 64
+    }
+  },
+  "events": [
+    { "frame": 5, "type": "windowResize", "width": 1280, "height": 720 },
+    { "frame": 25, "type": "windowResize", "width": 820, "height": 540 },
+    { "frame": 45, "type": "windowResize", "width": 520, "height": 360 },
+    { "frame": 65, "type": "windowResize", "width": 1400, "height": 900 },
+
+    { "frame": 95, "type": "windowResize", "width": 640, "height": 420 },
+    { "frame": 115, "type": "windowResize", "width": 1600, "height": 1000 },
+
+    { "frame": 145, "type": "windowResize", "width": 480, "height": 320 },
+    { "frame": 165, "type": "windowResize", "width": 1360, "height": 860 },
+
+    { "frame": 205, "type": "windowResize", "width": 700, "height": 480 },
+    { "frame": 225, "type": "windowResize", "width": 1200, "height": 800 },
+
+    { "frame": 265, "type": "windowResize", "width": 560, "height": 360 },
+    { "frame": 285, "type": "windowResize", "width": 1440, "height": 900 },
+
+    { "frame": 325, "type": "windowResize", "width": 900, "height": 600 },
+    { "frame": 345, "type": "windowResize", "width": 1280, "height": 720 },
+
+    { "frame": 0, "type": "mouseMove", "target": { "kind": "elementId", "id": "dock", "relX": 0.5, "relY": 0.5 } }
+  ]
+}
+

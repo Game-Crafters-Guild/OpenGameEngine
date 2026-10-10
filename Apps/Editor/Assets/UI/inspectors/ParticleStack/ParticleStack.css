@@ -1,0 +1,146 @@
+/* The particle stack inspector, requested by the elements that hold it (the stack
+   asset's inspector, the emitter's Processor Stack section and the Add Processor
+   picker), which carry the particle-stack class.
+
+   Processor and option icons: one class per processor category, tinted by the
+   category's colour. */
+.particle-stack {
+    --particle_tint_property: #78cda8;
+    --particle_tint_motion: #73b9ed;
+    --particle_tint_noise: #73d5d0;
+    --particle_tint_collision: #ed8d89;
+    --particle_tint_event: #ffad67;
+    --particle_tint_shape: #a994ff;
+    --particle_tint_light: #ffd36b;
+    --particle_tint_phase: #ba9aef;
+}
+
+.particle-choice-curve {
+    background-image: url("editor:Icons/linear_curve.png");
+    background-tint: var(--particle_tint_property);
+}
+
+.particle-choice-color {
+    background-image: url("editor:Icons/ParticleColor.svg");
+}
+
+.particle-choice-move {
+    background-image: url("editor:Icons/GiszmoTranslate.png");
+    background-tint: var(--particle_tint_motion);
+}
+
+.particle-choice-size {
+    background-image: url("editor:Icons/Ruler.png");
+    background-tint: var(--particle_tint_motion);
+}
+
+.particle-choice-animation {
+    background-image: url("editor:Icons/film.png");
+    background-tint: var(--particle_tint_motion);
+}
+
+.particle-choice-emission {
+    background-image: url("editor:Icons/sparkles.png");
+    background-tint: var(--particle_tint_motion);
+}
+
+.particle-choice-drag {
+    background-image: url("editor:Icons/magnet.png");
+    background-tint: var(--particle_tint_motion);
+}
+
+.particle-choice-noise {
+    background-image: url("editor:Icons/wind.svg");
+    background-tint: var(--particle_tint_noise);
+}
+
+.particle-choice-collision {
+    background-image: url("editor:Icons/PhysicsSettings.png");
+    background-tint: var(--particle_tint_collision);
+}
+
+.particle-choice-loop {
+    background-image: url("editor:Icons/looptime.png");
+    background-tint: var(--particle_tint_event);
+}
+
+.particle-choice-time {
+    background-image: url("editor:Icons/alarm.png");
+    background-tint: var(--particle_tint_event);
+}
+
+.particle-choice-custom {
+    background-image: url("editor:Icons/node.png");
+    background-tint: var(--particle_tint_shape);
+}
+
+.particle-choice-shape {
+    background-image: url("editor:Icons/Capsule.png");
+    background-tint: var(--particle_tint_shape);
+}
+
+.particle-choice-light {
+    background-image: url("editor:Icons/PointLight.png");
+    background-tint: var(--particle_tint_light);
+}
+
+.particle-phase-icon {
+    background-image: url("editor:Icons/looptime.png");
+    background-tint: var(--particle_tint_phase);
+}
+
+/* A row holding one action (Add Phase, Add Processor, New Stack) in the value column. */
+.particle-stack-add-row {
+    align-items: center;
+    align-self: stretch;
+    flex-shrink: 0;
+    padding-top: 8px;
+}
+
+/* A phase's processors stack with the header gap alone between them. */
+.particle-stack-section {
+    margin-top: 0px;
+}
+
+/* A phase's Add Processor row follows its processor list. */
+.particle-stack-add-processor-row {
+    order: 1;
+}
+
+/* A value row: the number fields and the mode dropdown side by side. When the value column is too
+   narrow for both, the dropdown wraps below the fields instead of running out of the panel. */
+.particle-value-fields {
+    flex-direction: row;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 4px;
+}
+
+/* The number fields share the row and shrink no narrower than a readable number. */
+.inspector-field.particle-value-fields > .float-field {
+    flex: 1 1 56px;
+    min-width: 56px;
+}
+
+/* The mode picker is as wide as its longest mode, "Random Curves", on one line with its chevron. */
+.inspector-field.particle-value-fields > .dropdown.particle-value-mode {
+    flex: 0 0 136px;
+    width: 136px;
+    min-width: 0;
+}
+
+.dropdown.particle-value-mode .dropdown-header-label {
+    white-space: nowrap;
+}
+
+.particle-curve-container {
+    flex-direction: column;
+    align-items: stretch;
+}
+
+.particle-curve-field {
+    height: 110px;
+    min-height: 110px;
+    max-height: 110px;
+    min-width: 160px;
+}

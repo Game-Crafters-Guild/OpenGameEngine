@@ -1,0 +1,191 @@
+#version 460
+#extension GL_EXT_ray_query : require
+#extension GL_EXT_buffer_reference : require
+#extension GL_EXT_shader_explicit_arithmetic_types_int64 : require
+
+// DDGI hardware ray-query trace kernel (M2, single grid, diffuse only).
+// One workgroup per probe (probeBase + gl_WorkGroupID.x), GE_DDGI_TRACE_THREADS
+// threads striding over the probe's rays (so raysPerProbe may exceed the
+// workgroup width).
+// Ray directions are a spherical-Fibonacci set (Includes/ddgi_common.glsl's
+// GE_DDGIRayDirection — shared verbatim with ddgi_blend.comp, which must
+// reconstruct the SAME directions for its cosine-weighted gather), rotated by
+// the frameIndex epoch's basis: identity under DDGIJitterMode::Gated (fixed
+// set, flicker-free), a fresh random rotation per tick under MonteCarlo. Infinite
+// bounce: a hit reads the PREVIOUS frame's uploaded probe field at its own
+// position (no recursive tracing) — the same trick the ported library uses.
+// That fetch is Includes/ddgi_hit_shade.glsl's GE_DDGISampleBounce, shared
+// with ddgi_trace_sw.comp and matching the forward consumer's gather.
+//
+// The TLAS is a real descriptor binding (DescriptorType::AccelerationStructure),
+// not an accelerationStructureEXT(uvec2) address cast: MSL's
+// raytracing::acceleration_structure is always resource-bound, so SPIRV-Cross
+// cannot translate OpConvertUToAccelerationStructureKHR at all. A descriptor
+// binding is the one form both Vulkan and Metal can carry.
+
+#include "Includes/ddgi_hit_shade.glsl"
+
+const uint GE_DDGI_TRACE_THREADS = 64u;
+layout(local_size_x = 64, local_size_y = 1, local_size_z = 1) in;
+
+layout(std140, set = 0, binding = 5) uniform DDGIVolumeParams
+{
+    vec4 uGridMinWS;      // xyz; w = depth atlas interior tile resolution (GE_DDGIDepthTexelUV)
+    vec4 uGridSizeWS;     // xyz; w = bounceIntensity
+    ivec4 uProbeCount;    // xyz = resX,resY,resZ; w = probeTotal
+    vec4 uParams0;        // x=minCellWS, y=normalBiasScale, z=hysteresis(unused here), w=intensity(unused here)
+    uvec4 uDispatch0;     // x=probeBase, y=raysPerProbe, z=frameIndex, w=lightCount
+    vec4 uParams1;        // x=radianceClamp, y=chebyshevStrength, z=skyScale, w=classifyStrength
+} DDGIParams;
+
+layout(set = 0, binding = 9) uniform accelerationStructureEXT uTlas;
+
+// Skinned per-INSTANCE geometry-row override (DDGISkinnedGeometry): map is one
+// u32 per GPUScene instance (0xFFFFFFFF = no override — a 1-element dummy when
+// no skinned instance is in the TLAS; .length() bounds the lookup), rows point
+// at that instance's POSED [pos|uv] buffer so a hit's face normal and UVs come
+// from the surface the ray actually intersected, not the bind pose.
+layout(std430, set = 0, binding = 18) readonly buffer DDGISkinnedRowMap
+{
+    uint ge_ddgiSkinnedRowMap[];
+};
+
+layout(std430, set = 0, binding = 19) readonly buffer DDGISkinnedGeomRows
+{
+    GE_MeshGeometryDesc ge_ddgiSkinnedGeomRows[];
+};
+
+layout(std430, set = 0, binding = 7) buffer DDGIRayBuffer
+{
+    // xyz = radiance, w = hitT. Negative w encodes: -1 = true miss (sky
+    // already resolved into rgb); a future glossy pass (M6) may add further
+    // negative-encoded classes, mirroring the ported library's convention.
+    vec4 ge_ddgiRays[];
+};
+
+GE_DDGIGridInfo GE_DDGIBuildGridInfo()
+{
+    GE_DDGIGridInfo g;
+    g.gridMinWS = DDGIParams.uGridMinWS.xyz;
+    g.gridSizeWS = DDGIParams.uGridSizeWS.xyz;
+    g.probeCount = DDGIParams.uProbeCount.xyz;
+    g.probeTotal = DDGIParams.uProbeCount.w;
+    g.minCellWS = DDGIParams.uParams0.x;
+    g.normalBiasScale = DDGIParams.uParams0.y;
+    g.hysteresis = DDGIParams.uParams0.z;
+    g.intensity = DDGIParams.uParams0.w;
+    return g;
+}
+
+// Shades one ray of one probe and writes its slot of the ray buffer.
+void GE_DDGITraceRay(GE_DDGIGridInfo grid, int probeIdx, vec3 probePosWS, uint rayIdx,
+                     uint raysPerProbe, mat3 basis)
+{
+    vec3 dir = GE_DDGIRayDirection(rayIdx, raysPerProbe, basis);
+    int depthOctRes = int(DDGIParams.uGridMinWS.w);
+
+    rayQueryEXT rq;
+    rayQueryInitializeEXT(rq, uTlas, gl_RayFlagsOpaqueEXT, 0xFFu,
+                          probePosWS, GE_DDGI_RAY_EPS, dir, GE_DDGI_T_MAX);
+    while (rayQueryProceedEXT(rq)) { }
+
+    uint outIdx = uint(probeIdx) * raysPerProbe + rayIdx;
+    if (rayQueryGetIntersectionTypeEXT(rq, true) == gl_RayQueryCommittedIntersectionNoneEXT)
+    {
+        // Miss: sky irradiance in the ray direction. Resolved once here
+        // (rather than deferred to the blend pass) so the blend kernel never
+        // needs the sky binding at all.
+        ge_ddgiRays[outIdx] = vec4(GE_DDGISampleSkyMiss(dir, DDGIParams.uParams1.z), -1.0);
+        return;
+    }
+    float hitT = rayQueryGetIntersectionTEXT(rq, true);
+    int instanceIdx = rayQueryGetIntersectionInstanceCustomIndexEXT(rq, true);
+    uint primitiveIdx = uint(rayQueryGetIntersectionPrimitiveIndexEXT(rq, true));
+
+    GE_DDGIInstance inst = ge_ddgiInstances[instanceIdx];
+    uint skinnedRow = uint(instanceIdx) < uint(ge_ddgiSkinnedRowMap.length())
+                          ? ge_ddgiSkinnedRowMap[instanceIdx]
+                          : 0xFFFFFFFFu;
+    GE_MeshGeometryDesc mesh = skinnedRow != 0xFFFFFFFFu ? ge_ddgiSkinnedGeomRows[skinnedRow]
+                                                         : ge_ddgiMeshGeometry[inst.meshIndex];
+    mat3 normalMatrix = mat3(inst.normalMatrixCol0.xyz, inst.normalMatrixCol1.xyz,
+                             inst.normalMatrixCol2.xyz);
+    vec3 hitNormalWS = GE_DDGITriangleNormalWS(mesh, primitiveIdx, normalMatrix);
+    // Face the normal toward the incoming ray (BLAS triangles carry no
+    // facing-cull guarantee here — GE_TriangleFacingCullDisable is set for
+    // occlusion rays only, this trace hits front AND back faces).
+    if (dot(hitNormalWS, dir) > 0.0)
+        hitNormalWS = -hitNormalWS;
+
+    vec3 hitPosWS = probePosWS + dir * hitT;
+    GE_DDGIMaterialData mat =
+        ge_ddgiMaterials[GE_MATERIAL_ROW_INDEX(ge_ddgiMaterials, inst.materialIndex)];
+    vec3 albedo = GE_DDGIMatBaseColor(mat).rgb;
+    // Authored emission (colour x nits) folded to scene-linear by the reference-
+    // white anchor, matching the raster surface and the software lane's CPU bake.
+    vec3 emissive = GE_DDGIMatEmission(mat).rgb * (GE_DDGIMatEmission(mat).w * (1.0 / GE_EMISSION_PAPERWHITE_NITS));
+
+    // Textured albedo and emission — the terms that actually carry colour
+    // between surfaces and let a patterned emitter light the room the way it
+    // looks like it should; the flat factors alone are grey and untextured on
+    // most authored content. Keyed by the SAME materialIndex as the param block
+    // above, and sampling the SAME atlas through the SAME single uv transform
+    // the software lane uses, so the two lanes shade a hit identically.
+    GE_DDGIMaterialMapRecord maps = ge_ddgiMapTable[inst.materialIndex];
+    vec2 hitUV = GE_DDGITriangleUV(mesh, primitiveIdx,
+                                   rayQueryGetIntersectionBarycentricsEXT(rq, true));
+    vec2 mapUV = hitUV * maps.UvTransform.xy + maps.UvTransform.zw;
+    albedo = GE_DDGIApplyAlbedoMap(albedo, maps.Layers.x, mapUV);
+    emissive = GE_DDGIApplyEmissiveMap(emissive, maps.Layers.y, mapUV);
+    // Published as a sphere-proxy light (GPUInstance flag bit 6), so the NEE
+    // loop already delivers this surface's energy to every probe. Adding it
+    // again here would count it twice — and the result would look BRIGHTER,
+    // which is exactly why this exclusion is not optional.
+    if ((inst.flags & GE_DDGI_INSTANCE_FLAG_GI_EMITTER) != 0u)
+        emissive = vec3(0.0);
+    albedo = GE_DDGIDiffuseAlbedo(albedo,
+                                  GE_DDGIApplyMetallicMap(GE_DDGIMatMetalRough(mat).x, maps.Layers.z, mapUV));
+
+    float traceBias = grid.minCellWS * GE_DDGI_TRACE_SURFACE_BIAS_CELL;
+    vec3 direct = GE_DDGIEvaluateDirectNEE(uTlas, hitPosWS, hitNormalWS, albedo,
+                                           DDGIParams.uDispatch0.w, traceBias);
+    // Recursive bounce, shaped by the ONE shared implementation both lanes
+    // call (Includes/ddgi_hit_shade.glsl's GE_DDGIShapeBounce) — it carries
+    // the convergence argument, the hue-preserving gain bound and the
+    // firefly ceiling, and it is the only place either kernel may shape this
+    // term. BounceIntensity rides in uGridSizeWS.w, the radiance clamp in
+    // uParams1.x. The direct NEE term above is deliberately NOT shaped: it
+    // reflects incoming light once rather than recursively, so an over-bright
+    // single bounce cannot itself diverge.
+    vec3 bounce = GE_DDGIShapeBounce(albedo, DDGIParams.uGridSizeWS.w,
+                                     GE_DDGISampleBounce(grid, hitPosWS, hitNormalWS,
+                                                         DDGIParams.uParams1.y,
+                                                         DDGIParams.uParams1.w, depthOctRes),
+                                     DDGIParams.uParams1.x);
+
+    ge_ddgiRays[outIdx] = vec4(direct + emissive + bounce, hitT);
+}
+
+void main()
+{
+    uint probeLocal = gl_WorkGroupID.x;
+    uint raysPerProbe = DDGIParams.uDispatch0.y;
+    int probeIdx = int(DDGIParams.uDispatch0.x) + int(probeLocal);
+    GE_DDGIGridInfo grid = GE_DDGIBuildGridInfo();
+    if (probeIdx >= grid.probeTotal)
+        return;
+
+    // Relocation is dialled by the same classify strength every gather applies
+    // (uParams1.w) — the ray must leave from where the field believes the
+    // probe is, or trace and consume disagree about the probe's position.
+    vec3 probeOffset =
+        GE_DDGIProbeStateApply(ge_ddgiProbeState[probeIdx], DDGIParams.uParams1.w).xyz;
+    vec3 probePosWS = GE_DDGIProbePosition(grid, probeIdx) + probeOffset;
+    mat3 basis = GE_DDGIRayBasis(DDGIParams.uDispatch0.z);
+
+    // The workgroup is GE_DDGI_TRACE_THREADS wide whatever the ray count: a
+    // probe with more rays than threads loops, so RaysPerProbe is bounded by
+    // the ray buffer, not by the dispatch shape.
+    for (uint rayIdx = gl_LocalInvocationID.x; rayIdx < raysPerProbe; rayIdx += GE_DDGI_TRACE_THREADS)
+        GE_DDGITraceRay(grid, probeIdx, probePosWS, rayIdx, raysPerProbe, basis);
+}

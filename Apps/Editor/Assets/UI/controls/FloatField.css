@@ -1,0 +1,36 @@
+/* Numeric field control — disabled presentation.
+   The field box, focus and hover treatments live with the rest of the
+   .float-field family (theme/inspector.css, theme/widgets.css); this file
+   carries only the state the control itself refuses input in, attached by
+   FloatField's constructor (RequestSubtreeStyleAssetPath).
+
+   The value stays legible — a switched-off row is still information the
+   author reads — and the editable affordances go. A context that greys a
+   whole row sets --float-field-disabled-text on itself, and the value
+   inherits it. The :hover pair exists so the resting look wins on
+   specificity alone rather than on this sheet's position relative to the
+   theme. */
+
+.float-field:disabled .float-field-input {
+	background-color: transparent;
+	border-color: transparent;
+	color: var(--float-field-disabled-text, var(--ui_color_text_dim));
+	cursor: default;
+}
+
+.float-field:disabled:hover .float-field-input {
+	border-color: transparent;
+	color: var(--float-field-disabled-text, var(--ui_color_text_dim));
+}
+
+/* A field carrying a unit suffix is the bordered box itself (the inner editor
+   goes transparent), so the box has to be cleared on the host instead. */
+.float-field.has-suffix:disabled {
+	background-color: transparent;
+	border-color: transparent;
+	cursor: default;
+}
+
+.float-field.has-suffix:disabled .field-suffix {
+	color: var(--float-field-disabled-text, var(--ui_color_text_dim));
+}

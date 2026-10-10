@@ -1,0 +1,8 @@
+{
+  "name": "ez-tree-upstream",
+  "version-string": "1.1.0",
+  "port-version": 1,
+  "description": "Pinned EZ-Tree license, preset, and asset data used by GameEngine's native EZTree module.",
+  "homepage": "https://github.com/dgreenheck/ez-tree",
+  "license": "MIT"
+}

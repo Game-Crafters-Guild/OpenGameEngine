@@ -1,0 +1,15 @@
+{
+  "name": "svn-vcs",
+  "version": "1.0.0",
+  "displayName": "SVN Version Control",
+  "assets": "Assets/",
+  "modules": [
+    {
+      "name": "svn-vcs-editor",
+      "kind": "Editor",
+      "lang": "Cpp",
+      "root": "Editor/",
+      "prebuilt": "Binaries/"
+    }
+  ]
+}

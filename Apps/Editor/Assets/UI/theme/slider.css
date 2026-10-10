@@ -1,0 +1,110 @@
+/* Slider control.
+   The base rules own only the visual treatment (transparent element box,
+   glowing thumb); dimensions come from context because the flex axis depends
+   on the parent container. Horizontal property rows share .property-slider sizing
+   below; standalone sliders (assets toolbar zoom, color picker) size
+   themselves. */
+
+/* The editor's track colours, from its tokens. Set on :root so they inherit,
+   and a variant recolours its track by setting --slider-track-fill,
+   --slider-track and --slider-tick on itself. */
+:root {
+    --slider-track-fill: var(--ui_color_slider_track_fill);
+    --slider-track: var(--ui_color_slider_track);
+    --slider-tick: var(--ui_color_slider_tick);
+}
+
+/* Slider's constructor always adds the "slider" class, so `.slider` matches
+   every instance — no `slider` type selector needed. */
+.slider {
+    background-color: transparent;
+    border-width: 0;
+    border-style: none;
+}
+
+/* Outer glow instead of a stroked border avoids SDF ring speckles on tiny circular thumbs.
+   8×8 fill matches the old border-box disk (12×12 less 2px border on each edge).
+   A slider variant recolours its thumb by setting these on itself; the thumb inherits them:
+   --slider-thumb-fill, --slider-thumb-fill-hover, --slider-thumb-fill-focus,
+   --slider-thumb-glow, --slider-thumb-glow-hover, --slider-thumb-glow-focus. */
+.slider-thumb {
+    position: absolute;
+    width: 8px;
+    height: 8px;
+    border-radius: 999px;
+    border-width: 0;
+    border-style: none;
+    background-color: var(--slider-thumb-fill, var(--ui_color_text_bright));
+    glow: 2px var(--slider-thumb-glow, var(--ui_color_accent_blue));
+    pointer-events: none;
+}
+
+.slider:hover .slider-thumb {
+    background-color: var(--slider-thumb-fill-hover, var(--ui_color_text_bright));
+    glow: 2px var(--slider-thumb-glow-hover, var(--ui_color_accent_blue_hover));
+}
+
+.slider:focus .slider-thumb {
+    background-color: var(--slider-thumb-fill-focus, var(--ui_color_text_bright));
+    glow: 2px var(--slider-thumb-glow-focus, var(--ui_color_accent_blue));
+}
+
+/* A disabled slider shows a value, not a control: the track loses its accent fill and the thumb
+   takes the neutral colours, hovered or focused alike, so it does not invite a drag it would
+   refuse. */
+.slider:disabled {
+    --slider-track-fill: var(--ui_color_slider_track);
+    --slider-thumb-fill: var(--ui_color_slider_neutral_thumb);
+    --slider-thumb-fill-hover: var(--ui_color_slider_neutral_thumb);
+    --slider-thumb-fill-focus: var(--ui_color_slider_neutral_thumb);
+    --slider-thumb-glow: var(--ui_color_slider_neutral_thumb_glow);
+    --slider-thumb-glow-hover: var(--ui_color_slider_neutral_thumb_glow);
+    --slider-thumb-glow-focus: var(--ui_color_slider_neutral_thumb_glow);
+}
+
+/* Shared horizontal-property sizing: fill the value cell of a row. Applied
+   by Inspector helpers and the Scene View popup. Not the
+   base default because flex-grow follows the parent axis — a column layout
+   (e.g. the color picker) would stretch vertically. */
+.property-slider {
+    flex: 1 1 auto;
+    min-width: 80px;
+    height: 24px;
+}
+
+/* Align the outside of the 8px thumb with the inspector field split. Inspector
+   sliders use a 7px track inset, so the slider only extends by the remaining
+   3px instead of letting the thumb protrude into the label column. */
+.inspector-field > .property-slider:first-child {
+    margin-left: -3px;
+}
+
+/* "Gray sliders" preference: desaturate property/settings slider accents. */
+.gray-sliders .property-slider .slider-thumb,
+.gray-sliders .settings-slider .slider-thumb,
+.gray-sliders .settings-row-slider .slider-thumb {
+    border-width: 0;
+    border-style: none;
+    glow: 2px var(--ui_color_slider_neutral_thumb_glow);
+    background-color: var(--ui_color_slider_neutral_thumb);
+}
+
+.gray-sliders .property-slider:hover .slider-thumb,
+.gray-sliders .settings-slider:hover .slider-thumb,
+.gray-sliders .settings-row-slider:hover .slider-thumb {
+    glow: 2px var(--ui_color_slider_neutral_thumb_glow_hover);
+    background-color: var(--ui_color_slider_neutral_thumb_hover);
+}
+
+.gray-sliders .property-slider:focus .slider-thumb,
+.gray-sliders .settings-slider:focus .slider-thumb,
+.gray-sliders .settings-row-slider:focus .slider-thumb {
+    glow: 2px var(--ui_color_slider_neutral_thumb_glow_focus);
+    background-color: var(--ui_color_slider_neutral_thumb_focus);
+}
+
+.gray-sliders .property-slider,
+.gray-sliders .settings-slider,
+.gray-sliders .settings-row-slider {
+    --slider-track-fill: var(--ui_color_slider_neutral_track_fill);
+}

@@ -1,0 +1,839 @@
+#version 450
+
+#include "Includes/storage_access.glsl"
+
+// SCATTER_STATS gates the per-slice drawn-triangle counter (P0 shadow-arc
+// instrumentation, default OFF). When defined, each surviving invocation
+// contributes its LOD triangle count, the subgroup sums them, and one elected
+// lane does a single atomicAdd per subgroup — 64x less atomic traffic than one
+// atomic per instance (methodology F3). Even so, every subgroup of a slice
+// aims that atomicAdd at ONE address (pc.statsBase is dispatch-constant), and
+// the single-address serialisation was measured at ~68% of Scatter.World once
+// #447 coalesced the fetch (scatter-world-decomp2-2026-07). It feeds only the
+// bench/editor shadow-debug readout, never render correctness — so it compiles
+// out of the shipping default and is opted into via GE_SCATTER_STATS=1. The
+// tripwire atomics (tableMisses/overflows) stay unconditional: they fire only
+// on error paths and are load-bearing invariant guards. Arithmetic subgroup
+// ops are Vulkan 1.1 core and universally supported for compute on the desktop
+// GPUs this engine targets (VK_API_VERSION clamps to 1.3 in VulkanDevice).
+#ifdef SCATTER_STATS
+#extension GL_KHR_shader_subgroup_basic : require
+#extension GL_KHR_shader_subgroup_arithmetic : require
+#endif
+
+// Single-pass scatter bucketer (R1.4).
+//
+// ONE dispatch per view-slice over all GPUScene instances. Each surviving
+// instance resolves its batch by binary search over the sorted batch table
+// (uploaded per frame from GPUScene's BatchRegistry snapshot), claims slots in
+// its batch's region of the SHARED draw-record/indirection buffers via a
+// per-(slice,batch) atomic cursor, and writes an indirect draw record — one
+// normally, two while it is crossfading between LOD levels.
+//
+// Region offsets are CPU-known (exclusive prefix over snapshot counts), so
+// consumers issue vkCmdDrawIndexedIndirectCount at CPU-computed byte offsets
+// while counts stay GPU-written. Capacity = the batch's snapshot instance count.
+// Culling and LOD selection only remove, so the head cursor cannot pass capacity
+// as long as the captured-snapshot invariant holds (see the design doc §3.2 —
+// the capacity check below is a tripwire for that invariant, not a normal path).
+//
+// A crossfading slice additionally gets a TAIL region per row, in its own record
+// block with its own cursors: an instance mid-transition writes its record PAIR
+// there and NO head record. Only the colour pass draws tails, so the depth
+// prepass — which shares the head records with it — never sees a dithered
+// instance. Nothing else about the head region changes, in layout or in bytes.
+//
+// cursorBase/recordBase are ARENA-ABSOLUTE, assigned per schedule call:
+// multiple scatter passes in one device frame (SceneView + GameView +
+// thumbnails) write disjoint arena ranges — disjointness IS the intra-frame
+// sync for these render-graph-undeclared buffers.
+
+layout(local_size_x = 64, local_size_y = 1, local_size_z = 1) in;
+
+// Bit layout of the crossfade channel this shader packs into the indirection
+// word, shared verbatim with the vertex unpack and the fragment dither. This is
+// the producer, so it opts into the full layout: it has no variant keyword, and
+// the consumers' keyword is what gates their half.
+#define GE_LOD_FADE_PACKING 1
+#include "Includes/lod_crossfade.glsl"
+
+const uint kMaxMeshLODs = 4u;
+const uint kBatchNotFound = 0xFFFFFFFFu;
+
+// 128-byte std430 layout; field order MUST match GPUScene.h::GPUMesh.
+struct GPUMesh {
+    vec3  boundingCenter;
+    float boundingRadius;
+    float lodCoverageScale;
+    uint  clusterCount;
+    uint  vertexOffset;
+    uint  vertexCount;
+    uint  indexOffset;
+    uint  indexCount;
+    uint  lodCount;
+    uint  bucketKey;
+    uint  indexType;
+    uint  vertexFlags;
+    uint  lodIndexOffset[kMaxMeshLODs];
+    uint  lodIndexCount[kMaxMeshLODs];
+    float lodThreshold[kMaxMeshLODs];
+    // Per-LOD vertex offset RELATIVE to vertexOffset (authored LODs; 0 for
+    // generated levels). Draw emits vertexOffset + lodVertexOffset[lod].
+    uint  lodVertexOffset[kMaxMeshLODs];
+    // LOD selection flags: bits 0..3 = lodThreshold[k] is SSE-normalized
+    // (scale it by sseThresholdToCoverage to get its coverage-space switch
+    // point); bit 4 = tight class (skinned chain) takes the tighter per-view
+    // factor. MUST match GPUScene.h kGPUMeshLodSseSlotMask /
+    // kGPUMeshLodTightClassBit.
+    uint  lodFlags;
+    // Per-mesh ceiling on sseThresholdToCoverage (MeshLODThresholds.h::
+    // LodSseScaleCeil). 0 = no ceiling.
+    float lodSseScaleCeil;
+};
+
+const uint kLodTightClassBit = 16u; // GPUMesh.lodFlags bit 4
+// MUST match MeshLODThresholds.h.
+const float kLodThresholdCeil = 0.5;
+const float kLodThresholdDescendFactor = 0.5;
+
+// Binding-1 instance struct. Two ABI-locked variants, selected at compile time:
+//  - SCATTER_COMPACT: the coalesced 32 B scatter-hot mirror
+//    (GPUScene.h::GPUInstanceScatterHot). Consecutive threads read consecutive
+//    bytes → coalesced, attacking the uncoalesced-fetch cost. Field names match
+//    the full struct so main() below is variant-agnostic.
+//  - default: the authoritative 240 B GPUInstance (full-fat fetch; the
+//    GE_SCATTER_COMPACT=0 fallback). 32 B read at a 240 B stride → uncoalesced.
+#ifdef SCATTER_COMPACT
+struct GPUInstance {
+    uint  meshIndex;
+    uint  materialIndex;
+    uint  flags;
+    float lodBias;
+    vec3  boundingCenter;
+    float boundingRadius;
+};
+#else
+struct GPUInstance {
+#include "Includes/gpu_instance_fields.glsl"
+};
+#endif
+
+// Mirrors GPUDrawStreamBuilder::BatchTableEntry (16 B std430). Sorted by
+// (materialIndex, meshIndex) — the binary search below depends on it.
+struct BatchTableEntry {
+    uint materialIndex;
+    uint meshIndex;
+    uint recordOffset;   // slice-relative exclusive prefix of capacities
+    uint capacity;       // snapshot live-instance count (the per-batch draw bound)
+};
+
+struct VkDrawIndexedIndirectCommand {
+    uint indexCount;
+    uint instanceCount;
+    uint firstIndex;
+    int  vertexOffset;
+    uint firstInstance;
+};
+
+layout(set = 0, binding = 0, std430) restrict readonly buffer VisibilityBuffer {
+    uint visibilityResults[];
+};
+
+layout(set = 0, binding = 1, std430) restrict readonly buffer InstanceBuffer {
+    GPUInstance instances[];
+};
+
+layout(set = 0, binding = 2, std430) restrict readonly buffer MeshBuffer {
+    GPUMesh meshes[];
+};
+
+layout(set = 0, binding = 3, std430) restrict readonly buffer BatchTableBuffer {
+    BatchTableEntry batchTable[];
+};
+
+layout(set = 0, binding = 4, std430) restrict GE_STORAGE_WRITEONLY buffer DrawCommandsBuffer {
+    VkDrawIndexedIndirectCommand drawCommands[];
+};
+
+// Per-(slice,batch) cursors; doubles as the DrawIndexedIndirectCount count
+// buffer (CPU side must create it with Indirect usage).
+layout(set = 0, binding = 5, std430) restrict coherent buffer BatchCursorsBuffer {
+    uint cursors[];
+};
+
+layout(set = 0, binding = 6, std430) restrict GE_STORAGE_WRITEONLY buffer IndirectionBuffer {
+    uint indirection[];
+};
+
+// Per-slice scatter counters (P0 shadow-arc instrumentation). The first two
+// fields are the original tripwires (non-zero means the captured-snapshot
+// invariant broke or the table diverged from the registry). drawnTriangles is
+// the subgroup-reduced LOD triangle count for this slice. Indexed by the
+// arena-absolute per-slice statsBase push constant so each (view, cascade)
+// dispatch attributes to its own row; the CPU reads the array one-frame-stale
+// (see GPUDrawStreamBuilder::ScatterSliceStats). MUST match that struct's
+// 16-byte std430 layout.
+struct ScatterSliceStats {
+    uint tableMisses;
+    uint overflows;
+    uint drawnTriangles;
+    uint lodChanges;
+};
+layout(set = 0, binding = 7, std430) restrict coherent buffer ScatterStatsBuffer {
+    ScatterSliceStats sliceStats[];
+} stats;
+
+// Per-materialIndex color class (P2). Indexed by instance.materialIndex; holds
+// either a downward-allocated colorClassId (opaque casters that share a PSO) or
+// the real materialIndex (blend/transmissive/material-dependent keep identity)
+// -- the exact CPU domain rule BuildColorBatchTable follows. Read only when
+// classMode == kClassModeColor; bound (valid) on every dispatch regardless.
+layout(set = 0, binding = 8, std430) restrict readonly buffer MaterialColorClassBuffer {
+    uint materialColorClass[];
+};
+
+// Per-meshIndex ORDERED mesh axis (draw consolidation). Indexed by the REAL
+// meshIndex; holds the dense per-mesh rank the batch tables keyed their mesh
+// axis on -- MeshPoolGroupPlan's ordered ranks, sorted (poolGroup, meshIndex)
+// so a pool group's table rows are CONTIGUOUS and the group-compact pass can
+// pack its region mesh-major (kAbsentPoolGroup for dead rows). Uploaded per
+// schedule call alongside the tables so the (map, table) pair always comes
+// from ONE snapshot -- the materialColorClass per-call precedent; the ranks
+// have no cross-frame stability and need none. Read only when
+// meshGroupMode != 0; bound (valid) on every dispatch regardless.
+layout(set = 0, binding = 9, std430) restrict readonly buffer MeshPoolGroupBuffer {
+    uint meshPoolGroup[];
+};
+
+// Per-(instance, view) LOD history for the dwell band (GPU-only, persistent
+// across frames, indexed by the GLOBAL instance index — the same index space
+// hzb_culling.comp's prevVisible[] uses). One buffer per camera view, so a
+// view's history never leaks into another's; phase A and phase B of one view
+// SHARE it, which is sound because their visibility slices are disjoint —
+// phase B sees only `visible && !drawnInA`, so the two never touch the same
+// element in one frame. That disjointness is also why this buffer needs no
+// intra-frame barrier despite being render-graph-undeclared (the same argument
+// the arena's disjoint ranges rely on); across frames the frame fence orders it.
+// The disjointness itself comes from hzb_culling.comp's §5-A2 rewrite (pinned by
+// HzbCullingComputeTest.PhaseBAppliesCorrectedPrevVisibleRule). It is the load-
+// bearing property, but not the only one holding the result stable: both slices
+// of a view are registered with IDENTICAL LOD params, and the rule is a fixed
+// point, so even a hypothetical overlap could not ratchet a level.
+// kLodNoHistory means "no usable history" — first touch, a grown
+// range, or a slot recycled to a mesh with fewer levels — and falls back to the
+// stateless pick. Read AND written only when pc.lodHysteresisBand > 0; the
+// binding is valid on every dispatch regardless (the binding-8/9 precedent).
+layout(set = 0, binding = 10, std430) restrict buffer PrevLodBuffer {
+    uint prevLod[];
+};
+const uint kLodNoHistory = 0xFFFFFFFFu;
+
+// Per-(instance, view) LOD crossfade state (GPU-only, persistent across frames,
+// indexed by the GLOBAL instance index — the same index space hzb_culling.comp's
+// prevVisible[] and this shader's visibilityResults[] use).
+//   .x = fromLod | (toLod << kLodFadeToLevelShift)
+//   .y = floatBitsToUint(start seconds)
+// One buffer per camera view, so a view's transitions never leak into another's;
+// phase A and phase B of one view SHARE it, which is sound because their
+// visibility slices are disjoint (phase B sees only `visible && !drawnInA`), and
+// because the only write is an idempotent stamp two slices compute identically.
+// That is also why the buffer needs no intra-frame barrier despite being
+// render-graph-undeclared — the same disjointness argument the record arena
+// relies on; across frames the frame fence orders it.
+//
+// kLodNoHistory in .x is the first-touch state — a fresh buffer, a grown range,
+// or a recycled slot — and adopts the pick as `from == to` instead of fading
+// from a level the instance never displayed. Zero is NOT that state: it is the
+// real, settled "displaying LOD0" pair, and treating it as first-touch is what
+// made a first pick above LOD0 dissolve in from LOD0. Read AND written only when
+// pc.crossfadeTailActive != 0; the binding is valid on every dispatch regardless
+// (the binding-8/9 precedent). A crossfade-less slice binds a small fixed-size
+// stand-in here rather than a per-instance buffer, so ge_UpdateLodFade's early
+// return BEFORE the first read is load-bearing: without it the read would run
+// off the end of that stand-in.
+layout(set = 0, binding = 11, std430) restrict buffer LodFadeBuffer {
+    uvec2 lodFade[];
+};
+
+// Per-(instance, view) rendered level and phase history, for a consumer that
+// pairs this frame's surface with the previous frame's (a motion producer).
+// Two buffers per view, roles rotating once per rendered frame: the PREVIOUS
+// buffer is the last frame this view's scatter actually recorded, read only
+// and never written during the frame, so every dispatch of the frame — phase
+// A, phase B, a producer running after them — reads the same previous pair;
+// the CURRENT buffer is cleared to kLodNoHistory before the frame's first
+// dispatch and receives one entry per instance that claims a record. An
+// instance that claims nothing (culled, table-missed) therefore leaves
+// kLodNoHistory as its entry, which is what makes a reappearing instance
+// read as discontinuous next frame. Processor-side continuity breaks (a new
+// or recycled tenant, a payload change, a mesh reload behind a stable handle)
+// arrive as kLodNoHistory refills of the PREVIOUS buffer's slots ahead of the
+// dispatch, the same fill protocol prevLod/lodFade use for recycled slots.
+// Independent of pc.lodHysteresisBand: read AND written only when
+// pc.renderedHistoryEnabled != 0; both bindings are valid on every dispatch
+// (stand-ins otherwise), and the gate keeps the shader off them.
+//   bits 0..7   selected level (the incoming level while fading)
+//   bit  8      fading: this frame emitted the crossfade pair
+//   bit  9      continuous: the previous entry existed and its level and
+//               fading state equal this frame's
+layout(set = 0, binding = 12, std430) restrict readonly buffer PrevRenderedHistoryBuffer {
+    uint prevRendered[];
+};
+layout(set = 0, binding = 13, std430) restrict GE_STORAGE_WRITEONLY buffer CurrentRenderedHistoryBuffer {
+    uint currentRendered[];
+};
+const uint kRenderedHistoryLevelMask     = 0xFFu;
+const uint kRenderedHistoryFadingBit     = 0x100u;
+const uint kRenderedHistoryContinuousBit = 0x200u;
+const uint kRenderedHistoryStateMask     = kRenderedHistoryLevelMask | kRenderedHistoryFadingBit;
+
+layout(push_constant) uniform PushConstants {
+    uint instanceCount;    // CALL-CAPTURED at snapshot time, never live-read
+    uint batchCount;       // table entry count B (search bound) — never a draw bound
+    uint cursorBase;       // arena-absolute base into cursors[]
+    uint recordBase;       // arena-absolute base into drawCommands[]/indirection[]
+    uint disableVisCheck;  // !=0: no visibility slice for this view — pass all
+    uint viewWorldKey;     // 16-bit world tag filter; 0 = no filter
+    // --- LOD selection (per view/slice) ---
+    float cameraPosX;
+    float cameraPosY;
+    float cameraPosZ;
+    float projScaleY;      // proj[1][1]; <= 0 forces LOD0 (ortho/shadow/thumb)
+    float lodBiasGlobal;   // log2; positive keeps more detail
+    uint  forceLod;        // 0xFFFFFFFF = auto-select
+    // 3-way batch-search routing (kClassMode* below):
+    //   Off    = key on instance.materialIndex (color/depth-prepass, merge off)
+    //   Shadow = R1.5 depth class via the flags bits (against the shadow table)
+    //   Color  = P2 color class: searchMat = materialColorClass[materialIndex]
+    uint  classMode;
+    // Arena-absolute row this slice attributes its per-slice stats to (mirrors
+    // cursorBase/recordBase). P0 shadow-arc instrumentation only.
+    uint  statsBase;
+    // Draw consolidation: != 0 routes the batch search's MESH axis through
+    // meshPoolGroup[] (per-mesh ORDERED ranks — rows stay per-mesh, but one
+    // pool group's rows are contiguous so the group-compact pass can merge
+    // them into one mesh-major draw region downstream).
+    // 0 == the raw-meshIndex tables: table bytes and the consumer command
+    // sequence match the pre-consolidation path, but this PSO itself is not
+    // that path's PSO — binding 9 and the dead mode-0 branch exist even off.
+    uint  meshGroupMode;
+    // Small-object cull (PROTOTYPE, default off = 0): instances whose
+    // projected bounding-sphere coverage falls below this are dropped before
+    // claiming a record slot — exactly like a visibility cull. Camera slices
+    // only: the CPU passes 0 for shadow buckets (a culled caster's shadow can
+    // be far larger than the caster's own on-screen coverage) and projScaleY
+    // <= 0 skips ortho/thumb slices. Same bias folding as LOD selection, so a
+    // keep-detail bias also resists the cull.
+    float smallCullCoverage;
+    // SSE-budget LOD selection (MeshLODThresholds.h): 2*budgetPx / viewportH
+    // per view. Multiplying an SSE-normalized lodThreshold by this gives the
+    // coverage at which that slot switches — equality is "the next level's
+    // projected error spans budgetPx pixels". Tight = the skinned/character-
+    // class factor (smaller budget). <= 0 = slice never set it: SSE slots
+    // fail-safe to keep-detail (never coarsen through them).
+    float sseThresholdToCoverage;
+    float sseThresholdToCoverageTight;
+    // Dithered LOD crossfade. Seconds-based so dynamic resolution and a stalled
+    // frame leave the perceived duration unchanged.
+    // nowSeconds shares the process-global animation clock the material path
+    // uses, and is differenced against a per-instance start stamp.
+    float nowSeconds;
+    float invFadeDuration;   // 1 / duration; 0 when the feature is off
+    // The ON signal for this slice: 0 means "emit exactly one record per
+    // instance into the head region", which is what shadow buckets, ortho/thumb
+    // slices and every slice of a crossfade-less frame receive. Non-zero
+    // promises the two bases below address a reserved TAIL region.
+    uint  crossfadeTailActive;
+    // Arena-absolute bases of this slice's tail row cursors and tail record
+    // block. The tail reuses the head's per-row recordOffset, so a row's tail
+    // region is [tailRecordBase + recordOffset, + capacity).
+    uint  tailCursorBase;
+    uint  tailRecordBase;
+    // LOD dwell band as a FRACTION of the switch coverage (0 = off, the
+    // stateless pick). Gaining detail requires coverage >= threshold*(1+band);
+    // keeping or losing it requires only coverage >= threshold. Same
+    // Enter/Exit convention as Hlod::MakeSwitchConfig. The CPU leaves this 0
+    // for exactly three slice shapes: cascadeIndex != none, projScaleY <= 0
+    // (which MakeViewLODParams zeroes only for EDITOR 2D ortho views, not for
+    // every orthographic camera), and a forced LOD. Every other slice gets the
+    // band — that includes thumbnail, planar-reflection and probe-face views,
+    // not just the main camera.
+    float lodHysteresisBand;
+    // Rendered level and phase history (bindings 12/13). 0 = off: the shader
+    // never touches either binding, which is what makes binding stand-ins
+    // legal. The CPU sets it only for camera slices of a view that asked for
+    // the history, and no view asks for it until a consumer exists.
+    uint  renderedHistoryEnabled;
+} pc;
+
+// classMode values -- MUST match GPUDrawStreamBuilder::kClassMode*.
+const uint kClassModeOff    = 0u;
+const uint kClassModeShadow = 1u;
+const uint kClassModeColor  = 2u;
+
+// GPUInstance.flags depth-class bits + the two shadow-table class sentinels.
+// MUST match Rendering::GPUInstanceDepthClass.h / GPUDrawStreamBuilder.
+const uint kDepthMaterialDependentBit = 4u;        // flags bit 2
+const uint kDepthDoubleSidedBit       = 8u;        // flags bit 3
+const uint kMirroredBit               = 16u;       // flags bit 4 (negative-det world transform)
+const uint kSharedDepthSSSentinel     = 0xFFFFFFu; // single-sided class group
+const uint kSharedDepthDSSentinel     = 0xFFFFFEu; // double-sided class group
+
+// Parity flag lives in bit 24 of the batch-table meshIndex FIELD (real mesh
+// indices are 24-bit). A mirrored instance searches (searchMat, mesh | this)
+// so it lands in the parity-1 sibling row the CPU table build emitted; the
+// mesh-table read below always uses the REAL meshIndex. MUST match
+// GPUDrawStreamBuilder's kMeshParityBit.
+const uint kMeshParityBit             = 0x1000000u; // 1u << 24
+
+// Pseudo mesh-axis value for rows absent from the ordered map (draw
+// consolidation). MUST match MeshPoolGroupPlan::kAbsentGroup. Absent rows CAN
+// survive the mesh-row checks below (a live mesh-table row with no plan
+// entry) and then scatter into the table's merged pseudo row; that row is
+// never drawn -- consumers filter the sentinel before their range lookup.
+// A genuine map/table snapshot divergence still lands in tableMiss.
+const uint kAbsentPoolGroup           = 0xFFFFFFu;
+
+uint ge_FindBatch(uint materialIndex, uint meshIndex) {
+    uint lo = 0u;
+    uint hi = pc.batchCount;
+    while (lo < hi) {
+        uint mid = (lo + hi) / 2u;
+        uint bMat = batchTable[mid].materialIndex;
+        uint bMesh = batchTable[mid].meshIndex;
+        if (bMat < materialIndex || (bMat == materialIndex && bMesh < meshIndex)) {
+            lo = mid + 1u;
+        } else {
+            hi = mid;
+        }
+    }
+    if (lo < pc.batchCount
+        && batchTable[lo].materialIndex == materialIndex
+        && batchTable[lo].meshIndex == meshIndex) {
+        return lo;
+    }
+    return kBatchNotFound;
+}
+
+// The stateless scan: the finest level whose EFFECTIVE switch threshold this
+// coverage clears. The threshold array is indexed in place rather than copied
+// (lever 2): materialising the full 128 B GPUMesh spikes VGPR pressure, cuts
+// resident warps, and leaves the uncoalesced fetch latency unhidden.
+//
+// Per-slot comparison space (lodFlags bits 0..3): an SSE slot's threshold
+// is boundingRadius/(error*maxExtent) and converts to this view's coverage
+// space by * sseToCoverage (= 2*budgetPx/viewportH); a coverage slot is
+// already there. The caller's bias fold is equivalent to dividing the budget
+// by exp2(bias). A slice that never set the factor (<= 0) keeps detail:
+// SSE slots resolve to 0 and match at any coverage.
+//
+// The scan is only sound when the EFFECTIVE thresholds descend, and the
+// two spaces have no registration-time ordering (sseToCoverage is
+// per-view), so the descend clamp runs HERE, after both are in one space.
+// Mirrors MeshLODThresholds.h::LodEffectiveThreshold; no-op on an
+// already-descending row, so authored/all-coverage rows are unchanged.
+// ge_SelectLOD's dwell band scales the COVERAGE input rather than any
+// threshold, so its two scans see one identical effective row and the band
+// cannot disturb the ordering this scan depends on.
+uint ge_ScanLOD(uint meshIndex, uint lodCount, float coverage) {
+    uint lodFlags = meshes[meshIndex].lodFlags;
+    float sseToCoverage = ((lodFlags & kLodTightClassBit) != 0u)
+        ? pc.sseThresholdToCoverageTight : pc.sseThresholdToCoverage;
+    // A viewport shorter than this mesh's break-even height would scale its SSE
+    // slots past the coverage mapping they replaced; the row's own ceiling pins
+    // them to that mapping instead (0 = no ceiling). Derived from the mesh's
+    // true shape factor, so this is min(SSE, coverage) exactly.
+    float sseScaleCeil = meshes[meshIndex].lodSseScaleCeil;
+    if (sseScaleCeil > 0.0 && sseScaleCeil < sseToCoverage)
+        sseToCoverage = sseScaleCeil;
+
+    uint lod = lodCount - 1u;
+    float prevEff = 3.402823e38; // FLT_MAX: no predecessor
+    for (uint k = 0u; k < lodCount; ++k) {
+        float eff = meshes[meshIndex].lodThreshold[k];
+        if ((lodFlags & (1u << k)) != 0u)
+            eff = min(eff * sseToCoverage, kLodThresholdCeil);
+        if (eff >= prevEff)
+            eff = prevEff * kLodThresholdDescendFactor;
+        prevEff = eff;
+        if (coverage >= eff) { lod = k; break; }
+    }
+    return lod;
+}
+
+// Screen-coverage LOD pick. Reads only the mesh fields it needs directly from
+// the buffer by meshIndex; lodCount is hoisted (read 3x). With a dwell band
+// active this is no longer a pure function of coverage — it also reads and
+// updates this (instance, view)'s previous level.
+uint ge_SelectLOD(uint instanceIndex, uint meshIndex, vec3 worldCenter,
+                  float worldRadius, float instLodBias) {
+    uint lodCount = meshes[meshIndex].lodCount;
+    if (lodCount <= 1u) return 0u;
+    if (pc.forceLod != 0xFFFFFFFFu) return min(pc.forceLod, lodCount - 1u);
+    if (pc.projScaleY <= 0.0) return 0u;
+
+    vec3 camPos = vec3(pc.cameraPosX, pc.cameraPosY, pc.cameraPosZ);
+    float dist = max(distance(camPos, worldCenter), 1e-4);
+    float coverage = worldRadius * pc.projScaleY / dist;
+    // Culling encloses every admitted level; selection retains LOD0's metric.
+    coverage *= meshes[meshIndex].lodCoverageScale;
+    coverage *= exp2(instLodBias + pc.lodBiasGlobal);
+
+    uint lodLoose = ge_ScanLOD(meshIndex, lodCount, coverage);
+    // Do NOT fold this away as redundant arithmetic. With a band of 0 the code
+    // below already returns lodLoose on every path (coverage/(1+0) is coverage,
+    // so lodStrict == lodLoose) — but it would still READ prevLod, and a
+    // band-less slice binds a small fixed-size stand-in at binding 10 rather
+    // than a per-instance buffer. That read would run off the end of the
+    // stand-in. This early return is what makes binding the stand-in legal.
+    if (pc.lodHysteresisBand <= 0.0) return lodLoose;
+
+    // Dwell band. The band is one-sided: losing detail is immediate, gaining it
+    // costs an extra (1+band) of coverage, which is what stops a camera hovering
+    // at a threshold from alternating between two levels every frame.
+    //
+    // Equivalent to clamp(prev, lodLoose, lodStrict) where lodStrict is the pick
+    // at the reduced coverage; prev <= lodLoose needs no strict scan because the
+    // clamp already resolves to lodLoose there. Skipping it keeps the extra
+    // threshold fetches on the minority of instances that want MORE detail.
+    //
+    // The rule is a FIXED POINT — feeding its own output back as `prev` returns
+    // that output unchanged. That is what makes it safe here: a second slice of
+    // the same view re-selecting from the updated history cannot ratchet, and
+    // the idle-elision gate (which skips the dispatch once its inputs settle)
+    // cannot freeze a half-converged level.
+    uint prev = prevLod[instanceIndex];
+    if (prev >= lodCount) return lodLoose; // no usable history -> stateless pick
+    if (prev <= lodLoose) return lodLoose; // holding or coarsening: no gate
+    uint lodStrict = ge_ScanLOD(meshIndex, lodCount, coverage / (1.0 + pc.lodHysteresisBand));
+    return min(prev, lodStrict);
+}
+
+// Per-(instance, view) crossfade state machine. Returns true when this instance
+// is mid-transition, and then reports the OUTGOING level and the 7-bit dither
+// weight; `selected` is the incoming level either way.
+//
+// The weight is DERIVED from (now - start), never accumulated. One view is
+// scattered by several concurrent dispatches (HZB phase A and phase B, plus the
+// thumbnail/GameView seam) issued inside one RG pass with no barrier between
+// them — disjoint arena ranges are the only intra-frame sync — so an
+// accumulating write would race and double-advance. Deriving it leaves exactly
+// one write: a conditional stamp taken when the selection leaves the level this
+// instance was heading for. Two concurrent slices evaluating that condition
+// against the same state and the same nowSeconds write the SAME bytes, so the
+// race is benign, the result is order-independent, and re-running a dispatch
+// unchanged is a no-op.
+bool ge_UpdateLodFade(uint instanceIndex, uint selected, out uint outFromLod, out uint outWeight)
+{
+    outFromLod = selected;
+    outWeight  = 0u;
+    // Camera slices only. The CPU passes crossfadeTailActive 0 for shadow buckets
+    // (dithering a caster punches holes in its shadow map, which PCF averages
+    // into a washed-out shadow — worse than the silhouette snap it would hide),
+    // and a slice that forces a level or has no perspective term has no
+    // transitions to animate. This early return runs BEFORE the first lodFade[]
+    // read, which is what makes binding a small stand-in at binding 11 legal.
+    if (pc.crossfadeTailActive == 0u || pc.projScaleY <= 0.0 || pc.forceLod != 0xFFFFFFFFu) {
+        return false;
+    }
+
+    uvec2 state = lodFade[instanceIndex];
+    if (state.x == kLodNoHistory) {
+        // No usable history — a fresh buffer, a grown range, or a slot GPUScene
+        // recycled to a new tenant. This instance has never been DISPLAYED in
+        // this view, so there is no level to dissolve FROM: adopt the pick as
+        // its settled state. Fading here would make an instance's very first
+        // frame a tail pair, and a pair writes no head record, so the instance
+        // would be absent from the depth prepass and absent from the colour
+        // pass too on any frame its tail draw is unavailable (a cold
+        // LodCrossfade variant compiles async and its draw is skipped).
+        // The write is the same benign race as the stamp below: concurrent
+        // slices of one view share LOD params and nowSeconds, so they store
+        // identical bytes.
+        lodFade[instanceIndex] = uvec2(selected | (selected << kLodFadeToLevelShift),
+                                       floatBitsToUint(pc.nowSeconds));
+        return false;
+    }
+    uint  fromLod = state.x & kLodFadeLevelMask;
+    uint  toLod   = (state.x >> kLodFadeToLevelShift) & kLodFadeLevelMask;
+    float alpha   = clamp((pc.nowSeconds - uintBitsToFloat(state.y)) * pc.invFadeDuration,
+                          0.0, 1.0);
+
+    if (selected != toLod) {
+        // A new transition starts from the level this instance was heading for.
+        // Reversing mid-fade — precisely the boundary-hover case — REFLECTS the
+        // elapsed time instead of restarting, so the pixel split is continuous
+        // across the reversal and an oscillating camera fades smoothly back.
+        bool  reversal = selected == fromLod && fromLod != toLod;
+        float start    = reversal ? pc.nowSeconds - (1.0 - alpha) / pc.invFadeDuration
+                                  : pc.nowSeconds;
+        uint  newFrom  = toLod;
+        lodFade[instanceIndex] =
+            uvec2(newFrom | (selected << kLodFadeToLevelShift), floatBitsToUint(start));
+        fromLod = newFrom;
+        toLod   = selected;
+        alpha   = clamp((pc.nowSeconds - start) * pc.invFadeDuration, 0.0, 1.0);
+    }
+
+    // Settled, or the transition just completed: one opaque record, fade code 0.
+    if (fromLod == toLod || alpha >= 1.0) {
+        return false;
+    }
+
+    outFromLod = fromLod;
+    // 1..127: 0 is the not-fading sentinel, so a just-started fade still packs a
+    // non-zero weight and its incoming level keeps one dither cell.
+    outWeight = clamp(uint(alpha * float(kLodFadeMaxWeight) + 0.5), 1u, kLodFadeMaxWeight);
+    return true;
+}
+
+// Emit one indirect draw record for `lod` of `meshIndex` at arena slot `slot`,
+// with `indirectionWord` as the vertex stage's per-record payload. Returns the
+// level's index count so the caller can accumulate drawn triangles.
+uint ge_WriteDrawRecord(uint slot, uint meshIndex, uint lod, uint indirectionWord) {
+    uint lodIndexCount   = meshes[meshIndex].lodIndexCount[lod];
+    uint lodIndexOffset  = meshes[meshIndex].lodIndexOffset[lod];
+    uint lodVertexOffset = meshes[meshIndex].lodVertexOffset[lod];
+    if (lodIndexCount == 0u) {
+        // Empty/absent level: fall back to LOD0's range, which shares the base
+        // vertex block (relative offset 0) — matches the CPU upload invariant.
+        lodIndexCount   = meshes[meshIndex].indexCount;
+        lodIndexOffset  = meshes[meshIndex].indexOffset;
+        lodVertexOffset = 0u;
+    }
+
+    VkDrawIndexedIndirectCommand cmd;
+    cmd.indexCount    = lodIndexCount;
+    cmd.instanceCount = 1u;
+    cmd.firstIndex    = lodIndexOffset;
+    // Base (absolute, in vertices) + per-LOD relative block offset. Generated
+    // and LOD0 draws add 0, so their vertexOffset is unchanged from pre-C1.
+    cmd.vertexOffset  = int(meshes[meshIndex].vertexOffset) + int(lodVertexOffset);
+    // Arena-global slot: the VS indexes the SHARED indirection buffer with
+    // gl_InstanceIndex == firstInstance, so the pushed indirection BDA is the
+    // buffer base — identical for every batch and every slice.
+    cmd.firstInstance = slot;
+
+    drawCommands[slot] = cmd;
+    indirection[slot]  = indirectionWord;
+    return lodIndexCount;
+}
+
+void main() {
+    uint instanceIndex = gl_GlobalInvocationID.x;
+    if (instanceIndex >= pc.instanceCount) {
+        return;
+    }
+
+    if (pc.disableVisCheck == 0u && visibilityResults[instanceIndex] == 0u) {
+        return;
+    }
+
+    // World-key filter. LOAD-BEARING for the captured-snapshot invariant:
+    // mid-frame flushes from other worlds (thumbnail seam) mutate rows this
+    // slice's regions were not sized for; their different worldKey is what
+    // keeps them out (design §3.2).
+    if (pc.viewWorldKey != 0u) {
+        uint instWorldKey = (instances[instanceIndex].flags >> 16u) & 0xFFFFu;
+        if (instWorldKey != pc.viewWorldKey) {
+            return;
+        }
+    }
+
+    // Tombstones self-reject here: their meshIndex is 0xFFFFFFFF.
+    uint meshIndex = instances[instanceIndex].meshIndex;
+    if (meshIndex >= meshes.length()) {
+        return;
+    }
+
+    // Read only the fields the scatter needs, directly from the buffer (lever
+    // 2). The full 128 B GPUMesh is never materialised — the batch search below
+    // uses the real meshIndex, LOD selection reads by meshIndex, and the record
+    // pulls indexCount/indexOffset/vertexOffset one field at a time.
+    if (meshes[meshIndex].indexCount == 0u) {
+        return; // cleared / unregistered mesh row
+    }
+
+    // Small-object cull (prototype, default off). Must run BEFORE the cursor
+    // claim below: a claimed slot is always written, so dropping an instance
+    // any later would leave a stale record inside the drawn count.
+    if (pc.smallCullCoverage > 0.0 && pc.projScaleY > 0.0) {
+        vec3 camPos = vec3(pc.cameraPosX, pc.cameraPosY, pc.cameraPosZ);
+        float dist = max(distance(camPos, instances[instanceIndex].boundingCenter), 1e-4);
+        float coverage = instances[instanceIndex].boundingRadius * pc.projScaleY / dist;
+        coverage *= exp2(instances[instanceIndex].lodBias + pc.lodBiasGlobal);
+        if (coverage < pc.smallCullCoverage) {
+            return;
+        }
+    }
+
+    // Batch-search key routing:
+    //  - Shadow: material-dependent casters keep their real materialIndex;
+    //    shared-depth-eligible ones collapse into their mesh's single/double-
+    //    sided sentinel (the shadow table is grouped/sorted by that key).
+    //  - Color: opaque casters that share a PSO collapse into their
+    //    colorClassId; blend/transmissive/material-dependent keep identity.
+    //    materialColorClass[] already encodes that domain rule per materialIndex
+    //    (mirrors the CPU-side BuildColorBatchTable), so the read is direct.
+    //  - Off: raw materialIndex against the unmerged color table.
+    uint instFlags     = instances[instanceIndex].flags;
+    uint materialIndex = instances[instanceIndex].materialIndex;
+    uint searchMat = materialIndex;
+    if (pc.classMode == kClassModeShadow) {
+        searchMat = ((instFlags & kDepthMaterialDependentBit) != 0u)
+            ? materialIndex
+            : (((instFlags & kDepthDoubleSidedBit) != 0u) ? kSharedDepthDSSentinel
+                                                          : kSharedDepthSSSentinel);
+    } else if (pc.classMode == kClassModeColor && materialIndex < materialColorClass.length()) {
+        searchMat = materialColorClass[materialIndex];
+    }
+
+    // Winding parity: mirrored (odd-determinant) instances search the parity-1
+    // sibling row so the consumer draws them with a flipped front face. In the
+    // depth-only shadow pass, double-sided casters (cull None) render both faces
+    // and route through the double-sided sentinel, which the CPU table build
+    // never splits — so gate their parity off, or they would search a
+    // nonexistent row and their shadow would be silently dropped (must-fix #1).
+    // Color/prepass split every parity (the gl_FrontFacing shading nuance
+    // applies to double-sided too), so no gate there. The mesh-table read above
+    // used the REAL meshIndex; only this batch search sees the parity bit.
+    uint parityBit = ((instFlags & kMirroredBit) != 0u) ? kMeshParityBit : 0u;
+    if (pc.classMode == kClassModeShadow && (instFlags & kDepthDoubleSidedBit) != 0u) {
+        parityBit = 0u;
+    }
+    // Draw consolidation: the tables key their mesh axis on the per-mesh
+    // ORDERED rank, so route the search through the per-call map. The record
+    // fields below still read the REAL meshIndex -- records stay
+    // self-contained, which is exactly what lets the compact pass merge a
+    // group's contiguous rows into one draw region.
+    uint searchMesh = meshIndex;
+    if (pc.meshGroupMode != 0u) {
+        searchMesh = (meshIndex < meshPoolGroup.length()) ? meshPoolGroup[meshIndex]
+                                                          : kAbsentPoolGroup;
+    }
+    searchMesh |= parityBit;
+
+    uint batchId = ge_FindBatch(searchMat, searchMesh);
+    if (batchId == kBatchNotFound) {
+        atomicAdd(stats.sliceStats[pc.statsBase].tableMisses, 1u);
+        return;
+    }
+
+    BatchTableEntry entry = batchTable[batchId];
+
+    // LOD selection runs AHEAD of the cursor claim: the crossfade state decides
+    // how many record slots this instance needs, and the claim can only be made
+    // once. Selection reads only the mesh/instance rows plus this instance's own
+    // dwell-band history (written nowhere between here and the commit at the
+    // end), so moving it changes nothing it produces.
+    uint lod = ge_SelectLOD(instanceIndex, meshIndex,
+                            instances[instanceIndex].boundingCenter,
+                            instances[instanceIndex].boundingRadius,
+                            instances[instanceIndex].lodBias);
+
+    // Dithered crossfade: a transitioning instance emits TWO records — the
+    // incoming and outgoing levels, carrying complementary dither phases — into
+    // this row's TAIL region. Both records stay in the same batch row, so the
+    // pair costs no extra draw call. BOTH raster passes draw the tail: prepass
+    // and colour run the same keep test at the same gl_FragCoord, so depth is
+    // written for exactly the fragments colour keeps and the complementary masks
+    // compose with no holes. What the separate tail region buys is the dither
+    // VARIANT — only these draws pay the discard, so the heads (nearly every
+    // instance) keep the early-Z it would forfeit.
+    uint fadeFromLod;
+    uint fadeWeight;
+    bool fading = ge_UpdateLodFade(instanceIndex, lod, fadeFromLod, fadeWeight);
+    // The fade code lives above the indirection word's 24-bit instance domain,
+    // so an index that reaches into those bits cannot carry one and pops
+    // instead. Applied BEFORE the claim: dropping the pair afterwards would
+    // leave a claimed slot unwritten inside the drawn count.
+    if (instanceIndex > kLodFadeIndexMask) {
+        fading = false;
+    }
+
+    uint drawnIndices = 0u;
+    bool wroteTail = false;
+    if (fading) {
+        // ONE claim of the PAIR, so the two records land in adjacent slots and
+        // another thread can never split them. Claims start at 0 and always
+        // advance by 2, which is what lets consumers take the written prefix as
+        // min(cursor, capacity) rounded down to even.
+        uint t = atomicAdd(cursors[pc.tailCursorBase + batchId], 2u);
+        if (t + 1u < entry.capacity) {
+            // Both records carry the same weight and opposite phases, so the two
+            // dither tests partition the pixels exactly.
+            uint tailSlot = pc.tailRecordBase + entry.recordOffset + t;
+            uint word = (fadeWeight << kLodFadeWeightShift) | instanceIndex;
+            drawnIndices  = ge_WriteDrawRecord(tailSlot, meshIndex, lod, word);
+            drawnIndices += ge_WriteDrawRecord(tailSlot + 1u, meshIndex, fadeFromLod,
+                                               word | kLodFadePhaseBit);
+            wroteTail = true;
+        }
+        // Tail exhausted: fall through to a single opaque head record — exactly
+        // today's pop, never a missing object and never a half-written pair.
+        // This is a quality degradation, not an invariant break, so it does NOT
+        // trip the overflow tripwire.
+    }
+
+    if (!wroteTail) {
+        uint localSlot = atomicAdd(cursors[pc.cursorBase + batchId], 1u);
+        if (localSlot >= entry.capacity) {
+            atomicAdd(stats.sliceStats[pc.statsBase].overflows, 1u);
+            return;
+        }
+        drawnIndices = ge_WriteDrawRecord(pc.recordBase + entry.recordOffset + localSlot,
+                                          meshIndex, lod, instanceIndex);
+    }
+
+    // Per-slice drawn-triangle accumulation (P0 shadow-arc instrumentation,
+    // SCATTER_STATS-gated — see the file header). drawnIndices covers every
+    // record this invocation wrote, so a crossfading instance contributes both
+    // of its levels; the subgroup sum over the active lanes is this subgroup's
+    // contribution, and one elected lane commits it with a single atomicAdd.
+    // drawnTriangles is a uint32: the bench's ~2e8 per-cascade peak has ~20x
+    // headroom before the 4.29e9 wrap.
+#ifdef SCATTER_STATS
+    uint sliceTriangles = subgroupAdd(drawnIndices / 3u);
+    if (subgroupElect()) {
+        atomicAdd(stats.sliceStats[pc.statsBase].drawnTriangles, sliceTriangles);
+    }
+#endif
+
+    // Commit this frame's level as the next frame's history. Only instances that
+    // actually claimed a record get here, so a culled or table-missed instance
+    // keeps its last DRAWN level — which is the level a dwell band should resume
+    // from when it reappears. `lod` is the INCOMING level: a crossfading
+    // instance's history tracks where it is heading, so the fade's outgoing
+    // record never re-enters selection.
+    if (pc.lodHysteresisBand > 0.0) {
+#ifdef SCATTER_STATS
+        // Thrash instrument: how many instances changed level this frame. The
+        // subgroup reduction costs one atomic per subgroup instead of one per
+        // instance, and the zero-skip drops even that in the settled case the
+        // dwell band is supposed to produce — so a quiet frame adds no atomic
+        // traffic at all, and a noisy one is exactly what we want to see.
+        uint changed = subgroupAdd((prevLod[instanceIndex] != lod) ? 1u : 0u);
+        if (changed != 0u && subgroupElect()) {
+            atomicAdd(stats.sliceStats[pc.statsBase].lodChanges, changed);
+        }
+#endif
+        prevLod[instanceIndex] = lod;
+    }
+
+    // Rendered level and phase history (bindings 12/13). Same commit point and
+    // the same "only instances that claimed a record" rule as the dwell band
+    // above, but two buffers instead of one: the previous frame's entry is
+    // read from a buffer nothing in this frame writes, and this frame's entry
+    // goes to a buffer nothing in this frame reads, so a later dispatch of the
+    // same frame (a motion producer) sees exactly the pair the world scatter
+    // compared against. The phase recorded is whether the crossfade PAIR was
+    // emitted (wroteTail), not whether the state machine wanted to fade: a
+    // tail-exhausted instance drew one opaque record and is recorded as such.
+    if (pc.renderedHistoryEnabled != 0u) {
+        uint state = (lod & kRenderedHistoryLevelMask) | (wroteTail ? kRenderedHistoryFadingBit : 0u);
+        uint previous = prevRendered[instanceIndex];
+        bool continuous = previous != kLodNoHistory
+                          && (previous & kRenderedHistoryStateMask) == state;
+        currentRendered[instanceIndex] = state | (continuous ? kRenderedHistoryContinuousBit : 0u);
+    }
+}

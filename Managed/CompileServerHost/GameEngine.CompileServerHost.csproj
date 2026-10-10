@@ -1,0 +1,66 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <TargetFramework>net10.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <GenerateDocumentationFile>true</GenerateDocumentationFile>
+    <TreatWarningsAsErrors>false</TreatWarningsAsErrors>
+    <WarningsAsErrors>CS1591</WarningsAsErrors>
+  </PropertyGroup>
+  <ItemGroup>
+    <PackageReference Include="Microsoft.CodeAnalysis.CSharp" Version="4.10.0" />
+  </ItemGroup>
+  <!--
+    The build stops the host running from its own output, and nothing else, for two reasons:
+    that host keeps serving the code this build replaces until it idles out (the client's
+    version handshake retires only a CompileServerVersion.txt bump), and on Windows it holds
+    the assembly it loaded open, so copying a fresh build over $(TargetPath) fails. Hosts
+    running from another tree or from an editor's staged copy are never asked, and processes
+    whose command line merely names the file are not hosts.
+    1. The previous build asks each host whose pid file names $(TargetPath) to exit; the host
+       checks the path itself and refuses otherwise. GE_COMPILE_SERVER_IDLE_SECONDS=1 bounds
+       an output from before this mode existed: it takes the flag for a pipe name and would
+       otherwise serve it for the default idle timeout while the build waits. A host that
+       accepts the request and never answers cannot hold the build past the step's timeout.
+    2. On Windows, a host that did not answer is force-stopped by the script, the last resort.
+  -->
+  <Target Name="StopHostRunningFromOutput" BeforeTargets="BeforeBuild">
+    <Exec Condition="Exists('$(TargetPath)') and Exists('$(TargetDir)$(TargetName).runtimeconfig.json')"
+          IgnoreExitCode="true"
+          EnvironmentVariables="GE_COMPILE_SERVER_IDLE_SECONDS=1"
+          Timeout="30000"
+          ContinueOnError="true"
+          Command="dotnet &quot;$(TargetPath)&quot; --shutdown-running-from &quot;$(TargetPath)&quot;" />
+    <Exec Condition="'$(OS)' == 'Windows_NT'"
+          IgnoreExitCode="true"
+          Command="powershell -NoProfile -NonInteractive -ExecutionPolicy Bypass -File &quot;$(MSBuildProjectDirectory)\StopHostRunningFromOutput.ps1&quot; -HostPath &quot;$(TargetPath)&quot;" />
+  </Target>
+
+  <!-- Generate a CompileServerBuildInfo.g.cs from CompileServerVersion.txt -->
+  <Target Name="GenerateCompileServerVersion" BeforeTargets="CoreCompile">
+    <PropertyGroup>
+      <_VersionTxt>$(MSBuildProjectDirectory)\CompileServerVersion.txt</_VersionTxt>
+      <_GenDir>$(IntermediateOutputPath)Generated\</_GenDir>
+      <_GenFile>$(_GenDir)CompileServerBuildInfo.g.cs</_GenFile>
+    </PropertyGroup>
+    <MakeDir Directories="$(_GenDir)" />
+    <ReadLinesFromFile File="$(_VersionTxt)">
+      <Output TaskParameter="Lines" ItemName="_RawVersionLines" />
+    </ReadLinesFromFile>
+    <PropertyGroup>
+      <_CompileServerVersion>@(_RawVersionLines,'')</_CompileServerVersion>
+    </PropertyGroup>
+    <ItemGroup>
+      <_GenLines Include="namespace GameEngine.CompileServerHost {" />
+      <_GenLines Include="    internal static class CompileServerBuildInfo {" />
+      <_GenLines Include="        internal const string Version = &quot;$(_CompileServerVersion)&quot;%3b" />
+      <_GenLines Include="    }" />
+      <_GenLines Include="}" />
+    </ItemGroup>
+    <WriteLinesToFile File="$(_GenFile)" Lines="@(_GenLines)" Overwrite="true" />
+    <ItemGroup>
+      <Compile Include="$(_GenFile)" />
+    </ItemGroup>
+  </Target>
+</Project>

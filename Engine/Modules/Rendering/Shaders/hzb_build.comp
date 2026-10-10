@@ -1,0 +1,102 @@
+#version 450
+
+// Hierarchical-Z pyramid build (R2.1 two-phase HZB occlusion, design §5-A5).
+//
+// One dispatch per destination mip. Mip 0 copies the phase-A depth into the
+// pyramid's base at full resolution; every further mip is a conservative 2x2
+// reduction of the mip below it — MIN (mode 1) or MAX (mode 2).
+//
+// Reverse-Z: the farthest surface has the SMALLEST depth value, the nearest the
+// LARGEST. The two consumers want opposite bounds:
+//   * Occlusion culling (mode 1, MIN = farthest): a HZB texel must be no NEARER
+//     than the farthest surface it covers, so an instance whose nearest depth is
+//     >= the texel is possibly visible. MIN only ever pushes a texel farther —
+//     it weakens culling but never culls a visible instance.
+//   * SSR HiZ traversal (mode 2, MAX = nearest): the march must know the NEAREST
+//     surface per tile so a ray registers a crossing as soon as it could hit
+//     anything the tile covers; MAX is the conservative bound that never lets a
+//     ray skip past near geometry.
+//
+// Non-power-of-two handling: the pyramid keeps the EXACT depth extent at mip 0
+// (not next-pow2-down), so a parent mip can have an odd dimension. Floor mip
+// sizing then leaves the trailing odd row/column uncovered by the plain 2x2
+// footprint. The reduction samples that trailing texel on the last
+// row/column, and clamps every source coordinate to the source extent, so the
+// child covers its entire parent region (design's "clamped gather"). This is
+// the standard conservative Hi-Z NPOT build.
+
+layout(local_size_x = 8, local_size_y = 8, local_size_z = 1) in;
+
+// r32f storage on both ends: the source is the phase-A depth (mip 0) or the
+// previous pyramid mip (reduce); the dest is the pyramid mip being written.
+// Both bound as single-mip views so image coordinates address the intended
+// level directly.
+layout(set = 0, binding = 0, r32f) uniform readonly image2D uSrc;
+layout(set = 0, binding = 1, r32f) uniform writeonly image2D uDst;
+
+layout(push_constant) uniform PushConstants
+{
+    uint dstW;
+    uint dstH;
+    uint srcW;
+    uint srcH;
+    uint mode; // 0 = copy depth into mip 0, 1 = 2x2 MIN reduce, 2 = 2x2 MAX reduce
+};
+
+float LoadClamped(ivec2 c, ivec2 maxCoord)
+{
+    return imageLoad(uSrc, clamp(c, ivec2(0), maxCoord)).r;
+}
+
+// Uniform control flow: mode is a push constant, identical across the dispatch.
+float Combine(float a, float b, bool useMax)
+{
+    return useMax ? max(a, b) : min(a, b);
+}
+
+void main()
+{
+    const ivec2 d = ivec2(gl_GlobalInvocationID.xy);
+    if (uint(d.x) >= dstW || uint(d.y) >= dstH)
+        return;
+
+    const ivec2 maxSrc = ivec2(int(srcW) - 1, int(srcH) - 1);
+
+    if (mode == 0u)
+    {
+        // Mip 0: same-size copy of the phase-A depth (clamp is a no-op here
+        // since dst and src share the extent, but keeps the load in-bounds).
+        imageStore(uDst, d, vec4(LoadClamped(d, maxSrc), 0.0, 0.0, 0.0));
+        return;
+    }
+
+    const bool useMax = (mode == 2u);
+    const ivec2 base = d * 2;
+    float acc = LoadClamped(base, maxSrc);
+    acc = Combine(acc, LoadClamped(base + ivec2(1, 0), maxSrc), useMax);
+    acc = Combine(acc, LoadClamped(base + ivec2(0, 1), maxSrc), useMax);
+    acc = Combine(acc, LoadClamped(base + ivec2(1, 1), maxSrc), useMax);
+
+    // Odd source dimension: the last dest column/row must also fold in the
+    // trailing source texel it would otherwise skip. Guarded to the boundary
+    // so interior texels stay a tight 2x2.
+    const bool oddW = (srcW & 1u) != 0u;
+    const bool oddH = (srcH & 1u) != 0u;
+    const bool lastCol = uint(d.x) == dstW - 1u;
+    const bool lastRow = uint(d.y) == dstH - 1u;
+
+    if (oddW && lastCol)
+    {
+        acc = Combine(acc, LoadClamped(base + ivec2(2, 0), maxSrc), useMax);
+        acc = Combine(acc, LoadClamped(base + ivec2(2, 1), maxSrc), useMax);
+    }
+    if (oddH && lastRow)
+    {
+        acc = Combine(acc, LoadClamped(base + ivec2(0, 2), maxSrc), useMax);
+        acc = Combine(acc, LoadClamped(base + ivec2(1, 2), maxSrc), useMax);
+    }
+    if (oddW && oddH && lastCol && lastRow)
+        acc = Combine(acc, LoadClamped(base + ivec2(2, 2), maxSrc), useMax);
+
+    imageStore(uDst, d, vec4(acc, 0.0, 0.0, 0.0));
+}

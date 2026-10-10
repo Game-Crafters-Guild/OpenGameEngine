@@ -1,0 +1,364 @@
+#version 450
+
+// The serial half of grass placement's plan: fit the density radius to the instance pool, then turn
+// terrain_grass_classify.comp's per-cell verdicts into contiguous slot ranges.
+//
+// ONE WORKGROUP, because a prefix sum over the whole cell window has to be carried somewhere. Every
+// embarrassingly parallel part has been moved out: the frustum and terrain tests run as a grid in
+// the classify kernel, and what is left touches each cell twice with almost no barriers — each lane
+// walks a CONTIGUOUS CHUNK of cells serially and the workgroup scans one partial sum per lane,
+// rather than running a block scan for every 256 cells.
+//
+// TWO ORDERS, deliberately different. The BUDGET is spent by distance ring, so a view that cannot
+// hold everything loses the farthest grass and never the near field. The LAYOUT is row-major over
+// the world cell lattice, so the pool order is a world-space order: two blades never swap places in
+// the pool as the camera moves.
+
+layout(local_size_x = 256, local_size_y = 1, local_size_z = 1) in;
+const uint kPlanWorkgroupSize = 256u;
+
+// Halvings of the [0,1] radius-scale bracket. Ten leave the scale within 0.001, about a third of a
+// metre at the shipped range — far inside the one-ring tolerance the two implementations of this
+// fit must agree to.
+const uint kGrassFitRefineSteps = 10u;
+
+#include "grass_placement.glsl"
+
+struct TerrainParamsEntry
+{
+    float WorldOriginX;
+    float WorldOriginZ;
+    float WorldSizeX;
+    float WorldSizeZ;
+    float HeightScale;
+    float InvHeightmapWidth;
+    float InvHeightmapHeight;
+    float TexelSize;
+    float WorldOriginY;
+    uint SplatmapBindless;
+    float MaterialTiling;
+    uint LayerCount;
+    uint LayerRole[4];
+    float GridDimHalf;
+    uint Flags;
+    uint NormalmapBindless;
+    uint HeightmapBindless;
+    uint GrassEnabled;
+    float GrassDensity;
+    float GrassBladeHeight;
+    float GrassBladeWidth;
+    float GrassMaskThreshold;
+    float GrassDensityFalloff;
+    float GrassRange;
+    float GrassWindStrength;
+    uint GrassLayerIndex;
+    float GrassBrightness;
+    float GrassGroundingStrength;
+    float GrassRandomScale;
+    float GrassRandomBrightness;
+    float GrassTranslucency;
+    uint GrassRootColor;
+    uint GrassTipColor;
+    uint GrassBacklightColor;
+    float GrassWindDirection;
+    float GrassWindGustSpeed;
+    float GrassWindGustScale;
+    float GrassWindRestingLean;
+    float GrassWindFlutterAmount;
+    float GrassWindFlutterSpeed;
+    float GrassWindSeed;
+    uint GrassBladeSegments;
+    uint GrassAlbedoBindless;
+    uint GrassAlphaBindless;
+    uint GrassNormalBindless;
+    uint GrassAtlasColumns;
+    uint GrassAtlasRows;
+    uint GrassAtlasTileCount;
+    float GrassAlphaCutoff;
+    float GrassNormalStrength;
+    float GrassTextureCardsPerSquareMeter;
+    float GrassTextureSize;
+    float GrassPlacementSeed;
+    float GrassMaxWidthRatio;
+    float GrassClumpSize;
+    float GrassClumpHeightVariance;
+    float GrassClumpAlignment;
+    float GrassClumpGather;
+    float GrassHueVariation;
+    float GrassRootShade;
+    float GrassBladeNormalForm;
+    float GrassBladeScatterGain;
+    float GrassRootFadeStart;
+    float GrassRootFadeEnd;
+    uint GrassControlBindless;
+};
+
+struct DrawIndexedIndirectCommand
+{
+    uint IndexCount;
+    uint InstanceCount;
+    uint FirstIndex;
+    int VertexOffset;
+    uint FirstInstance;
+};
+
+layout(std430, set = 0, binding = 0) readonly buffer TerrainParamsBuffer
+{
+    TerrainParamsEntry terrains[];
+};
+
+layout(std430, set = 0, binding = 1) buffer TerrainGrassCellPlanBuffer
+{
+    uint RingCells[kGrassRingHistogramWords];
+    GrassCellPlan Cells[kGrassMaxCells];
+} CellPlan;
+
+// WGSL has no coherent attribute (naga emits one, tint rejects it). Nothing is lost: this kernel is
+// a single workgroup, so its own writes are ordered by barrier(), and the engine's plan to emit
+// barrier publishes them to the stage that reads them.
+#if defined(GE_COMPAT_PROFILE)
+#define GE_COHERENT
+#else
+#define GE_COHERENT coherent
+#endif
+
+layout(std430, set = 0, binding = 3) GE_COHERENT buffer TerrainGrassIndirectArgs
+{
+    DrawIndexedIndirectCommand drawArgs[kGrassLodCount];
+    uint CandidatesConsidered;
+    uint CellsVisible;
+    uint AcceptedBlades;
+    uint FittedRangeScaleBits;
+    uint Capacity;
+    uint _CounterPad0;
+    uint _CounterPad1;
+    uint _CounterPad2;
+} Args;
+
+layout(std140, set = 0, binding = 6) uniform GrassPlaceParamsBuffer
+{
+    vec4 FrustumPlanes[6];
+    vec4 CameraPos;
+    ivec4 CellWindow;
+    vec4 Bounds;
+    vec4 ViewRotCol0;
+    vec4 ViewRotCol1;
+    vec4 ViewRotCol2;
+    // Worst case across every active grass terrain: x = densest blades per square metre at the
+    // camera, y = flattest falloff. The fit below is a BOUND, and these are what make it one.
+    vec4 Summary;
+} Place;
+
+shared uint sRingCells[kGrassMaxRings];
+shared uvec2 sScan[kPlanWorkgroupSize];
+shared uint sReduce[kPlanWorkgroupSize];
+shared float sFittedScale;
+shared uint sVisibleCells;
+
+// Upper bound on the slots one cell of `ring` wants at radius scale `scale`. The ring's INNER
+// distance is used because that is the closest a cell of that ring can sit and a closer cell wants
+// more slots; the terrain SUMMARY dominates every per-terrain value for the same reason. Together
+// they make the total below a bound the per-cell sweep cannot exceed, so nothing downstream needs
+// a runtime clamp when slots are handed out.
+uint ringSlotBound(uint ring, float scale)
+{
+    float range = (Place.Bounds.w - kGrassCellSize) * scale;
+    float wanted = GrassSlotsWantedForCell(Place.Summary.x, range, Place.Summary.y,
+                                           float(ring) * kGrassCellSize);
+    return GrassSlotsToIterate(wanted);
+}
+
+// Slots the whole visible window would reserve at this radius scale. Uniform across the workgroup.
+uint reservedAtScale(float scale, uint lane)
+{
+    uint contribution = 0u;
+    if (lane < kGrassMaxRings)
+    {
+        uint cells = sRingCells[lane];
+        if (cells > 0u)
+            contribution = cells * ringSlotBound(lane, scale);
+    }
+    sReduce[lane] = contribution;
+    barrier();
+    for (uint stride = kPlanWorkgroupSize / 2u; stride > 0u; stride >>= 1u)
+    {
+        if (lane < stride)
+            sReduce[lane] += sReduce[lane + stride];
+        barrier();
+    }
+    uint total = sReduce[0];
+    barrier();
+    return total;
+}
+
+// This cell's reserved slot count at the fitted scale, plus the LOD it draws with. Straight-line
+// on purpose: the caller decodes the classify kernel's verdict and skips a cell that was not
+// admitted rather than this returning early. A conditional return here would leave the cell plan's
+// storage pointer live across the merge the inliner builds for it, and naga has to spill such a
+// value into a local it cannot type — the WGSL arm stops translating.
+uint cellSlots(uint cell, int span, float fittedScale, uint terrainIdx, out float slotsWanted,
+               out uint lod)
+{
+    int ix = int(cell % uint(span));
+    int iz = int(cell / uint(span));
+    int halfSpan = (span - 1) / 2;
+    vec2 centre = vec2(float(Place.CellWindow.x - halfSpan + ix),
+                       float(Place.CellWindow.y - halfSpan + iz)) * kGrassCellSize
+                  + vec2(kGrassCellSize * 0.5);
+    float distanceToCamera = distance(centre, Place.CameraPos.xz);
+
+    TerrainParamsEntry tp = terrains[terrainIdx];
+    bool textureGrass = (tp.GrassEnabled & 4u) != 0u;
+    float nearDensity = textureGrass ? tp.GrassTextureCardsPerSquareMeter : tp.GrassDensity;
+    float range = max(tp.GrassRange, 0.0) * Place.CameraPos.w * fittedScale;
+    slotsWanted = GrassSlotsWantedForCell(nearDensity, range, tp.GrassDensityFalloff,
+                                          distanceToCamera);
+    lod = distanceToCamera < Place.Bounds.z ? 0u : 1u;
+    return GrassSlotsToIterate(slotsWanted);
+}
+
+void main()
+{
+    uint lane = gl_LocalInvocationID.x;
+    int span = Place.CellWindow.z;
+    uint cellCount = span <= 0 ? 0u : min(uint(span) * uint(span), kGrassMaxCells);
+    uint capacity = Args.Capacity;
+
+    // The histogram the classify kernel filled, and the visible-cell tally it implies.
+    uint ringCount = 0u;
+    if (lane < kGrassMaxRings)
+    {
+        ringCount = CellPlan.RingCells[lane];
+        sRingCells[lane] = ringCount;
+    }
+    barrier();
+    sReduce[lane] = ringCount;
+    barrier();
+    for (uint stride = kPlanWorkgroupSize / 2u; stride > 0u; stride >>= 1u)
+    {
+        if (lane < stride)
+            sReduce[lane] += sReduce[lane + stride];
+        barrier();
+    }
+    if (lane == 0u)
+        sVisibleCells = sReduce[0];
+    barrier();
+
+    // ---- Fit the density radius to the pool, against the cells this view actually sees ----
+    //
+    // The same fit the CPU runs, with the frustum share MEASURED instead of assumed. Spending the
+    // budget by shortening the density curve rather than by cutting cells is what keeps the field
+    // edge soft: density still reaches zero where the field ends, and the growth ramp still scales
+    // the outermost slots in.
+    //
+    // A FIXED bisection over the whole [0,1] bracket. Fixed so the answer is a pure function of the
+    // inputs; over the WHOLE bracket so it is also monotone in the histogram — a bracket seeded
+    // from an analytic guess settles on a scale that depends on the guess, so one cell entering the
+    // window could move the field edge in either direction.
+    //
+    // It runs UNCONDITIONALLY, including for a view whose cells already fit. Every step carries
+    // workgroup barriers, and the predicate that would skip them is the pool capacity read out of a
+    // storage buffer: a barrier only part of the workgroup reaches is undefined in GLSL, and WGSL's
+    // uniformity analysis cannot see through such a predicate at all.
+    uint wantedAtFullRange = reservedAtScale(1.0, lane);
+    float lo = 0.0;
+    float hi = 1.0;
+    for (uint step = 0u; step < kGrassFitRefineSteps; ++step)
+    {
+        float mid = (lo + hi) * 0.5;
+        if (reservedAtScale(mid, lane) <= capacity)
+            lo = mid;
+        else
+            hi = mid;
+    }
+    // `lo` is always feasible — scale 0 reserves nothing — so the search only ever tightens a
+    // valid answer, and taking it rather than `hi` is what keeps the bound a bound. A view that
+    // fits at full range takes the full range EXACTLY, which halving [0,1] can only approach: the
+    // instrument would otherwise report a budget-shortened field for a budget that never bound.
+    if (lane == 0u)
+        sFittedScale = wantedAtFullRange <= capacity ? 1.0 : lo;
+    barrier();
+    float fittedScale = sFittedScale;
+
+    // ---- Hand every surviving cell a contiguous slot range ----
+    //
+    // Each lane owns a CONTIGUOUS chunk of cells, so the whole window costs one workgroup scan over
+    // 256 partial sums instead of one scan per 256 cells. The chunks are laid out in cell order, so
+    // the pool order is still row-major over the world lattice.
+    uint chunk = (cellCount + kPlanWorkgroupSize - 1u) / kPlanWorkgroupSize;
+    uint first = min(lane * chunk, cellCount);
+    uint last = min(first + chunk, cellCount);
+
+    uvec2 mine = uvec2(0u);
+    for (uint cell = first; cell < last; ++cell)
+    {
+        uint packed = CellPlan.Cells[cell].LodAndTerrain;
+        uint terrainIdx = packed & kGrassCellTerrainMask;
+        float slotsWanted = 0.0;
+        uint lod = 0u;
+        uint slots = 0u;
+        if ((packed & kGrassCellValidBit) != 0u)
+            slots = cellSlots(cell, span, fittedScale, terrainIdx, slotsWanted, lod);
+        // Written for EVERY cell of the window, not only the admitted ones: this buffer persists
+        // across frames, so a cell that stops being admitted must be told so rather than left
+        // holding the slot count and base it had when it last was.
+        CellPlan.Cells[cell].Slots = slots;
+        CellPlan.Cells[cell].SlotsWantedBits = floatBitsToUint(slotsWanted);
+        CellPlan.Cells[cell].LodAndTerrain =
+            slots > 0u ? (kGrassCellValidBit | (lod << kGrassCellLodShift) | terrainIdx) : 0u;
+        if (slots > 0u)
+            mine[lod] += slots;
+    }
+
+    sScan[lane] = mine;
+    barrier();
+    for (uint offset = 1u; offset < kPlanWorkgroupSize; offset <<= 1u)
+    {
+        uvec2 addend = lane >= offset ? sScan[lane - offset] : uvec2(0u);
+        barrier();
+        sScan[lane] += addend;
+        barrier();
+    }
+    uvec2 exclusive = sScan[lane] - mine;
+    uvec2 totals = sScan[kPlanWorkgroupSize - 1u];
+
+    uint runLod0 = exclusive.x;
+    uint runLod1 = exclusive.y;
+    for (uint cell = first; cell < last; ++cell)
+    {
+        uint slots = CellPlan.Cells[cell].Slots;
+        if (slots == 0u)
+        {
+            CellPlan.Cells[cell].Base = 0u;
+            continue;
+        }
+        if (((CellPlan.Cells[cell].LodAndTerrain >> kGrassCellLodShift) & 1u) == 0u)
+        {
+            CellPlan.Cells[cell].Base = runLod0;
+            runLod0 += slots;
+        }
+        else
+        {
+            CellPlan.Cells[cell].Base = runLod1;
+            runLod1 += slots;
+        }
+    }
+
+    if (lane == 0u)
+    {
+        // LOD 0 fills the pool from slot 0 upward and LOD 1 from the top downward. The two ranges
+        // can only meet if the fit above was wrong, and it cannot be: its per-ring term dominates
+        // every per-cell term computed here.
+        Args.drawArgs[0].InstanceCount = totals.x;
+        Args.drawArgs[0].FirstInstance = 0u;
+        Args.drawArgs[1].InstanceCount = totals.y;
+        Args.drawArgs[1].FirstInstance = capacity - totals.y;
+
+        Args.CandidatesConsidered = totals.x + totals.y;
+        Args.CellsVisible = sVisibleCells;
+        // Zeroed here rather than by a CPU fill: the emit kernel accumulates into it immediately
+        // after this dispatch, and the plan already owns every other counter in the block.
+        Args.AcceptedBlades = 0u;
+        Args.FittedRangeScaleBits = floatBitsToUint(fittedScale);
+    }
+}

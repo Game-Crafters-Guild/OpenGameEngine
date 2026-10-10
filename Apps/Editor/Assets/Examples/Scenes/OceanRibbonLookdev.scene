@@ -1,0 +1,163 @@
+[scene name="OceanRibbonLookdev" version=1]
+; A continuous, bounded river with flow and material optics,
+; running in a channel its own spline carves through the terrain and out into the sea.
+; The ocean surface detail guide (docs/Rendering/ocean-surface-detail.html) explains the controls.
+
+[entity id="sun"]
+Name.value = "Sun"
+Light.enabled = true
+Light.type = 0
+Light.color = (1, 0.97, 0.92)
+Light.intensity = 70000
+Light.intensityUnit = Lux
+Light.castsShadows = true
+Transform.rotation = (0.3037, 0.3576, -0.1242, 0.8744)
+
+[entity id="sky"]
+Name.value = "Daylight sky"
+SkyEnvironment.Enabled = true
+SkyEnvironment.Mode = 1
+SkyEnvironment.GradientSkyTopColor = (0.16, 0.29, 0.48)
+SkyEnvironment.GradientSkyHorizonColor = (0.48, 0.58, 0.66)
+SkyEnvironment.GradientSkyBottomColor = (0.10, 0.13, 0.15)
+SkyEnvironment.GradientSkyIntensity = 32000
+SkyEnvironment.AnimateTimeOfDay = false
+SkyEnvironment.AutoSunMoon = false
+SkyEnvironment.TimeOfDayDrivesSunLight = false
+SkyEnvironment.SunLight = "sun"
+SkyEnvironment.IblIntensity = 1
+SkyEnvironment.ShowSun = false
+
+[entity id="camera"]
+Name.value = "Main Camera"
+Camera.enabled = true
+Camera.perspective = true
+Camera.fovY = 55
+Camera.nearZ = 0.05
+Camera.farZ = 3000
+Camera.exposureControl = 1
+Camera.manualExposureEV = 14.6
+Transform.position = (0, 14, -35)
+Transform.rotation = (0.22, 0, 0, 0.9755)
+
+[entity id="post"]
+PostProcessVolume.enabled = true
+PostProcessVolume.weight = 1
+PostProcessVolume.isGlobal = true
+PostProcessVolume.tonemap = 4
+
+[entity id="ocean"]
+Name.value = "Ocean - continuous river"
+Transform.position = (0, 0, 0)
+OceanSurface.Enabled = true
+OceanSurface.FoamTexture = [path="Examples/Materials/Ocean/crest_foam.png"]
+OceanSurface.NormalTexture = [path="Examples/Materials/Ocean/crest_wave_normals.png"]
+OceanSurface.FoamScale = 5
+OceanSurface.FoamBubbleCoverage = 0.4
+OceanSurface.FoamBubbleParallax = 0.1
+OceanSurface.FoamRoughness = 0.65
+OceanSurface.FoamColor = (0.92, 0.96, 0.95, 1)
+OceanSurface.FoamAmount = 1
+OceanSurface.FoamFadeRate = 0.4
+OceanSurface.NormalsStrength = 0.75
+OceanSurface.NormalsScale = 1
+OceanSurface.Roughness = 0.12
+OceanSurface.DeepColor = (0.015, 0.045, 0.06, 1)
+OceanSurface.Diffuse = (0.005, 0.025, 0.04, 1)
+OceanSurface.DiffuseGrazing = (0.01, 0.04, 0.055, 1)
+OceanSurface.DiffuseShadow = (0.002, 0.01, 0.016, 1)
+OceanSurface.Spray = false
+OceanSurface.Underwater = true
+OceanSurface.PlanarReflections = true
+OceanSurface.ShorelineFoamMaxDepth = 0.7
+OceanSurface.ShorelineFoamStrength = 1.3
+OceanSurface.IntersectionFoamDepth = 0.4
+OceanSurface.IntersectionFoamStrength = 0.8
+OceanRenderer.Enabled = true
+OceanRenderer.GlobalWindSpeed = 6
+OceanRenderer.ShadowSettings = [path="Examples/Materials/Ocean/temporal_shadows.oceansettings"]
+OceanRenderer.GlobalWindDirection = 25
+OceanRenderer.GlobalWindTurbulence = 0.22
+OceanWaveSpectrum.Multiplier = 0.25
+OceanWaveSpectrum.Chop = 1.5
+
+[entity id="river"]
+Name.value = "Continuous bounded river"
+Transform.position = (0, 0, 0)
+Spline.enabled = true
+Spline.type = 0
+Spline.closed = false
+Spline.defaultRadius = 2
+Spline.pointCount = 5
+Spline.point0.position = (-5, 0, -100)
+Spline.point1.position = (-5, 0, -10)
+Spline.point2.position = (10, 0, 20)
+Spline.point3.position = (10, 0, 100)
+Spline.point4.position = (-10, 0, 330)
+Spline.point3.radius = 2.5
+Spline.point4.radius = 9
+TerrainModifierVolume.shape = 2
+TerrainModifierVolume.falloff = 6
+TerrainModifierVolume.falloffInward = 0
+TerrainModifierVolume.weight = 1
+TerrainModifierVolume.priority = 10
+TerrainModifierVolume.enabled = true
+TerrainHeightOffsetEffect.stackOrder = 0
+TerrainHeightOffsetEffect.enabled = true
+TerrainHeightOffsetEffect.offset = -5
+TerrainHeightOffsetEffect.blend = 1
+OceanSplineInput.Enabled = true
+OceanSplineInput.MaxSegmentLength = 2
+OceanSplineInput.Width = 8
+OceanSplineInput.ConfineSurface = true
+OceanSplineInput.ClipFeather = 0.25
+OceanSplineInput.Flow = true
+OceanSplineInput.FlowSpeed = 1.5
+
+[entity id="river-material"]
+Name.value = "River optics"
+Transform.position = (0, 0, 75)
+OceanWaterBody.Enabled = true
+OceanWaterBody.ExtentX = 25
+OceanWaterBody.ExtentZ = 175
+OceanWaterBody.ConfineSurface = false
+OceanWaterBody.UnderwaterVolume = false
+OceanWaterBody.MaterialOverride = [path="Examples/Materials/Ocean/lagoon.oceanpreset"]
+
+[entity id="land"]
+Name.value = "Land"
+Terrain.baseSource = 2
+Terrain.enabled = true
+Terrain.sizeX = 1024
+Terrain.sizeZ = 1024
+Terrain.heightScale = 60
+Terrain.samplesPerMeter = 1
+Terrain.renderLayerMask = 1
+Terrain.castShadows = true
+Terrain.receiveShadows = true
+Transform.position = (0, 1.5, 200)
+
+[entity id="coast"]
+Name.value = "Coast the river runs out into"
+Transform.position = (0, 0, 480)
+TerrainModifierVolume.shape = 0
+TerrainModifierVolume.rectHalfX = 512
+TerrainModifierVolume.rectHalfZ = 180
+TerrainModifierVolume.falloff = 90
+TerrainModifierVolume.falloffInward = 0
+TerrainModifierVolume.weight = 1
+TerrainModifierVolume.priority = 5
+TerrainModifierVolume.enabled = true
+TerrainHeightOffsetEffect.stackOrder = 0
+TerrainHeightOffsetEffect.enabled = true
+TerrainHeightOffsetEffect.offset = -9
+TerrainHeightOffsetEffect.blend = 1
+
+[entity id="sea"]
+Name.value = "Sea at the river mouth"
+Transform.position = (0, 0, 460)
+OceanWaterBody.Enabled = true
+OceanWaterBody.ExtentX = 512
+OceanWaterBody.ExtentZ = 260
+OceanWaterBody.ConfineSurface = true
+OceanWaterBody.UnderwaterVolume = false

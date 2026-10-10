@@ -1,0 +1,1395 @@
+/* Grid view layout
+ *
+ * IMPORTANT: `GridView` is a virtualized control that owns an internal `ScrollView`.
+ * The outer `.grid` container should be a *single-column* flex box so the internal
+ * ScrollView is height-constrained by the panel. If `.grid` is a wrapping row flex
+ * container, Yoga will size the ScrollView to its (large) content height, which
+ * makes ScrollView think everything is already visible → no scroll range / no thumb.
+ */
+.grid {
+	display: flex;
+	flex-direction: column;
+	justify-content: flex-start;
+	align-items: stretch;
+	/* Top / bottom / left inset only: no right padding so the ScrollView scrollbar lines up with list view. */
+	padding: 8px 0 8px 8px;
+	background-color: var(--ui_color_bg_grid);
+	flex-grow: 1;
+	min-width: 0;
+	min-height: 0;
+}
+
+/* Virtualized grid content container (no flex-wrap/gap; cells are absolutely
+   positioned). The padding is the single source of the grid's content inset:
+   GridView reads it back for cell placement and column math. */
+.grid-virtual-content {
+	display: block;
+	padding: 8px;
+	gap: 0px;
+	background-color: var(--ui_color_bg_grid);
+	flex-grow: 1;
+	min-height: 100%;
+}
+
+.grid-cell {
+	display: flex;
+	flex-direction: column;
+	align-items: center;
+	width: 96px;
+	overflow: hidden;
+}
+
+/* If background-image is unsupported, this rule will be ignored; we'll switch to an Image control. */
+.grid-cell.folder .thumb {
+	background-image: url("editor:Icons/Folder@512px.png");
+	background-size: contain;
+	background-position: center;
+	background-repeat: no-repeat;
+	background-color: var(--ui_color_bg_hover_alt);
+	/* Tint for folder icons in grid view (overridden by --ui_asset_icon_tint when set) */
+	background-image-tint: rgba(170, 170, 170, 1.0);
+	background-image-tint: var(--ui_asset_icon_tint, rgba(170, 170, 170, 1.0));
+}
+
+/* Scene file icon in grid view */
+.grid-cell.scene .thumb {
+	background-image: url("editor:Icons/sceneicon.png");
+	background-size: contain;
+	background-position: center;
+	background-repeat: no-repeat;
+	/* Match folder/neutral icon tint (overridden by --ui_asset_icon_tint when set) */
+	background-image-tint: rgba(170, 170, 170, 1.0);
+	background-image-tint: var(--ui_asset_icon_tint, rgba(170, 170, 170, 1.0));
+}
+
+/* When a saved scene has an actual thumbnail, show it at 80% alpha (no icon tint). */
+.grid-cell.scene.has-thumbnail .thumb {
+	background-image-tint: rgba(255, 255, 255, 0.89);
+}
+
+/* Script file icon in grid view */
+.grid-cell.script .thumb {
+	background-image: url("editor:Icons/codeicon.png");
+	background-size: contain;
+	background-position: center;
+	background-repeat: no-repeat;
+	/* Match folder/neutral icon tint (overridden by --ui_asset_icon_tint when set) */
+	background-image-tint: rgba(170, 170, 170, 1.0);
+	background-image-tint: var(--ui_asset_icon_tint, rgba(170, 170, 170, 1.0));
+}
+
+/* Video file icon in grid view (no tint — extracted frame thumbnails must match preview) */
+.grid-cell.video .thumb {
+	background-image: url("editor:Icons/videocam.png");
+	background-size: contain;
+	background-position: center;
+	background-repeat: no-repeat;
+}
+
+.grid-cell .thumb {
+	width: 80px;
+	height: 80px;
+	padding: 6px;
+	background-color: transparent;
+	border-radius: var(--ui_radius_md);
+	border-width: 0px;
+	border-color: transparent;
+	background-size: contain;
+	background-position: center;
+	background-repeat: no-repeat;
+	align-self: center;
+}
+
+/* Hover/selection overlays */
+.grid-cell.hover .thumb,
+.grid-cell:hover .thumb {
+	background-color: var(--ui_color_bg_item_hover);
+}
+
+/* Phantom rows: ghost the cell + tint label red so the user can see the
+   asset is missing at this path. The MissingAssetTracker injects these
+   rows into the grid/list provider — see InjectPhantomsForCurrentDir. */
+.grid-cell.missing-asset .thumb {
+	opacity: 0.35;
+}
+.grid-cell.missing-asset .label {
+	color: #d96a6a;
+	opacity: 0.85;
+}
+.list-item.missing-asset .thumb,
+.list-item.missing-asset .icon {
+	opacity: 0.35;
+}
+.list-item.missing-asset .label {
+	color: #d96a6a;
+	opacity: 0.85;
+}
+
+.grid-cell.selected .thumb {
+	background-color: var(--ui_color_bg_item_hover);
+	border-color: var(--ui_color_accent);
+	box-shadow: 0 0 0 2px var(--ui_color_accent_highlight);
+	transform: scale(1.04);
+}
+
+/* Selection outline is a separate layer on top so it is never covered by thumb/title. */
+.grid-cell .grid-cell-selection-outline {
+	pointer-events: none;
+	border: none;
+	box-shadow: none;
+	border-radius: var(--ui_radius_md);
+	box-sizing: border-box;
+}
+
+.grid-cell.selected .grid-cell-selection-outline {
+	border-width: 2px;
+	border-style: solid;
+	border-color: var(--ui_color_accent);
+	box-shadow: 0 0 0 2px rgba(58, 143, 255, 0.3);
+}
+
+/* GridView pins the title box (width and the band below the icon) as cell
+   geometry; the gap under the icon is padding inside that box. */
+.grid-title {
+	font-size: var(--ui_font_size_base);
+	text-align: center;
+	color: var(--ui_color_text_dim);
+	overflow: visible;
+	align-self: center;
+	padding: 6px 8px 0 8px;
+}
+
+.grid-cell.selected .grid-title {
+	color: #FFFFFF;
+}
+
+/* Inline rename: the field stands in for the title/name label for one editing
+   session (Enter commits, Escape cancels). An invalid name is outlined and the
+   reason rides on the field's tooltip. */
+.grid-cell .asset-rename-field {
+	margin-top: 6px;
+	width: 90%;
+	align-self: center;
+	min-height: 20px;
+}
+
+.grid-cell .asset-rename-field > TextInput {
+	font-size: var(--ui_font_size_base);
+	text-align: center;
+}
+
+.assets-name-cell .asset-rename-field {
+	flex-grow: 1;
+	flex-shrink: 1;
+	min-width: 0;
+}
+
+/* The editing state is a visible box, not just a caret. The base TextInput
+   hover/focus rules keep the accent colour, and the invalid rule outranks them. */
+.asset-rename-field > TextInput {
+	border-width: 1px;
+	border-style: solid;
+	border-color: var(--ui_color_accent);
+}
+
+.asset-rename-field.invalid > TextInput {
+	border-color: var(--ui_color_vcs_removed);
+}
+
+/* ------------------------------------------------
+   Drag/drop hover feedback
+   ------------------------------------------------ */
+
+/* GridView: highlight hovered drop cell (folder targets) */
+.grid-cell.drop-hover .thumb {
+	box-shadow: 0 0 0 2px rgba(255, 255, 255, 0.10);
+}
+
+.grid-cell.drop-hover.drop-allowed .thumb {
+	box-shadow:
+		0 0 0 2px rgba(76, 175, 80, 0.70),
+		0 0 0 6px rgba(76, 175, 80, 0.18);
+}
+
+.grid-cell.drop-hover.drop-denied .thumb {
+	box-shadow:
+		0 0 0 2px rgba(244, 67, 54, 0.75),
+		0 0 0 6px rgba(244, 67, 54, 0.18);
+}
+
+.grid-cell .thumb-emoji {
+	width: 100%;
+	height: 100%;
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	font-size: 42px;
+	pointer-events: none;
+}
+
+/* Tree view */
+.tree-scroll {
+	display: flex;
+	flex-direction: column;
+	flex-grow: 1;
+	min-height: 0;
+}
+
+/* A TreeView always reports its content width as the viewport width
+   (TreeView::LayoutRows -> ScrollView::SetContentSize), so it can never really
+   overflow sideways. What does happen is a shrink: the viewport narrows a frame
+   before the tree relayouts, the stale wider content width briefly exceeds it,
+   and a horizontal bar flashes in. Suppress it — there is nothing to scroll to. */
+.tree .scrollview {
+	overflow-x: hidden;
+}
+
+/* A tree whose host enabled horizontal scrolling measures its bound rows, so
+   its overflow is real and the suppression above must not apply
+   (TreeView::SetHorizontalScrollEnabled owns the class). */
+.tree.tree-horizontal-scroll-enabled .scrollview {
+	overflow-x: visible;
+}
+
+/* With the bar on, it takes the very bottom of the panel and the Hierarchy's
+   navigation row rides above it, both still bottom-anchored. The scrollview lays out as
+   [rows][h-bar], so it reaches down through the strip the panel reserves for
+   the search (-38px) while the rows inset back out of it, leaving only the bar
+   in the strip. */
+.tree.has-horizontal-scroll .scrollview {
+	margin-bottom: -44px;
+}
+
+.tree.has-horizontal-scroll .scroll-row {
+	margin-bottom: 29px;
+}
+
+/* Remove width:100% because % width isn't supported; rely on flex to fill */
+.tree {
+	display: flex;
+	flex-direction: column;
+	align-items: stretch;
+	justify-content: flex-start;
+	padding: 4px;
+	gap: 0px;
+	flex-grow: 1;
+	min-width: 0;
+	min-height: 0;
+}
+
+.tree .tree-item {
+	align-self: stretch;
+	min-width: 0;
+	box-sizing: border-box;
+	padding: 1px 8px;
+	border-radius: 4px;
+	cursor: default;
+}
+
+.tree .tree-item:hover {
+	background-color: var(--ui_color_bg_hover_alt);
+}
+
+.tree .tree-item.selected {
+	background-color: var(--ui_color_bg_selected);
+}
+
+/* TreeView: hovered drop target feedback (used by TreeView::UpdateDropPreviewClasses) */
+.tree .tree-item.drop-onto-valid {
+	background-color: rgba(76, 175, 80, 0.16);
+	box-shadow: inset 0 0 0 1px rgba(76, 175, 80, 0.55);
+}
+
+.tree .tree-item.drop-onto-invalid {
+	background-color: rgba(244, 67, 54, 0.14);
+	box-shadow: inset 0 0 0 1px rgba(244, 67, 54, 0.60);
+}
+
+/* Foldout + spacing */
+.tree .tree-item {
+	display: flex;
+	flex-direction: row;
+	flex-wrap: nowrap;
+	align-items: center;
+	gap: 6px;
+}
+
+.tree .tree-foldout {
+	display: inline-block;
+	/* Chevron caps at 2× baseline; TreeView applies the same via ApplyTreeFoldoutToggleLayout. */
+	width: var(--ui_tree_foldout_size, var(--ui_tree_icon_size, 12px));
+	height: var(--ui_tree_foldout_size, var(--ui_tree_icon_size, 12px));
+	min-height: var(--ui_tree_foldout_size, var(--ui_tree_icon_size, 12px));
+	min-width: var(--ui_tree_foldout_size, var(--ui_tree_icon_size, 12px));
+	text-align: center;
+	cursor: pointer;
+	color: var(--ui_color_text_dim);
+	order: 0;
+	flex-shrink: 0;
+	opacity: 0.5;
+
+	/* Use icon images instead of text glyphs */
+	background-image: url("editor:Icons/arrow-right.png");
+	background-size: var(--ui_tree_foldout_size, var(--ui_tree_icon_size, 12px)) var(--ui_tree_foldout_size, var(--ui_tree_icon_size, 12px));
+	background-repeat: no-repeat;
+	background-position: center;
+	background-image-tint: rgba(200, 200, 200, 1.0);
+}
+
+.tree .tree-foldout:hover {
+	opacity: 1.0;
+}
+
+.tree .tree-foldout.expanded {
+	color: var(--ui_color_text_muted);
+	background-image: url("editor:Icons/arrow-down.png");
+}
+
+.tree .tree-foldout.no-children {
+	visibility: hidden;
+	pointer-events: none;
+	background-image: none;
+}
+
+.tree .foldout-spacer {
+	display: inline-block;
+	width: var(--ui_tree_foldout_size, var(--ui_tree_icon_size, 12px));
+	min-width: var(--ui_tree_foldout_size, var(--ui_tree_icon_size, 12px));
+	order: 0;
+	flex-shrink: 0;
+}
+
+/* Tree folder icon */
+.tree .tree-item .tree-title {
+	flex-grow: 1;
+	flex-shrink: 1;
+	flex-basis: auto;
+	min-width: 0;
+	overflow: hidden;
+	/* The render-layer dropdown is anchored over the row's right edge, so a long
+	   name has to end inside its reserved box rather than run under the control. */
+	text-overflow: ellipsis;
+	white-space: nowrap;
+	word-break: normal;
+	order: 3;
+	background-image: url("editor:Icons/Folder@64px.png");
+	background-size: var(--ui_tree_icon_size) var(--ui_tree_icon_size);
+	background-position: left center;
+	background-repeat: no-repeat;
+	padding-left: var(--ui_tree_icon_padding);
+	/* Neutral tint for hierarchy icons (overridden by --ui_asset_icon_tint when set) */
+	background-image-tint: rgba(200, 200, 200, 1.0);
+	background-image-tint: var(--ui_asset_icon_tint, rgba(200, 200, 200, 1.0));
+	color: #BDBDBD;
+}
+
+/* Hierarchy entity preview icons use their own element so icon hover does not
+   get conflated with the row-name hover state. */
+/* Fallback glyph for an entity with no kind class. Deliberately one class, so
+   the .entity-icon.hierarchy-entity-* rules (two) outrank it — the previous
+   .tree .tree-item .hierarchy-preview-icon spelling was three and beat every
+   kind rule, which is why those needed four-class selectors to win. */
+.hierarchy-preview-icon {
+	background-image: url("editor:Icons/EmptyEntity.png");
+}
+
+.tree .tree-item .hierarchy-preview-icon {
+	width: var(--ui_tree_icon_size);
+	height: var(--ui_tree_icon_size);
+	min-width: var(--ui_tree_icon_size);
+	min-height: var(--ui_tree_icon_size);
+	flex-shrink: 0;
+	align-self: center;
+	order: 2;
+	margin-right: var(--ui_spacing_sm, 6px);
+	background-size: var(--ui_tree_icon_size) var(--ui_tree_icon_size);
+	background-position: center;
+	background-repeat: no-repeat;
+	background-image-tint: var(--ui_asset_icon_tint, rgba(200, 200, 200, 1.0));
+	background-image-saturation: 0;
+	border-radius: var(--ui_radius_sm);
+}
+
+/* Trailing affordances are all anchored to the row's right edge and must not
+   land on each other. The column, outermost first: lock 8..24, VCS diff dot
+   25..41, layer dropdown 45..149. Move one and the next one's offset - and the
+   title margin that reserves the whole strip - has to move with it. */
+
+/* Optional per-entity render layer control, anchored to the row's right edge the
+   same way the lock is. Flowing it with `margin-left: auto` only right-aligns it
+   when the row has spare main-axis space, which a long title eats; an absolute
+   right anchor puts it in the same place regardless. */
+.tree .tree-item .hierarchy-render-layer-dropdown {
+	position: absolute;
+	right: 45px;
+	top: 50%;
+	margin-top: -10px;
+	width: 104px;
+	min-width: 104px;
+	max-width: 104px;
+	height: 20px;
+}
+
+/* Reserve the anchored dropdown's strip, plus breathing room, so a long name
+   ends clearly before the control rather than right up against it. 45 + 104
+   width + 14 clear. */
+.tree .tree-item.has-render-layer .tree-title {
+	margin-right: 163px;
+}
+
+/* Floor for how far the anchored control may travel inward. The dropdown rides
+   the row's right edge, so a shrinking panel keeps pushing it into the name.
+   Below this row width it stops moving: the row holds its width and the panel
+   clips it, rather than the control eating what is left of the title. */
+.tree .tree-item.has-render-layer {
+	min-width: 391px;
+}
+
+/* Narrow panel: shrink the control instead of hiding it, so the layer stays
+   readable and the name keeps usable room. */
+.tree .tree-item.render-layer-narrow .hierarchy-render-layer-dropdown {
+	width: 78px;
+	min-width: 78px;
+	max-width: 78px;
+}
+
+.tree .tree-item.has-render-layer.render-layer-narrow .tree-title {
+	margin-right: 133px;
+}
+
+.tree .tree-item .hierarchy-render-layer-dropdown > .dropdown-header {
+	padding: 1px 5px 1px 7px;
+	min-height: 20px;
+	font-size: 12px;
+	color: #BDBDBD;
+	/* A short control must clip its label, not wrap it onto a second line. */
+	white-space: nowrap;
+	overflow: hidden;
+}
+
+.tree .tree-item:hover .hierarchy-render-layer-dropdown > .dropdown-header,
+.tree .tree-item.selected .hierarchy-render-layer-dropdown > .dropdown-header,
+.tree .tree-item .hierarchy-render-layer-dropdown.open > .dropdown-header {
+	color: #E5E5E5;
+}
+
+/* Scene hierarchy: Camera entities */
+.entity-icon.hierarchy-entity-camera {
+	background-image: url("editor:Icons/videocam.png");
+}
+
+/* Scene hierarchy: Terrain entities */
+.entity-icon.hierarchy-entity-terrain {
+	background-image: url("editor:Icons/terrain.png");
+}
+
+/* Scene hierarchy: Planet entities (Terrain component in spherical domain) */
+.entity-icon.hierarchy-entity-planet {
+	background-image: url("editor:Icons/planet.svg");
+}
+
+/* Tree Generator chrome moved to the eztree package (Editor/UI/EZTreeEditorChrome.css,
+   registered through EditorPanelRegistry::RegisterEditorStyleSheet). */
+
+/* Scene hierarchy: Sky environment (SkyEnvironment component) */
+.entity-icon.hierarchy-entity-sky {
+	background-image: url("editor:Icons/skyenvironment.png");
+}
+
+/* Scene hierarchy: reflection probe */
+.entity-icon.hierarchy-entity-reflection-probe {
+	background-image: url("editor:Icons/probe.png");
+}
+
+/* Scene hierarchy: lights */
+.entity-icon.hierarchy-entity-light-directional {
+	background-image: url("editor:Icons/DirectionalLight.png");
+}
+
+.entity-icon.hierarchy-entity-light-spot {
+	background-image: url("editor:Icons/SpotLight.png");
+}
+
+.entity-icon.hierarchy-entity-light-point {
+	background-image: url("editor:Icons/PointLight.png");
+}
+
+.entity-icon.hierarchy-entity-light-area {
+	background-image: url("editor:Icons/arealight.png");
+}
+
+.entity-icon.hierarchy-entity-light-volume {
+	background-image: url("editor:Icons/PointLight.png");
+}
+
+.entity-icon.hierarchy-entity-light-ambient {
+	background-image: url("editor:Icons/AmbientLight.png");
+}
+
+/* Scene hierarchy: primitive shapes (engine MeshRenderer GUID) */
+.entity-icon.hierarchy-entity-shape-cube {
+	background-image: url("editor:Icons/Cube.png");
+}
+
+.entity-icon.hierarchy-entity-shape-sphere {
+	background-image: url("editor:Icons/Sphere.png");
+}
+
+.entity-icon.hierarchy-entity-shape-capsule {
+	background-image: url("editor:Icons/Capsule.png");
+}
+
+.entity-icon.hierarchy-entity-shape-plane {
+	background-image: url("editor:Icons/Plane.png");
+}
+
+/* Scene hierarchy: sprite (plane primitive with a file-backed material,
+   typically created by dropping a texture onto empty hierarchy/scene space). */
+.entity-icon.hierarchy-entity-sprite {
+	background-image: url("editor:Icons/2d.png");
+}
+
+/* Scene hierarchy: imported model fallback while async thumbnails resolve */
+.entity-icon.hierarchy-entity-model {
+	background-image: url("editor:Icons/3d.png");
+}
+
+/* Scene hierarchy: physics world settings singleton; physics-only body/collider (no mesh above) */
+.entity-icon.hierarchy-entity-physics-settings,
+.entity-icon.hierarchy-entity-physics {
+	background-image: url("editor:Icons/PhysicsSettings.png");
+}
+
+/* Scene hierarchy: spline (SplineComponent) */
+.entity-icon.hierarchy-entity-spline {
+	background-image: url("editor:Icons/GizmoSpline.png");
+}
+
+/* Scene hierarchy: measure/ruler entities */
+.entity-icon.hierarchy-entity-measure {
+	background-image: url("editor:Icons/Ruler.png");
+}
+
+/* Scene hierarchy: measure start/end point entities */
+.entity-icon.hierarchy-entity-measure-point {
+	background-image: url("editor:Icons/pin.png");
+}
+
+/* Scene hierarchy: ocean (OceanSurface) */
+.entity-icon.hierarchy-entity-ocean {
+	background-image: url("editor:Icons/ocean.svg");
+}
+
+/* Scene hierarchy: post-process volume */
+.entity-icon.hierarchy-entity-post-process-volume {
+	background-image: url("editor:Icons/color-filter.svg");
+}
+
+/* Scene hierarchy: DDGI volume */
+.tree .tree-item.hierarchy-entity-ddgi-volume .hierarchy-preview-icon,
+.inspector-header-container .inspector-hierarchy-entity-icon.hierarchy-entity-ddgi-volume,
+.bookmark-row .bookmark-icon.hierarchy-entity-ddgi-volume {
+	background-image: url("editor:Icons/ddgivolume.svg");
+}
+
+/* Scene hierarchy: wind volume */
+.entity-icon.hierarchy-entity-wind-volume {
+	background-image: url("editor:Icons/wind.svg");
+}
+
+/* Scene hierarchy: terrain surface rules */
+.entity-icon.hierarchy-entity-terrain-surface-rules {
+	background-image: url("editor:Icons/terrain-surface-rules.svg");
+}
+
+/* Scene hierarchy: particle emitter */
+.entity-icon.hierarchy-entity-particles {
+	background-image: url("editor:Icons/sparkles.png");
+}
+
+/* Scene hierarchy: video texture */
+.entity-icon.hierarchy-entity-video-texture {
+	background-image: url("editor:Icons/film.png");
+}
+
+/* Scene hierarchy: lens flare source */
+.entity-icon.hierarchy-entity-lens-flare {
+	background-image: url("editor:Icons/flame.png");
+}
+
+/* Hierarchy icons default to fully desaturated (shader luma-collapses the
+   sampled PNG). HierarchyPanel::ApplyLightIconTint bumps saturation to 1 and
+   sets a per-row tint (white or the light's color) when the Colored Hierarchy
+   Icons toggle is on. */
+.tree .tree-item .tree-title,
+.tree .tree-item .hierarchy-preview-icon {
+	background-image-saturation: 0;
+}
+
+/* Scene hierarchy: empty / generic entity */
+.entity-icon.hierarchy-entity-empty {
+	background-image: url("editor:Icons/EmptyEntity.png");
+}
+
+/* Root items (Assets folder) - no folder icon */
+.tree .tree-item.tree-root .tree-title {
+	background-image: none;
+	padding-left: 4px;
+}
+
+/* Selected and hover text color */
+.tree .tree-item.selected .tree-title {
+	color: #E5E5E5;
+}
+
+.tree .tree-item:hover .tree-title {
+	color: #E5E5E5;
+}
+
+/* Hierarchy names use the same resting and interaction tones as asset files. */
+.hierarchy-panel .tree .tree-item .tree-title {
+	color: var(--ui_color_text_dim);
+}
+
+.hierarchy-panel .tree .tree-item:hover .tree-title {
+	color: var(--ui_color_text_bright);
+}
+
+.hierarchy-panel .tree .tree-item.selected .tree-title {
+	color: var(--ui_color_text_bright);
+}
+
+/* Row lock is absolutely positioned after `.tree-title` in DOM order, so hit-testing prefers
+   the lock over the title's flex-grown box. Reserve the strip only when locks exist (Hierarchy). */
+.tree.tree-row-lock-enabled .tree-item .tree-title {
+	margin-right: 24px;
+}
+
+/* Lock icon — tree rows use `.icon-button` (not generic button); higher specificity overrides `.icon-button:hover` transparent fill from widgets.css */
+.tree .tree-item .tree-row-lock.icon-button {
+    position: absolute;
+    right: 8px;
+    top: 50%;
+    margin-top: -8px;
+    width: 16px;
+    min-width: 16px;
+    max-width: 16px;
+    height: 16px;
+    min-height: 16px;
+    max-height: 16px;
+    cursor: pointer;
+    border-style: none;
+    border-color: transparent;
+    background-image: url("editor:Icons/LockOpen.png");
+    background-size: 16px 16px;
+    background-repeat: no-repeat;
+    background-position: center;
+    border-radius: 3px;
+    padding: 0;
+    border-width: 0;
+    background-color: transparent;
+    background-image-tint: #FFFFFF00;
+    opacity: 0;
+}
+
+/* Peek: 15% white on the inactive glyph; full white only on direct lock hover. */
+.tree .tree-item:hover .tree-row-lock.icon-button:not(.active),
+.tree .tree-item.selected .tree-row-lock.icon-button:not(.active) {
+    opacity: 1.0;
+    background-image-tint: #FFFFFF26;
+}
+
+.tree .tree-item:hover .tree-row-lock.icon-button:not(.active):hover,
+.tree .tree-item.selected .tree-row-lock.icon-button:not(.active):hover,
+.tree .tree-item:hover .tree-row-lock.icon-button:not(.active):active,
+.tree .tree-item.selected .tree-row-lock.icon-button:not(.active):active,
+.tree .tree-item:hover .tree-row-lock.icon-button:not(.active).pressed,
+.tree .tree-item.selected .tree-row-lock.icon-button:not(.active).pressed {
+    opacity: 1.0;
+    background-image-tint: #FFFFFFFF;
+    background-color: transparent;
+    border-color: transparent;
+    border-width: 0;
+}
+
+.tree .tree-item .tree-row-lock.icon-button.active {
+    background-image: url("editor:Icons/LockClosed.png");
+    background-image-tint: #FFFFFF59;
+    opacity: 1.0;
+    background-color: transparent;
+}
+
+.tree .tree-item .tree-row-lock.icon-button.active:hover,
+.tree .tree-item .tree-row-lock.icon-button.active:active,
+.tree .tree-item .tree-row-lock.icon-button.active.pressed {
+    background-image-tint: #FFFFFFFF;
+    background-color: transparent;
+    border-color: transparent;
+    border-width: 0;
+}
+
+/* Runtime entities in hierarchy: tint play-mode-created entities to distinguish from scene entities. */
+.tree .tree-item.entity-runtime .tree-title {
+	color: #64b5f6;
+}
+
+/* Runtime + disabled: keep the disabled dim, just tint blue. */
+.tree .tree-item.entity-runtime.entity-disabled .tree-title {
+	color: #64b5f6;
+	opacity: 0.3;
+}
+
+/* Note: Smart Folder tree styles moved to smartfolders.css */
+
+/* RTL support (opt-in via [dir="rtl"]) */
+[dir="rtl"] .grid {
+	direction: rtl;
+}
+
+[dir="rtl"] .tree {
+	direction: rtl;
+}
+
+/* Swap tree icon to the right in RTL */
+[dir="rtl"] .tree .tree-item .tree-title {
+	background-position: right center;
+	padding-right: var(--ui_tree_icon_padding_rtl);
+	padding-left: 0;
+}
+
+/* Keep AssetPanel LTR even under RTL */
+.assets,
+.assets .grid,
+.assets .tree {
+	direction: ltr;
+}
+
+[dir="rtl"] .assets,
+[dir="rtl"] .assets .grid,
+[dir="rtl"] .assets .tree {
+	direction: ltr;
+}
+
+/* Assets panel right side (grid view) background */
+.assets .grid {
+	background-color: #222222;
+}
+
+.assets .grid-virtual-content {
+	background-color: #222222;
+}
+
+/* Assets views container */
+.assets-views-container {
+	display: flex;
+	flex-direction: column;
+	position: relative;
+	flex-grow: 1;
+	min-width: 0;
+	min-height: 0;
+}
+
+/* ======================================
+   List View Styles (Virtualized)
+   ====================================== */
+
+/* ListView container */
+ListView {
+	display: flex;
+	flex-direction: column;
+	flex-grow: 1;
+	min-width: 0;
+	min-height: 0;
+}
+
+/* View-only search filtering. Doubling the class gives this enough specificity
+   to beat component display rules without disturbing their normal state. */
+.search-filtered-out.search-filtered-out {
+	display: none;
+}
+
+/* Horizontal scroll wrapper for list header + rows */
+.assets-list-scroll {
+	display: flex;
+	flex-direction: column;
+	flex-grow: 1;
+	min-width: 0;
+	min-height: 0;
+}
+
+
+/* Background behind the TableView header (the .axis-header itself owns the bottom border). */
+#assets-list .list-header-host {
+	background-color: #262727;
+}
+
+/* Virtualized list content container (items are absolutely positioned) */
+.list-virtual-content {
+	display: block;
+	padding: 0px;
+	gap: 0px;
+	background-color: var(--ui_color_bg_grid);
+	flex-grow: 1;
+	min-height: 100%;
+	width: 100%;
+	box-sizing: border-box;
+}
+
+/* Cell wrapper for absolutely positioned list items */
+.list-cell {
+	display: flex;
+	flex-direction: column;
+	padding: 0px;
+	margin: 0px;
+	border-width: 0px;
+	overflow: hidden;
+	width: 100%;
+	box-sizing: border-box;
+}
+
+/* Individual list item */
+.list-item {
+	display: flex;
+	flex-direction: row;
+	align-items: center;
+	padding: 4px 8px;
+	background-color: transparent;
+	border-width: 0px;
+	cursor: default;
+	gap: 8px;
+	width: 100%;
+	box-sizing: border-box;
+}
+
+.assets-list-row {
+	border-bottom-width: 1px;
+	border-bottom-color: transparent;
+}
+
+/* Tighter vertical padding than generic .list-item so short rows still fit one line of text. */
+.list-item.assets-list-row {
+	padding-top: 2px;
+	padding-bottom: 2px;
+}
+
+/* List item icon - size set dynamically based on row height */
+.list-item-icon {
+	flex-shrink: 0;
+	background-size: contain;
+	background-repeat: no-repeat;
+	background-position: center;
+}
+
+/* Match grid previews while leaving transparent folder/script glyphs unclipped. */
+.list-item-icon.has-thumbnail {
+	border-radius: var(--ui_radius_md);
+}
+
+/* Folder icon in list view - same size as asset preview icons */
+.folder .list-item-icon {
+	background-image: url("editor:Icons/Folder@64px.png");
+	background-size: contain;
+	background-position: center;
+	background-repeat: no-repeat;
+	/* Neutral tint for folder icons in list view (overridden by --ui_asset_icon_tint when set) */
+	background-image-tint: rgba(170, 170, 170, 1.0);
+	background-image-tint: var(--ui_asset_icon_tint, rgba(170, 170, 170, 1.0));
+}
+
+/* Scene icon in list view */
+.scene .list-item-icon {
+	background-image: url("editor:Icons/sceneicon.png");
+	background-size: contain;
+	background-position: center;
+	background-repeat: no-repeat;
+	/* Match folder/neutral icon tint (overridden by --ui_asset_icon_tint when set) */
+	background-image-tint: rgba(170, 170, 170, 1.0);
+	background-image-tint: var(--ui_asset_icon_tint, rgba(170, 170, 170, 1.0));
+}
+
+/* Rendered scene thumbnail: show at full color, no tint */
+.scene .list-item-icon.has-thumbnail {
+	background-image-tint: rgba(255, 255, 255, 1.0);
+}
+
+/* Script icon in list view */
+.script .list-item-icon {
+	background-image: url("editor:Icons/codeicon.png");
+	background-size: contain;
+	background-position: center;
+	background-repeat: no-repeat;
+	/* Match folder/neutral icon tint (overridden by --ui_asset_icon_tint when set) */
+	background-image-tint: rgba(170, 170, 170, 1.0);
+	background-image-tint: var(--ui_asset_icon_tint, rgba(170, 170, 170, 1.0));
+}
+
+/* Video icon in list view (no tint — extracted frame thumbnails must match preview) */
+.video .list-item-icon {
+	background-image: url("editor:Icons/videocam.png");
+	background-size: contain;
+	background-position: center;
+	background-repeat: no-repeat;
+}
+
+.list-item:hover,
+.list-item.hover {
+	background-color: var(--ui_color_bg_item_hover);
+}
+
+.list-item:hover .list-label,
+.list-item.hover .list-label,
+.list-item:hover .list-type,
+.list-item.hover .list-type,
+.list-item:hover .list-size,
+.list-item.hover .list-size,
+.list-item:hover .list-dimensions,
+.list-item.hover .list-dimensions,
+.list-item:hover .list-modified,
+.list-item.hover .list-modified,
+.list-item:hover .list-tag .tag-text,
+.list-item.hover .list-tag .tag-text,
+.list-item:hover .list-referenced,
+.list-item.hover .list-referenced,
+.list-item:hover .list-custom,
+.list-item.hover .list-custom,
+.list-item:hover .list-creator,
+.list-item.hover .list-creator,
+.list-item.selected .list-label,
+.list-item.selected .list-type,
+.list-item.selected .list-size,
+.list-item.selected .list-dimensions,
+.list-item.selected .list-modified,
+.list-item.selected .list-tag .tag-text,
+.list-item.selected .list-referenced,
+.list-item.selected .list-custom,
+.list-item.selected .list-creator {
+	color: var(--ui_color_text_bright);
+}
+
+.list-item.selected {
+	background-color: var(--ui_color_bg_selected);
+}
+
+/* ListView: highlight hovered drop row */
+.list-item.drop-hover {
+	background-color: rgba(255, 255, 255, 0.2);
+}
+
+.list-item.drop-hover.drop-allowed {
+	background-color: rgba(76, 175, 80, 0.18);
+	box-shadow: inset 0 0 0 1px rgba(76, 175, 80, 0.55);
+}
+
+.list-item.drop-hover.drop-denied {
+	background-color: rgba(244, 67, 54, 0.14);
+	box-shadow: inset 0 0 0 1px rgba(244, 67, 54, 0.60);
+}
+
+/* List item label (name column) - width from --col-0-width on row (set by binder) so it syncs with header resize */
+.list-item .list-label {
+	flex-grow: 0;
+	flex-shrink: 0;
+	flex-basis: var(--col-0-width, 300px);
+	min-width: 0;
+	max-width: var(--col-0-width, 300px);
+	font-size: var(--ui_font_size_list);
+	color: var(--ui_color_text_dim);
+	overflow: hidden;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+	min-height: 20px;
+}
+
+.list-item .list-type {
+	flex-grow: 0;
+	flex-shrink: 0;
+	flex-basis: 70px;
+	min-width: 0;
+	max-width: 70px;
+	font-size: var(--ui_font_size_list);
+	color: var(--ui_color_text_dim);
+	overflow: hidden;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+	text-align: left;
+	min-height: 20px;
+}
+
+.list-item .list-size {
+	flex-grow: 0;
+	flex-shrink: 0;
+	flex-basis: 60px;
+	min-width: 0;
+	max-width: 60px;
+	font-size: var(--ui_font_size_list);
+	color: var(--ui_color_text_dim);
+	overflow: hidden;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+	min-height: 20px;
+}
+
+.list-item .list-dimensions {
+	flex-grow: 0;
+	flex-shrink: 0;
+	flex-basis: 120px;
+	min-width: 0;
+	max-width: 120px;
+	font-size: var(--ui_font_size_list);
+	color: var(--ui_color_text_dim);
+	overflow: hidden;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+	text-align: center;
+	min-height: 20px;
+}
+
+.list-item .list-modified {
+	flex-grow: 0;
+	flex-shrink: 0;
+	flex-basis: 150px;
+	min-width: 0;
+	max-width: 150px;
+	font-size: var(--ui_font_size_list);
+	color: var(--ui_color_text_dim);
+	overflow: hidden;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+	min-height: 20px;
+}
+
+/* Grid view: make the title area a flex row to accommodate dot + text */
+.grid-cell {
+	position: relative;
+}
+
+/* Separate folder icon element for assets tree */
+.tree-folder-icon {
+	width: 16px;
+	height: 16px;
+	min-width: 16px;
+	min-height: 16px;
+	background-image: url("editor:Icons/Folder@64px.png");
+	background-size: contain;
+	background-repeat: no-repeat;
+	background-position: center;
+	/* Default hierarchy folder icon tint (overridden for Smart Folders and by --ui_asset_icon_tint when set) */
+	background-image-tint: rgba(170, 170, 170, 1.0);
+	background-image-tint: var(--ui_asset_icon_tint, rgba(170, 170, 170, 1.0));
+	margin-right: 4px;
+	align-self: center;
+	flex-shrink: 0;
+	order: 2;
+}
+
+.tree .tree-item.asset-tree-materials-folder .tree-folder-icon {
+	background-image: url("editor:Icons/material.png");
+	background-image-tint: rgba(255, 255, 255, 0.92);
+}
+
+/* Title without background icon (when using separate icon element) */
+.tree .tree-item .tree-title.tree-title-no-icon {
+	background-image: none;
+	padding-left: 0;
+}
+
+.list-item .list-tag {
+	flex-grow: 0;
+	flex-shrink: 0;
+	flex-basis: 140px;
+	min-width: 0;
+	max-width: 140px;
+	font-size: var(--ui_font_size_list);
+	color: var(--ui_color_text_dim);
+	overflow: hidden;
+	text-align: left;
+	min-height: 20px;
+	line-height: 20px;
+	align-self: stretch;
+	display: flex;
+	align-items: center;
+}
+
+.list-item .list-tag.tag-container {
+	display: flex;
+	flex-direction: row;
+	align-items: center;
+}
+
+.list-item .list-tag .tag-dots {
+	display: flex;
+	flex-direction: row;
+	align-items: center;
+	flex-shrink: 0;
+	gap: 0;
+	margin-right: 6px;
+}
+
+.list-item .list-tag .tag-dot {
+	flex-shrink: 0;
+	width: 8px;
+	height: 8px;
+	min-width: 8px;
+	min-height: 8px;
+	border-radius: 50%;
+	align-self: center;
+}
+
+.list-item .list-tag .tag-text {
+	flex-grow: 1;
+	min-width: 0;
+	overflow: hidden;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+	line-height: 20px;
+	color: var(--ui_color_text_dim);
+}
+
+.list-item .list-referenced,
+.list-item .list-custom,
+.list-item .list-creator {
+	flex-grow: 0;
+	flex-shrink: 0;
+	flex-basis: 100px;
+	min-width: 0;
+	max-width: 100px;
+	font-size: var(--ui_font_size_list);
+	color: var(--ui_color_text_dim);
+	overflow: hidden;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+	text-align: center;
+	min-height: 20px;
+}
+
+.list-item .list-custom {
+	flex-grow: 0;
+	flex-shrink: 0;
+	flex-basis: 130px;
+	min-width: 0;
+	max-width: 130px;
+}
+
+
+/* Selected row text color override */
+.list-item.selected .list-label,
+.list-item.selected .list-type,
+.list-item.selected .list-size,
+.list-item.selected .list-dimensions,
+.list-item.selected .list-modified,
+.list-item.selected .list-tag .tag-text,
+.list-item.selected .list-referenced,
+.list-item.selected .list-custom,
+.list-item.selected .list-creator {
+	color: #FFFFFF;
+}
+
+/* List item icon (optional child element) */
+.list-item .list-icon {
+	width: 16px;
+	height: 16px;
+	background-size: contain;
+	background-position: center;
+	background-repeat: no-repeat;
+}
+
+/* ---- Assets list migrated to the reusable TableView ----
+   The TableView owns column widths (on each .table-view-cell wrapper, via ApplyTrackSizes) and the
+   row layout. These rules let the legacy .list-* cell content fill its cell instead of carrying its
+   own fixed width, neutralize the generic .list-item gap/padding (which would misalign body cells
+   from the header), and make the row fill the virtualized (variable-height) wrapper. Colours, icons,
+   hover and selected styling are inherited unchanged from the .list-item rules above. */
+.table-view-row.assets-list-row {
+	padding: 0;
+	gap: 0;
+	height: 100%;
+}
+
+/* Name cell hosts the icon + label as a row (the icon folded in from its old standalone column). */
+.assets-name-cell {
+	display: flex;
+	flex-direction: row;
+	align-items: center;
+	min-width: 0;
+}
+
+/* Cell content fills its TableView cell; width lives on the cell wrapper, not on the content. */
+.table-view-row .table-view-cell .list-label,
+.table-view-row .table-view-cell .list-type,
+.table-view-row .table-view-cell .list-size,
+.table-view-row .table-view-cell .list-dimensions,
+.table-view-row .table-view-cell .list-modified,
+.table-view-row .table-view-cell .list-tag,
+.table-view-row .table-view-cell .list-referenced,
+.table-view-row .table-view-cell .list-custom,
+.table-view-row .table-view-cell .list-creator {
+	flex-grow: 1;
+	flex-shrink: 1;
+	flex-basis: auto;
+	min-width: 0;
+	max-width: none;
+}
+
+/* Scene View: .scene-viewport itself lives in theme/scene-view.css. */
+
+.scene-asset-preview {
+	position: absolute;
+	left: 0;
+	top: 0;
+	right: 0;
+	bottom: 0;
+	display: none;
+	align-items: center;
+	justify-content: center;
+	pointer-events: none;
+}
+
+.scene-asset-preview-image {
+	width: 100%;
+	height: 100%;
+	background-size: contain;
+	background-position: center;
+	background-repeat: no-repeat;
+}
+
+/* FPS Counter — positional anchors (top/left/right/bottom) are set from
+   SceneViewPanel in C++ so the label can be dragged and persisted. */
+.fps-counter {
+	position: absolute;
+	padding: 6px 12px;
+	background-color: rgba(0, 0, 0, 0.28);
+	color: #ffffff;
+	font-size: 14px;
+	font-family: var(--ui_font_family);
+	border-radius: 4px;
+	text-align: center;
+	white-space: nowrap;
+	/* Fixed size prevents layout signature changes when text updates and lets
+	   Yoga resolve absolute positioning with bottom-anchoring (no stretch). */
+	width: 100px;
+	height: 28px;
+}
+
+/* ======================================
+   Panel Search Bar (shared styles)
+   ====================================== */
+
+/* Bottom-anchored panel searches reserve space below their content. */
+.hierarchy-panel,
+.assets-left-pane,
+.inspector-panel,
+.bookmarks-panel,
+.todo-panel {
+	position: relative;
+	padding-bottom: 38px;
+}
+
+.hierarchy-panel.search-bars-at-top,
+.assets-left-pane.search-bars-at-top,
+.inspector-panel.search-bars-at-top,
+.bookmarks-panel.search-bars-at-top,
+.todo-panel.search-bars-at-top {
+	padding-top: 32px;
+	padding-bottom: 0;
+}
+
+/* Without a top search, give the Assets tree the same small breathing gap used
+   between the table header and its first asset row. */
+.assets-left-pane:not(.search-bars-at-top) > .tree {
+	margin-top: 6px;
+	padding-top: 0;
+}
+
+/* Inspector's fixed header already has its own inset, so reserve less space
+   beneath a top-anchored search and tighten that inset only in top mode. */
+.inspector-panel.search-bars-at-top {
+	padding-top: 26px;
+}
+
+.inspector-panel.search-bars-at-top > .inspector-top {
+	padding-top: 0;
+}
+
+.inspector-panel.search-bars-at-top > .panel-search-bar.search-bar-at-top {
+	top: 4px;
+}
+
+.inspector-panel.search-bars-at-top .inspector-scrollview .scroll-content {
+	padding-top: 4px;
+}
+
+.inspector-panel.search-bars-at-top .inspector-scrollview .scroll-content > .inspector-section:first-child:not(.inspector-section-collapsed) {
+	margin-bottom: 5px;
+}
+
+.inspector-panel.search-bars-at-top .inspector-scrollview .scroll-content > .inspector-section:first-child.inspector-section-collapsed {
+	margin-bottom: 1px;
+}
+
+.panel-search-bar {
+	position: absolute;
+	bottom: 8px;
+	left: 8px;
+	right: 8px;
+	height: 22px;
+}
+
+.panel-search-bar.search-bar-at-top {
+	top: 8px;
+	bottom: unset;
+}
+
+/* The Assets tree pane reserves a 10px right margin before its splitter.
+   Offset this search within the pane so its visible insets are both 13px,
+   shifting the bar right without changing its width. */
+.assets-left-pane > .panel-search-bar {
+	left: 13px;
+	right: 3px;
+}
+
+/* The Assets bottom-toolbar search is inline, not panel-anchored. Keep it
+   vertically centered when the global top/bottom preference changes. */
+.assets-view-toggle-toolbar .panel-search-bar,
+.assets-view-toggle-toolbar .panel-search-bar.search-bar-at-top {
+	top: unset;
+	bottom: unset;
+}
+
+/* The Assets panel has a left-tree search and an optional duplicate in its
+   bottom view toolbar. Top placement always uses the left-tree search; bottom
+   placement follows the user's extra-toolbar preference. */
+.assets-left-pane > .panel-search-bar.assets-extra-toolbar-enabled:not(.search-bar-at-top),
+.assets-view-toggle-toolbar .panel-search-bar:not(.assets-extra-toolbar-enabled),
+.assets-view-toggle-toolbar .panel-search-bar.search-bar-at-top {
+	display: none;
+}
+
+.panel-search-bar.hidden {
+	/* Override generic .hidden { display: none } - we still want the search bar visible */
+	display: flex;
+	background-color: transparent;
+	border-color: transparent;
+}
+
+.panel-search-bar.hidden.panel-search-bar-active {
+	background-color: #222222 !important;
+	border: 1px solid var(--ui_color_accent_pressed) !important;
+}
+
+.panel-search-bar-active {
+	background-color: #222222 !important;
+	border: 1px solid var(--ui_color_accent_pressed) !important;
+}
+
+.panel-search-bar.active {
+	border: 1px solid var(--ui_color_accent_pressed);
+}
+
+.panel-search-bar.search-accent-focus:focus-within {
+	border-color: var(--ui_color_accent);
+}
+
+/* Keep icon visible when search bar is hidden so users know where to click */
+.panel-search-bar.hidden .panel-search-icon {
+	opacity: 0.6;
+}

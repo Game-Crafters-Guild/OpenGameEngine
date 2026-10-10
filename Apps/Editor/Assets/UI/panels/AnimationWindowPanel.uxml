@@ -1,0 +1,200 @@
+<UIElement class="animationwindow-panel">
+  <UIElement id="AnimationWindowToolbar" class="animationwindow-toolbar">
+    <Button id="AnimationWindowNewAnimation" class="secondary icon-button plus-icon" />
+    <Button id="AnimationWindowOpenAnimation" class="secondary icon-button folder-open-icon" />
+    <Button id="AnimationWindowSave" class="secondary icon-button save-icon" />
+    <Label id="AnimationWindowUnsavedIndicator" class="anim-unsaved-indicator hidden" text="*" />
+    <Dropdown id="AnimationWindowClipDropdown" class="small secondary animationwindow-clip-dropdown" />
+    <Button id="AnimationWindowAnimationMenu" class="small secondary animationwindow-menu-button" text="Animation" />
+    <UIElement id="AnimationWindowViewButtons" class="animationwindow-view-buttons">
+      <Button id="AnimationWindowDopeSheetView" class="small secondary animationwindow-view-button" text="Dope Sheet" />
+      <Button id="AnimationWindowCurvesView" class="small secondary animationwindow-view-button" text="Curves" />
+    </UIElement>
+
+    <UIElement class="animationwindow-toolbar-group anim-toolbar-edit">
+      <Button id="AnimationWindowCopy" class="secondary icon-button copy-icon" />
+      <Button id="AnimationWindowPaste" class="secondary icon-button paste-icon" />
+    </UIElement>
+
+    <UIElement class="animationwindow-toolbar-group anim-toolbar-view">
+      <Button id="AnimationWindowFolderOpen" class="secondary icon-button link-icon" />
+    </UIElement>
+
+    <UIElement class="animationwindow-toolbar-group anim-toolbar-frame">
+      <Button id="AnimationWindowFrameAll" class="secondary icon-button frame-all-icon" />
+      <Button id="AnimationWindowFrameSelectedCurves" class="secondary icon-button frame-selected-curves-icon" />
+      <Button id="AnimationWindowFitHeight" class="secondary icon-button fit-height-icon" />
+      <Button id="AnimationWindowFramePlaybackRange" class="secondary icon-button frame-playback-range-icon" />
+      <Button id="AnimationWindowCenterPlayhead" class="secondary icon-button center-playhead-icon" />
+      <Slider id="AnimationWindowTimelineZoomSlider" class="animationwindow-zoom-slider" min="1.0" max="4.0" value="1.0" step="0.05" valuebubble="true" />
+    </UIElement>
+
+    <UIElement id="AnimationWindowCurveGroup" class="animationwindow-toolbar-group anim-toolbar-curve">
+      <Button id="AnimationWindowCurveLinear" class="secondary icon-button linear-curve-icon" />
+      <Button id="AnimationWindowCurveStepped" class="secondary icon-button stepped-curve-icon" />
+      <Button id="AnimationWindowCurveSpline" class="secondary icon-button spline-curve-icon" />
+      <Dropdown id="AnimationWindowDefaultTangentDropdown" class="small secondary animationwindow-mode-dropdown" />
+      <UIElement class="toolbar-gap" />
+      <Button id="AnimationWindowSmoothLowpass" class="secondary icon-button smooth-lowpass-icon" />
+      <Button id="AnimationWindowSmoothPeak" class="secondary icon-button smooth-peak-icon" />
+      <Button id="AnimationWindowAddNoise" class="secondary icon-button add-noise-icon" />
+      <Button id="AnimationWindowCurveSimplify" class="secondary icon-button simplify-curve-icon" />
+      <UIElement class="toolbar-gap" />
+      <Button id="AnimationWindowCurveDraw" class="secondary icon-button retime-icon" />
+      <Button id="AnimationWindowDrawCurve" class="secondary icon-button draw-curve-icon" />
+    </UIElement>
+
+    <UIElement id="AnimationWindowEaseGroup" class="animationwindow-toolbar-group anim-toolbar-ease">
+      <Button id="AnimationWindowEaseIn" class="secondary icon-button ease-in-icon" />
+      <Button id="AnimationWindowEaseEase" class="secondary icon-button ease-ease-icon" />
+      <Button id="AnimationWindowEaseOut" class="secondary icon-button ease-out-icon" />
+      <Button id="AnimationWindowBreakTangents" class="secondary icon-button break-tangents-icon" />
+      <Button id="AnimationWindowUnifyTangents" class="secondary icon-button unify-tangents-icon" />
+    </UIElement>
+
+    <UIElement id="AnimationWindowCurveViewGroup" class="animationwindow-toolbar-group anim-toolbar-view2">
+      <Button id="AnimationWindowCurvesStacked" class="secondary icon-button stacked-curves-icon" />
+      <Button id="AnimationWindowCurvesNormalized" class="secondary icon-button normalized-curves-icon" />
+      <Button id="AnimationWindowBufferSnapshot" class="secondary icon-button buffer-snapshot-icon" />
+      <Button id="AnimationWindowSwapBuffer" class="secondary icon-button swap-buffer-icon" />
+    </UIElement>
+
+    <UIElement id="AnimationWindowCurveToolsGroup" class="animationwindow-toolbar-group anim-toolbar-tools">
+      <UIElement class="toolbar-gap" />
+      <Button id="AnimationWindowSelectAllKeys" class="secondary icon-button select-all-keys-icon" />
+      <Button id="AnimationWindowDeselectKeys" class="secondary icon-button deselect-keys-icon" />
+      <Button id="AnimationWindowToggleKeytool" class="secondary icon-button toggle-keytool-icon" />
+      <Button id="AnimationWindowPreviousKeyframe" class="secondary icon-button prev-keyframe-icon" />
+      <Button id="AnimationWindowAddKeyframe" class="secondary icon-button add-keyframe-icon" />
+      <Button id="AnimationWindowDuplicateKeyframe" class="secondary icon-button duplicate-keyframe-icon" />
+      <Button id="AnimationWindowDeleteKeyframe" class="secondary icon-button delete-keyframe-icon" />
+      <Button id="AnimationWindowNextKeyframe" class="secondary icon-button next-keyframe-icon" />
+      <Button id="AnimationWindowEulerFilter" class="secondary icon-button euler-filter-icon" />
+      <Button id="AnimationWindowLattice" class="secondary icon-button lattice-icon" />
+      <Button id="AnimationWindowAddMarker" class="secondary icon-button add-marker-icon" />
+    </UIElement>
+
+    <UIElement id="AnimationWindowStatsBar" class="animationwindow-stats-bar animationwindow-stats-hidden">
+      <Label class="animationwindow-stats-label" text="T:" />
+      <TextField id="AnimationWindowStatsTime" class="animationwindow-stats-field" />
+      <Label class="animationwindow-stats-label" text="V:" />
+      <TextField id="AnimationWindowStatsValue" class="animationwindow-stats-field" />
+    </UIElement>
+    <UIElement class="animationwindow-toolbar-spacer" />
+    <Button id="AnimationWindowPreviewToggle" class="secondary icon-button anim-preview-toggle-icon" />
+    <UIElement class="animationwindow-toolbar-right">
+      <UIElement class="animationwindow-fps-row">
+        <Label class="animationwindow-fps-label" text="FPS" />
+        <FloatField id="AnimationWindowFpsField" class="animationwindow-fps-field" />
+      </UIElement>
+    </UIElement>
+  </UIElement>
+
+  <UIElement id="AnimationWindowMainRow" class="animationwindow-main-row">
+    <splitview id="AnimationWindowMainSplit" class="animationwindow-main-split">
+      <pane id="AnimationWindowPropertiesPane" class="animationwindow-properties-pane" weight="0">
+        <UIElement id="AnimationWindowPropertiesHeader" class="animationwindow-properties-header">
+          <UIElement class="animationwindow-properties-search-row panel-search-bar search-field-with-filter">
+            <TextField id="AnimationWindowPropertiesSearch" class="animationwindow-properties-search panel-search-field" />
+            <UIElement id="AnimationWindowPropertiesSearchIcon" class="panel-search-icon" />
+            <Button id="AnimationWindowPropertiesSearchClear" class="panel-search-clear xclose-icon hidden" />
+          </UIElement>
+          <UIElement id="AnimationWindowPropertiesFilterRow" class="animationwindow-properties-filter-row">
+            <UIElement class="animationwindow-filter-eye-icon" />
+            <Button id="AnimationWindowFilterAnimated" class="small secondary animationwindow-filter-button" text="Animated" />
+            <Button id="AnimationWindowFilterHierarchy" class="small secondary animationwindow-filter-button" text="Hierarchy" />
+            <Button id="AnimationWindowFilterChannelsOnly" class="small secondary animationwindow-filter-button" text="Channels" />
+            <Button id="AnimationWindowFilterFlat" class="small secondary animationwindow-filter-button" text="Flat" />
+          </UIElement>
+        </UIElement>
+        <treeview id="AnimationWindowPropertiesTree" class="animationwindow-properties-tree tree" />
+        <UIElement id="AnimationWindowSequencerSidebar" class="animationwindow-sequencer-sidebar animationwindow-sidebar-hidden" />
+        <UIElement id="AnimationWindowTimelineLeftBar" class="animationwindow-timeline-left-bar">
+          <UIElement class="animationwindow-timeline-controls">
+            <UIElement class="anim-controls-nav">
+              <Button id="AnimationWindowGoToStart" class="secondary icon-button go-to-start-icon hidden" />
+              <Button id="AnimationWindowPreviousFrame" class="secondary icon-button prev-frame-icon hidden" />
+              <Button id="AnimationWindowLoop" class="secondary icon-button loop-icon" />
+              <Button id="AnimationWindowSyncPlayhead" class="secondary icon-button sync-playhead-icon" />
+              <Button id="AnimationWindowNextFrame" class="secondary icon-button next-frame-icon hidden" />
+              <Button id="AnimationWindowGoToEnd" class="secondary icon-button go-to-end-icon hidden" />
+            </UIElement>
+            <UIElement class="anim-controls-playback">
+              <Button id="AnimationWindowRecord" class="secondary icon-button toolbar-record-icon" />
+              <Button id="AnimationWindowStop" class="secondary icon-button stop-icon" />
+              <Button id="AnimationWindowPlayBackward" class="secondary icon-button play-backward-icon" />
+              <Button id="AnimationWindowPause" class="secondary icon-button pause-icon" />
+              <Button id="AnimationWindowPlay" class="secondary icon-button play-icon" />
+            </UIElement>
+            <UIElement class="anim-controls-right-pad" />
+          </UIElement>
+        </UIElement>
+      </pane>
+      <splitter id="AnimationWindowLeftSplitter" class="splitter row" />
+      <pane id="AnimationWindowRightColumn" class="animationwindow-right-column" weight="1">
+      <UIElement id="AnimationWindowMarkersRow" class="animationwindow-markers-row">
+        <timelinemarkerselement id="AnimationWindowTimelineMarkers" class="animationwindow-timeline-markers" />
+      </UIElement>
+      <UIElement id="AnimationWindowContentArea" class="animationwindow-content">
+      <UIElement id="AnimationWindowOptionsBar" class="anim-options-bar hidden">
+        <UIElement id="AnimationWindowOptionsNoise" class="anim-options-panel">
+          <Label class="anim-options-title" text="Add Noise Options" />
+          <Label class="anim-options-label" text="Frequency" />
+          <Label id="AnimationWindowNoiseFreqMinLabel" class="anim-options-drag-label" text="Min" />
+          <IntField id="AnimationWindowNoiseFreqMin" class="anim-options-int-field" />
+          <Label id="AnimationWindowNoiseFreqMaxLabel" class="anim-options-drag-label" text="Max" />
+          <IntField id="AnimationWindowNoiseFreqMax" class="anim-options-int-field" />
+          <Label class="anim-options-label" text="per second" />
+          <Label id="AnimationWindowNoiseMagnitudeLabel" class="anim-options-drag-label" text="Magnitude:" />
+          <FloatField id="AnimationWindowNoiseMagnitude" class="anim-options-float-field" />
+          <Button id="AnimationWindowNoiseConfirm" class="secondary icon-button checkmark-circle-icon anim-options-confirm" />
+        </UIElement>
+        <UIElement id="AnimationWindowOptionsSimplify" class="anim-options-panel">
+          <Label class="anim-options-title" text="Simplify Options" />
+          <Label class="anim-options-label" text="Method" />
+          <Dropdown id="AnimationWindowSimplifyMethod" class="small secondary anim-options-dropdown" />
+          <Label id="AnimationWindowSimplifyTimeTolLabel" class="anim-options-drag-label" text="Max Gap:" />
+          <FloatField id="AnimationWindowSimplifyTimeTol" class="anim-options-float-field" />
+          <Label id="AnimationWindowSimplifyValueTolLabel" class="anim-options-drag-label" text="Value Tol:" />
+          <FloatField id="AnimationWindowSimplifyValueTol" class="anim-options-float-field" />
+          <Button id="AnimationWindowSimplifyConfirm" class="secondary icon-button checkmark-circle-icon anim-options-confirm" />
+        </UIElement>
+        <UIElement id="AnimationWindowOptionsSmooth" class="anim-options-panel">
+          <Label id="AnimationWindowSmoothTitle" class="anim-options-title" text="Smooth Options" />
+          <Label id="AnimationWindowSmoothFilterWidthLabel" class="anim-options-drag-label" text="Filter Width:" />
+          <IntField id="AnimationWindowSmoothFilterWidth" class="anim-options-int-field" />
+          <Label id="AnimationWindowSmoothSampleCountLabel" class="anim-options-drag-label" text="Sample Count:" />
+          <IntField id="AnimationWindowSmoothSampleCount" class="anim-options-int-field" />
+          <Button id="AnimationWindowSmoothConfirm" class="secondary icon-button checkmark-circle-icon anim-options-confirm" />
+        </UIElement>
+        <UIElement id="AnimationWindowOptionsLattice" class="anim-options-panel">
+          <Label class="anim-options-title" text="Lattice Options" />
+          <Label id="AnimationWindowLatticePointCountLabel" class="anim-options-drag-label" text="Points:" />
+          <IntField id="AnimationWindowLatticePointCount" class="anim-options-int-field" />
+          <Label class="anim-options-label" text="Basis" />
+          <Dropdown id="AnimationWindowLatticeBasis" class="small secondary anim-options-dropdown" />
+        </UIElement>
+      </UIElement>
+      <DopeSheetView id="AnimationWindowDopeSheetPlaceholder" class="animationwindow-view-placeholder" />
+      <CurvesGraphView id="AnimationWindowCurvesPlaceholder" class="animationwindow-view-placeholder" />
+      <TimeCompositeView id="AnimationWindowTimeCompositePlaceholder" class="animationwindow-view-placeholder" />
+      <LaneClipEditorView id="AnimationWindowClipEditorPlaceholder" class="animationwindow-view-placeholder" />
+    </UIElement>
+        <UIElement id="AnimationWindowTimeLabelsBar" class="animationwindow-time-labels-bar">
+          <timelinetimelabelselement id="AnimationWindowTimelineTimeLabels" class="animationwindow-timeline-time-labels" />
+        </UIElement>
+        <UIElement id="AnimationWindowTimelineRightBar" class="animationwindow-timeline-right-bar">
+          <UIElement id="AnimationWindowTimelineRulerColumn" class="animationwindow-timeline-ruler-column">
+            <timelinebarelement id="AnimationWindowTimelineRuler" class="animationwindow-timeline-ruler" />
+            <timelineframelabelselement id="AnimationWindowTimelineFrameLabels" class="animationwindow-timeline-frame-labels" />
+          </UIElement>
+        </UIElement>
+        <UIElement id="AnimationWindowTimeRangeRow" class="animationwindow-time-range-row">
+          <IntField id="AnimationWindowRangeStart" class="animationwindow-range-field" />
+          <timerangesliderelement id="AnimationWindowTimeRangeSlider" class="animationwindow-time-range-slider" />
+          <IntField id="AnimationWindowRangeEnd" class="animationwindow-range-field" />
+        </UIElement>
+      </pane>
+    </splitview>
+  </UIElement>
+</UIElement>

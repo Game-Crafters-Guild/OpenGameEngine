@@ -1,0 +1,146 @@
+/* CPU Profiler panel — toolbar, frame-time chart, top-scopes list. */
+
+.cpu-profiler-panel {
+    display: flex;
+    flex-direction: column;
+    width: 100%;
+    height: 100%;
+    background-color: var(--ui_color_bg_panel);
+    padding: 6px;
+    gap: 6px;
+}
+
+.cpu-profiler-toolbar {
+    display: flex;
+    flex-direction: row;
+    align-items: center;
+    gap: 6px;
+    flex: 0 0 auto;
+}
+
+.cpu-profiler-btn-enable,
+.cpu-profiler-btn-pause {
+    flex: 0 0 auto;
+    width: 80px;
+}
+
+.cpu-profiler-btn-dump {
+    flex: 0 0 auto;
+    width: 100px;
+}
+
+.cpu-profiler-header {
+    flex: 1 1 auto;
+    font-size: 12px;
+    color: var(--ui_color_text_secondary);
+    padding-left: 8px;
+}
+
+.cpu-profiler-chart {
+    flex: 0 0 auto;
+    height: 120px;
+    min-height: 80px;
+    background-color: var(--ui_color_bg_grid);
+    border-radius: 4px;
+    padding: 4px 6px;
+}
+
+.cpu-profiler-list-header {
+    display: flex;
+    flex-direction: row;
+    align-items: center;
+    padding: 6px 8px;
+    border-bottom-width: 1px;
+    border-bottom-color: var(--ui_color_border);
+    flex: 0 0 auto;
+}
+
+.cpu-profiler-sort-header {
+    cursor: pointer;
+    color: var(--ui_color_text_secondary);
+}
+
+.cpu-profiler-sort-header:hover {
+    color: var(--ui_color_accent_blue);
+}
+
+.cpu-profiler-list-header .cpu-profiler-col-total,
+.cpu-profiler-list-header .cpu-profiler-col-self,
+.cpu-profiler-list-header .cpu-profiler-col-count {
+    text-align: left;
+}
+
+.cpu-profiler-rows {
+    flex: 1 1 auto;
+    min-height: 0;
+    overflow-y: auto;
+    overflow-x: hidden;
+    background-color: var(--ui_color_bg_grid);
+    border-radius: 4px;
+}
+
+.cpu-profiler-rows .scroll-content {
+    display: flex;
+    flex-direction: column;
+    padding: 2px 4px 8px 4px;
+    gap: 1px;
+}
+
+.cpu-profiler-row {
+    display: flex;
+    flex-direction: row;
+    align-items: center;
+    padding: 2px 6px 2px 8px;
+    height: 20px;
+    flex: 0 0 auto;
+    border-left-width: 2px;
+    border-left-color: transparent;
+}
+
+.cpu-profiler-row:hover {
+    background-color: var(--ui_color_bg_hover);
+}
+
+.cpu-profiler-row.selected,
+.cpu-profiler-row.selected:hover {
+    background-color: #2A3340;
+}
+
+.cpu-profiler-row.selected .cpu-profiler-col-name {
+    color: #ffffff;
+}
+
+.cpu-profiler-row.hidden {
+    display: none;
+}
+
+.cpu-profiler-col-name {
+    flex: 1 1 auto;
+    font-size: 12px;
+    color: var(--ui_color_text_primary);
+    min-width: 0;
+}
+
+.cpu-profiler-col-total {
+    width: 90px;
+    text-align: right;
+    font-size: 12px;
+    color: var(--ui_color_text_secondary);
+    flex: 0 0 auto;
+}
+
+.cpu-profiler-col-self {
+    width: 90px;
+    text-align: right;
+    font-size: 12px;
+    color: var(--ui_color_text_secondary);
+    flex: 0 0 auto;
+}
+
+.cpu-profiler-col-count {
+    width: 60px;
+    text-align: right;
+    font-size: 12px;
+    color: var(--ui_color_text_secondary);
+    flex: 0 0 auto;
+}

@@ -1,0 +1,37 @@
+/* The instancing page and its control panel: a dark translucent card over the scene. */
+html, body { margin: 0; height: 100%; background: #000; color: #eee; font: 13px/1.4 system-ui, sans-serif; }
+/* An element's own display never overrides its hidden attribute. */
+[hidden] { display: none !important; }
+canvas { display: block; width: 100%; height: 100%; touch-action: none; }
+.panel { position: fixed; top: 16px; right: 16px; width: 260px; padding: 12px 14px; box-sizing: border-box;
+    background: rgba(20, 22, 28, 0.78); backdrop-filter: blur(8px); border: 1px solid rgba(255, 255, 255, 0.12);
+    border-radius: 10px; box-shadow: 0 6px 24px rgba(0, 0, 0, 0.35); color-scheme: dark; }
+.panel summary { font-weight: 600; cursor: pointer; margin-bottom: 4px; }
+.panel label { display: flex; flex-wrap: wrap; justify-content: space-between; gap: 6px; margin: 10px 0 0; }
+.panel input[type=range] { width: 100%; accent-color: #6cf; }
+.panel button { font: inherit; color: #eee; background: rgba(255, 255, 255, 0.08); width: 100%; margin-top: 10px;
+    border: 1px solid rgba(255, 255, 255, 0.18); border-radius: 6px; padding: 5px 8px; cursor: pointer; }
+.panel :disabled, .panel .check:has(:disabled) { opacity: 0.45; cursor: default; }
+.panel .check { justify-content: flex-start; align-items: center; cursor: pointer; }
+.panel .hint, .panel output[name=status] { display: block; margin: 6px 0 0; color: #9aa3ad; font-size: 12px; }
+/* The download bar along the page's top edge: a 4 px opaque gray track, 3:1 against a black
+   page and apart from the sky, filled in the accent color (3.8:1 against the track). */
+.download { position: fixed; top: 0; left: 0; z-index: 1; display: block; width: 100%; height: 4px; margin: 0;
+    border: 0; appearance: none; background: #555a64; }
+.download::-webkit-progress-bar { background: transparent; }
+.download::-webkit-progress-value { background: #6cf; }
+.download::-moz-progress-bar { background: #6cf; }
+/* A download of unknown size: a short accent with a solid core sweeps along the track. */
+.download:indeterminate { background: linear-gradient(90deg, transparent, #6cf 30%, #6cf 70%, transparent) no-repeat,
+    #555a64; background-size: 30% 100%, 100% 100%; animation: download-sweep 1.2s linear infinite; }
+@keyframes download-sweep { from { background-position: -50% 0, 0 0; } to { background-position: 150% 0, 0 0; } }
+/* The status in the middle of the canvas until the first frame draws. */
+.canvas-status { position: fixed; inset: 0; display: grid; place-items: center; margin: 0; color: #9aa3ad;
+    font-size: 14px; pointer-events: none; }
+.panel .summary-progress { font-weight: 400; color: #9aa3ad; }
+.panel kbd { font: 12px ui-monospace, monospace; padding: 0 4px; border: 1px solid #667; border-radius: 3px; }
+.fps { position: fixed; top: 16px; left: 16px; padding: 6px 10px; font: 12px ui-monospace, monospace;
+    background: rgba(20, 22, 28, 0.78); border-radius: 6px; }
+@media (max-width: 600px) {
+    .panel { top: auto; bottom: 12px; left: 12px; right: 12px; width: auto; }
+}

@@ -1,0 +1,13 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="#E8E4DC" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+  <defs>
+    <radialGradient id="ssrSheen" cx="50%" cy="0%" r="100%">
+      <stop offset="0" stop-color="#5C9BFF" stop-opacity=".22"/>
+      <stop offset="1" stop-color="#5C9BFF" stop-opacity="0"/>
+    </radialGradient>
+  </defs>
+  <path d="M2.6 16.4h18.8v5.4H2.6Z" fill="url(#ssrSheen)" stroke="none"/>
+  <path d="M4.8 4.6 12.6 16.4"/>
+  <path d="M12.6 16.4 19.8 7.8"/>
+  <path d="M16.4 8.6 19.8 7.8 19.4 11.3"/>
+  <path d="M2.6 16.4h18.8" stroke="#5C9BFF"/>
+</svg>

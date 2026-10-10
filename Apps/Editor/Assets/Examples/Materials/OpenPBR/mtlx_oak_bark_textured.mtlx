@@ -1,0 +1,29 @@
+<?xml version="1.0"?>
+<materialx version="1.39" colorspace="lin_rec709">
+  <nodegraph name="NG_oak">
+    <image name="base_tex" type="color3">
+      <input name="file" type="filename" value="../../../Textures/EZTree/bark/oak_color_1k.jpg" colorspace="srgb_texture"/>
+    </image>
+    <image name="rough_tex" type="float">
+      <input name="file" type="filename" value="../../../Textures/EZTree/bark/oak_roughness_1k.jpg"/>
+    </image>
+    <image name="nrm_tex" type="vector3">
+      <input name="file" type="filename" value="../../../Textures/EZTree/bark/oak_normal_1k.jpg"/>
+    </image>
+    <normalmap name="nrm" type="vector3">
+      <input name="in" type="vector3" nodename="nrm_tex"/>
+    </normalmap>
+    <output name="base_out" type="color3" nodename="base_tex"/>
+    <output name="rough_out" type="float" nodename="rough_tex"/>
+    <output name="normal_out" type="vector3" nodename="nrm"/>
+  </nodegraph>
+  <open_pbr_surface name="OakBark" type="surfaceshader">
+    <input name="base_color" type="color3" nodegraph="NG_oak" output="base_out"/>
+    <input name="specular_roughness" type="float" nodegraph="NG_oak" output="rough_out"/>
+    <input name="geometry_normal" type="vector3" nodegraph="NG_oak" output="normal_out"/>
+    <input name="base_metalness" type="float" value="0.0"/>
+  </open_pbr_surface>
+  <surfacematerial name="OakBarkMat" type="material">
+    <input name="surfaceshader" type="surfaceshader" nodename="OakBark"/>
+  </surfacematerial>
+</materialx>

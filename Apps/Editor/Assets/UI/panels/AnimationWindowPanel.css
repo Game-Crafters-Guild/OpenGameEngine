@@ -1,0 +1,1183 @@
+/* ======================================
+   Animation Window panel
+   ====================================== */
+.animationwindow-panel {
+    display: flex;
+    flex-direction: column;
+    flex: 1 1 0px;
+    min-height: 0;
+    min-width: 0;
+    height: 100%;
+    width: 100%;
+    background-color: #1e1e1e;
+}
+
+.animationwindow-toolbar {
+    display: flex;
+    align-items: center;
+    padding: 0 8px;
+    height: 36px;
+    min-height: 32px;
+    background-color: #252525;
+    flex-shrink: 0;
+    gap: 8px;
+}
+
+/* Clip selection dropdown */
+.animationwindow-clip-dropdown {
+    min-width: 120px;
+    max-width: 200px;
+    height: 24px;
+}
+
+.animationwindow-clip-dropdown .dropdown-header-label,
+.animationwindow-clip-dropdown .dropdown-item {
+    white-space: nowrap;
+    overflow: hidden;
+    text-align: left;
+}
+
+/* Animation view switch.
+
+   The gap has to clear the focus ring, which inflates 4px beyond the border box
+   (outline-offset 2px + outline-width 2px). Outlines paint in tree order here,
+   not in a final pass over the stacking context as CSS 2.1 specifies, so a
+   sibling closer than that inflate paints its own background over the focused
+   button's ring. 8px is what every other editor toolbar uses. */
+.animationwindow-view-buttons {
+    display: flex;
+    flex-direction: row;
+    align-items: center;
+    gap: 8px;
+    flex: 0 0 auto;
+    height: 24px;
+}
+
+.animationwindow-view-button {
+    height: 24px;
+    min-width: 58px;
+    padding: 2px 8px;
+    font-size: 11px;
+    flex: 0 0 auto;
+}
+
+.animationwindow-view-button.active {
+    background-color: #3c4d63;
+    border-color: #5f7894;
+    color: #f0f6ff;
+}
+
+.animationwindow-menu-button {
+    height: 24px;
+    padding: 2px 8px;
+    font-size: 11px;
+    flex: 0 0 auto;
+}
+
+.animationwindow-mode-dropdown {
+    min-width: 92px;
+    max-width: 118px;
+    height: 24px;
+}
+
+.animationwindow-zoom-slider {
+    width: 120px;
+    min-width: 90px;
+    max-width: 140px;
+    height: 24px;
+}
+
+/* Preview toggle button */
+.anim-preview-toggle-icon {
+    background-image: url("editor:Icons/eye.png");
+    background-size: contain;
+    background-repeat: no-repeat;
+    background-position: center;
+}
+
+.anim-preview-toggle-icon.active {
+    background-image-tint: var(--ui_icon_tint_active);
+}
+
+/* Unsaved changes indicator next to save button */
+.anim-unsaved-indicator {
+    flex-shrink: 0;
+    font-size: 14px;
+    color: #ff9933;
+    font-weight: bold;
+    padding: 0;
+    margin: 0;
+    margin-left: 2px;
+    width: 10px;
+    min-width: 10px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.anim-unsaved-indicator.hidden {
+    display: none;
+}
+
+.animationwindow-toolbar-spacer {
+    flex: 1 1 0px;
+    min-width: 0;
+    width: 0;
+}
+
+.animationwindow-toolbar-group {
+    display: flex;
+    flex-direction: row;
+    align-items: center;
+    gap: 8px;
+    flex-shrink: 0;
+    margin-left: 12px;
+    margin-right: 12px;
+}
+
+/* Empty group: every child icon is currently hidden via display:none, but the
+   group container itself was still claiming the standard 12+12px margin and
+   leaving a phantom-wide gap between the Ease and Tools groups. */
+#AnimationWindowCurveViewGroup {
+    display: none;
+}
+
+/* User-insertable spacer ("gap"): a slim, faintly visible separator that
+   can be dragged to reposition or right-clicked to remove. The visible
+   line is the right border; the rest of the element is empty hit area. */
+.toolbar-gap {
+    width: 12px;
+    height: 16px;
+    min-width: 0;
+    min-height: 0;
+    flex-shrink: 1;
+}
+
+button.toolbar-gap,
+.button.toolbar-gap {
+    width: 12px;
+    height: 16px;
+    min-width: 12px;
+    min-height: 16px;
+    padding: 0;
+    margin: 0 4px;
+    background-color: transparent;
+    border-width: 0;
+    border-left-width: 2px;
+    border-left-color: transparent;
+    border-left-style: solid;
+}
+
+.toolbar-gap:hover,
+button.toolbar-gap:hover,
+.button.toolbar-gap:hover {
+    background-color: transparent;
+}
+
+.toolbar-gap.dragging,
+button.toolbar-gap.dragging {
+    opacity: 0.6;
+}
+
+.animationwindow-toolbar .linear-curve-icon.active,
+.animationwindow-toolbar button.linear-curve-icon.active,
+.animationwindow-toolbar .stepped-curve-icon.active,
+.animationwindow-toolbar button.stepped-curve-icon.active,
+.animationwindow-toolbar .spline-curve-icon.active,
+.animationwindow-toolbar button.spline-curve-icon.active,
+.animationwindow-toolbar .retime-icon.active,
+.animationwindow-toolbar button.retime-icon.active,
+.animationwindow-toolbar .draw-curve-icon.active,
+.animationwindow-toolbar button.draw-curve-icon.active,
+.animationwindow-toolbar .fit-height-icon.active,
+.animationwindow-toolbar button.fit-height-icon.active,
+.animationwindow-toolbar .lattice-icon.active,
+.animationwindow-toolbar button.lattice-icon.active {
+    background-image-tint: var(--ui_icon_tint_active);
+}
+
+.animationwindow-toolbar-right {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    flex-shrink: 0;
+}
+
+.anim-controls-nav {
+    flex: 0 0 auto;
+    display: flex;
+    flex-direction: row;
+    align-items: center;
+    gap: 2px;
+    justify-content: center;
+}
+
+.anim-controls-playback {
+    flex: 0 0 auto;
+    display: flex;
+    flex-direction: row;
+    align-items: center;
+    gap: 2px;
+}
+
+.anim-controls-right-pad {
+    flex: 0 0 auto;
+}
+
+/* Keyframe and Marker button icons */
+.select-all-keys-icon {
+    background-image: url("editor:Icons/checkmark-circle.png");
+}
+
+.deselect-keys-icon {
+    background-image: url("editor:Icons/xclose.png");
+}
+
+.add-keyframe-icon {
+    background-image: url("editor:Icons/add_key_marker.png");
+}
+
+.duplicate-keyframe-icon {
+    background-image: url("editor:Icons/copy.png");
+}
+
+.delete-keyframe-icon {
+    background-image: url("editor:Icons/trash.png");
+}
+
+.prev-keyframe-icon {
+    background-image: url("editor:Icons/arrow-left.png");
+}
+
+.next-keyframe-icon {
+    background-image: url("editor:Icons/arrow-right.png");
+}
+
+.prev-frame-icon {
+    background-image: url("editor:Icons/fold-left.png");
+}
+
+.next-frame-icon {
+    background-image: url("editor:Icons/fold-right.png");
+}
+
+.add-marker-icon {
+    background-image: url("editor:Icons/marker.png");
+}
+
+.center-playhead-icon {
+    background-image: url("editor:Icons/timer.png");
+}
+
+.go-to-start-icon {
+    background-image: url("editor:Icons/left-arrow.png");
+}
+
+.go-to-end-icon {
+    background-image: url("editor:Icons/right-arrow.png");
+}
+
+/* Grid icon background */
+.animationwindow-toolbar .icon-button.anim-grid-icon {
+    background-image: url("editor:Icons/grid-icon.png");
+}
+
+
+/* Unified icon-button state: 35% default (matches top toolbar), 80% active/toggle-on, 100% hover. */
+.animationwindow-toolbar .icon-button,
+.animationwindow-toolbar button.icon-button,
+.animationwindow-timeline-controls .icon-button,
+.animationwindow-timeline-controls button.icon-button {
+    opacity: 1.0;
+    background-color: transparent;
+    border-width: 0;
+    border-color: transparent;
+    background-image-tint: rgba(255, 255, 255, 0.58);
+}
+
+.animationwindow-toolbar .icon-button:hover,
+.animationwindow-toolbar button.icon-button:hover,
+.animationwindow-timeline-controls .icon-button:hover,
+.animationwindow-timeline-controls button.icon-button:hover {
+    opacity: 1.0;
+    background-image-tint: var(--ui_icon_tint_hover);
+    background-color: transparent;
+}
+
+.animationwindow-toolbar .icon-button.active,
+.animationwindow-toolbar button.icon-button.active,
+.animationwindow-toolbar .icon-button.pressed,
+.animationwindow-toolbar button.icon-button.pressed,
+.animationwindow-toolbar .icon-button.icon-active,
+.animationwindow-toolbar button.icon-button.icon-active,
+.animationwindow-timeline-controls .icon-button.active,
+.animationwindow-timeline-controls button.icon-button.active,
+.animationwindow-timeline-controls .icon-button.pressed,
+.animationwindow-timeline-controls button.icon-button.pressed {
+    opacity: 1.0;
+    background-image-tint: var(--ui_icon_tint_active);
+}
+
+.animationwindow-toolbar .icon-button.active:hover,
+.animationwindow-toolbar button.icon-button.active:hover,
+.animationwindow-toolbar .icon-button.pressed:hover,
+.animationwindow-toolbar button.icon-button.pressed:hover,
+.animationwindow-toolbar .icon-button.icon-active:hover,
+.animationwindow-toolbar button.icon-button.icon-active:hover,
+.animationwindow-timeline-controls .icon-button.active:hover,
+.animationwindow-timeline-controls button.icon-button.active:hover,
+.animationwindow-timeline-controls .icon-button.pressed:hover,
+.animationwindow-timeline-controls button.icon-button.pressed:hover {
+    opacity: 1.0;
+    background-image-tint: var(--ui_icon_tint_hover);
+}
+
+
+/* Plus-icon (new animation button) matches the layout preset toolbar's style:
+   dim by default, full brightness on hover, no tint override. */
+.animationwindow-toolbar .icon-button.plus-icon,
+.animationwindow-toolbar button.icon-button.plus-icon {
+    opacity: 0.175;
+    background-image-tint: unset;
+}
+
+.animationwindow-toolbar .icon-button.plus-icon:hover,
+.animationwindow-toolbar button.icon-button.plus-icon:hover {
+    opacity: 1.0;
+    background-image-tint: unset;
+}
+
+.animationwindow-main-row {
+    display: flex;
+    flex-direction: row;
+    flex: 1 1 0px;
+    min-height: 0;
+    min-width: 0;
+    width: 100%;
+    height: 100%;
+}
+
+/* When properties pane should be on the right */
+/* Use order property to swap visual positions (Yoga doesn't support row-reverse) */
+.animationwindow-main-split.properties-on-right > pane:first-child {
+    order: 3;
+}
+
+.animationwindow-main-split.properties-on-right > pane:last-child {
+    order: 1;
+}
+
+.animationwindow-main-split.properties-on-right > splitter {
+    order: 2;
+}
+
+/* Also need to ensure splitter hit-testing works in reversed order */
+.animationwindow-main-split.properties-on-right > splitter {
+    /* Splitter still works by flex position, order just affects visual */
+}
+
+.animationwindow-main-split {
+    display: flex;
+    flex-direction: row;
+    flex: 1 1 0px;
+    min-height: 0;
+    min-width: 0;
+}
+
+/* Left column: width from flex-basis (px) and splitter drag — not width/% or flex-basis %. */
+.animationwindow-properties-pane {
+    flex: 0 1 350px;
+    width: auto;
+    /* Allow the splitter to shrink this column; tree scrolls horizontally if needed */
+    min-width: 0;
+    background-color: #252525;
+    display: flex;
+    flex-direction: column;
+    min-height: 0;
+}
+
+
+.animationwindow-properties-tree {
+    flex: 1;
+    min-height: 0;
+}
+
+.animationwindow-properties-header {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    padding: 0 6px 2px 6px;
+    flex-shrink: 0;
+    background-color: #252525;
+}
+
+.animationwindow-properties-search-row {
+    position: relative;
+    flex-shrink: 0;
+    width: auto;
+    height: 22px;
+    bottom: unset;
+    left: unset;
+    right: unset;
+    margin: 2px 6px 2px 6px;
+}
+
+.animationwindow-properties-search {
+    width: 100%;
+    height: 100%;
+}
+
+.animationwindow-properties-filter-row {
+    display: flex;
+    flex-direction: row;
+    flex-wrap: wrap;
+    align-items: center;
+    justify-content: center;
+    gap: 4px;
+}
+
+.animationwindow-filter-eye-icon {
+    width: 14px;
+    height: 14px;
+    min-width: 14px;
+    min-height: 14px;
+    background-image: url("editor:Icons/eye.png");
+    background-size: contain;
+    background-repeat: no-repeat;
+    background-position: center;
+    opacity: 0.5;
+    flex-shrink: 0;
+}
+
+.animationwindow-filter-button {
+    padding: 2px 6px;
+    font-size: 10px;
+    flex: 0 0 auto;
+    min-height: 0;
+}
+
+.animationwindow-filter-button.active {
+    background-color: #3a5a82;
+    color: #ffffff;
+}
+
+.animationwindow-sequencer-sidebar {
+    display: flex;
+    flex-direction: column;
+    flex: 1;
+    min-height: 0;
+    padding: 0;
+    overflow: hidden;
+}
+
+.animationwindow-sequencer-top-spacer {
+    flex: 0 0 16px;
+    min-height: 16px;
+    max-height: 16px;
+}
+
+
+.animationwindow-sidebar-hidden {
+    display: none;
+}
+
+.animationwindow-toolbar-group-hidden {
+    display: none;
+}
+
+.animationwindow-sequencer-title {
+    color: #f0f0f0;
+    font-size: 13px;
+}
+
+.animationwindow-sequencer-section {
+    color: #b8b8b8;
+    font-size: 11px;
+    margin-top: 4px;
+}
+
+.animationwindow-sequencer-track-list {
+    display: flex;
+    flex-direction: column;
+    flex: 0 0 auto;
+    min-height: 0;
+}
+
+.animationwindow-sequencer-track-row {
+    display: flex;
+    flex-direction: column;
+    flex: 0 0 28px;
+    min-height: 28px;
+    max-height: 28px;
+}
+
+.animationwindow-sequencer-track-content {
+    display: flex;
+    flex-direction: row;
+    align-items: center;
+    gap: 6px;
+    flex: 1;
+    min-width: 0;
+    padding: 0 6px;
+    overflow: hidden;
+}
+
+.animationwindow-sequencer-track-content .animationwindow-sequencer-select-button {
+    flex: 0 1 auto;
+    min-width: 0;
+    overflow: hidden;
+    white-space: nowrap;
+}
+
+.animationwindow-sequencer-track-content .animationwindow-sequencer-select-button .button-text {
+    overflow: hidden;
+    white-space: nowrap;
+}
+
+.animationwindow-sequencer-track-spacer {
+    flex: 1 1 auto;
+    min-width: 0;
+}
+
+.animationwindow-sequencer-track-content .animationwindow-sequencer-enable-button {
+    width: 20px;
+    height: 20px;
+    min-width: 20px;
+    min-height: 20px;
+    padding: 0;
+    flex-shrink: 0;
+    margin-left: 0;
+    background-image: url("editor:Icons/eye.png");
+    background-size: 14px 14px;
+    background-repeat: no-repeat;
+    background-position: center;
+    background-image-tint: rgba(255, 255, 255, 0.97);
+    opacity: 0.92;
+}
+
+.animationwindow-sequencer-track-content .animationwindow-sequencer-enable-button.active,
+.animationwindow-sequencer-track-content .animationwindow-sequencer-enable-button.icon-active {
+    background-image-tint: rgba(255, 255, 255, 1.0);
+    opacity: 1.0;
+}
+
+.animationwindow-sequencer-track-content .animationwindow-sequencer-enable-button.muted {
+    background-image-tint: rgba(255, 255, 255, 0.58);
+    opacity: 0.35;
+}
+
+.animationwindow-sequencer-track-content .animationwindow-sequencer-enable-button:hover {
+    background-image-tint: rgba(255, 255, 255, 1.0);
+    opacity: 1.0;
+}
+
+.animationwindow-sequencer-meta {
+    color: #8f8f8f;
+    font-size: 10px;
+    flex-shrink: 0;
+    white-space: nowrap;
+}
+
+.animationwindow-sequencer-value {
+    color: #d8d8d8;
+    font-size: 11px;
+    flex: 1;
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.animationwindow-sequencer-card {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    padding: 8px;
+    border: 1px solid #3f3f3f;
+    background-color: #2b2b2b;
+}
+
+.animationwindow-sequencer-empty {
+    color: #8f8f8f;
+    font-size: 14px;
+    width: 100%;
+    align-self: center;
+    text-align: center;
+    margin: 0;
+}
+
+.animationwindow-sequencer-value {
+    color: #d8d8d8;
+    font-size: 11px;
+}
+
+/* No folder icon in properties tree */
+.animationwindow-properties-tree .tree-item .tree-title {
+    background-image: none;
+    padding-left: 0;
+}
+
+/* Vector component coloring (X=red, Y=green, Z=blue, W=white) */
+.animationwindow-properties-tree .tree-item.tree-component-x .tree-title { color: #ff6464; }
+.animationwindow-properties-tree .tree-item.tree-component-y .tree-title { color: #6dff6d; }
+.animationwindow-properties-tree .tree-item.tree-component-z .tree-title { color: #6da7ff; }
+.animationwindow-properties-tree .tree-item.tree-component-w .tree-title { color: #d8d8d8; }
+
+/* Flat mode: color only the component letter suffix, not the whole row */
+.tree-flat-component-suffix { flex: 0 0 auto; order: 2; }
+.tree-flat-component-suffix.tree-component-x { color: #ff6464; }
+.tree-flat-component-suffix.tree-component-y { color: #6dff6d; }
+.tree-flat-component-suffix.tree-component-z { color: #6da7ff; }
+.tree-flat-component-suffix.tree-component-w { color: #d8d8d8; }
+
+/* Title does not flex-grow in the anim tree so actions sit right after the label */
+.animationwindow-properties-tree .tree-item .tree-title {
+    flex: 0 1 auto;
+    order: 1;
+}
+
+/* Per-row action overlay (color tag, lock, prev/add/next key, pin, component swatch) */
+.animationwindow-properties-tree .tree-row-actions {
+    display: flex;
+    flex-direction: row;
+    align-items: center;
+    gap: 7px;
+    flex-shrink: 0;
+    position: absolute;
+    right: 30px;
+    top: 0;
+    bottom: 0;
+    align-items: center;
+}
+
+.animationwindow-properties-tree .tree-row-action-icon {
+    width: 14px;
+    height: 14px;
+    min-width: 14px;
+    min-height: 14px;
+    padding: 0;
+    background-color: transparent;
+    border-width: 0;
+    background-size: contain;
+    background-repeat: no-repeat;
+    background-position: center;
+    opacity: 0;
+}
+
+.animationwindow-properties-tree .tree-item:hover .tree-row-action-icon,
+.animationwindow-properties-tree .tree-item.selected .tree-row-action-icon {
+    opacity: 0.45;
+}
+
+.animationwindow-properties-tree .tree-item:hover .tree-row-action-icon:hover,
+.animationwindow-properties-tree .tree-item.selected .tree-row-action-icon:hover {
+    opacity: 1.0;
+}
+
+/* Toggled-on: always visible, full brightness, subtle background pill */
+.animationwindow-properties-tree .tree-row-action-icon.active {
+    opacity: 1.0;
+    background-color: rgba(255, 255, 255, 0.31);
+    border-radius: 3px;
+}
+
+.animationwindow-properties-tree .tree-row-action-icon.active:hover {
+    opacity: 1.0;
+    background-color: rgba(255, 255, 255, 0.45);
+}
+
+.animationwindow-properties-tree .tree-row-action-lock {
+    background-image: url("editor:Icons/LockOpen.png");
+    background-color: transparent;
+    border-width: 0px;
+    margin-left: 4px;
+}
+.animationwindow-properties-tree .tree-row-action-lock:hover,
+.animationwindow-properties-tree .tree-row-action-lock:active,
+.animationwindow-properties-tree .tree-row-action-lock.pressed {
+    background-color: transparent;
+}
+.animationwindow-properties-tree .tree-row-action-lock.active,
+.animationwindow-properties-tree .tree-row-action-lock.active:hover {
+    background-image: url("editor:Icons/LockClosed.png");
+    background-image-tint: rgba(255, 255, 255, 1.0);
+    background-color: transparent;
+    border-radius: 0px;
+}
+.animationwindow-properties-tree .tree-row-action-prev-key {
+    background-image: url("editor:Icons/arrow-left.png");
+}
+.animationwindow-properties-tree .tree-row-action-add-key {
+    background-image: url("editor:Icons/dot.png");
+    width: 7px;
+    height: 7px;
+    min-width: 7px;
+    min-height: 7px;
+}
+.animationwindow-properties-tree .tree-row-action-next-key {
+    background-image: url("editor:Icons/arrow-right.png");
+}
+.animationwindow-properties-tree .tree-row-action-pin {
+    background-image: url("editor:Icons/pin.png");
+    margin-left: 6px;
+}
+
+/* User-set color tag (small square) — invisible until a tag is assigned */
+.animationwindow-properties-tree .tree-row-color-tag {
+    width: 8px;
+    height: 8px;
+    min-width: 8px;
+    min-height: 8px;
+    background-color: transparent;
+}
+.animationwindow-properties-tree .tree-row-color-tag.tag-yellow { background-color: #f0c850; }
+.animationwindow-properties-tree .tree-row-color-tag.tag-red    { background-color: #e05050; }
+.animationwindow-properties-tree .tree-row-color-tag.tag-green  { background-color: #6dd06d; }
+.animationwindow-properties-tree .tree-row-color-tag.tag-blue   { background-color: #6da5e0; }
+
+/* Tree rows need relative positioning so the swatch can be pinned absolutely */
+.animationwindow-properties-tree .tree-item {
+    position: relative;
+}
+.animationwindow-properties-tree .tree-item:hover {
+    background-color: #2e2e2e;
+}
+
+/* Per-component swatch dot — pinned to the right edge, visible only on row hover */
+.animationwindow-properties-tree .tree-row-component-swatch {
+    position: absolute;
+    right: 6px;
+    top: 2px;
+    bottom: 0;
+    width: 16px;
+    height: 16px;
+    min-width: 16px;
+    min-height: 16px;
+    margin-top: auto;
+    margin-bottom: auto;
+    border-radius: 2px;
+    border-width: 1px;
+    border-color: #3E3E3E;
+    background-color: transparent;
+    opacity: 0;
+}
+.animationwindow-properties-tree .tree-item:hover.tree-component-x .tree-row-component-swatch,
+.animationwindow-properties-tree .tree-item:hover.tree-component-y .tree-row-component-swatch,
+.animationwindow-properties-tree .tree-item:hover.tree-component-z .tree-row-component-swatch,
+.animationwindow-properties-tree .tree-item:hover.tree-component-w .tree-row-component-swatch { opacity: 1; }
+.animationwindow-properties-tree .tree-item.tree-component-x .tree-row-component-swatch { background-color: #ff6464; }
+.animationwindow-properties-tree .tree-item.tree-component-y .tree-row-component-swatch { background-color: #6dff6d; }
+.animationwindow-properties-tree .tree-item.tree-component-z .tree-row-component-swatch { background-color: #6da7ff; }
+.animationwindow-properties-tree .tree-item.tree-component-w .tree-row-component-swatch { background-color: #d8d8d8; }
+
+/* Right column: markers row + content area only (not over the left properties pane) */
+.animationwindow-right-column {
+    display: flex;
+    flex-direction: column;
+    flex: 1 1 0px;
+    min-height: 0;
+    min-width: 64px;
+    width: 100%;
+    overflow: hidden;
+}
+
+.animationwindow-content {
+    display: flex;
+    flex: 1 1 0px;
+    flex-direction: column;
+    min-height: 0;
+    min-width: 0;
+    width: 100%;
+    height: 100%;
+    position: relative; /* anchor for the absolutely-positioned options bar overlay */
+    background-color: #252525;
+    overflow: hidden;
+}
+
+.animationwindow-view-placeholder {
+    display: none;
+    flex: 1 1 0px;
+    min-height: 0;
+    min-width: 0;
+    width: 100%;
+    height: 100%;
+    background-color: #2d2d2d;
+    border: 1px solid #3f3f3f;
+    overflow: hidden;
+}
+
+.animationwindow-view-placeholder.animationwindow-view-active {
+    display: flex;
+}
+
+/* Curves view: no padding/margin so grid fills to edges */
+.animationwindow-curves {
+    padding: 0;
+    margin: 0;
+}
+
+/* Markers row above content (right column only); match content bg so playhead reads as one line */
+.animationwindow-markers-row {
+    display: flex;
+    flex-direction: row;
+    align-items: stretch;
+    width: 100%;
+    min-width: 1px;
+    height: 16px;
+    min-height: 16px;
+    flex-shrink: 0;
+    background-color: #252525;
+    overflow: hidden;
+}
+
+.animationwindow-markers-row .animationwindow-timeline-markers {
+    flex: 1 1 0px;
+    min-width: 1px;
+    min-height: 16px;
+    width: 100%;
+    align-self: stretch;
+}
+
+/* Frame counter: bottom of left split pane — width follows the resizable pane (no fixed 200px). */
+.animationwindow-timeline-left-bar {
+    flex: 0 0 52px;
+    min-height: 52px;
+    max-height: 52px;
+    align-self: stretch;
+    box-sizing: border-box;
+    display: flex;
+    flex-direction: row;
+    align-items: center;
+    justify-content: center;
+    flex-shrink: 0;
+    background-color: #252525;
+}
+
+/* Time labels strip: sits immediately above the ruler bar, forming one visual unit at the bottom. */
+.animationwindow-time-labels-bar {
+    display: flex;
+    flex-direction: row;
+    align-items: stretch;
+    flex: 0 0 14px;
+    min-height: 14px;
+    max-height: 14px;
+    width: 100%;
+    box-sizing: border-box;
+    flex-shrink: 0;
+    background-color: #252525;
+    overflow: visible;
+    z-index: 1;
+}
+
+.animationwindow-time-labels-bar .animationwindow-timeline-time-labels {
+    flex: 1;
+    width: 100%;
+}
+
+.animationwindow-ruler-top .animationwindow-time-labels-bar {
+    order: -1;
+}
+
+
+/* Ruler strip (scrub bar + frame labels): always at the bottom. */
+.animationwindow-timeline-right-bar {
+    display: flex;
+    flex-direction: row;
+    align-items: stretch;
+    flex: 0 0 38px;
+    min-height: 38px;
+    max-height: 38px;
+    width: 100%;
+    box-sizing: border-box;
+    flex-shrink: 0;
+    background-color: #252525;
+    z-index: 1;
+    overflow: visible;
+}
+
+.animationwindow-timeline-ruler-column {
+    display: flex;
+    flex-direction: column;
+    flex: 1;
+    flex-grow: 1;
+    flex-basis: 0;
+    min-width: 0;
+    min-height: 0;
+    overflow: visible;
+}
+
+.animationwindow-timeline-time-labels {
+    height: 14px;
+    min-height: 14px;
+    flex-shrink: 0;
+    background-color: #252525;
+    color: #808080;
+    font-size: 10px;
+    pointer-events: auto; /* scrub playhead strip matches ruler (see TimelineBarElement) */
+}
+
+.animationwindow-timeline-markers {
+    position: relative;
+    width: 100%;
+    min-width: 1px;
+    height: 16px;
+    min-height: 16px;
+    flex-shrink: 0;
+    background-color: transparent;
+}
+
+/* Per-marker icon (editor:Icons/marker.png) */
+.animationwindow-marker-icon {
+    width: 16px;
+    height: 16px;
+    min-width: 16px;
+    min-height: 16px;
+    background-image: url("editor:Icons/marker.png");
+    background-size: contain;
+    background-repeat: no-repeat;
+    background-position: center;
+    opacity: 0.35;
+}
+
+.animationwindow-timeline-ruler {
+    flex: 1;
+    flex-grow: 1;
+    flex-basis: 0;
+    min-width: 0;
+    min-height: 24px;
+    background-color: var(--ui_color_bg_tabbar); /* same as area between tabs (.tabbar) */
+    font-size: 11px;
+    pointer-events: auto; /* ensure ruler receives scroll and mouse for scrubbing/zoom */
+    cursor: grab;
+}
+
+.animationwindow-timeline-ruler.timeline-dragging {
+    cursor: grabbing;
+}
+
+.animationwindow-timeline-frame-labels {
+    height: 14px;
+    min-height: 14px;
+    flex-shrink: 0;
+    background-color: #252525;
+    color: #808080;
+    font-size: 10px;
+    pointer-events: auto;
+    cursor: grab;
+}
+
+.animationwindow-timeline-frame-labels.timeline-dragging {
+    cursor: grabbing;
+}
+
+.animationwindow-timeline-controls {
+    display: flex;
+    flex-direction: row;
+    align-items: center;
+    padding: 0 4px;
+    gap: 0;
+    flex: 1;
+    justify-content: center;
+}
+
+.animationwindow-fps-row {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    flex-shrink: 0;
+}
+
+.animationwindow-fps-label {
+    color: #b0b0b0;
+    font-size: 11px;
+}
+
+.animationwindow-fps-field {
+    width: 56px;
+    min-width: 56px;
+}
+
+.animationwindow-fps-field .float-field-input {
+    text-align: center;
+}
+
+.animationwindow-stats-bar {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    flex-shrink: 0;
+}
+
+.animationwindow-stats-bar.animationwindow-stats-hidden {
+    display: none;
+}
+
+.animationwindow-stats-label {
+    color: #b0b0b0;
+    font-size: 11px;
+    padding: 4px 8px;
+    margin: -4px -8px;
+    cursor: ew-resize;
+    user-select: none;
+}
+
+.animationwindow-stats-field {
+    width: 56px;
+    min-width: 56px;
+}
+
+.animationwindow-stats-field TextInput {
+    text-align: center;
+    padding: 6px 12px;
+    border-width: 1px;
+    border-radius: 6px;
+    border-color: transparent;
+    background-color: #202020;
+    height: 27px;
+}
+
+.animationwindow-stats-label:hover {
+    color: #d8d8d8;
+    background-color: rgba(255, 255, 255, 0.17);
+    border-radius: 4px;
+}
+
+.animationwindow-current-frame {
+    color: #e8e8e8;
+    font-size: 13px;
+    min-width: 36px;
+    padding: 0 6px;
+    text-align: center;
+}
+
+.animationwindow-time-range-row {
+    display: flex;
+    flex-direction: row;
+    flex: 0 0 28px;
+    min-height: 28px;
+    max-height: 28px;
+    width: 100%;
+    flex-shrink: 0;
+    background-color: #1a1a1a;
+    box-sizing: border-box;
+    padding: 2px 0;
+}
+
+.animationwindow-time-range-slider {
+    flex: 1;
+    min-width: 0;
+    font-size: 11px;
+    pointer-events: auto;
+    background-color: #1a1a1a;
+}
+
+.animationwindow-range-field {
+    width: 52px;
+    min-width: 52px;
+    max-width: 52px;
+    flex-shrink: 0;
+    align-self: center;
+    font-size: 13px;
+    background-color: #1a1a1a;
+    border: none;
+    padding: 0 4px;
+}
+
+.animationwindow-range-field .int-field-input {
+    text-align: center;
+    color: #d0d0d0;
+    font-size: 13px;
+}
+
+/* Curve-edit options bar (Add Noise / Simplify / Smooth).
+   Floats over the top of the curves view rather than pushing it down,
+   so the visible curve area doesn't shrink when the bar appears. */
+.anim-options-bar {
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    display: flex;
+    flex-direction: column;
+    background-color: rgba(42, 42, 42, 0.92);
+    padding: 4px 8px;
+    gap: 4px;
+    z-index: 10;
+}
+
+.anim-options-bar.hidden {
+    display: none;
+}
+
+.anim-options-panel {
+    display: none;
+    flex-direction: row;
+    align-items: center;
+    gap: 6px;
+}
+
+.anim-options-panel.anim-options-active {
+    display: flex;
+}
+
+.anim-options-title {
+    color: #4aa3ff;
+    font-size: 12px;
+    font-weight: bold;
+    margin-right: 8px;
+}
+
+.anim-options-label {
+    color: #b0b0b0;
+    font-size: 11px;
+    padding: 0 2px;
+    user-select: none;
+}
+
+.anim-options-drag-label {
+    color: #b0b0b0;
+    font-size: 11px;
+    padding: 2px 6px;
+    margin: -2px 0;
+    cursor: ew-resize;
+    user-select: none;
+    border-radius: 4px;
+}
+
+.anim-options-drag-label:hover {
+    color: #d8d8d8;
+    background-color: rgba(255, 255, 255, 0.17);
+}
+
+.anim-options-int-field,
+.anim-options-float-field {
+    width: 48px;
+    min-width: 48px;
+}
+
+.anim-options-int-field TextInput,
+.anim-options-float-field TextInput {
+    text-align: center;
+    padding: 4px 6px;
+    border-width: 1px;
+    border-radius: 4px;
+    border-color: transparent;
+    background-color: #1f1f1f;
+    height: 24px;
+}
+
+.anim-options-dropdown {
+    min-width: 90px;
+}
+
+.anim-options-confirm {
+    width: 22px;
+    height: 22px;
+    margin-left: 6px;
+}
+
+/* Bone icon in animation properties tree */
+.animationwindow-properties-tree .tree-item.anim-tree-bone .tree-title {
+    background-image: url("editor:Icons/bone_icon.png");
+    background-image-tint: #808080;
+}

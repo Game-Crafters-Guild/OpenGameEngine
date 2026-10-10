@@ -1,0 +1,115 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Unity import</title>
+<style>
+  :root {
+    --bg: #0f1115; --panel: #171a21; --panel-light: #1f232c; --border: #2a2f3a;
+    --text: #d7dae0; --muted: #8b919c; --accent: #6ea8fe; --danger: #ff6b6b;
+    --bad: #ff6b6b; --ok: #4cd18a; --good: #4cd18a; --warn: #f2c94c;
+  }
+  body { margin: 0; padding: 2rem 3rem; background: var(--bg); color: var(--text);
+         font: 15px/1.55 system-ui, -apple-system, "Segoe UI", sans-serif; max-width: 1100px; }
+  h1 { margin: 0 0 .25rem; font-size: 1.9rem; }
+  h2 { margin-top: 2.2rem; padding: .35rem .6rem; border: 1px solid var(--border);
+       border-left: 4px solid var(--accent); background: var(--panel); font-size: 1.25rem; }
+  h3 { margin: 1.4rem 0 .4rem; color: var(--accent); font-size: 1.05rem; }
+  .lede { color: var(--muted); margin: 0 0 1.5rem; letter-spacing: .04em; text-transform: uppercase; font-size: .8rem; }
+  hr { border: 0; border-top: 1px solid var(--border); margin: 2rem 0; }
+  code, pre { font: 13px/1.5 ui-monospace, "Cascadia Mono", Consolas, monospace;
+              background: var(--panel-light); border-radius: 4px; }
+  code { padding: .05rem .35rem; }
+  pre { padding: .8rem 1rem; overflow-x: auto; border: 1px solid var(--border); }
+  .panel { border: 1px solid var(--border); background: var(--panel); border-radius: 6px; padding: .9rem 1.1rem; margin: 1rem 0; }
+  .panel.ok { border-left: 4px solid var(--ok); }
+  .panel.warn { border-left: 4px solid var(--warn); }
+  table { border-collapse: collapse; width: 100%; margin: 1rem 0; }
+  th, td { border: 1px solid var(--border); padding: .45rem .7rem; text-align: left; vertical-align: top; }
+  th { background: var(--panel-light); color: var(--muted); font-weight: 600; font-size: .85rem; }
+  tr:hover td { background: var(--panel); }
+  footer { margin-top: 3rem; color: var(--muted); font-size: .85rem; }
+</style>
+</head>
+<body>
+
+<h1>Unity import</h1>
+<p class="lede">GUIDE · assets / editor · bringing scenes from a Unity package into a project</p>
+<p>
+  <strong>Tools &gt; Import Unity Package...</strong> converts the scenes of a Unity package into engine scenes in
+  the open project: static mesh placements, materials, directional and point lights and the scene environment (fog, ambient light,
+  skybox), with the models and textures they reference. It runs inside the editor, from the built-in
+  <code>unity-import</code> package; nothing has to be installed.
+</p>
+
+<h2>Importing a package</h2>
+<ol>
+  <li>Open the project the scenes should land in, then choose <strong>Tools &gt; Import Unity Package...</strong>.</li>
+  <li>Pick the source: a <code>.unitypackage</code> file with <strong>Browse...</strong>, or the path of an
+      extracted package folder (the <code>&lt;guid&gt;/pathname</code> and <code>&lt;guid&gt;/asset</code> layout a
+      <code>.unitypackage</code> unpacks to) typed into the field, followed by Enter.</li>
+  <li>The dialog lists every scene in the package, all selected, and counts the shared models, textures and
+      materials. Clear the scenes you do not want; shared assets are imported once for any selection.</li>
+  <li>Choose the destination inside the project's assets folder (the assets folder itself by default) and press
+      <strong>Import</strong>.</li>
+  <li>If files with the same names already exist at the destination, the dialog lists them and asks before it
+      overwrites anything.</li>
+  <li>When the import completes, the dialog reports the scenes, entities and materials written, the models and
+      textures brought in, and any reference that did not resolve. <strong>Open &lt;scene&gt;</strong> opens a
+      converted scene.</li>
+</ol>
+
+<h3>What the import writes</h3>
+<table>
+  <tr><th>Output</th><th>Where</th></tr>
+  <tr><td>One scene per selected Unity scene</td><td><code>&lt;Scene&gt;_unity.scene</code> in the destination</td></tr>
+  <tr><td>Materials converted from the package's <code>.mat</code> files</td><td><code>Materials_Unity/</code></td></tr>
+  <tr><td>Models the project does not already have (matched by file name, ignoring case)</td><td><code>Models_Unity/</code>, under the package's own folder layout</td></tr>
+  <tr><td>Textures, as source images the engine compiles on import</td><td><code>Textures_Unity/</code></td></tr>
+</table>
+<div class="panel warn">
+  <strong>Scope.</strong> The importer converts static meshes, materials, directional and point lights and the
+  scene environment. Skinned meshes and characters, cameras, spot and area lights, particles, colliders, scripts
+  and terrain are skipped; the converter README lists every limitation.
+</div>
+
+<h2>Where the converter comes from</h2>
+<p>
+  The conversion itself is done by the Unity scene converter, an open-source project with its own repository:
+  <a href="https://github.com/Game-Crafters-Guild/OpenEngine-Unity-Scene-Converter">Game-Crafters-Guild/OpenEngine-Unity-Scene-Converter</a>.
+  Its README documents every conversion rule and a command-line tool that runs the same conversion outside the editor.
+  The <code>unity-import</code> package carries one built copy of it, <code>Tools/UnityConverter.dll</code>, which the
+  editor runs on its own .NET runtime. The assembly targets <code>net9.0</code> and loads on the editor's .NET 10
+  runtime until the converter repository re-pins its SDK to .NET 10. Beside it, <code>Tools/UnityConverter.dll.source</code> records where that
+  copy was built from:
+</p>
+<table>
+  <tr><th>Line</th><th>Meaning</th></tr>
+  <tr><td><code>home</code>, <code>commit</code></td><td>The converter repository and the commit the assembly was built from</td></tr>
+  <tr><td><code>sdk</code></td><td>The exact .NET SDK version, which the converter repository pins in its <code>global.json</code></td></tr>
+  <tr><td><code>build</code>, <code>output</code></td><td>The build command and the file it writes</td></tr>
+  <tr><td><code>sha256</code></td><td>The hash of the vendored file; a rebuild of that commit with that SDK reproduces it exactly</td></tr>
+</table>
+
+<h2>Updating the converter</h2>
+<ol>
+  <li>Land the change in the converter repository.</li>
+  <li>In a clean checkout of the resulting commit, with the SDK its <code>global.json</code> names installed, run
+      <code>npm run build:dll</code>.</li>
+  <li>Copy <code>dist/UnityConverter.dll</code> over <code>Tools/UnityConverter.dll</code> in the
+      <code>unity-import</code> package, update the commit, SDK and SHA-256 in
+      <code>Tools/UnityConverter.dll.source</code>, and land both in one change.</li>
+</ol>
+<p>The next editor build stages the new assembly with the package; no engine code changes.</p>
+
+<hr>
+<h2>Changelog</h2>
+<ul>
+  <li>2026-10-05: first version. The converter is a vendored assembly built by its own repository.</li>
+  <li>2026-10-05: the editor hosts .NET 10; the vendored <code>net9.0</code> assembly loads on it unchanged.</li>
+</ul>
+
+<footer>Unity import · version 2 · 2026-10-05</footer>
+
+</body>
+</html>

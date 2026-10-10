@@ -1,0 +1,7 @@
+{
+  "name": "diharaw-volumetric-fog-upstream",
+  "version-date": "2021-05-08",
+  "description": "Pinned diharaw/volumetric-fog license metadata for the VolumetricFog module reference implementation.",
+  "homepage": "https://github.com/diharaw/volumetric-fog",
+  "license": "MIT"
+}

@@ -1,0 +1,202 @@
+#version 450
+// Flow-field bake. Writes, per texel of each camera-snapped flow LOD layer, the
+// horizontal current (world XZ velocity, meters/second) accumulated from the
+// tagged flow sources (rectangular/polygon footprints of constant flow plus
+// texture-driven flow maps). Like the seabed depth bake, this is a closed-form
+// evaluation — each texel maps to a fixed world XZ via the shared cascade layout,
+// and the flow there is the sum of every source whose footprint contains it — so
+// no geometry pass is needed and it degrades to "no flow everywhere" when nothing
+// is tagged.
+//
+// The flow cascade has the foam cascade's resolution, LOD count and base scale,
+// so the two align texel-for-texel on the frames both snap to the same camera:
+// the foam sim advects by this cascade. The surface scrolls its detail-normal UVs
+// by it, sampled with this layout.
+
+#include "Ocean/ocean_cascade_common.glsl"
+
+layout(local_size_x = 8, local_size_y = 8, local_size_z = 1) in;
+
+// Must match kMaxOceanFlowSources / kMaxOceanFlowPolygons /
+// kMaxOceanFlowPolygonPoints / kMaxOceanFlowMapSources in Ocean/OceanTypes.h.
+const int GE_OCEAN_MAX_FLOW = 8;
+const int GE_OCEAN_MAX_FLOW_POLYGONS = 4;
+const int GE_OCEAN_MAX_FLOW_POLYGON_POINTS = 8;
+const int GE_OCEAN_MAX_FLOW_MAPS = 4;
+
+struct OceanFlowSourceGPU
+{
+    vec4 OriginExtent; // xy = center XZ, zw = half-extent (X, Z)
+    vec4 FlowVelocity; // xy = velocity, z = feather, w = encoded typed blend + 1
+};
+
+struct OceanFlowPolygonGPU
+{
+    vec4 Meta;         // x = point count, y = inward feather meters
+    vec4 Bounds;       // xy = min XZ, zw = max XZ
+    vec4 FlowVelocity; // xy = world XZ velocity (m/s), zw = pad
+    vec4 Points[GE_OCEAN_MAX_FLOW_POLYGON_POINTS]; // xy = world XZ
+};
+
+struct OceanFlowMapSourceGPU
+{
+    vec4 OriginExtent;    // xy = center XZ, zw = half-extent (X, Z)
+    vec4 StrengthFeather; // x = strength, y = feather, zw = bias XZ
+};
+
+// std140 — must match OceanFlowParamsGPU in Ocean/OceanTypes.h.
+layout(std140, set = 0, binding = 0) uniform OceanFlowParams
+{
+    uint  uResolution;
+    uint  uLodCount;
+    uint  uSourceCount;
+    uint  uFlowPad0;
+
+    // Embedded OceanCascadeLayoutGPU: per-LOD vec4 (xy=origin, z=texel, w=scale)
+    // then a padded uint lane (LodCount + 3 pad).
+    vec4  uCascadeOriginScale[GE_OCEAN_LOD_CASCADES];
+    uvec4 uCascadeMeta; // x = LodCount
+
+    OceanFlowSourceGPU uSources[GE_OCEAN_MAX_FLOW];
+    uvec4 uPolygonMeta; // x = polygon count
+    OceanFlowPolygonGPU uPolygons[GE_OCEAN_MAX_FLOW_POLYGONS];
+    uvec4 uFlowMapMeta; // x = flow-map count
+    OceanFlowMapSourceGPU uFlowMaps[GE_OCEAN_MAX_FLOW_MAPS];
+};
+
+layout(set = 0, binding = 1, rg16f) uniform writeonly image2DArray uFlowOut;
+layout(set = 0, binding = 2) uniform sampler2D uFlowMap0;
+layout(set = 0, binding = 3) uniform sampler2D uFlowMap1;
+layout(set = 0, binding = 4) uniform sampler2D uFlowMap2;
+layout(set = 0, binding = 5) uniform sampler2D uFlowMap3;
+
+vec4 OceanSampleFlowMap(uint index, vec2 uv)
+{
+    if (index == 0u)
+        return texture(uFlowMap0, uv);
+    if (index == 1u)
+        return texture(uFlowMap1, uv);
+    if (index == 2u)
+        return texture(uFlowMap2, uv);
+    return texture(uFlowMap3, uv);
+}
+
+float OceanRectFeatherWeight(vec2 d, vec2 halfExtent, float feather)
+{
+    if (d.x > halfExtent.x || d.y > halfExtent.y)
+        return 0.0;
+    if (feather <= 1e-3)
+        return 1.0;
+    vec2 edgeDistance = halfExtent - d;
+    return smoothstep(0.0, feather, min(edgeDistance.x, edgeDistance.y));
+}
+
+float OceanSegmentDistance(vec2 p, vec2 a, vec2 b)
+{
+    vec2 ab = b - a;
+    float t = clamp(dot(p - a, ab) / max(dot(ab, ab), 1e-12), 0.0, 1.0);
+    return length(p - (a + ab * t));
+}
+
+float OceanPolygonWeight(vec2 p, OceanFlowPolygonGPU poly)
+{
+    uint count = uint(clamp(poly.Meta.x, 0.0, float(GE_OCEAN_MAX_FLOW_POLYGON_POINTS)));
+    if (count < 3u)
+        return 0.0;
+    if (p.x < poly.Bounds.x || p.y < poly.Bounds.y || p.x > poly.Bounds.z || p.y > poly.Bounds.w)
+        return 0.0;
+
+    bool inside = false;
+    float minEdgeDist = 1e20;
+    vec2 prev = poly.Points[count - 1u].xy;
+    for (uint i = 0u; i < count; ++i)
+    {
+        vec2 curr = poly.Points[i].xy;
+        minEdgeDist = min(minEdgeDist, OceanSegmentDistance(p, curr, prev));
+        bool crosses = ((curr.y > p.y) != (prev.y > p.y));
+        float denom = prev.y - curr.y;
+        denom = abs(denom) < 1e-6 ? (denom < 0.0 ? -1e-6 : 1e-6) : denom;
+        float xAtY = (prev.x - curr.x) * (p.y - curr.y) / denom + curr.x;
+        if (crosses && p.x < xAtY)
+            inside = !inside;
+        prev = curr;
+    }
+    if (!inside)
+        return 0.0;
+
+    float feather = max(poly.Meta.y, 0.0);
+    if (feather <= 1e-3)
+        return 1.0;
+    return smoothstep(0.0, feather, minEdgeDist);
+}
+
+void main()
+{
+    const ivec3 id = ivec3(gl_GlobalInvocationID);
+    if (uint(id.x) >= uResolution || uint(id.y) >= uResolution || uint(id.z) >= uLodCount)
+        return;
+
+    const vec4 layer = uCascadeOriginScale[id.z];
+    const vec2 worldXZ = OceanCascadeTexelToWorld(id.xy, layer.xy, layer.z);
+
+    // Accumulate the flow from every source whose footprint contains this texel.
+    vec2 flow = vec2(0.0);
+    uint count = min(uSourceCount, uint(GE_OCEAN_MAX_FLOW));
+    for (uint s = 0u; s < count; ++s)
+    {
+        OceanFlowSourceGPU src = uSources[s];
+        vec2 d = abs(worldXZ - src.OriginExtent.xy);
+        if (d.x > src.OriginExtent.z || d.y > src.OriginExtent.w)
+            continue; // outside this source's footprint
+        // Soften the rectangular edge so the current fades in rather than
+        // snapping on, which would leave a hard advection seam in the foam.
+        vec2 edge = vec2(1.0) - smoothstep(0.7, 1.0,
+                                           d / max(src.OriginExtent.zw, vec2(1e-3)));
+        float weight = src.FlowVelocity.z > 1e-3
+                           ? OceanRectFeatherWeight(d, src.OriginExtent.zw,
+                                                    src.FlowVelocity.z)
+                           : min(edge.x, edge.y);
+        if (src.FlowVelocity.w <= 0.5)
+        {
+            flow += src.FlowVelocity.xy * weight;
+        }
+        else
+        {
+            int mode = int(clamp(floor(src.FlowVelocity.w - 0.5), 0.0, 4.0));
+            vec2 combined = src.FlowVelocity.xy;
+            if (mode == 1) combined = flow + src.FlowVelocity.xy;
+            else if (mode == 2) combined = flow * src.FlowVelocity.xy;
+            else if (mode == 3) combined = min(flow, src.FlowVelocity.xy);
+            else if (mode == 4) combined = max(flow, src.FlowVelocity.xy);
+            flow = mix(flow, combined, weight);
+        }
+    }
+
+    uint polygonCount = min(uPolygonMeta.x, uint(GE_OCEAN_MAX_FLOW_POLYGONS));
+    for (uint p = 0u; p < polygonCount; ++p)
+    {
+        OceanFlowPolygonGPU poly = uPolygons[p];
+        float w = OceanPolygonWeight(worldXZ, poly);
+        if (w <= 0.0)
+            continue;
+        flow += poly.FlowVelocity.xy * w;
+    }
+
+    uint mapCount = min(uFlowMapMeta.x, uint(GE_OCEAN_MAX_FLOW_MAPS));
+    for (uint m = 0u; m < mapCount; ++m)
+    {
+        OceanFlowMapSourceGPU src = uFlowMaps[m];
+        vec2 halfExtent = max(src.OriginExtent.zw, vec2(1e-3));
+        vec2 d = abs(worldXZ - src.OriginExtent.xy);
+        float w = OceanRectFeatherWeight(d, halfExtent, max(src.StrengthFeather.y, 0.0));
+        if (w <= 0.0)
+            continue;
+
+        vec2 uv = (worldXZ - src.OriginExtent.xy) / (2.0 * halfExtent) + vec2(0.5);
+        vec2 encoded = OceanSampleFlowMap(m, clamp(uv, vec2(0.0), vec2(1.0))).rg;
+        vec2 decoded = (encoded - vec2(0.5)) * 2.0;
+        flow += (decoded * src.StrengthFeather.x + src.StrengthFeather.zw) * w;
+    }
+
+    imageStore(uFlowOut, id, vec4(flow, 0.0, 0.0));
+}

@@ -1,0 +1,30 @@
+#version 450
+// Runs the production reflection gather (GE_DDGIGatherReflectionC0) and
+// diffuse sample (GE_DDGISampleC0) at authored receivers, one case per
+// invocation, against a volume and atlases the test binds at the production
+// binding numbers.
+#include "Includes/ddgi_probes.glsl"
+layout(local_size_x = 1) in;
+struct MomentCase
+{
+    vec4 PositionWS;
+    vec4 Direction;  // the reflection direction and the diffuse normal
+};
+layout(std430, set = 0, binding = 0) readonly buffer MomentCases
+{
+    MomentCase cases[];
+};
+layout(std430, set = 0, binding = 1) writeonly buffer MomentResults
+{
+    vec4 results[];  // per case: [0] = rough reflection lobe, [1] = diffuse irradiance
+};
+void main()
+{
+    uint i = gl_GlobalInvocationID.x;
+    MomentCase c = cases[i];
+    vec4 rough;
+    vec4 glossy;
+    GE_DDGIGatherReflectionC0(c.PositionWS.xyz, c.Direction.xyz, true, false, rough, glossy);
+    results[2u * i] = rough;
+    results[2u * i + 1u] = vec4(GE_DDGISampleC0(c.PositionWS.xyz, c.Direction.xyz), 1.0);
+}

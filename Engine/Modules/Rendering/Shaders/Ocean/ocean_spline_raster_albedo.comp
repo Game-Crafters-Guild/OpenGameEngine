@@ -1,0 +1,4 @@
+#version 450
+// Spline ribbons into the albedo cascade.
+#define OCEAN_RIBBON_FIELD 3
+#include "Ocean/ocean_spline_raster.glsl"

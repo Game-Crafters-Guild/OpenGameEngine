@@ -1,0 +1,19 @@
+{
+  "schemaVersion": 3,
+  "materialName": "OpenPBR - Rough Diffuse + DICE Back-Transmission",
+  "lightingModel": "StandardPBR",
+  "alphaMode": "Opaque",
+  "doubleSided": false,
+  "surfaceShader": "Surfaces/standard_pbr.glsl",
+  "properties": {
+    "baseColor": [0.63, 0.44, 0.36, 1.0],
+    "metallic": 0.0,
+    "roughness": 0.42,
+    "diffuseRoughness": 0.5,
+    "specularIor": 1.4,
+    "enableSubsurface": true,
+    "subsurfaceColor": [0.72, 0.16, 0.1],
+    "thickness": 0.45
+  },
+  "textures": {}
+}

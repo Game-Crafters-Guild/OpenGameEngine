@@ -1,0 +1,78 @@
+{
+  "assetType": "TerrainMaterialLibrary",
+  "materials": [
+    {
+      "albedo": [
+        0.3499999940395355,
+        0.550000011920929,
+        0.18000000715255737
+      ],
+      "albedoTexture": "f78498e7-2643-4d6e-a345-d96c7bede21e",
+      "ao": 1.0,
+      "hexTiling": true,
+      "name": "Grass",
+      "normalStrength": 1.0,
+      "roughness": 0.8500000238418579,
+      "slotId": 0,
+      "tiling": 1.0,
+      "variationHue": 0.10000000149011612,
+      "variationScale": 0.029999999329447746,
+      "variationStrength": 0.1599999964237213
+    },
+    {
+      "albedo": [
+        0.550000011920929,
+        0.5,
+        0.41999998688697815
+      ],
+      "albedoTexture": "f0d2ab62-d04a-4d09-be27-b0ea9573dc68",
+      "ao": 1.0,
+      "hexTiling": true,
+      "name": "Rock",
+      "normalStrength": 1.0,
+      "roughness": 0.6499999761581421,
+      "slotId": 1,
+      "tiling": 1.0,
+      "variationHue": 0.11999999731779099,
+      "variationScale": 0.02199999988079071,
+      "variationStrength": 0.23999999463558197
+    },
+    {
+      "albedo": [
+        0.5,
+        0.3799999952316284,
+        0.25
+      ],
+      "albedoTexture": "98356aeb-6cbe-48f4-a62a-f8622ab5cb35",
+      "ao": 1.0,
+      "hexTiling": true,
+      "name": "Dirt",
+      "normalStrength": 1.0,
+      "roughness": 0.75,
+      "slotId": 2,
+      "tiling": 1.0,
+      "variationHue": 0.10000000149011612,
+      "variationScale": 0.029999999329447746,
+      "variationStrength": 0.18000000715255737
+    },
+    {
+      "albedo": [
+        0.8999999761581421,
+        0.9200000166893005,
+        0.949999988079071
+      ],
+      "albedoTexture": "7305db25-159f-44dc-bd58-2699954a00b4",
+      "ao": 1.0,
+      "hexTiling": true,
+      "name": "Snow",
+      "normalStrength": 1.0,
+      "roughness": 0.8999999761581421,
+      "slotId": 3,
+      "tiling": 1.0,
+      "variationHue": 0.029999999329447746,
+      "variationScale": 0.03999999910593033,
+      "variationStrength": 0.07000000029802322
+    }
+  ],
+  "schemaVersion": 1
+}

@@ -1,0 +1,78 @@
+#version 450
+
+#include "Includes/compat_profile.glsl"
+
+// Box-downsample one mip of the env-capture cube from the mip above it. Fills
+// mip N (the bound storage image) by averaging a 2x2 footprint of mip N-1 of the
+// SAME cube, sampled trilinearly through the cube sampler. Run once per mip,
+// N = 1 .. kEnvCaptureMipCount-1, after the capture pass renders mip 0 and BEFORE
+// the diffuse/specular convolves read the chain. Gated with the bake, so it has
+// zero per-frame cost on a steady sky.
+//
+// Why a compute box-downsample (not the engine's BlitImageMip): the blit path is
+// NEAREST-filtered (keeps the thin high-frequency horizon glow aliased — exactly
+// the banding we are killing), per-layer, and needs manual TRANSFER_SRC/DST
+// transitions that fight the render graph's automatic per-subresource barriers.
+// A linear box filter pre-blurs the glow so the GGX prefilter / cosine convolve
+// integrate a smooth source -> no fireflies, no banding, even at low sample counts.
+
+layout(local_size_x = 8, local_size_y = 8, local_size_z = 1) in;
+
+// The source binding is a SINGLE-MIP cube view of mip N-1 (not the whole
+// chain): a whole-chain sampled descriptor claims ShaderReadOnly for every mip
+// it can reach, while the destination mip is simultaneously storage-resident
+// in GENERAL (VUID-VkDescriptorImageInfo-imageLayout-00344). Sampling lod 0 of
+// the single-mip view reads exactly the render-graph-declared source mip.
+layout(set = 0, binding = 0) uniform samplerCube uEnvMap;                 // mip N-1 (single-mip view)
+layout(set = 0, binding = 1, rgba16f) writeonly uniform image2DArray uDst; // mip N (one cube as a 6-layer array)
+
+vec3 CubemapDirection(int face, vec2 uv)
+{
+    float u = uv.x * 2.0 - 1.0;
+    float v = (1.0 - uv.y) * 2.0 - 1.0; // flip Y to match sky cube rendering
+
+    if (face == 0) return normalize(vec3( 1.0,  v, -u)); // +X
+    if (face == 1) return normalize(vec3(-1.0,  v,  u)); // -X
+    if (face == 2) return normalize(vec3( u,  1.0, -v)); // +Y
+    if (face == 3) return normalize(vec3( u, -1.0,  v)); // -Y
+    if (face == 4) return normalize(vec3( u,  v,  1.0)); // +Z
+    return             normalize(vec3(-u,  v, -1.0));    // -Z
+}
+
+// Radiance sanitize: NaN -> 0, clamp to the fp16 finite maximum so a diverged
+// or infinite source (e.g. a reflection-probe capture that fed its own env in a
+// closed room) cannot poison the bake into all-black. A no-op for real sky/HDRI
+// values, which are finite and far below the cap.
+vec3 GE_SanitizeRadiance(vec3 c)
+{
+    c = mix(vec3(0.0), c, equal(c, c));           // NaN != NaN -> 0
+    return clamp(c, vec3(0.0), vec3(65504.0));    // -Inf -> 0, +Inf -> fp16 max
+}
+
+void main()
+{
+    ivec3 size = GE_ARRAY_IMAGE_SIZE(uDst, 6);
+    ivec3 gid  = ivec3(gl_GlobalInvocationID);
+    if (gid.x >= size.x || gid.y >= size.y || gid.z >= size.z) return;
+
+    int face = gid.z;
+
+    // Four sub-texel offsets inside this destination texel (the 2x2 box footprint
+    // in the destination's UV space). Sampling the finer source mip at these four
+    // directions with a linear sampler averages a 4x4 region of the source — a
+    // smooth, glow-spreading downsample.
+    vec2 invSize = 1.0 / vec2(size.xy);
+    const vec2 kOffsets[4] = vec2[4](
+        vec2(0.25, 0.25), vec2(0.75, 0.25),
+        vec2(0.25, 0.75), vec2(0.75, 0.75));
+
+    vec3 sum = vec3(0.0);
+    for (int i = 0; i < 4; ++i)
+    {
+        vec2 uv = (vec2(gid.xy) + kOffsets[i]) * invSize;
+        vec3 dir = CubemapDirection(face, uv);
+        sum += GE_SanitizeRadiance(textureLod(uEnvMap, dir, 0.0).rgb);
+    }
+
+    imageStore(uDst, gid, vec4(sum * 0.25, 1.0));
+}

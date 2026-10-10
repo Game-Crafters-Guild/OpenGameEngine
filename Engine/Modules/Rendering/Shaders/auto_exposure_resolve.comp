@@ -1,0 +1,161 @@
+#version 450
+
+// Auto-exposure pass 2: reduce the geometry and sky histograms (built by auto_exposure_histogram.comp)
+// to one LINEAR exposure scale, smoothed in log space against the previous frame (eye adaptation).
+// State lives in a PERSISTENT/imported SSBO (RGFrame::ImportPersistentBuffer) so it survives across
+// frames; transient pool buffers alias and MUST NOT be used here.
+//
+// Metering rule (design: GameEngine-Workbench designs/rendering/auto-exposure.md):
+//   the meter reads the geometry; the sky is a ceiling, not part of the average. With G and S the
+//   10-90 % log-averages of the geometry and sky histograms and f the sky's share of the metered
+//   pixels,
+//     G' = mix(S, G, smoothstep(0, kMinGeometryShare, 1 - f))   (an all-sky frame meters the sky)
+//     M  = G' + clamp((f - kSkyShareStart) / (kSkyShareFull - kSkyShareStart), 0, 1)
+//               * max(0, S - kSkyHeadroomStops - G')
+//   so the sky may sit up to kSkyHeadroomStops over the key before it holds the exposure back, and
+//   only when it is a large share of the frame: a window of daylight in a dark room is left to bloom.
+//
+// A SINGLE thread does the serial reduction + write-back. It runs once per frame over 512 bins
+// (trivial), and avoids the shared-memory/barrier hazards a parallel reduction would introduce.
+
+layout(local_size_x = 1, local_size_y = 1, local_size_z = 1) in;
+
+const uint kBinCount = 256u;
+const uint kSkyOffset = kBinCount;  // histogram[256..511] is the sky (far plane)
+const float kMinLogLum = -16.0;     // must match the histogram pass
+const float kLogLumRange = 30.0;    // must match the histogram pass (physical scene-linear range)
+// Centered percentile window: reject only the extremes (deep shadow + highlights) and average the
+// middle 80% of each histogram.
+const float kLowPercent = 0.10;
+const float kHighPercent = 0.90;
+// The sky may sit this many stops over the metered key before it holds the exposure back.
+const float kSkyHeadroomStops = 2.0;
+// The sky's pull ramps in from this share of the metered pixels to full at kSkyShareFull.
+const float kSkyShareStart = 0.10;
+const float kSkyShareFull = 0.30;
+// Below this share of geometry the frame is metered as sky (looking up into open sky).
+const float kMinGeometryShare = 0.05;
+
+layout(set = 0, binding = 0, std430) restrict buffer HistogramBuffer { uint histogram[]; };
+
+// Persistent state. exposureScale is what the tonemap reads (N-1 latency).
+layout(set = 0, binding = 1, std430) restrict buffer ExposureState {
+    float exposureScale; // resolved LINEAR scene-exposure multiplier
+    uint  valid;         // != 1 -> first frame: snap to target, no smoothing
+    float padA;
+    float padB;
+} state;
+
+layout(push_constant) uniform PC {
+    float deltaTime;     // seconds, clamped [0,0.1] on the CPU
+    float speedUp;       // adaptation speed when brightening
+    float speedDown;     // adaptation speed when darkening
+    float exposureKey;   // target exposed-average luminance, in the SAME scene-linear unit as the
+                         // 203-nit reference white anchor (kNeutralExposureEV): 0.18 = mid-grey, so
+                         // Auto lands an 18% card where Manual/Physical do. The CPU pre-multiplies the
+                         // key AND both clamps by 2^AutoExposureBiasEv (PostProcessSettings::
+                         // TryWriteField) — identical to biasing the resolved exposure post-clamp, so
+                         // compensation works even at the envelope pins.
+    float minExposure;   // linear clamp (from MaxEv, bias pre-applied)
+    float maxExposure;   // linear clamp (from MinEv, bias pre-applied)
+} pc;
+
+// Called only for bins 1..255 — the reduction excludes the reserved near-black bin 0.
+float BinToLogLuminance(uint bin)
+{
+    return kMinLogLum + (float(bin - 1u) / float(kBinCount - 2u)) * kLogLumRange;
+}
+
+// Pixels in bins 1..255 of the histogram starting at `offset`.
+float CountMetered(uint offset)
+{
+    float total = 0.0;
+    for (uint i = 1u; i < kBinCount; ++i)
+        total += float(histogram[offset + i]);
+    return total;
+}
+
+// Percentile-windowed log2-luminance average: each bin contributes only the portion of its weight
+// inside [kLowPercent, kHighPercent] of the cumulative distribution. `total` must be > 0.
+float WindowedLogAverage(uint offset, float total)
+{
+    float minSum = total * kLowPercent;
+    float maxSum = total * kHighPercent;
+    float wsum = 0.0;
+    float wlog = 0.0;
+    float prefix = 0.0;
+    for (uint i = 1u; i < kBinCount; ++i)
+    {
+        float c = float(histogram[offset + i]);
+        float windowed = max(0.0, min(prefix + c, maxSum) - max(prefix, minSum));
+        wsum += windowed;
+        wlog += windowed * BinToLogLuminance(i);
+        prefix += c;
+    }
+    return (wsum > 1e-5) ? (wlog / wsum) : kMinLogLum;
+}
+
+// The metered log2 luminance (the rule in the header). An empty frame meters the window floor.
+float MeteredLogLuminance()
+{
+    float geometryCount = CountMetered(0u);
+    float skyCount = CountMetered(kSkyOffset);
+    float total = geometryCount + skyCount;
+    if (total <= 0.0)
+        return kMinLogLum;
+    if (skyCount <= 0.0)
+        return WindowedLogAverage(0u, geometryCount);
+    float sky = WindowedLogAverage(kSkyOffset, skyCount);
+    if (geometryCount <= 0.0)
+        return sky;
+
+    float skyShare = skyCount / total;
+    float geometry = mix(sky, WindowedLogAverage(0u, geometryCount),
+                         smoothstep(0.0, kMinGeometryShare, 1.0 - skyShare));
+    float pull = clamp((skyShare - kSkyShareStart) / (kSkyShareFull - kSkyShareStart), 0.0, 1.0);
+    return geometry + pull * max(0.0, sky - kSkyHeadroomStops - geometry);
+}
+
+void main()
+{
+    float avgLum = exp2(MeteredLogLuminance());
+    // Order the clamp bounds so an inverted Min/Max EV (which swaps min/maxExposure) stays well-defined.
+    float loScale = min(pc.minExposure, pc.maxExposure);
+    float hiScale = max(pc.minExposure, pc.maxExposure);
+    // The div-by-zero guard must sit BELOW the window floor (2^-16), or it becomes the real
+    // adaptation limit and MinEv is unreachable again.
+    float targetScale = clamp(pc.exposureKey / max(avgLum, 1e-6), loScale, hiScale);
+
+    // Snap on the first frame OR when the persistent state reads back garbage. The persistent buffer
+    // is not zero-initialized, and an evicted view's buffer can be recycled with a stale valid==1, so
+    // do not trust `valid` alone: also reject a non-finite/non-positive previous exposure, and clamp a
+    // finite-but-stale value into range before smoothing so it can never flash.
+    float prev = state.exposureScale;
+#if defined(GE_COMPAT_PROFILE)
+    // naga has no OpIsNan/OpIsInf: NaN is self-inequal, Inf exceeds FLT_MAX.
+    bool snap = (state.valid != 1u) || (prev != prev) || (abs(prev) >= 3.4e38) || prev <= 0.0;
+#else
+    bool snap = (state.valid != 1u) || isnan(prev) || isinf(prev) || prev <= 0.0;
+#endif
+
+    float resolved;
+    if (snap)
+    {
+        resolved = targetScale;
+    }
+    else
+    {
+        float logOld = log2(clamp(prev, loScale, hiScale));
+        float logTarget = log2(targetScale);
+        float speed = (logTarget > logOld) ? pc.speedUp : pc.speedDown;
+        float factor = clamp(1.0 - exp2(-pc.deltaTime * speed), 0.0, 1.0); // frame-rate independent
+        resolved = exp2(logOld + (logTarget - logOld) * factor);
+    }
+
+    state.exposureScale = resolved;
+    state.valid = 1u;
+
+    // The histograms are zero-filled by the CPU (FillBuffer) at the top of the histogram pass each
+    // frame — covering the never-initialized first frame and pool-recycled buffers, which an
+    // end-of-frame clear here could not.
+}

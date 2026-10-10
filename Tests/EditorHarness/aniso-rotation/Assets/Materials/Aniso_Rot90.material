@@ -1,0 +1,17 @@
+{
+  "schemaVersion": 3,
+  "materialName": "AnisoRot90",
+  "lightingModel": "StandardPBR",
+  "alphaMode": "Opaque",
+  "doubleSided": false,
+  "surfaceShader": "Surfaces/standard_pbr.glsl",
+  "properties": {
+    "baseColor": [0.85, 0.85, 0.88, 1.0],
+    "metallic": 1.0,
+    "roughness": 0.2,
+    "enableAnisotropy": true,
+    "anisotropy": 0.6,
+    "anisotropyRotation": 1.5708
+  },
+  "textures": {}
+}

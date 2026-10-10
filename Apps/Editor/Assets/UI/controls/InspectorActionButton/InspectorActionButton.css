@@ -1,0 +1,50 @@
+.inspector-action-button {
+    gap: 6px;
+    padding: 4px 10px;
+    min-height: 27px;
+    align-self: flex-start;
+    background-color: transparent;
+}
+
+.inspector-action-button:hover {
+    background-color: var(--ui_color_bg_hover);
+    border-color: var(--ui_color_text_dim);
+}
+
+.inspector-action-icon {
+    width: 16px;
+    height: 16px;
+    min-width: 16px;
+    min-height: 16px;
+    flex-shrink: 0;
+    background-size: contain;
+    background-repeat: no-repeat;
+    background-position: center;
+    background-tint: var(--ui_color_text_dim);
+    pointer-events: none;
+}
+
+/* The plus is drawn smaller than the action icons: it is a mark beside the label, not a picture. */
+.inspector-action-add {
+    width: 12px;
+    height: 12px;
+    min-width: 12px;
+    min-height: 12px;
+    background-image: url("editor:Icons/plus.png");
+}
+
+.inspector-action-restart {
+    background-image: url("editor:Icons/ResetReload.png");
+}
+
+.inspector-action-play {
+    background-image: url("editor:Icons/play.png");
+}
+
+.inspector-action-pause {
+    background-image: url("editor:Icons/pause.png");
+}
+
+.inspector-action-step {
+    background-image: url("editor:Icons/fastforward.png");
+}

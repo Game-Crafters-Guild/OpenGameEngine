@@ -1,0 +1,329 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Particles</title>
+<style>
+  :root {
+    --bg: #0f1115; --panel: #171a21; --panel-light: #1f232c; --border: #2a2f3a;
+    --text: #d7dae0; --muted: #8b93a3; --accent: #6aa9ff; --danger: #ff6b6b; --bad: #ff6b6b;
+    --ok: #5fd38d; --good: #5fd38d; --warn: #ffc857;
+  }
+  body { margin: 0; background: var(--bg); color: var(--text); font: 15px/1.55 -apple-system, Segoe UI, Roboto, sans-serif; }
+  .wrap { max-width: 1040px; margin: 0 auto; padding: 40px 28px 64px; }
+  h1 { font-size: 30px; margin: 0 0 4px; }
+  h2 { font-size: 21px; margin: 40px 0 14px; padding: 8px 0; border-bottom: 2px solid var(--border); }
+  h3 { font-size: 16px; margin: 22px 0 8px; color: var(--accent); }
+  .lede { color: var(--muted); margin: 0 0 24px; letter-spacing: .04em; text-transform: uppercase; font-size: 12px; }
+  code, pre { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 13px; }
+  code { background: var(--panel-light); padding: 1px 5px; border-radius: 4px; }
+  pre { background: var(--panel); border: 1px solid var(--border); border-radius: 8px; padding: 14px 16px; overflow-x: auto; }
+  pre code { background: none; padding: 0; }
+  table { width: 100%; border-collapse: collapse; margin: 12px 0 18px; background: var(--panel); border: 1px solid var(--border); border-radius: 8px; overflow: hidden; }
+  th { text-align: left; background: var(--panel-light); color: var(--muted); font-weight: 600; font-size: 12px; text-transform: uppercase; letter-spacing: .04em; }
+  th, td { padding: 8px 12px; border-bottom: 1px solid var(--border); vertical-align: top; }
+  tr:last-child td { border-bottom: none; }
+  tr:hover td { background: rgba(255,255,255,.02); }
+  .panel { background: var(--panel); border: 1px solid var(--border); border-left: 4px solid var(--accent); border-radius: 8px; padding: 12px 16px; margin: 14px 0; }
+  .panel.warn { border-left-color: var(--warn); }
+  .panel.ok { border-left-color: var(--ok); }
+  .muted { color: var(--muted); }
+  hr { border: 0; border-top: 1px solid var(--border); margin: 36px 0; }
+  .footer { color: var(--muted); font-size: 13px; margin-top: 48px; padding-top: 16px; border-top: 1px solid var(--border); }
+</style>
+</head>
+<body>
+<div class="wrap">
+
+<h1>Particles</h1>
+<p class="lede">Guide · rendering · particle emitters, stacks and renderers · living document</p>
+
+<p>A particle effect is three things on an entity: a <b>Particle Emitter</b> that decides when and
+how fast its particles simulate, the <b>processor stack</b> asset the emitter runs, which says what the
+particles do, and an optional <b>Particle Renderer</b> that says how they draw. Stacks are assets: one
+stack can drive any number of emitters, and editing it changes every emitter that runs it. This guide
+covers the components and the editor; the stack itself, its processors and its file format are in
+<a href="particle-processor-stack.html">Particle processor stacks</a>.</p>
+
+<h2>Making an emitter</h2>
+
+<ul>
+  <li><b>Hierarchy, Create, Particle Emitter</b> makes an entity with an emitter. In a 2D Scene View the
+      emitter is a 2D one: its particles stay on the entity's XY plane.</li>
+  <li><b>Add Component, Rendering</b> offers <b>Particle Emitter 2D</b>, <b>Particle Emitter 3D</b> and
+      <b>Particle Renderer</b> for an existing entity.</li>
+</ul>
+
+<p>A new emitter runs the default stack: particles launched upward in a cone, at a rate of its
+<b>Amount</b> per second, falling under gravity. Press <b>New Stack</b> in its Processor Stack section to
+get a stack asset of your own: the editor writes <code>Particles/Particle Stack.particlestack</code>
+(numbered if the name is taken) into the project, starting from the default stack, and points the
+emitter at it. That step is one undo. To share a stack, drag the same asset onto several emitters'
+<b>Stack</b> field.</p>
+
+<div class="panel">
+Without a Particle Renderer an emitter draws soft, procedural smoke puffs facing the camera, which is enough to see
+what a stack does. Add a Particle Renderer to choose the material, texture sheet, lighting, meshes and
+trails. Switching the renderer off hides the particles; they keep simulating. Hundreds of overlapping
+puffs add up: the web seed project's smoke reads as a translucent gray plume with a mid-gray color
+(0.55), an opacity that peaks at 0.35 and thins as the column rises, and a size that grows along an
+S-curve, where full white at full opacity would draw an opaque white mass.
+</div>
+
+<h2>The emitter</h2>
+
+<table>
+  <thead><tr><th>Field</th><th>Default</th><th>What it does</th></tr></thead>
+  <tbody>
+    <tr><td>Stack</td><td>none</td><td>The processor stack asset the particles run. None runs the default stack.</td></tr>
+    <tr><td>Emitting</td><td>on</td><td>Off stops new particles; the ones alive keep simulating until they die.</td></tr>
+    <tr><td>Amount</td><td>8</td><td>The most particles alive at once, at most 4096.</td></tr>
+    <tr><td>Prewarm Seconds</td><td>0</td><td>Seconds simulated before the effect is first shown, at most 60. The effect appears when its prewarm finishes, spread over the first frames so no frame stalls.</td></tr>
+    <tr><td>Simulation Speed</td><td>1</td><td>Multiplies the simulation clock; 0 freezes the effect.</td></tr>
+    <tr><td>Dimension</td><td>World3D</td><td>World2D keeps particles on the emitter's XY plane.</td></tr>
+    <tr><td>Local Space</td><td>off</td><td>On, particles move with the emitter; off, they stay where they were born.</td></tr>
+    <tr><td>Ticks Per Second</td><td>30</td><td>Fixed simulation steps per second, up to 240. At 0 the simulation takes one bounded step per frame, which gives up determinism across frame rates.</td></tr>
+    <tr><td>Interpolate</td><td>on</td><td>Draws particles between steps. Off shows each step as it lands: a stepped, hand-animated look.</td></tr>
+    <tr><td>Seed</td><td>0</td><td>The effect's random sequence. 0 derives one from the entity, so copies differ; any other value makes every emitter with it identical.</td></tr>
+    <tr><td>Sub-emitters</td><td>none</td><td>Four slots naming the emitters the stack's spawn rules send particles to (see below).</td></tr>
+  </tbody>
+</table>
+
+<p>A fixed tick rate makes an effect deterministic: the same seed, stack, transforms and tick sequence
+produce the same particles, whatever the frame rate. When a frame takes long the simulation runs at
+most eight ticks and drops the rest of the time, so a hitch slows the effect down rather than stalling
+the frame.</p>
+
+<p>A moving emitter is where it was when each tick ended, between the transforms of the frames around
+it: it moves in a straight line, turns at a steady rate and scales evenly between them. The particles a
+tick emits spread along the stretch it covered during the tick, the newest at the emitter, so a fast
+emitter lays an even trail, the same at any frame rate, and a spinning one keeps its shape. A move of
+more than 50 times the emitter's own scale in one frame is a teleport: that frame's particles start at
+the new place and the emitter is at rest there. To jump a shorter distance without a trail, restart the
+emitter.</p>
+
+<h3>Previewing</h3>
+
+<p>The top of the emitter's inspector previews the effect in the Scene View: <b>Restart</b>,
+<b>Pause</b> (then <b>Play</b>), <b>Step</b> one tick, and <b>Preview Time</b>, which scrubs the effect to a
+time between 0 and 60 seconds and pauses it there. Scrubbing replays the effect at the emitter's
+current transform in small chunks over the next frames; it raises no collision events and sends
+nothing to sub-emitters. The card below the buttons shows the live particle count, the preview time,
+the simulation cost and dropped time. The first preview action adds a <b>ParticlePlayback</b>
+component to the entity to carry these commands; it is runtime state and is not saved with the scene.</p>
+
+<h3>Sub-emitters</h3>
+
+<p>A stack's spawn rules (the Event processor's <i>Spawn in Child Emitter</i> action) name one of four
+slots, <b>Sub-emitter 1</b> to <b>Sub-emitter 4</b>. The emitter's Sub-emitters section says which
+entity each slot is. The child receives the particles on its next update, at the parent particle's
+world position, carrying what the rule says it inherits (velocity, size, color, rotation, lifetime).
+A child emitter whose stack emits nothing on its own shows only what its parents send it. A slot that
+names no emitter, or a switched-off one, drops the spawns. Scene files keep the slots pointing at the
+entities they name.</p>
+
+<h3>Events from gameplay</h3>
+
+<p>A stack reacts to named events a game sends to its emitter through the Event processor's
+<i>On Game Event</i> trigger. Send one through the emitter's <code>ParticlePlayback</code>:</p>
+
+<pre><code>#include "Components/Rendering/Particles.h"
+#include "Types/StringId.h"
+
+void Detonate(ECS::World&amp; world, ECS::EntityHandle emitter)
+{
+    if (!world.HasComponent&lt;Components::ParticlePlayback&gt;(emitter))
+        world.AddComponentImmediate(emitter, Components::ParticlePlayback{});
+    world.GetComponentForWrite&lt;Components::ParticlePlayback&gt;(emitter)-&gt;SendEvent("Detonate"_sid);
+}</code></pre>
+
+<p>Every live particle of the emitter runs its game-event rules for that name on the emitter's next
+update. Up to eight events wait per update; <code>SendEvent</code> returns false when the queue is full.
+The same component restarts (<code>++Restart</code>), pauses (<code>Paused = true</code>) and steps
+(<code>++SingleStep</code>) the effect from gameplay code.</p>
+
+<h3>Collision events</h3>
+
+<p>The stack's Collision processor bounces particles off a plane or off the physics world. To read the
+collisions in gameplay code, add <b>Particle Collision Events</b> (Add Component, Rendering) to the
+emitter, or to any one entity for every emitter that has none: its <code>ParticleCollisionEventsBuffer</code>
+holds the frame's first 64 contacts, each with the emitter, the particle, the position, normal, velocity
+and whether the particle died.</p>
+
+<h2>The renderer</h2>
+
+<p>The Particle Renderer's inspector groups its fields by what they change and shows the six-way,
+emitter-scale and trail rows only when they apply.</p>
+
+<h3>Material and texture sheet</h3>
+
+<p><b>Material</b> is optional: a material asset whose properties and textures the particles use. The
+particle shaders, blending and lighting mode always come from the renderer; the material's own
+surface shader or graph is not used. Without one, particles use a neutral material in which the
+particle color alone sets the color. <b>Texture</b> is an RGBA atlas whose cells count left to right,
+then top to bottom. Every sample stays half a texel inside its cell; leave gutters between cells if the
+atlas is viewed small enough to reach lower mip levels.</p>
+
+<table>
+  <thead><tr><th>Field</th><th>What it does</th></tr></thead>
+  <tbody>
+    <tr><td>Columns, Rows</td><td>The atlas grid, 1 to 256 each.</td></tr>
+    <tr><td>Frame Count</td><td>Cells the sheet plays; 0 plays every cell.</td></tr>
+    <tr><td>Frame Rate</td><td>Playback rate in frames per second. At 0 the sheet plays once over each particle's life. The simulation speed also scales it; a stack can vary it per particle with the Animation Speed and Animation Offset attributes.</td></tr>
+    <tr><td>Start Frame</td><td>The first cell, fractional when blending.</td></tr>
+    <tr><td>Loop</td><td>Loop when playing at a frame rate.</td></tr>
+    <tr><td>Blend Frames</td><td>Crossfade between neighboring cells, including the last-to-first seam when looping. Turn it off for hand-drawn frames that must not blur into each other.</td></tr>
+  </tbody>
+</table>
+
+<h3>Lighting</h3>
+
+<p><b>Unlit</b> draws the authored color relative to the camera's exposure: a color of 1 draws as
+the display's white at whatever exposure the view has, so unlit smoke authored gray reads gray in
+daylight and at night alike. <b>Lit</b> lights particles as a uniform volume from the
+scene's lights and environment: directional, point, spot and area lights, their shadows, and the
+ambient probe; there is no flat-surface cosine or specular highlight. <b>SixWay</b> lights them from six
+baked directional response maps, which gives smoke and fire volume under moving lights. Assign
+<b>Six Way Map A</b> and <b>Six Way Map B</b> and pick how they pack the six directions:</p>
+
+<table>
+  <thead><tr><th>Six Way Layout</th><th>Map A</th><th>Map B</th><th>Opacity</th><th>Emission mask</th></tr></thead>
+  <tbody>
+    <tr><td>SignedAxes</td><td>+X, +Y, +Z</td><td>−X, −Y, −Z</td><td>Texture alpha</td><td>Emission Texture</td></tr>
+    <tr><td>RightTopBackRgba</td><td>right, top, back, opacity</td><td>left, bottom, front, emission</td><td>Map A alpha</td><td>Map B alpha</td></tr>
+    <tr><td>TopLeftRightBottomBackFront</td><td>top, left, right</td><td>bottom, back, front</td><td>Texture alpha</td><td>Emission Texture</td></tr>
+  </tbody>
+</table>
+
+<p>Directions are in the sprite's own basis: right, up, and toward the camera as front. Import the
+maps as linear data unless the pack says otherwise; the renderer samples the color space the texture
+asset declares. The maps play on the same grid and frame as the texture sheet. <b>Six Way Contrast</b>
+raises the response to a power, which firms up maps baked with a soft response; 1 keeps them as baked.
+Until both maps are assigned the particles light as <b>Lit</b>, and the inspector says so.</p>
+
+<p><b>Emission Color</b> and <b>Emission Intensity</b> make the particles glow with their own light,
+which shows with scene lights off but does not light other objects; an intensity of 0 emits nothing.
+On <b>Unlit</b> particles the emission is relative to the exposure like the color: an intensity of 1
+adds the display's white. On <b>Lit</b> and <b>SixWay</b> particles it is scene light, where 1 is the
+engine's reference white of 203 nits, so a glow meant to show in daylight needs an intensity in the
+hundreds.
+Without an emission texture the whole particle glows. <b>Emission Texture</b> says where it glows: an
+RGB emissive atlas played with the sheet (for fire inside smoke), which replaces map B's emission alpha
+when the RGBA layout is used. To light the scene, give the stack a Light processor.</p>
+
+<h3>Orientation and order</h3>
+
+<table>
+  <thead><tr><th>Billboard</th><th>The quad or mesh</th></tr></thead>
+  <tbody>
+    <tr><td>FaceCameraPosition (default)</td><td>Faces the camera's position rather than its plane, so particles near the screen edges turn toward the viewer. A particle close to the camera covers the part of the view it fills, not the whole width a quad parallel to the camera plane spreads over at a wide field of view: with the camera inside a smoke column this draws about 40 % fewer fragments.</td></tr>
+    <tr><td>FaceCamera</td><td>Faces the camera plane.</td></tr>
+    <tr><td>WorldOriented</td><td>Keeps the emitter's plane; rotate the entity to orient it. Six-way lighting keeps its signed axes from behind.</td></tr>
+    <tr><td>LockedToEmitterUp</td><td>Turns toward the camera around the emitter's up axis, like a tree sprite.</td></tr>
+    <tr><td>Horizontal</td><td>Lies flat, facing up.</td></tr>
+    <tr><td>YAlongVelocity</td><td>Its up axis follows the velocity in 3D.</td></tr>
+    <tr><td>FaceCameraYAlongVelocity</td><td>Faces the camera with its up axis along the velocity as seen on screen: the stretched spark.</td></tr>
+    <tr><td>ZAlongVelocity</td><td>A mesh's forward axis follows its actual motion, including motion from noise.</td></tr>
+  </tbody>
+</table>
+
+<p><b>Inherit Scale</b> makes the particles take the emitter's scale on top of their own size, in
+every billboard mode. <b>Velocity Stretch</b> lengthens particles along their motion by that much per unit of speed.
+<b>Draw Order</b> sorts particles back to front. <b>ViewDepth</b>, the default, sorts every particle by
+its own distance from the camera, across emitters, so a column of smoke reads right from above and
+from below. <b>Spawn</b> (the newest on top), <b>Lifetime</b> (the oldest on top) and
+<b>ReverseLifetime</b> (the youngest on top) keep an emitter's particles together in that order and
+place the emitter by the depth of its origin, which suits effects seen from one side. Particles draw after opaque geometry,
+blended, without writing depth; they receive shadows and do not cast them.</p>
+
+<h3>Meshes</h3>
+
+<p>Assign up to four models to <b>Meshes</b> to draw each particle as those meshes (the first submesh of
+each, unskinned) instead of a sprite. Every assigned mesh draws for every particle. With none, particles
+are sprites.</p>
+
+<h3>Trails</h3>
+
+<p>When the stack has a Trail processor, the renderer draws each particle's recorded path as a ribbon
+facing the camera. <b>Trail Only</b> hides the particles and keeps the ribbons (tracers, streaks).
+<b>Trail Inherit Color</b> tints a trail with its particle's color instead of white; <b>Trail Size Affects
+Width</b> makes the width follow the particle's size; <b>Trail Fade Over Length</b> fades toward both
+ends rather than over the points' age. <b>Trail Width Min</b> and <b>Max</b> pick a width multiplier
+once per trail, <b>Trail Alpha Peak</b> is the opacity at its most opaque point, and <b>Trail Texture
+Tile</b> repeats the texture by distance travelled (<b>Trail Texture Scale U</b>, <b>V</b>) instead of
+stretching it over the trail.</p>
+
+<h3>Visibility</h3>
+
+<p><b>Render Layer Mask</b> chooses the views that draw the particles, as for meshes.
+<b>Thinning Start</b> and <b>Thinning End</b> hide a growing share of the particles
+between the two distances from the camera in metres, the same particles every frame, and all of them beyond
+the end; an end distance of 0 turns thinning off, and the inspector says so. Culling and thinning never pause the simulation.</p>
+
+<p>A sprite that faces the camera (<b>FaceCamera</b> or <b>FaceCameraPosition</b>, not stretched by
+<b>Velocity Stretch</b>) fades out before the camera's near plane can cut it. Its opacity falls from full to
+nothing while its distance from the camera comes from two of its half-diagonals to one half-diagonal
+past the near plane, and closer than that it is not drawn; both distances stop at 3 m and 1.5 m, so a
+large sprite seen from outside is drawn until the camera is close. The distance is measured to the
+camera, not along the view, so a cloud does not thin as the camera turns. With the camera inside a smoke
+column, the puffs around the camera are not drawn. Under an additive or other authored blend the color
+and emission fade too, as the square of the fade, so a bright glow dims across the whole distance rather
+than at its end. Ground-aligned and world-oriented sprites, sprites on an emitter with Velocity Stretch,
+meshes and trails do not fade.</p>
+
+<h2>Budgets</h2>
+
+<p>An emitter simulates at most its Amount, up to 4096 live particles. A world simulates at most 65,536
+by default; add a <b>Particle World Settings</b> component to set a lower <b>Max Particles</b> (the
+lowest wins when there are several). Emitters take their share in entity order, so the same scene
+always spends its budget the same way. The simulation runs on the CPU, one emitter after another, in
+the frame's extraction phase; it needs a world transform but no camera or graphics device, so it runs
+in headless worlds and tests too.</p>
+
+<h2>Packaging</h2>
+
+<p>Stacks are written as JSON in the project so they diff and merge. When a game is built, the build
+cooks every stack it packages into a compact binary form the Player reads without parsing JSON; a
+stack that fails to cook fails the build with its path and the reason. Nothing needs setting up.</p>
+
+<p>A browser has no shader compiler, so a web export cooks the particle shader programs ahead of time:
+for each kind of particle material (lighting mode, six-way layout, texture sheet and emission texture),
+the programs the render pipeline draws particles with. Those are the keywords of the pipeline's
+<b>Transmissive</b> node that particles take (ForwardPlus and Shadows, with or without IBL), on a sprite or
+on a mesh with or without tangents. The engine's own pipelines are covered. A project pipeline whose
+Transmissive node has other keywords, or a mesh particle whose mesh brings vertex colors, extra UV sets
+or skinning, has no cooked program on the web. The emitter then does not draw, and the browser console
+reports "no cooked program" with the material's name and its defines. To fix it, give the Transmissive
+node ForwardPlus, Instanced and Shadows (IBL optional), and use meshes without those extra streams.</p>
+
+<h2>Limits</h2>
+
+<ul>
+  <li><b>CPU simulation.</b> Particles simulate on the CPU; there is no GPU simulation path.</li>
+  <li><b>Tick-aligned timing.</b> Processor intervals and age triggers take effect at simulation ticks,
+      so at 30 ticks per second an interval starts within a thirtieth of a second of its time.</li>
+  <li><b>Physics collisions</b> sweep a ray extended by the particle's radius rather than a sphere, and
+      can miss glancing contacts. Without a physics world they find nothing.</li>
+  <li><b>Particle lights</b> are capped at 64 per frame across the world.</li>
+  <li><b>No self-shadowing.</b> Particles receive scene shadows but cast none.</li>
+</ul>
+
+<h2>Changelog</h2>
+<ul>
+  <li><b>2026-10-08</b> — Packaging: which particle programs a web export cooks, and what the browser
+      reports for one it does not.</li>
+  <li><b>2026-10-01</b> — Camera-facing sprites close to the camera fade out, within 3 m of the near plane,
+      and are not drawn once they would reach it; under authored blends their color and emission fade too.</li>
+  <li><b>2026-09-30</b> — Unlit color and emission are relative to the camera's exposure; lit
+      emission is in scene units. A moving emitter spreads its particles along its path, turns rather
+      than shrinks between frames, and a move beyond 50 times its scale in one frame is a teleport.</li>
+  <li><b>2026-09-29</b> — Rewritten for stack assets, the emitter and renderer components, sub-emitter
+      slots, gameplay events and packaged stacks.</li>
+</ul>
+
+<hr>
+<p class="footer">Particles · rendering · living document · last revised 2026-10-08</p>
+
+</div>
+</body>
+</html>

@@ -1,0 +1,30 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
+    <AssemblyName>GameEngine.CoreBridge</AssemblyName>
+    <RootNamespace>GameEngine.CoreBridge</RootNamespace>
+    <GenerateDocumentationFile>true</GenerateDocumentationFile>
+    <TreatWarningsAsErrors>false</TreatWarningsAsErrors>
+    <WarningsAsErrors>CS1591</WarningsAsErrors>
+  </PropertyGroup>
+
+  <!-- Emit Roslyn Source Generator outputs to disk in Debug/Release for inspection -->
+  <PropertyGroup Condition="'$(Configuration)'=='Debug' or '$(Configuration)'=='Release'">
+    <EmitCompilerGeneratedFiles>true</EmitCompilerGeneratedFiles>
+    <CompilerGeneratedFilesOutputPath>$(BaseIntermediateOutputPath)Generated</CompilerGeneratedFilesOutputPath>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\InteropGenerator\InteropGenerator.csproj" OutputItemType="Analyzer" ReferenceOutputAssembly="false" />
+  </ItemGroup>
+  <ItemGroup>
+    <Compile Include="..\Common\EngineNativeBinding.cs" Link="EngineNativeBinding.cs" />
+    <Compile Include="..\Common\NativeEngineLibrary.cs" Link="NativeEngineLibrary.cs" />
+    <Compile Include="..\Common\EngineInstanceContext.cs" Link="EngineInstanceContext.cs" />
+    <Compile Include="..\Common\GenerateBindingAttribute.cs" Link="GenerateBindingAttribute.cs" />
+  </ItemGroup>
+
+</Project>

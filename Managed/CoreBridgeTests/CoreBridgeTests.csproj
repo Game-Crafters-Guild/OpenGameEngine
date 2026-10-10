@@ -1,0 +1,28 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <IsPackable>false</IsPackable>
+    <Nullable>enable</Nullable>
+    <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
+    <GenerateDocumentationFile>true</GenerateDocumentationFile>
+    <TreatWarningsAsErrors>false</TreatWarningsAsErrors>
+    <WarningsAsErrors>CS1591</WarningsAsErrors>
+  </PropertyGroup>
+  <ItemGroup>
+    <PackageReference Include="NUnit" Version="4.1.0" />
+    <PackageReference Include="NUnit3TestAdapter" Version="4.5.0" />
+    <PackageReference Include="Microsoft.NET.Test.Sdk" Version="17.11.0" />
+  </ItemGroup>
+  <ItemGroup>
+    <ProjectReference Include="..\CoreBridge\GameEngine.CoreBridge.csproj" />
+    <ProjectReference Include="..\HotReload\GameEngine.HotReload.csproj" />
+    <!-- The script assembly ScriptLifecycleTests loads; built and copied beside the test
+         assembly, never referenced. -->
+    <ProjectReference Include="..\..\Tests\ManagedTestAssemblies\DomainRoutingTest\DomainRoutingTest.csproj"
+                      ReferenceOutputAssembly="false" OutputItemType="Content" CopyToOutputDirectory="PreserveNewest" />
+  </ItemGroup>
+  <ItemGroup>
+    <Compile Include="..\Common\NativeEngineLibrary.cs" Link="NativeEngineLibrary.cs" />
+  </ItemGroup>
+</Project>
+

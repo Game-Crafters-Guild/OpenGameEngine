@@ -1,0 +1,17 @@
+{
+  "schemaVersion": 3,
+  "materialName": "OpenPBR - Charlie Sheen Velvet",
+  "lightingModel": "StandardPBR",
+  "alphaMode": "Opaque",
+  "doubleSided": false,
+  "surfaceShader": "Surfaces/standard_pbr.glsl",
+  "properties": {
+    "baseColor": [0.09, 0.012, 0.032, 1.0],
+    "metallic": 0.0,
+    "roughness": 0.9,
+    "enableSheen": true,
+    "sheenColor": [0.95, 0.60, 0.72],
+    "sheenRoughness": 0.45
+  },
+  "textures": {}
+}

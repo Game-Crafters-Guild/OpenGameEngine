@@ -1,0 +1,739 @@
+#version 450
+
+#extension GL_EXT_nonuniform_qualifier : require
+#extension GL_EXT_samplerless_texture_functions : require
+
+// Deterministic camera-relative grass placement.
+//
+// ONE WORKGROUP PER CELL of a world-anchored lattice (grass_placement.glsl).
+// terrain_grass_plan.comp has already decided, for every cell, whether it is visible, which terrain
+// it stands on, how many slots it reserves, which LOD it draws with and WHERE those slots sit in
+// the pool. This kernel reads that plan and fills the range: slot `s` lands at `Base + s`, always.
+//
+// No atomic decides an index or a membership here, so the placed set and its ORDER are a pure
+// function of the inputs. A candidate the mask rejects still occupies its own slot, written as a
+// zero-size blade whose triangles are degenerate and discarded before rasterization — paying a
+// dead vertex rather than shifting every blade after it.
+//
+// A blade's position, yaw and scale are a pure function of (cellX, cellZ, slot, seed): nothing
+// depends on the terrain's size, the camera's position, or the dispatch's extent, so grass is
+// identical at 512 m and at 16 km, and a blade never moves when the camera does.
+
+layout(local_size_x = 64, local_size_y = 1, local_size_z = 1) in;
+
+#include "grass_placement.glsl"
+#include "TerrainGrass/grass_clump.glsl"
+
+struct TerrainParamsEntry
+{
+    float WorldOriginX;
+    float WorldOriginZ;
+    float WorldSizeX;
+    float WorldSizeZ;
+    float HeightScale;
+    float InvHeightmapWidth;
+    float InvHeightmapHeight;
+    float TexelSize;
+    float WorldOriginY;
+    uint SplatmapBindless;
+    float MaterialTiling;
+    uint LayerCount;
+    uint LayerRole[4];
+    float GridDimHalf;
+    uint Flags;
+    uint NormalmapBindless;
+    uint HeightmapBindless;
+    uint GrassEnabled;
+    float GrassDensity;
+    float GrassBladeHeight;
+    float GrassBladeWidth;
+    float GrassMaskThreshold;
+    float GrassDensityFalloff;
+    float GrassRange;
+    float GrassWindStrength;
+    uint GrassLayerIndex;
+    float GrassBrightness;
+    float GrassGroundingStrength;
+    float GrassRandomScale;
+    float GrassRandomBrightness;
+    float GrassTranslucency;
+    uint GrassRootColor;
+    uint GrassTipColor;
+    uint GrassBacklightColor;
+    float GrassWindDirection;
+    float GrassWindGustSpeed;
+    float GrassWindGustScale;
+    float GrassWindRestingLean;
+    float GrassWindFlutterAmount;
+    float GrassWindFlutterSpeed;
+    float GrassWindSeed;
+    uint GrassBladeSegments;
+    uint GrassAlbedoBindless;
+    uint GrassAlphaBindless;
+    uint GrassNormalBindless;
+    uint GrassAtlasColumns;
+    uint GrassAtlasRows;
+    uint GrassAtlasTileCount;
+    float GrassAlphaCutoff;
+    float GrassNormalStrength;
+    float GrassTextureCardsPerSquareMeter;
+    float GrassTextureSize;
+    float GrassPlacementSeed;
+    float GrassMaxWidthRatio;
+    float GrassClumpSize;
+    float GrassClumpHeightVariance;
+    float GrassClumpAlignment;
+    float GrassClumpGather;
+    float GrassHueVariation;
+    float GrassRootShade;
+    float GrassBladeNormalForm;
+    float GrassBladeScatterGain;
+    float GrassRootFadeStart;
+    float GrassRootFadeEnd;
+    uint GrassControlBindless;
+};
+
+struct GrassBladeInstance
+{
+    float WorldX;
+    float WorldZ;
+    float RootY;
+    float BladeHeight;
+    float BladeWidth;
+    float Yaw;
+    float Rand;
+    float GrassWeight;
+    uint TerrainIndex;
+    // Terrain surface normal (world nx/nz; ny reconstructed) baked here for atlas terrains, whose
+    // vertex modifier has no unified normalmap to sample. 0 for non-atlas terrains (the vertex
+    // modifier samples NormalmapBindless / the height gradient itself, unchanged).
+    float NormalX;
+    float NormalZ;
+    uint Flags; // LOD index + clump colour code; grass_clump.glsl owns the bit layout
+};
+
+struct DrawIndexedIndirectCommand
+{
+    uint IndexCount;
+    uint InstanceCount;
+    uint FirstIndex;
+    int VertexOffset;
+    uint FirstInstance;
+};
+
+layout(std430, set = 0, binding = 0) readonly buffer TerrainParamsBuffer
+{
+    TerrainParamsEntry terrains[];
+};
+
+// WGSL storage buffers are read or read_write — there is no write-only access mode, and naga
+// rejects the qualifier outright. Dropping it on the compat arm costs nothing: writeonly is a
+// hint about traffic, not a correctness requirement, and this buffer is still only written.
+#if defined(GE_COMPAT_PROFILE)
+#define GE_WRITEONLY
+#else
+#define GE_WRITEONLY writeonly
+#endif
+
+layout(std430, set = 0, binding = 2) GE_WRITEONLY buffer TerrainGrassInstances
+{
+    GrassBladeInstance outInstances[];
+};
+
+// WGSL has no coherent attribute (naga emits one, tint rejects it). Nothing is lost: this
+// buffer is only ever touched through atomicAdd below, and WGSL atomics carry their own
+// cross-invocation visibility.
+#if defined(GE_COMPAT_PROFILE)
+#define GE_COHERENT
+#else
+#define GE_COHERENT coherent
+#endif
+
+// Indirect draw records (one per LOD) followed by the placement counters the readback reports. One
+// buffer so the instrument copies a single contiguous range and can never report a count from a
+// different dispatch than the draw it describes.
+layout(std430, set = 0, binding = 3) GE_COHERENT buffer TerrainGrassIndirectArgs
+{
+    DrawIndexedIndirectCommand drawArgs[kGrassLodCount];
+    // Slots the admitted cells reserve across both LODs — the pool's fill level. Written by the
+    // plan kernel, which is also what the draw records carry, so the two cannot disagree.
+    uint CandidatesConsidered;
+    uint CellsVisible;
+    // Of those slots, how many produced a blade. The gap is the mask's rejections, standing as
+    // zero-size instances: this is the number that says what the dead-slot cost is on real content.
+    uint AcceptedBlades;
+    // Radius scale the GPU budget fit landed on; 1.0 means the pool cost this view no range.
+    uint FittedRangeScaleBits;
+    // Pool size, written by the CPU beside the draw records' constant fields so the GPU and the
+    // readback measure against the same number.
+    uint Capacity;
+    uint _CounterPad0;
+    uint _CounterPad1;
+    uint _CounterPad2;
+} Args;
+
+// The per-cell plan terrain_grass_plan.comp produced for this dispatch. Not `readonly` even though
+// this kernel only reads it: one descriptor layout serves both pipelines and the plan kernel writes
+// it, and a backend that bakes access into the layout (WebGPU) rejects a readonly module bound to
+// a read_write entry.
+layout(std430, set = 0, binding = 1) buffer TerrainGrassCellPlanBuffer
+{
+    // The ring histogram the classify kernel accumulates into shares this buffer and sits AHEAD of
+    // the cell array. It is dead weight to this kernel, but it has to be declared: dropping it here
+    // would shift every cell read by the header's length.
+    uint RingCells[kGrassRingHistogramWords];
+    GrassCellPlan Cells[kGrassMaxCells];
+} CellPlan;
+
+// Per-workgroup accepted tally, reduced to ONE atomic per cell rather than one per blade.
+shared uint sAccepted[gl_WorkGroupSize.x];
+
+// The compat arm reads every map through the named bindings below and never touches
+// the material texture slots this include declares at set 1; declaring them anyway
+// would name a set the compute layout does not carry, which a backend that pads
+// argument buffers from the layout (Metal) rejects at pipeline creation.
+#if !defined(GE_COMPAT_PROFILE)
+#include "Includes/bindless_textures.glsl"
+#endif
+
+// Resident-window atlas resolve (terrain UV -> tile -> slot UV). Pure math, no bindings —
+// the SAME byte-shared helper CBT's compute + surface run (cbt_atlas.glsl), so grass snaps
+// roots to exactly the height CBT displaces the surface to. Included here rather than by
+// grass_atlas_splat.glsl below because only this stage's compile has the CBT directory on its
+// include path (the surface reaches the same file as "CBT/cbt_atlas.glsl").
+#include "cbt_atlas.glsl"
+
+// Unified-map existence bits (Terrain/TerrainTypes.h mirror): on the compat profile the bindless
+// indices are always 0, so map existence rides these flags and the taps read the NAMED bindings.
+#if defined(GE_COMPAT_PROFILE)
+const uint kTerrainFlagHasHeightmap = 4u;
+const uint kTerrainFlagHasNormalmap = 8u;
+const uint kTerrainFlagHasSplatmap = 16u;
+#define GRASS_MISSING_HEIGHTMAP(tp) ((tp.Flags & kTerrainFlagHasHeightmap) == 0u)
+#define GRASS_HAS_NORMALMAP(tp) ((tp.Flags & kTerrainFlagHasNormalmap) != 0u)
+#define GRASS_HAS_SPLATMAP(tp) ((tp.Flags & kTerrainFlagHasSplatmap) != 0u)
+#else
+#define GRASS_MISSING_HEIGHTMAP(tp) (tp.HeightmapBindless == 0u)
+#define GRASS_HAS_NORMALMAP(tp) (tp.NormalmapBindless != 0u)
+#define GRASS_HAS_SPLATMAP(tp) (tp.SplatmapBindless != 0u)
+#endif
+
+// Every terrain/atlas map tap below is an explicit-LOD data lookup, so one macro carries the
+// whole profile fork: the full profile indexes the bindless array, compat reads a named binding
+// declared just below (WebGPU exposes no binding arrays).
+//
+// Each tap names BOTH the bindless index and the compat texture; each arm expands only its own
+// operand, so the other name never has to exist in that profile. Every index keeps its desktop
+// meaning (0 = nothing bound) in both arms, so the callers' guards are untouched — the compat
+// build just writes 0 or 1 there, because the texture itself is what carries the binding.
+//
+// A macro, not a function: the default arm then preprocesses to exactly the call it always was,
+// which is what makes the desktop SPIR-V byte-identical.
+#if defined(GE_COMPAT_PROFILE)
+#define grassMapTap(mapIndex, mapTex, uv) textureLod(sampler2D(mapTex, gGrassMapSampler), uv, 0.0)
+#define grassMapSize(mapIndex, mapTex) textureSize(sampler2D(mapTex, gGrassMapSampler), 0)
+#else
+#define grassMapTap(mapIndex, mapTex, uv) textureLod(GE_BTEX(mapIndex, GE_TS_CLAMP), uv, 0.0)
+#define grassMapSize(mapIndex, mapTex) textureSize(GE_BTEX(mapIndex, GE_TS_CLAMP), 0)
+#endif
+// A unified height, normal, splat or grass control map read at a terrain UV: those maps are
+// terrain lattices (CBT_LatticeTextureUV), so the blade stands on the surface the terrain draws.
+#define grassLatticeTap(mapIndex, mapTex, uv) \
+    grassMapTap(mapIndex, mapTex, CBT_LatticeTextureUV(uv, vec2(grassMapSize(mapIndex, mapTex))))
+
+#if defined(GE_COMPAT_PROFILE)
+// WebGPU exposes no binding arrays, so the twelve maps this shader reads are named bindings in
+// grass's own set, after PlaceParams at binding 6. One sampler serves all of them: every tap
+// here is a clamped explicit-LOD data lookup (GE_TS_CLAMP on the bindless arm).
+layout(set = 0, binding = 7) uniform texture2D gGrassAtlasHeight;
+layout(set = 0, binding = 8) uniform texture2D gGrassAtlasHeightCoarse;
+layout(set = 0, binding = 9) uniform texture2D gGrassAtlasNormal;
+layout(set = 0, binding = 10) uniform texture2D gGrassAtlasNormalCoarse;
+layout(set = 0, binding = 11) uniform texture2D gGrassAtlasSplat;
+layout(set = 0, binding = 12) uniform texture2D gGrassAtlasSplatCoarse;
+layout(set = 0, binding = 13) uniform texture2D gGrassHeightmap;
+layout(set = 0, binding = 14) uniform texture2D gGrassNormalmap;
+layout(set = 0, binding = 15) uniform texture2D gGrassSplatmap;
+layout(set = 0, binding = 16) uniform texture2D gGrassAtlasControl;
+layout(set = 0, binding = 17) uniform texture2D gGrassAtlasControlCoarse;
+layout(set = 0, binding = 18) uniform texture2D gGrassControlmap;
+layout(set = 0, binding = 19) uniform sampler gGrassMapSampler;
+#endif
+
+// The shared splat taps, for the profile with no bindless array. Unlike the surface, the compute
+// DOES carry the atlas pair as named bindings, so all three sources resolve here.
+#if defined(GE_COMPAT_PROFILE)
+#define GRASS_SPLAT_TAP_UNIFIED(idx, uv) grassLatticeTap(idx, gGrassSplatmap, uv)
+#define GRASS_SPLAT_TAP_ATLAS_SLOT(idx, uv) grassMapTap(idx, gGrassAtlasSplat, uv)
+#define GRASS_SPLAT_TAP_ATLAS_COARSE(idx, uv) grassMapTap(idx, gGrassAtlasSplatCoarse, uv)
+#endif
+
+// The atlas bindings + the ground splat resolve, shared with terrain_grass_surface.glsl so a
+// blade's placement mask and its ground colour can never resolve the splat differently.
+#define GRASS_ATLAS_SET 0
+#define GRASS_ATLAS_PARAMS_BINDING 4
+#define GRASS_ATLAS_ROWS_BINDING 5
+#include "TerrainGrass/grass_atlas_splat.glsl"
+
+// Endpoint-aligned RG8 control lattice: R is height, G is density. Missing maps
+// are exactly neutral. Resolve at the final gathered site, never the candidate's
+// earlier position, and do not crossfade rejection probabilities during streaming.
+vec2 grassRegionControls(TerrainParamsEntry tp, vec2 uv)
+{
+    if (GrassAtlas_IsAtlasBacked(tp.Flags, Atlas.Enabled))
+    {
+        if (Atlas.GrassEnabled == 0u) return vec2(1.0);
+        AtlasResolve r = grassAtlasResolve(uv);
+#if defined(GE_COMPAT_PROFILE)
+        // GrassEnabled is published only after BOTH named maps have authored
+        // contents. A compat device never allocates bindless indices.
+        bool haveSlot = true;
+        bool haveCoarse = true;
+#else
+        bool haveSlot = Atlas.GrassBindless != 0u;
+        bool haveCoarse = Atlas.GrassCoarseBindless != 0u;
+#endif
+        if (r.Resident && haveSlot)
+            return grassMapTap(Atlas.GrassBindless, gGrassAtlasControl, r.SlotUV).rg;
+        if (haveCoarse)
+            return grassMapTap(Atlas.GrassCoarseBindless, gGrassAtlasControlCoarse,
+                               grassCoarseUV(uv, Atlas.CoarseDim)).rg;
+        return vec2(1.0);
+    }
+#if defined(GE_COMPAT_PROFILE)
+    bool haveMap = (tp.Flags & 32u) != 0u;
+#else
+    bool haveMap = tp.GrassControlBindless != 0u;
+#endif
+    if (!haveMap) return vec2(1.0);
+    return grassLatticeTap(tp.GrassControlBindless, gGrassControlmap, uv).rg;
+}
+
+// Per-view placement inputs. A UBO rather than push constants because the six frustum planes alone
+// are 96 bytes, over the guaranteed push-constant budget, and splitting one logical block across
+// two mechanisms costs more than the load.
+layout(std140, set = 0, binding = 6) uniform GrassPlaceParamsBuffer
+{
+    vec4 FrustumPlanes[6]; // xyz = normal, w = d; inside when dot(n, p) + d >= 0
+    vec4 CameraPos;        // xyz = camera world position, w = range scale from the budget fit
+    ivec4 CellWindow;      // xy = camera cell, z = cells per side, w = terrain params count
+    vec4 Bounds;           // x = world min Y, y = world max Y, z = LOD1 start distance, w = max range
+    // The three COLUMNS of the upper-left 3x3 of this view's view matrix, plus the projection's Y
+    // scale. Only the rotation is carried: positions are taken relative to the camera below, so the
+    // view translation never enters and no world-scale absolute coordinate is ever formed.
+    // ViewRotCol0.w carries this view's viewport height in pixels, after render scale: per-VIEW
+    // data like the rest of this block, and consumed in the same expression as ViewRotCol2.w. 0
+    // means the view has not published a world pass yet, which the reader below treats as "size
+    // unknown" and answers with no widening.
+    vec4 ViewRotCol0;      // xyz = view matrix column 0, w = viewport height in pixels
+    vec4 ViewRotCol1;      // xyz = view matrix column 1
+    vec4 ViewRotCol2;      // xyz = view matrix column 2, w = projection Y scale (uP[1][1])
+    // Worst case across every active grass terrain: x = densest blades/m² at the camera,
+    // y = flattest falloff. Read by terrain_grass_plan.comp, whose budget fit needs a term that
+    // dominates every per-terrain value; declared here because both kernels bind this same block.
+    vec4 Summary;
+} Place;
+
+// Width, in pixels, that a blade is never allowed to project below. Under about a pixel a blade
+// stops being a shape and becomes a sampling decision: it survives in one screen column and not the
+// next, and moves between them as the camera turns. That is the grazing-angle hatch, and it is a
+// geometry problem — no AA mode resolves a sliver it is only ever handed a fraction of.
+const float kGrassMinPixelWidth = 0.75;
+// Divide guard for the perspective term below, in view-space metres. Not the near plane: it exists
+// only so a blade at or behind the eye cannot divide by zero.
+const float kGrassMinProjectionDepth = 0.001;
+
+// Screen pixels covered by a one-world-unit step along `dirWS` at `posWS`, to first order.
+//
+// Only uP[1][1] and the viewport HEIGHT appear, which is exact rather than an approximation: the
+// horizontal term wants the viewport WIDTH and uP[0][0], and since uP[0][0] = uP[1][1] / aspect
+// while width = height * aspect, the aspect cancels.
+//
+// The position is taken RELATIVE TO THE CAMERA and rotated by the view rotation rather than
+// transformed by the full view matrix. The two agree exactly — the camera is the origin of view
+// space — but the relative form never builds a large absolute coordinate, so it holds at world
+// scale and needs no render-origin rebase.
+//
+// PERSPECTIVE ONLY: this divides by view z, which is clip.w only under a perspective projection.
+// An orthographic projection carries w = 1, so the same expression under-reads pixels-per-unit by a
+// factor of z and would pin every blade past about a metre to the expansion ceiling. The C++ side
+// keeps that case out rather than this one guarding for it: an orthographic view publishes
+// viewport height 0, which the caller below reads as "size unknown" and answers with no floor.
+float grassProjectedPixelsPerUnit(vec3 posWS, vec3 dirWS)
+{
+    mat3 viewRot = mat3(Place.ViewRotCol0.xyz, Place.ViewRotCol1.xyz, Place.ViewRotCol2.xyz);
+    vec3 posVS = viewRot * (posWS - Place.CameraPos.xyz);
+    vec3 dirVS = viewRot * dirWS;
+    // Behind or at the eye the derivative below is meaningless; the clamp drives the result large,
+    // which asks for no widening at all — the safe answer for a blade that is not on screen.
+    float z = max(posVS.z, kGrassMinProjectionDepth);
+    vec2 dNdc = (dirVS.xy * z - posVS.xy * dirVS.z) / (z * z);
+    return length(dNdc) * Place.ViewRotCol2.w * Place.ViewRotCol0.w * 0.5;
+}
+
+// The blade's minimum projected width as a multiple of its authored width, for the vertex stage to
+// clamp against. Evaluated ONCE per blade, where the vertex stage would evaluate it once per vertex
+// — twelve times over at LOD 0.
+//
+// One evaluation point is enough because of WHICH term dominates. A face-on blade in a field
+// authored at these widths only falls under the pixel floor tens of metres out; what actually
+// drives the floor is how far the blade is turned EDGE-ON to the camera, and that direction is a
+// per-blade property the vertex stage does not vary along the blade either. What is approximated is
+// only the positional term, which moves as 1/z over the blade's own height: mid-height is the point
+// that minimises its error over the span.
+//
+// Returned as a ratio to `bladeWidth` so the vertex stage can recover a world width by multiplying
+// by the value it already reads, without this shader having to know about the taper, the
+// aspect-ratio cap or the textured-card halving that the vertex stage applies afterwards.
+float grassMinWidthScale(vec3 rootWS, float bladeHeight, float bladeWidth, float yaw)
+{
+    // Height 0 means the view has not published a world pass yet, so the pixel size is not known.
+    // Widening nothing is the only safe reading of that; dividing by it would send every blade to
+    // the expansion ceiling for that frame.
+    if (Place.ViewRotCol0.w <= 0.0 || bladeWidth <= 0.0)
+        return 0.0;
+    vec3 evalPos = rootWS + vec3(0.0, bladeHeight * 0.5, 0.0);
+    float pixelsPerUnit = grassProjectedPixelsPerUnit(evalPos, vec3(cos(yaw), 0.0, sin(yaw)));
+    if (pixelsPerUnit <= 0.0)
+        return kGrassMaxWidthExpansion;
+    return (kGrassMinPixelWidth / pixelsPerUnit) / bladeWidth;
+}
+
+float sampleAtlasHeight01(vec2 uv)
+{
+    AtlasResolve r = grassAtlasResolve(uv);
+    if (r.Resident && Atlas.HeightBindless != 0u)
+        return grassMapTap(Atlas.HeightBindless, gGrassAtlasHeight, r.SlotUV).r;
+    if (Atlas.HeightCoarseBindless != 0u)
+        return grassMapTap(Atlas.HeightCoarseBindless, gGrassAtlasHeightCoarse,
+                           grassCoarseUV(uv, Atlas.CoarseDim)).r;
+    return 0.0;
+}
+
+float layerWeight(vec4 weights, uint layerIndex)
+{
+    if (layerIndex == 0u) return weights.r;
+    if (layerIndex == 1u) return weights.g;
+    if (layerIndex == 2u) return weights.b;
+    return weights.a;
+}
+
+float sampleHeight01(TerrainParamsEntry tp, vec2 uv)
+{
+    if (grassAtlasBacked(tp.Flags))
+        return sampleAtlasHeight01(uv);
+    if (GRASS_MISSING_HEIGHTMAP(tp))
+        return 0.0;
+    return grassLatticeTap(tp.HeightmapBindless, gGrassHeightmap, uv).r;
+}
+
+vec3 sampleTerrainNormalWS(TerrainParamsEntry tp, vec2 uv)
+{
+    if (grassAtlasBacked(tp.Flags))
+    {
+        AtlasResolve r = grassAtlasResolve(uv);
+        vec2 nXZ = vec2(0.0);
+        if (r.Resident && Atlas.NormalBindless != 0u)
+            nXZ = grassMapTap(Atlas.NormalBindless, gGrassAtlasNormal, r.SlotUV).rg;
+        else if (Atlas.NormalCoarseBindless != 0u)
+            nXZ = grassMapTap(Atlas.NormalCoarseBindless, gGrassAtlasNormalCoarse,
+                              grassCoarseUV(uv, Atlas.CoarseDim)).rg;
+        float ny = sqrt(max(1.0 - dot(nXZ, nXZ), 0.0));
+        return normalize(vec3(nXZ.x, ny, nXZ.y));
+    }
+    if (GRASS_HAS_NORMALMAP(tp))
+    {
+        vec2 nXZ = grassLatticeTap(tp.NormalmapBindless, gGrassNormalmap, uv).rg;
+        float ny = sqrt(max(1.0 - dot(nXZ, nXZ), 0.0));
+        return normalize(vec3(nXZ.x, ny, nXZ.y));
+    }
+
+    if (tp.HeightmapBindless == 0u)
+        return vec3(0.0, 1.0, 0.0);
+
+    float texelSize = tp.TexelSize;
+    float hL = sampleHeight01(tp, uv + vec2(-texelSize, 0.0));
+    float hR = sampleHeight01(tp, uv + vec2( texelSize, 0.0));
+    float hD = sampleHeight01(tp, uv + vec2(0.0, -texelSize));
+    float hU = sampleHeight01(tp, uv + vec2(0.0,  texelSize));
+    float spacingX = max(tp.WorldSizeX * texelSize * 2.0, 0.0001);
+    float normalScaleX = tp.HeightScale / spacingX;
+    return normalize(vec3(
+        (hL - hR) * normalScaleX,
+        1.0,
+        (hD - hU) * normalScaleX
+    ));
+}
+
+// Splat-mask acceptance in [0,1] for a candidate, or a negative value when the surface refuses
+// grass outright. Semantics preserved from the fixed-grid placement (mirrored by the
+// TerrainAtlasTests oracles): grass must both reach MaskThreshold and lead the next-strongest
+// layer by min(0.18, MaskThreshold).
+float grassMaskFactor(TerrainParamsEntry tp, vec2 uv, out float grassWeightOut)
+{
+    bool hasSplatmap = grassHasSplat(tp.Flags, tp.SplatmapBindless);
+    // A newly-resident tile's coarse->slot crossfade is NOT shown here: the mask below is a
+    // threshold and a refusal, and a weight sliding between two sources across the upgrade window
+    // would spawn and unspawn blades along the residency frontier. Placement has always taken the
+    // slot outright and keeps doing so; only the ground COLOUR travels with the ground's fade.
+    vec4 splatWeights = GrassAtlas_ResolveSplat(tp.Flags, tp.SplatmapBindless, uv, false);
+
+    uint grassLayer = min(tp.GrassLayerIndex, 3u);
+    float grassWeight = layerWeight(splatWeights, grassLayer);
+    grassWeightOut = grassWeight;
+    float otherMax = 0.0;
+    for (uint layer = 0u; layer < 4u; ++layer)
+    {
+        if (layer != grassLayer)
+            otherMax = max(otherMax, layerWeight(splatWeights, layer));
+    }
+
+    float maskThreshold = clamp(tp.GrassMaskThreshold, 0.0, 1.0);
+    float dominantGrass = grassWeight - otherMax;
+    float dominanceFloor = min(0.18, maskThreshold);
+    if (hasSplatmap && (grassWeight < maskThreshold || dominantGrass < dominanceFloor))
+        return -1.0;
+
+    float maskFeather = hasSplatmap ? 0.08 : 0.25;
+    float dominanceMin = hasSplatmap ? dominanceFloor : 0.08;
+    float dominanceMax = hasSplatmap ? (dominanceFloor + 0.18) : 0.28;
+    return smoothstep(maskThreshold, min(maskThreshold + maskFeather, 1.0), grassWeight)
+        * smoothstep(dominanceMin, dominanceMax, dominantGrass);
+}
+
+// First terrain row whose XZ footprint CONTAINS this point. Resolved per candidate, not per cell:
+// a cell straddling a terrain edge has slots on both sides, and picking one terrain for the whole
+// cell would drop every slot that landed on the neighbour, leaving a cell-wide bald strip along
+// every seam.
+int resolveTerrainForPoint(vec2 p)
+{
+    int count = Place.CellWindow.w;
+    for (int i = 0; i < count; ++i)
+    {
+        TerrainParamsEntry t = terrains[i];
+        if ((t.GrassEnabled & 1u) == 0u)
+            continue;
+        if (p.x >= t.WorldOriginX && p.x <= t.WorldOriginX + t.WorldSizeX &&
+            p.y >= t.WorldOriginZ && p.y <= t.WorldOriginZ + t.WorldSizeZ)
+            return i;
+    }
+    return -1;
+}
+
+// Writes this cell's slot range and returns how many of this lane's candidates the mask accepted.
+//
+// Separate from main() so that the workgroup reduction main() runs afterwards is never reached by
+// only part of the workgroup. A barrier behind a return is undefined in GLSL and rejected outright
+// by WGSL's uniformity analysis, which cannot see that the early-outs below are workgroup-uniform
+// because their terms come through a storage buffer. Returning here re-converges at the call site.
+uint emitCellSlots()
+{
+    uint cellIndex = gl_WorkGroupID.x;
+    int span = Place.CellWindow.z;
+    if (span <= 0 || cellIndex >= uint(span * span) || cellIndex >= kGrassMaxCells)
+        return 0u;
+
+    // Everything the cell needs was decided once, for every cell, by terrain_grass_plan.comp.
+    // The slot count is READ rather than recomputed: two shaders evaluating the same float
+    // expression may reassociate it differently, and a one-slot disagreement with the range the
+    // plan reserved would write past it.
+    GrassCellPlan plan = CellPlan.Cells[cellIndex];
+    uint slotCount = plan.Slots;
+    if ((plan.LodAndTerrain & kGrassCellValidBit) == 0u || slotCount == 0u)
+        return 0u;
+
+    uint capacity = Args.Capacity;
+    if (capacity == 0u)
+        return 0u;
+
+    int terrainIdx = int(plan.LodAndTerrain & kGrassCellTerrainMask);
+    uint lod = (plan.LodAndTerrain >> kGrassCellLodShift) & 1u;
+    float slotsWanted = uintBitsToFloat(plan.SlotsWantedBits);
+    uint base = plan.Base;
+    TerrainParamsEntry tp = terrains[terrainIdx];
+
+    int ix = int(cellIndex % uint(span));
+    int iz = int(cellIndex / uint(span));
+    int halfSpan = (span - 1) / 2;
+    int cellX = Place.CellWindow.x - halfSpan + ix;
+    int cellZ = Place.CellWindow.y - halfSpan + iz;
+
+    vec2 cellMin = vec2(float(cellX), float(cellZ)) * kGrassCellSize;
+
+    uint seed = floatBitsToUint(tp.GrassPlacementSeed);
+
+    uint acceptedByLane = 0u;
+    uint iterations = (slotCount + gl_WorkGroupSize.x - 1u) / gl_WorkGroupSize.x;
+    for (uint iter = 0u; iter < iterations; ++iter)
+    {
+        uint slot = iter * gl_WorkGroupSize.x + gl_LocalInvocationID.x;
+
+        bool accepted = false;
+        GrassBladeInstance blade;
+        blade.WorldX = 0.0;
+        blade.WorldZ = 0.0;
+        blade.RootY = 0.0;
+        blade.BladeHeight = 0.0;
+        blade.BladeWidth = 0.0;
+        blade.Yaw = 0.0;
+        blade.Rand = 0.0;
+        blade.GrassWeight = 0.0;
+        blade.TerrainIndex = uint(terrainIdx);
+        blade.NormalX = 0.0;
+        blade.NormalZ = 0.0;
+        blade.Flags = GrassPackFlags(lod, 0u, 0.0);
+
+        if (slot < slotCount)
+        {
+            float growth = GrassGrowthForSlot(slotsWanted, slot);
+            if (growth >= kGrassMinGrowth)
+            {
+                GrassSlotSample s = GrassSampleSlot(cellX, cellZ, slot, seed);
+                float worldX = cellMin.x + s.CellU * kGrassCellSize;
+                float worldZ = cellMin.y + s.CellV * kGrassCellSize;
+
+                // Clumping, from the CELL's terrain for the same reason its density comes from
+                // there: the lattice is a field-scale property, and resolving it per candidate
+                // would make a cell straddling two terrains sample two different lattices and
+                // tear the tufts along the seam. The response AMOUNTS below come from the site
+                // terrain, which is where every other per-blade attribute comes from.
+                bool clumped = tp.GrassClumpSize > 0.0;
+                GrassClumpSample clump;
+                uint clumpCode = 0u;
+                if (clumped)
+                {
+                    clump = GrassSampleClump(vec2(worldX, worldZ), tp.GrassClumpSize, seed);
+                    clumpCode = GrassClumpCodeFromRand(clump.ColorRand);
+                    // Gathered BEFORE the terrain, mask and height are resolved, so a blade is
+                    // masked and grounded where it actually ends up standing. Pulling afterwards
+                    // would let a gathered blade land on bare rock with a grass mask that passed
+                    // somewhere else, and hover at the height of the point it came from.
+                    float gather = clamp(tp.GrassClumpGather, 0.0, 1.0);
+                    worldX = mix(worldX, clump.Center.x, gather);
+                    worldZ = mix(worldZ, clump.Center.y, gather);
+                }
+
+                // The terrain this blade actually stands on, which is not necessarily the one whose
+                // density curve the cell used.
+                int siteIdx = resolveTerrainForPoint(vec2(worldX, worldZ));
+                if (siteIdx >= 0)
+                {
+                    TerrainParamsEntry stp = terrains[siteIdx];
+                    vec2 uv = clamp(vec2((worldX - stp.WorldOriginX) / max(stp.WorldSizeX, 0.0001),
+                                         (worldZ - stp.WorldOriginZ) / max(stp.WorldSizeZ, 0.0001)),
+                                    vec2(0.0), vec2(1.0));
+                    float grassWeight = 0.0;
+                    vec2 regional = grassRegionControls(stp, uv);
+                    float mask = grassMaskFactor(stp, uv, grassWeight) * regional.g;
+                    // The mask feather stays stochastic so splat boundaries keep their soft edge;
+                    // the base density is now geometric, not a Bernoulli thinning of a fixed grid.
+                    if (regional.r > 0.0 && mask > 0.0 && s.MaskRand <= mask)
+                    {
+                        float randomScaleAmount = max(0.0, stp.GrassRandomScale);
+                        float randomScale = max(0.0, 1.0 + (s.ScaleRand * 2.0 - 1.0) * randomScaleAmount);
+                        float bladeScale = randomScale * growth;
+                        float bladeHeight = max(0.0, stp.GrassBladeHeight) * bladeScale
+                            * mix(0.65, 1.35, s.ScaleRand);
+                        if (clumped)
+                        {
+                            // Folded into the height the instance already carries: some tufts
+                            // tall, some short, at zero bytes per blade. A variance of 0 returns
+                            // exactly 1.0, so an unclumped field is bit-identical, not merely
+                            // close.
+                            bladeHeight *= GrassClumpHeightMultiplier(
+                                clump.HeightRand, stp.GrassClumpHeightVariance);
+                        }
+                        float bladeWidth = max(0.0, stp.GrassBladeWidth) * bladeScale
+                            * mix(0.65, 1.25, s.WidthRand);
+                        bool card = (stp.GrassEnabled & 4u) != 0u;
+                        if (card)
+                        {
+                            float cardSize = max(0.0, stp.GrassTextureSize) * bladeScale
+                                * mix(0.85, 1.15, s.WidthRand);
+                            bladeHeight = cardSize;
+                            bladeWidth = cardSize;
+                        }
+
+                        // A textured card is sized from its WIDTH: the vertex modifier overwrites
+                        // a card's height with its width and halves the width to build the quad, so
+                        // a height written here is dropped for cards and a region's Height alone
+                        // would do nothing at all to card grass. Scaling the width scales the whole
+                        // card, which is also what keeps the artwork's proportions. A ribbon is the
+                        // blade itself, so its height is its height. Both are exactly the terrain's
+                        // own size at 1.0.
+                        bladeHeight *= regional.r;
+                        if (card)
+                            bladeWidth *= regional.r;
+
+                        blade.WorldX = worldX;
+                        blade.WorldZ = worldZ;
+                        blade.RootY = stp.WorldOriginY + sampleHeight01(stp, uv) * stp.HeightScale;
+                        blade.BladeHeight = bladeHeight;
+                        blade.BladeWidth = bladeWidth;
+                        float yaw = s.Yaw01 * 6.28318530718;
+                        float alignment = clamp(stp.GrassClumpAlignment, 0.0, 1.0);
+                        if (clumped && alignment > 0.0)
+                        {
+                            // Headings blended as VECTORS, never as angles: an angle lerp takes
+                            // the long way round the wrap and would sweep a blade through every
+                            // intermediate heading. Near-opposite headings cancel, so fall back
+                            // to the blade's own yaw rather than normalizing a zero vector.
+                            float clumpYaw = clump.FacingRand * 6.28318530718;
+                            vec2 blended = mix(vec2(cos(yaw), sin(yaw)),
+                                               vec2(cos(clumpYaw), sin(clumpYaw)), alignment);
+                            if (dot(blended, blended) > 1e-8)
+                                yaw = atan(blended.y, blended.x);
+                        }
+                        blade.Yaw = yaw;
+                        blade.Rand = s.WidthRand;
+                        blade.GrassWeight = grassWeight;
+                        blade.TerrainIndex = uint(siteIdx);
+                        blade.Flags = GrassPackFlags(lod, clumpCode,
+                            grassMinWidthScale(vec3(worldX, blade.RootY, worldZ),
+                                               bladeHeight, bladeWidth, yaw));
+                        if (grassAtlasBacked(stp.Flags))
+                        {
+                            vec3 terrainNormal = sampleTerrainNormalWS(stp, uv);
+                            blade.NormalX = terrainNormal.x;
+                            blade.NormalZ = terrainNormal.z;
+                        }
+                        accepted = true;
+                    }
+                }
+            }
+        }
+
+        // The slot's own place in the pool, decided before this dispatch ran. LOD 0 fills the pool
+        // from the front and LOD 1 from the back; the plan's budget fit is what keeps the two
+        // ranges from meeting, so the ordinal test below is never the thing that fires. It is here
+        // anyway because it costs one compare next to five hashes, and because the pool has no
+        // robustBufferAccess behind it: an ordinal past the end would be an undefined write rather
+        // than a discarded one, and a dropped blade is a far better failure than a device fault.
+        uint ordinal = base + slot;
+        if (slot < slotCount && ordinal < capacity)
+        {
+            outInstances[lod == 0u ? ordinal : capacity - 1u - ordinal] = blade;
+            acceptedByLane += accepted ? 1u : 0u;
+        }
+    }
+
+    return acceptedByLane;
+}
+
+void main()
+{
+    uint acceptedByLane = emitCellSlots();
+
+    // One atomic per CELL, not per blade: the tally only feeds the instrument that reports how much
+    // of the pool the mask left standing.
+    sAccepted[gl_LocalInvocationID.x] = acceptedByLane;
+    barrier();
+    for (uint stride = gl_WorkGroupSize.x / 2u; stride > 0u; stride >>= 1u)
+    {
+        if (gl_LocalInvocationID.x < stride)
+            sAccepted[gl_LocalInvocationID.x] += sAccepted[gl_LocalInvocationID.x + stride];
+        barrier();
+    }
+    if (gl_LocalInvocationID.x == 0u && sAccepted[0] > 0u)
+        atomicAdd(Args.AcceptedBlades, sAccepted[0]);
+}

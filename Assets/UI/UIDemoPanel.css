@@ -1,0 +1,55 @@
+/* UI Demo panel subtree-specific styles. These mirror the existing Editor
+   theme rules but are attached only to the UIDemoPanel branch. */
+
+.ui-demo-panel {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    padding: 8px;
+}
+
+.ui-demo-header {
+    font-size: 16px;
+    font-weight: bold;
+    margin-bottom: 4px;
+}
+
+.ui-demo-row {
+    display: flex;
+    flex-direction: row;
+    align-items: center;
+    gap: 6px;
+}
+
+.ui-demo-label {
+    min-width: 120px;
+    text-align: right;
+    margin-right: 6px;
+}
+
+.ui-demo-checkbox,
+.ui-demo-toggle {
+    margin-top: 2px;
+}
+
+.ui-demo-slider {
+	    flex: 1;
+	    min-width: 120px;
+	    height: 24px;
+}
+
+.ui-demo-slider.centered {
+	    /* Centered variant can be further themed via CSS if desired. */
+}
+
+.ui-demo-section-header {
+    font-size: 14px;
+    font-weight: bold;
+    margin-top: 16px;
+    margin-bottom: 8px;
+    color: rgba(255, 255, 255, 0.8);
+    border-bottom: 1px solid rgba(255, 255, 255, 0.2);
+    padding-bottom: 4px;
+}
+
+

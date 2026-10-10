@@ -1,0 +1,37 @@
+#version 450
+#include "Ocean/ocean_spray_gpu_common.glsl"
+#include "Includes/storage_access.glsl"
+layout(local_size_x = 64) in;
+layout(std430, set = 0, binding = 1) readonly buffer Particles
+{
+    SprayParticle particles[];
+};
+layout(std430, set = 0, binding = 2) GE_STORAGE_WRITEONLY buffer Visible
+{
+    uint visible[];
+};
+layout(std430, set = 0, binding = 3) buffer Args
+{
+    uint vertexCount;
+    uint instanceCount;
+    uint firstVertex;
+    uint firstInstance;
+};
+void main()
+{
+    uint id = gl_GlobalInvocationID.x;
+    if (id == 0u)
+        vertexCount = 6u;
+    if (id >= uint(controls.x))
+        return;
+    SprayParticle p = particles[id];
+    if (p.velocityLife.w <= 0 || p.positionAge.w >= p.velocityLife.w)
+        return;
+    vec4 clip = viewProjection * vec4(p.positionAge.xyz, 1);
+    float margin = max(p.look.x, p.look.y) * 2;
+    if (clip.w <= 0 || abs(clip.x) > clip.w + margin || abs(clip.y) > clip.w + margin || clip.z < 0 ||
+        clip.z > clip.w)
+        return;
+    uint slot = atomicAdd(instanceCount, 1u);
+    visible[slot] = id;
+}

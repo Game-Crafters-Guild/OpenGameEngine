@@ -1,0 +1,119 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Desktop Player source ownership</title>
+<style>
+  :root {
+    --bg: #0f1115; --panel: #171a21; --panel-light: #1f232c; --border: #2a2f3a;
+    --text: #d7dae0; --muted: #8b919c; --accent: #6ea8fe; --danger: #ff6b6b;
+    --bad: #ff6b6b; --ok: #4cd18a; --good: #4cd18a; --warn: #f2c94c;
+  }
+  body { margin: 0; padding: 2rem 3rem; background: var(--bg); color: var(--text);
+         font: 15px/1.55 system-ui, -apple-system, "Segoe UI", sans-serif; max-width: 1100px; }
+  h1 { margin: 0 0 .25rem; font-size: 1.9rem; }
+  h2 { margin-top: 2.2rem; padding: .35rem .6rem; border: 1px solid var(--border);
+       border-left: 4px solid var(--accent); background: var(--panel); font-size: 1.25rem; }
+  h3 { margin: 1.4rem 0 .4rem; color: var(--accent); font-size: 1.05rem; }
+  .lede { color: var(--muted); margin: 0 0 1.5rem; letter-spacing: .04em; text-transform: uppercase; font-size: .8rem; }
+  hr { border: 0; border-top: 1px solid var(--border); margin: 2rem 0; }
+  code, pre { font: 13px/1.5 ui-monospace, "Cascadia Mono", Consolas, monospace;
+              background: var(--panel-light); border-radius: 4px; }
+  code { padding: .05rem .35rem; }
+  pre { padding: .8rem 1rem; overflow-x: auto; border: 1px solid var(--border); }
+  .panel { border: 1px solid var(--border); background: var(--panel); border-radius: 6px; padding: .9rem 1.1rem; margin: 1rem 0; }
+  .panel.danger { border-left: 4px solid var(--danger); }
+  .panel.ok { border-left: 4px solid var(--ok); }
+  .panel.warn { border-left: 4px solid var(--warn); }
+  .two-col { display: grid; grid-template-columns: 1fr 1fr; gap: 1rem; }
+  table { border-collapse: collapse; width: 100%; margin: 1rem 0; }
+  th, td { border: 1px solid var(--border); padding: .45rem .7rem; text-align: left; vertical-align: top; }
+  th { background: var(--panel-light); color: var(--muted); font-weight: 600; font-size: .85rem; }
+  tr:hover td { background: var(--panel); }
+  .pill { display: inline-block; padding: .05rem .5rem; border-radius: 999px; font-size: .75rem; font-weight: 600; }
+  .pill.new { background: #1e3a2a; color: var(--ok); }
+  .pill.keep { background: #1f2a3f; color: var(--accent); }
+  .pill.del { background: #3a1e1e; color: var(--bad); }
+  footer { margin-top: 3rem; color: var(--muted); font-size: .85rem; }
+</style>
+</head>
+<body>
+
+<h1>Desktop Player source ownership</h1>
+<p class="lede">CONCEPT &middot; build &amp; export / Player &middot; which sources in your project a desktop export owns</p>
+<p>One rule for the sources a desktop export compiles: the engine owns the default application and keeps it
+out of the project, and the project owns everything it wrote itself. Windows and macOS exports prepare the
+default application in <code>&lt;project&gt;/.Build/Player/Source</code>; nothing is created, refreshed or
+deleted inside project <code>Assets</code>.</p>
+
+<div class="panel danger">
+  <strong>The problem, as the user meets it.</strong> An export used to copy the whole Player template
+  directory into <code>Assets/Source</code> &mdash; including the browser entry points, which do not compile
+  for a desktop target. The copies then sat in the tree the native gameplay module watches and compiles, so
+  the same translation units were built twice and every later export rewrote files the project now appeared
+  to own. Nothing in the tree said which files were the engine&rsquo;s and which were the user&rsquo;s.
+</div>
+
+<h2>Who owns which sources</h2>
+<table>
+  <tr><th>Tree</th><th>Owner</th><th>What export does with it</th></tr>
+  <tr><td><code>&lt;project&gt;/.Build/Player/Source</code></td><td><span class="pill new">engine</span></td>
+      <td>Written and refreshed on every export from the SDK template set. Changed files are rewritten,
+          newly listed companions are added, unchanged files are left alone.</td></tr>
+  <tr><td><code>&lt;project&gt;/Assets/Source</code></td><td><span class="pill keep">project</span></td>
+      <td>Read only. A <code>main.cpp</code> or <code>PlayerApplication.cpp</code> here selects the
+          application and suppresses the generated default entirely; other files there join the source list
+          as helpers.</td></tr>
+  <tr><td><code>&lt;project&gt;/Assets</code> (everything else)</td><td><span class="pill keep">project</span></td>
+      <td>Compiled into the native user module and shipped through native module staging. Never linked into
+          the Player a second time.</td></tr>
+</table>
+
+<h2>One manifest, two consumers</h2>
+<p>
+  <code>Apps/Player/DesktopSources.txt</code> lists the desktop application&rsquo;s translation units. The
+  repository&rsquo;s own <code>Player</code> target reads it through
+  <code>ge_read_desktop_player_sources()</code> (<code>cmake/DesktopPlayerSources.cmake</code>), and SDK
+  staging copies exactly those files plus the manifest into
+  <code>SDK/templates/Player</code>. Export reads the staged manifest again in
+  <code>PreparePlayerSources()</code>. Adding a companion file is therefore one edit, and the browser entry
+  points &mdash; which belong to the Web Player target &mdash; can never reach a desktop export.
+</p>
+<p>
+  A manifest entry is a relative path under the template root with a <code>.cpp</code> or <code>.h</code>
+  extension. Absolute paths, drive letters, backslashes, semicolons and <code>.</code>/<code>..</code>
+  components are refused, as is an entry naming a file that does not exist. The whole list is validated
+  before anything is written, so a bad manifest fails the export with the offending path instead of leaving
+  a half-written source project behind.
+</p>
+
+<h2>Projects exported by older editors</h2>
+<div class="panel warn">
+  Older exports copied SDK sources into <code>Assets/Source</code> without an ownership marker. Those files
+  are now treated as project-owned, including modified copies: their filenames cannot establish permission
+  to overwrite or delete them. Export neither migrates nor discards them.
+</div>
+<p>
+  To return to the generated default: compare the old <code>Assets/Source</code> files against the SDK
+  version that produced them, keep any deliberate change, and delete the rest from the project. To keep a
+  custom Player, maintain its companion files as application code &mdash; and remove the Web-only
+  translation units an older export left there, because they are now compiled as part of the desktop
+  application.
+</p>
+<p>
+  Use a matching Editor and SDK. A missing manifest, or a companion the manifest names but the SDK does not
+  carry, fails source preparation with the failing path rather than producing a partial source project.
+</p>
+
+<hr>
+<h2>Changelog</h2>
+<table>
+  <tr><th>Date</th><th>Change</th></tr>
+  <tr><td>2026-09-17</td><td>Initial version: generated default application under
+      <code>.Build/Player/Source</code>, project <code>Assets</code> read-only for export, one desktop
+      source manifest shared by the repository target and SDK staging.</td></tr>
+</table>
+
+<footer>v1 &middot; 2026-09-17 &middot; Apps/Player/DesktopSources.txt, cmake/DesktopPlayerSources.cmake, Engine/Include/Engine/Build/PlayerSourcePreparation.h, Engine/Source/Engine/Build/{PlayerSourcePreparation,BuildPipeline}.cpp, cmake/GameEngineSDK.cmake</footer>
+</body>
+</html>

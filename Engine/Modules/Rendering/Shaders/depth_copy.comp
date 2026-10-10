@@ -1,0 +1,21 @@
+#version 450
+
+// Copies a single-sample depth texture (D32) into a 1-sample R32F image.
+// Used by DepthResolveNode when sampleCount == 1 so that View.DepthResolved
+// is always R32F regardless of MSAA state, letting all consumers use plain
+// sampler2D with RGUsage::Sampled (no DepthSampled format mismatch).
+
+layout(local_size_x = 8, local_size_y = 8, local_size_z = 1) in;
+
+layout(set = 0, binding = 0) uniform sampler2D uDepth;
+layout(set = 0, binding = 1, r32f) uniform writeonly image2D uDepthResolved;
+
+void main()
+{
+    ivec2 size = textureSize(uDepth, 0);
+    ivec2 pix  = ivec2(gl_GlobalInvocationID.xy);
+    if (pix.x >= size.x || pix.y >= size.y)
+        return;
+    float d = texelFetch(uDepth, pix, 0).r;
+    imageStore(uDepthResolved, pix, vec4(d, 0.0, 0.0, 0.0));
+}

@@ -1,0 +1,729 @@
+[scene name="MaterialLookdev" version=1]
+; Neutral dark studio for judging the OpenPBR hero lobes side by side.
+; Eleven balls, one material each, on a staggered two-row stand; the
+; brushed-steel capsule and thick-glass cube show the two lobes that a
+; sphere cannot read (anisotropic stretch needs a swept tangent, and
+; Beer-Lambert path length needs parallel faces).
+;
+; Key/fill/top/rim are emissive PANELS, not area lights: the reflection
+; probe captures them, and that hard-edged rectangle in the coat and
+; metal lobes is what makes those lobes legible. Rect area lights are
+; deliberately not used here - their specular is point-sampled and
+; resolves as a constellation of dots rather than a rectangle. Soft
+; diffuse comes from the sky IBL; the sun is a back-right rim with a
+; wide angular diameter for a soft contact shadow. Exposure is pinned
+; (Manual EV100 14.6) so the poses in captures.json are repeatable.
+
+[entity id="sun"]
+HierarchyOrder.order = 10
+Light.enabled = true
+Light.type = 0
+Light.color = (1, 0.96, 0.9)
+Light.intensity = 70000
+Light.intensityUnit = Lux
+Light.castsLight = true
+Light.castsShadows = true
+Light.cascadeCount = 4
+Light.shadowResolutionTier = 0
+Light.shadowAngularDiameter = 1.8
+Light.useColorTemperature = false
+Light.colorTemperature = 6500
+Name.value = "Sun (rim)"
+Transform.position = (0, 8, 0)
+Transform.rotation = (0.3037, 0.3576, -0.1242, 0.8744)
+Transform.scale = (1, 1, 1)
+
+[entity id="sky_environment"]
+HierarchyOrder.order = 20
+Name.value = "Sky Environment"
+SkyEnvironment.Enabled = true
+SkyEnvironment.Mode = 1
+SkyEnvironment.TimeOfDayHours = 9.5
+SkyEnvironment.GradientSkyTopColor = (0.30, 0.32, 0.37)
+SkyEnvironment.GradientSkyHorizonColor = (0.40, 0.41, 0.44)
+SkyEnvironment.GradientSkyBottomColor = (0.16, 0.16, 0.18)
+; The sky drives both the IBL fill and the visible cyclorama, so it is the exposure
+; knob for this studio. The emissive panels and the glass caustics set the clip point,
+; not the sky, so raising this costs no highlights (clipped fraction is flat from
+; 17000 to 48000). Below ~24000 the floor and the horizon line crush to black and the
+; balls read as floating; above ~48000 the backdrop lifts into the balls' contrast
+; range and the lobes flatten.
+SkyEnvironment.GradientSkyIntensity = 48000
+SkyEnvironment.AnimateTimeOfDay = false
+SkyEnvironment.AutoSunMoon = false
+SkyEnvironment.TimeOfDayDrivesSunLight = false
+SkyEnvironment.SunLight = "sun"
+SkyEnvironment.ShowSun = false
+SkyEnvironment.ShowMoon = false
+SkyEnvironment.IblIntensity = 1
+SkyEnvironment.IblLowerHemisphereDarkness = 0.25
+SkyEnvironment.SkyExposureTrim = 0
+Transform.position = (0, 0, 0)
+Transform.rotation = (0, 0, 0, 1)
+Transform.scale = (1, 1, 1)
+
+[entity id="main_camera"]
+HierarchyOrder.order = 30
+Camera.enabled = true
+Camera.perspective = true
+Camera.fovY = 34
+Camera.nearZ = 0.05
+Camera.farZ = 500
+Camera.exposureControl = 1
+Camera.manualExposureEV = 14.6
+Camera.exposureCompensation = 0
+Camera.antiAliasing = 0
+Camera.msaaSamples = 0
+Name.value = "Main Camera"
+Transform.position = (0, 2.45, -12.6)
+Transform.rotation = (0.03256, 0, 0, 0.9995)
+Transform.scale = (1, 1, 1)
+
+[entity id="post_process_volume"]
+HierarchyOrder.order = 40
+Name.value = "Post Process Volume"
+PostProcessVolume.enabled = true
+PostProcessVolume.weight = 1
+PostProcessVolume.priority = 0
+PostProcessVolume.postProcessMask = 4294967295
+PostProcessVolume.tonemap = 4
+PostProcessVolume.ditherMode = 0
+PostProcessVolume.isGlobal = true
+PostProcessVolume.shape = 0
+PostProcessVolume.blendDistance = 1
+DebandEffect.enabled = true
+DebandEffect.thresholdLsb = 6
+AmbientOcclusionEffect.enabled = true
+AmbientOcclusionEffect.intensity = 1
+AmbientOcclusionEffect.radius = 1.0
+AmbientOcclusionEffect.thickness = 1
+ScreenSpaceReflectionsEffect.enabled = true
+ScreenSpaceReflectionsEffect.intensity = 0.9
+ScreenSpaceReflectionsEffect.maxDistance = 60
+ScreenSpaceReflectionsEffect.thickness = 0.2
+ScreenSpaceReflectionsEffect.edgeFade = 0.08
+ScreenSpaceReflectionsEffect.maxSteps = 96
+ScreenSpaceReflectionsEffect.sampleQuality = 2
+ScreenSpaceReflectionsEffect.multiBounce = false
+BloomEffect.enabled = true
+BloomEffect.threshold = 1.15
+BloomEffect.intensity = 0.45
+BloomEffect.scatter = 0.6
+BloomEffect.scatteringAmount = 0
+Transform.position = (0, 0, 0)
+Transform.rotation = (0, 0, 0, 1)
+Transform.scale = (1, 1, 1)
+
+[entity id="reflection_probe"]
+HierarchyOrder.order = 50
+Name.value = "Studio Reflection Probe"
+ReflectionProbe.Enabled = true
+ReflectionProbe.BoxProjection = true
+ReflectionProbe.BlendDistance = 2
+ReflectionProbe.Priority = 1
+ReflectionProbe.Intensity = 1
+ReflectionProbe.ExposureEV = 0
+ReflectionProbe.RotationDegrees = 0
+ReflectionProbe.IblLowerHemisphereDarkness = 0
+ReflectionProbe.CaptureResolution = 512
+ReflectionProbe.UpdateMode = Realtime
+ReflectionProbe.RealtimeUpdateInterval = 0.5
+ReflectionProbe.CullMask = 4294967295
+Transform.position = (0, 3, -1)
+Transform.rotation = (0, 0, 0, 1)
+Transform.scale = (26, 13, 34)
+
+[entity id="ground"]
+HierarchyOrder.order = 60
+Name.value = "Studio Ground"
+MeshRenderer.meshPrimitive = Plane
+MeshRenderer.material = [path="Examples/Materials/Lookdev/studio_ground.material"]
+MeshRenderer.enabled = true
+MeshRenderer.renderLayerMask = 1
+MeshRenderer.castShadows = false
+MeshRenderer.receiveShadows = true
+MeshRenderer.motionVectors = true
+Transform.position = (0, 0, 0)
+Transform.rotation = (0, 0, 0, 1)
+Transform.scale = (80, 1, 80)
+
+[entity id="backdrop"]
+HierarchyOrder.order = 70
+Name.value = "Studio Backdrop"
+MeshRenderer.meshPrimitive = Cube
+MeshRenderer.material = [path="Examples/Materials/Lookdev/studio_backdrop.material"]
+MeshRenderer.enabled = true
+MeshRenderer.renderLayerMask = 1
+MeshRenderer.castShadows = false
+MeshRenderer.receiveShadows = true
+MeshRenderer.motionVectors = true
+Transform.position = (0, 24, 22)
+Transform.rotation = (0, 0, 0, 1)
+Transform.scale = (120, 48, 0.5)
+
+[entity id="key_panel"]
+HierarchyOrder.order = 80
+Name.value = "Key Panel"
+MeshRenderer.meshPrimitive = Cube
+MeshRenderer.material = [path="Examples/Materials/Lookdev/studio_softbox.material"]
+MeshRenderer.enabled = true
+MeshRenderer.renderLayerMask = 1
+MeshRenderer.castShadows = false
+MeshRenderer.receiveShadows = false
+MeshRenderer.motionVectors = true
+Transform.position = (-6.2, 3.4, -15)
+Transform.rotation = (0.06272, 0.1732, -0.01105, 0.9828)
+Transform.scale = (6, 5, 0.06)
+
+[entity id="fill_panel"]
+HierarchyOrder.order = 90
+Name.value = "Fill Panel"
+MeshRenderer.meshPrimitive = Cube
+MeshRenderer.material = [path="Examples/Materials/Lookdev/studio_softbox.material"]
+MeshRenderer.enabled = true
+MeshRenderer.renderLayerMask = 1
+MeshRenderer.castShadows = false
+MeshRenderer.receiveShadows = false
+MeshRenderer.motionVectors = true
+Transform.position = (6.8, 2.6, -14.2)
+Transform.rotation = (0.0429, -0.1912, 0.008365, 0.9806)
+Transform.scale = (5.5, 4.2, 0.06)
+
+[entity id="top_panel"]
+HierarchyOrder.order = 100
+Name.value = "Top Panel"
+MeshRenderer.meshPrimitive = Cube
+MeshRenderer.material = [path="Examples/Materials/Lookdev/studio_softbox.material"]
+MeshRenderer.enabled = true
+MeshRenderer.renderLayerMask = 1
+MeshRenderer.castShadows = false
+MeshRenderer.receiveShadows = false
+MeshRenderer.motionVectors = true
+Transform.position = (0, 8.6, -6)
+Transform.rotation = (0.3925, 0, 0, 0.9198)
+Transform.scale = (10, 6, 0.06)
+
+[entity id="ped_car_paint"]
+HierarchyOrder.order = 110
+Name.value = "Pedestal Car Paint (metallic base + clear coat)"
+MeshRenderer.meshPrimitive = Cube
+MeshRenderer.material = [path="Examples/Materials/Lookdev/studio_pedestal.material"]
+MeshRenderer.enabled = true
+MeshRenderer.renderLayerMask = 1
+MeshRenderer.castShadows = true
+MeshRenderer.receiveShadows = true
+MeshRenderer.motionVectors = true
+Transform.position = (-6, 0.09, 0)
+Transform.rotation = (0, 0, 0, 1)
+Transform.scale = (1.35, 0.18, 1.35)
+
+[entity id="car_paint"]
+HierarchyOrder.order = 120
+Name.value = "Car Paint (metallic base + clear coat)"
+MeshRenderer.meshPrimitive = Sphere
+MeshRenderer.material = [path="Examples/Materials/OpenPBR/car_paint_coated_metallic.material"]
+MeshRenderer.enabled = true
+MeshRenderer.renderLayerMask = 1
+MeshRenderer.castShadows = true
+MeshRenderer.receiveShadows = true
+MeshRenderer.motionVectors = true
+Transform.position = (-6, 0.98, 0)
+Transform.rotation = (0, 0, 0, 1)
+Transform.scale = (1.6, 1.6, 1.6)
+
+[entity id="ped_brushed_metal"]
+HierarchyOrder.order = 130
+Name.value = "Pedestal Brushed Anisotropic Steel"
+MeshRenderer.meshPrimitive = Cube
+MeshRenderer.material = [path="Examples/Materials/Lookdev/studio_pedestal.material"]
+MeshRenderer.enabled = true
+MeshRenderer.renderLayerMask = 1
+MeshRenderer.castShadows = true
+MeshRenderer.receiveShadows = true
+MeshRenderer.motionVectors = true
+Transform.position = (-3.6, 0.09, 0)
+Transform.rotation = (0, 0, 0, 1)
+Transform.scale = (1.35, 0.18, 1.35)
+
+[entity id="brushed_metal"]
+HierarchyOrder.order = 140
+Name.value = "Brushed Anisotropic Steel"
+MeshRenderer.meshPrimitive = Sphere
+MeshRenderer.material = [path="Examples/Materials/OpenPBR/anisotropy_brushed.material"]
+MeshRenderer.enabled = true
+MeshRenderer.renderLayerMask = 1
+MeshRenderer.castShadows = true
+MeshRenderer.receiveShadows = true
+MeshRenderer.motionVectors = true
+Transform.position = (-3.6, 0.98, 0)
+Transform.rotation = (0, 0, 0, 1)
+Transform.scale = (1.6, 1.6, 1.6)
+
+[entity id="ped_velvet"]
+HierarchyOrder.order = 150
+Name.value = "Pedestal Sheen Velvet"
+MeshRenderer.meshPrimitive = Cube
+MeshRenderer.material = [path="Examples/Materials/Lookdev/studio_pedestal.material"]
+MeshRenderer.enabled = true
+MeshRenderer.renderLayerMask = 1
+MeshRenderer.castShadows = true
+MeshRenderer.receiveShadows = true
+MeshRenderer.motionVectors = true
+Transform.position = (-1.2, 0.09, 0)
+Transform.rotation = (0, 0, 0, 1)
+Transform.scale = (1.35, 0.18, 1.35)
+
+[entity id="velvet"]
+HierarchyOrder.order = 160
+Name.value = "Sheen Velvet"
+MeshRenderer.meshPrimitive = Sphere
+MeshRenderer.material = [path="Examples/Materials/OpenPBR/sheen_velvet.material"]
+MeshRenderer.enabled = true
+MeshRenderer.renderLayerMask = 1
+MeshRenderer.castShadows = true
+MeshRenderer.receiveShadows = true
+MeshRenderer.motionVectors = true
+Transform.position = (-1.2, 0.98, 0)
+Transform.rotation = (0, 0, 0, 1)
+Transform.scale = (1.6, 1.6, 1.6)
+
+[entity id="ped_glass_thick"]
+HierarchyOrder.order = 170
+Name.value = "Pedestal Thick Absorbing Glass"
+MeshRenderer.meshPrimitive = Cube
+MeshRenderer.material = [path="Examples/Materials/Lookdev/studio_pedestal.material"]
+MeshRenderer.enabled = true
+MeshRenderer.renderLayerMask = 1
+MeshRenderer.castShadows = true
+MeshRenderer.receiveShadows = true
+MeshRenderer.motionVectors = true
+Transform.position = (1.2, 0.09, 0)
+Transform.rotation = (0, 0, 0, 1)
+Transform.scale = (1.35, 0.18, 1.35)
+
+[entity id="glass_thick"]
+HierarchyOrder.order = 180
+Name.value = "Thick Absorbing Glass"
+MeshRenderer.meshPrimitive = Sphere
+MeshRenderer.material = [path="Examples/Materials/OpenPBR/glass_thick_absorbing.material"]
+MeshRenderer.enabled = true
+MeshRenderer.renderLayerMask = 1
+MeshRenderer.castShadows = true
+MeshRenderer.receiveShadows = true
+MeshRenderer.motionVectors = true
+Transform.position = (1.2, 0.98, 0)
+Transform.rotation = (0, 0, 0, 1)
+Transform.scale = (1.6, 1.6, 1.6)
+
+[entity id="ped_iridescent_metal"]
+HierarchyOrder.order = 190
+Name.value = "Pedestal Thin-Film Iridescent Titanium"
+MeshRenderer.meshPrimitive = Cube
+MeshRenderer.material = [path="Examples/Materials/Lookdev/studio_pedestal.material"]
+MeshRenderer.enabled = true
+MeshRenderer.renderLayerMask = 1
+MeshRenderer.castShadows = true
+MeshRenderer.receiveShadows = true
+MeshRenderer.motionVectors = true
+Transform.position = (3.6, 0.09, 0)
+Transform.rotation = (0, 0, 0, 1)
+Transform.scale = (1.35, 0.18, 1.35)
+
+[entity id="iridescent_metal"]
+HierarchyOrder.order = 200
+Name.value = "Thin-Film Iridescent Titanium"
+MeshRenderer.meshPrimitive = Sphere
+MeshRenderer.material = [path="Examples/Materials/OpenPBR/iridescent_metal_titanium.material"]
+MeshRenderer.enabled = true
+MeshRenderer.renderLayerMask = 1
+MeshRenderer.castShadows = true
+MeshRenderer.receiveShadows = true
+MeshRenderer.motionVectors = true
+Transform.position = (3.6, 0.98, 0)
+Transform.rotation = (0, 0, 0, 1)
+Transform.scale = (1.6, 1.6, 1.6)
+
+[entity id="ped_gold"]
+HierarchyOrder.order = 210
+Name.value = "Pedestal F82 Gold"
+MeshRenderer.meshPrimitive = Cube
+MeshRenderer.material = [path="Examples/Materials/Lookdev/studio_pedestal.material"]
+MeshRenderer.enabled = true
+MeshRenderer.renderLayerMask = 1
+MeshRenderer.castShadows = true
+MeshRenderer.receiveShadows = true
+MeshRenderer.motionVectors = true
+Transform.position = (6, 0.09, 0)
+Transform.rotation = (0, 0, 0, 1)
+Transform.scale = (1.35, 0.18, 1.35)
+
+[entity id="gold"]
+HierarchyOrder.order = 220
+Name.value = "F82 Gold"
+MeshRenderer.meshPrimitive = Sphere
+MeshRenderer.material = [path="Examples/Materials/OpenPBR/f82_gold.material"]
+MeshRenderer.enabled = true
+MeshRenderer.renderLayerMask = 1
+MeshRenderer.castShadows = true
+MeshRenderer.receiveShadows = true
+MeshRenderer.motionVectors = true
+Transform.position = (6, 0.98, 0)
+Transform.rotation = (0, 0, 0, 1)
+Transform.scale = (1.6, 1.6, 1.6)
+
+[entity id="ped_lacquer_wood"]
+HierarchyOrder.order = 230
+Name.value = "Pedestal Lacquered Walnut"
+MeshRenderer.meshPrimitive = Cube
+MeshRenderer.material = [path="Examples/Materials/Lookdev/studio_pedestal.material"]
+MeshRenderer.enabled = true
+MeshRenderer.renderLayerMask = 1
+MeshRenderer.castShadows = true
+MeshRenderer.receiveShadows = true
+MeshRenderer.motionVectors = true
+Transform.position = (-4.8, 0.5, 3.2)
+Transform.rotation = (0, 0, 0, 1)
+Transform.scale = (1.35, 1, 1.35)
+
+[entity id="lacquer_wood"]
+HierarchyOrder.order = 240
+Name.value = "Lacquered Walnut"
+MeshRenderer.meshPrimitive = Sphere
+MeshRenderer.material = [path="Examples/Materials/OpenPBR/coated_lacquer_wood.material"]
+MeshRenderer.enabled = true
+MeshRenderer.renderLayerMask = 1
+MeshRenderer.castShadows = true
+MeshRenderer.receiveShadows = true
+MeshRenderer.motionVectors = true
+Transform.position = (-4.8, 1.8, 3.2)
+Transform.rotation = (0, 0, 0, 1)
+Transform.scale = (1.6, 1.6, 1.6)
+
+[entity id="ped_skin"]
+HierarchyOrder.order = 250
+Name.value = "Pedestal Skin (DICE back-transmission)"
+MeshRenderer.meshPrimitive = Cube
+MeshRenderer.material = [path="Examples/Materials/Lookdev/studio_pedestal.material"]
+MeshRenderer.enabled = true
+MeshRenderer.renderLayerMask = 1
+MeshRenderer.castShadows = true
+MeshRenderer.receiveShadows = true
+MeshRenderer.motionVectors = true
+Transform.position = (-2.4, 0.5, 3.2)
+Transform.rotation = (0, 0, 0, 1)
+Transform.scale = (1.35, 1, 1.35)
+
+[entity id="skin"]
+HierarchyOrder.order = 260
+Name.value = "Diffuse + Back-Transmission (NOT subsurface scattering)"
+MeshRenderer.meshPrimitive = Sphere
+MeshRenderer.material = [path="Examples/Materials/OpenPBR/diffuse_back_transmission.material"]
+MeshRenderer.enabled = true
+MeshRenderer.renderLayerMask = 1
+MeshRenderer.castShadows = true
+MeshRenderer.receiveShadows = true
+MeshRenderer.motionVectors = true
+Transform.position = (-2.4, 1.8, 3.2)
+Transform.rotation = (0, 0, 0, 1)
+Transform.scale = (1.6, 1.6, 1.6)
+
+[entity id="ped_clay"]
+HierarchyOrder.order = 270
+Name.value = "Pedestal Oren-Nayar Clay"
+MeshRenderer.meshPrimitive = Cube
+MeshRenderer.material = [path="Examples/Materials/Lookdev/studio_pedestal.material"]
+MeshRenderer.enabled = true
+MeshRenderer.renderLayerMask = 1
+MeshRenderer.castShadows = true
+MeshRenderer.receiveShadows = true
+MeshRenderer.motionVectors = true
+Transform.position = (0, 0.5, 3.2)
+Transform.rotation = (0, 0, 0, 1)
+Transform.scale = (1.35, 1, 1.35)
+
+[entity id="clay"]
+HierarchyOrder.order = 280
+Name.value = "Oren-Nayar Clay"
+MeshRenderer.meshPrimitive = Sphere
+MeshRenderer.material = [path="Examples/Materials/OpenPBR/oren_nayar_clay.material"]
+MeshRenderer.enabled = true
+MeshRenderer.renderLayerMask = 1
+MeshRenderer.castShadows = true
+MeshRenderer.receiveShadows = true
+MeshRenderer.motionVectors = true
+Transform.position = (0, 1.8, 3.2)
+Transform.rotation = (0, 0, 0, 1)
+Transform.scale = (1.6, 1.6, 1.6)
+
+[entity id="ped_candy_coat"]
+HierarchyOrder.order = 290
+Name.value = "Pedestal Candy Coat (tinted coat medium)"
+MeshRenderer.meshPrimitive = Cube
+MeshRenderer.material = [path="Examples/Materials/Lookdev/studio_pedestal.material"]
+MeshRenderer.enabled = true
+MeshRenderer.renderLayerMask = 1
+MeshRenderer.castShadows = true
+MeshRenderer.receiveShadows = true
+MeshRenderer.motionVectors = true
+Transform.position = (2.4, 0.5, 3.2)
+Transform.rotation = (0, 0, 0, 1)
+Transform.scale = (1.35, 1, 1.35)
+
+[entity id="candy_coat"]
+HierarchyOrder.order = 300
+Name.value = "Candy Coat (tinted coat medium)"
+MeshRenderer.meshPrimitive = Sphere
+MeshRenderer.material = [path="Examples/Materials/OpenPBR/coat_color_candy.material"]
+MeshRenderer.enabled = true
+MeshRenderer.renderLayerMask = 1
+MeshRenderer.castShadows = true
+MeshRenderer.receiveShadows = true
+MeshRenderer.motionVectors = true
+Transform.position = (2.4, 1.8, 3.2)
+Transform.rotation = (0, 0, 0, 1)
+Transform.scale = (1.6, 1.6, 1.6)
+
+[entity id="ped_glass_thin"]
+HierarchyOrder.order = 310
+Name.value = "Pedestal Thin Clear Glass"
+MeshRenderer.meshPrimitive = Cube
+MeshRenderer.material = [path="Examples/Materials/Lookdev/studio_pedestal.material"]
+MeshRenderer.enabled = true
+MeshRenderer.renderLayerMask = 1
+MeshRenderer.castShadows = true
+MeshRenderer.receiveShadows = true
+MeshRenderer.motionVectors = true
+Transform.position = (4.8, 0.5, 3.2)
+Transform.rotation = (0, 0, 0, 1)
+Transform.scale = (1.35, 1, 1.35)
+
+[entity id="glass_thin"]
+HierarchyOrder.order = 320
+Name.value = "Thin Clear Glass"
+MeshRenderer.meshPrimitive = Sphere
+MeshRenderer.material = [path="Examples/Materials/OpenPBR/clear_glass.material"]
+MeshRenderer.enabled = true
+MeshRenderer.renderLayerMask = 1
+MeshRenderer.castShadows = true
+MeshRenderer.receiveShadows = true
+MeshRenderer.motionVectors = true
+Transform.position = (4.8, 1.8, 3.2)
+Transform.rotation = (0, 0, 0, 1)
+Transform.scale = (1.6, 1.6, 1.6)
+
+[entity id="brushed_metal_capsule"]
+HierarchyOrder.order = 330
+Name.value = "Brushed Steel Capsule (anisotropy along sweep)"
+MeshRenderer.meshPrimitive = Capsule
+MeshRenderer.material = [path="Examples/Materials/OpenPBR/anisotropy_brushed.material"]
+MeshRenderer.enabled = true
+MeshRenderer.renderLayerMask = 1
+MeshRenderer.castShadows = true
+MeshRenderer.receiveShadows = true
+MeshRenderer.motionVectors = true
+Transform.position = (-3.6, 0.42, -3.4)
+Transform.rotation = (0, 0, 0.7071, 0.7071)
+Transform.scale = (0.84, 0.84, 0.84)
+
+[entity id="glass_thick_cube"]
+HierarchyOrder.order = 340
+Name.value = "Thick Glass Cube (short path: same glass, half the chord)"
+MeshRenderer.meshPrimitive = Cube
+MeshRenderer.material = [path="Examples/Materials/OpenPBR/glass_thick_absorbing_short.material"]
+MeshRenderer.enabled = true
+MeshRenderer.renderLayerMask = 1
+MeshRenderer.castShadows = false
+MeshRenderer.receiveShadows = true
+MeshRenderer.motionVectors = true
+Transform.position = (3.6, 0.48, -3.4)
+Transform.rotation = (0, 0.2164, 0, 0.9763)
+Transform.scale = (0.95, 0.95, 0.95)
+
+; --- Refraction reference card ---------------------------------------
+; A checker behind the glass cube: the UE substrate-48 read for refractive
+; bend and for Beer-Lambert path length. The cells are straight and evenly
+; spaced, so any displacement or magnification seen THROUGH the cube is the
+; refraction, judged against the same cells visible around its silhouette.
+; Built from tiles rather than a texture so it has no asset dependency.
+
+[entity id="checker_card"]
+HierarchyOrder.order = 350
+Name.value = "Checker Card (refraction reference)"
+MeshRenderer.meshPrimitive = Cube
+MeshRenderer.material = [path="Examples/Materials/Lookdev/checker_light.material"]
+MeshRenderer.enabled = true
+MeshRenderer.renderLayerMask = 1
+MeshRenderer.castShadows = false
+MeshRenderer.receiveShadows = true
+MeshRenderer.motionVectors = true
+Transform.position = (3.6, 0.47, -2.2)
+Transform.rotation = (0, 0, 0, 1)
+Transform.scale = (2.4, 0.9, 0.03)
+
+[entity id="checker_tile_0_1"]
+HierarchyOrder.order = 360
+Name.value = "Checker Tile 0x1"
+MeshRenderer.meshPrimitive = Cube
+MeshRenderer.material = [path="Examples/Materials/Lookdev/checker_dark.material"]
+MeshRenderer.enabled = true
+MeshRenderer.renderLayerMask = 1
+MeshRenderer.castShadows = false
+MeshRenderer.receiveShadows = true
+MeshRenderer.motionVectors = true
+Transform.position = (2.85, 0.17, -2.225)
+Transform.rotation = (0, 0, 0, 1)
+Transform.scale = (0.3, 0.3, 0.02)
+
+[entity id="checker_tile_0_3"]
+HierarchyOrder.order = 370
+Name.value = "Checker Tile 0x3"
+MeshRenderer.meshPrimitive = Cube
+MeshRenderer.material = [path="Examples/Materials/Lookdev/checker_dark.material"]
+MeshRenderer.enabled = true
+MeshRenderer.renderLayerMask = 1
+MeshRenderer.castShadows = false
+MeshRenderer.receiveShadows = true
+MeshRenderer.motionVectors = true
+Transform.position = (3.45, 0.17, -2.225)
+Transform.rotation = (0, 0, 0, 1)
+Transform.scale = (0.3, 0.3, 0.02)
+
+[entity id="checker_tile_0_5"]
+HierarchyOrder.order = 380
+Name.value = "Checker Tile 0x5"
+MeshRenderer.meshPrimitive = Cube
+MeshRenderer.material = [path="Examples/Materials/Lookdev/checker_dark.material"]
+MeshRenderer.enabled = true
+MeshRenderer.renderLayerMask = 1
+MeshRenderer.castShadows = false
+MeshRenderer.receiveShadows = true
+MeshRenderer.motionVectors = true
+Transform.position = (4.05, 0.17, -2.225)
+Transform.rotation = (0, 0, 0, 1)
+Transform.scale = (0.3, 0.3, 0.02)
+
+[entity id="checker_tile_0_7"]
+HierarchyOrder.order = 390
+Name.value = "Checker Tile 0x7"
+MeshRenderer.meshPrimitive = Cube
+MeshRenderer.material = [path="Examples/Materials/Lookdev/checker_dark.material"]
+MeshRenderer.enabled = true
+MeshRenderer.renderLayerMask = 1
+MeshRenderer.castShadows = false
+MeshRenderer.receiveShadows = true
+MeshRenderer.motionVectors = true
+Transform.position = (4.65, 0.17, -2.225)
+Transform.rotation = (0, 0, 0, 1)
+Transform.scale = (0.3, 0.3, 0.02)
+
+[entity id="checker_tile_1_0"]
+HierarchyOrder.order = 400
+Name.value = "Checker Tile 1x0"
+MeshRenderer.meshPrimitive = Cube
+MeshRenderer.material = [path="Examples/Materials/Lookdev/checker_dark.material"]
+MeshRenderer.enabled = true
+MeshRenderer.renderLayerMask = 1
+MeshRenderer.castShadows = false
+MeshRenderer.receiveShadows = true
+MeshRenderer.motionVectors = true
+Transform.position = (2.55, 0.47, -2.225)
+Transform.rotation = (0, 0, 0, 1)
+Transform.scale = (0.3, 0.3, 0.02)
+
+[entity id="checker_tile_1_2"]
+HierarchyOrder.order = 410
+Name.value = "Checker Tile 1x2"
+MeshRenderer.meshPrimitive = Cube
+MeshRenderer.material = [path="Examples/Materials/Lookdev/checker_dark.material"]
+MeshRenderer.enabled = true
+MeshRenderer.renderLayerMask = 1
+MeshRenderer.castShadows = false
+MeshRenderer.receiveShadows = true
+MeshRenderer.motionVectors = true
+Transform.position = (3.15, 0.47, -2.225)
+Transform.rotation = (0, 0, 0, 1)
+Transform.scale = (0.3, 0.3, 0.02)
+
+[entity id="checker_tile_1_4"]
+HierarchyOrder.order = 420
+Name.value = "Checker Tile 1x4"
+MeshRenderer.meshPrimitive = Cube
+MeshRenderer.material = [path="Examples/Materials/Lookdev/checker_dark.material"]
+MeshRenderer.enabled = true
+MeshRenderer.renderLayerMask = 1
+MeshRenderer.castShadows = false
+MeshRenderer.receiveShadows = true
+MeshRenderer.motionVectors = true
+Transform.position = (3.75, 0.47, -2.225)
+Transform.rotation = (0, 0, 0, 1)
+Transform.scale = (0.3, 0.3, 0.02)
+
+[entity id="checker_tile_1_6"]
+HierarchyOrder.order = 430
+Name.value = "Checker Tile 1x6"
+MeshRenderer.meshPrimitive = Cube
+MeshRenderer.material = [path="Examples/Materials/Lookdev/checker_dark.material"]
+MeshRenderer.enabled = true
+MeshRenderer.renderLayerMask = 1
+MeshRenderer.castShadows = false
+MeshRenderer.receiveShadows = true
+MeshRenderer.motionVectors = true
+Transform.position = (4.35, 0.47, -2.225)
+Transform.rotation = (0, 0, 0, 1)
+Transform.scale = (0.3, 0.3, 0.02)
+
+[entity id="checker_tile_2_1"]
+HierarchyOrder.order = 440
+Name.value = "Checker Tile 2x1"
+MeshRenderer.meshPrimitive = Cube
+MeshRenderer.material = [path="Examples/Materials/Lookdev/checker_dark.material"]
+MeshRenderer.enabled = true
+MeshRenderer.renderLayerMask = 1
+MeshRenderer.castShadows = false
+MeshRenderer.receiveShadows = true
+MeshRenderer.motionVectors = true
+Transform.position = (2.85, 0.77, -2.225)
+Transform.rotation = (0, 0, 0, 1)
+Transform.scale = (0.3, 0.3, 0.02)
+
+[entity id="checker_tile_2_3"]
+HierarchyOrder.order = 450
+Name.value = "Checker Tile 2x3"
+MeshRenderer.meshPrimitive = Cube
+MeshRenderer.material = [path="Examples/Materials/Lookdev/checker_dark.material"]
+MeshRenderer.enabled = true
+MeshRenderer.renderLayerMask = 1
+MeshRenderer.castShadows = false
+MeshRenderer.receiveShadows = true
+MeshRenderer.motionVectors = true
+Transform.position = (3.45, 0.77, -2.225)
+Transform.rotation = (0, 0, 0, 1)
+Transform.scale = (0.3, 0.3, 0.02)
+
+[entity id="checker_tile_2_5"]
+HierarchyOrder.order = 460
+Name.value = "Checker Tile 2x5"
+MeshRenderer.meshPrimitive = Cube
+MeshRenderer.material = [path="Examples/Materials/Lookdev/checker_dark.material"]
+MeshRenderer.enabled = true
+MeshRenderer.renderLayerMask = 1
+MeshRenderer.castShadows = false
+MeshRenderer.receiveShadows = true
+MeshRenderer.motionVectors = true
+Transform.position = (4.05, 0.77, -2.225)
+Transform.rotation = (0, 0, 0, 1)
+Transform.scale = (0.3, 0.3, 0.02)
+
+[entity id="checker_tile_2_7"]
+HierarchyOrder.order = 470
+Name.value = "Checker Tile 2x7"
+MeshRenderer.meshPrimitive = Cube
+MeshRenderer.material = [path="Examples/Materials/Lookdev/checker_dark.material"]
+MeshRenderer.enabled = true
+MeshRenderer.renderLayerMask = 1
+MeshRenderer.castShadows = false
+MeshRenderer.receiveShadows = true
+MeshRenderer.motionVectors = true
+Transform.position = (4.65, 0.77, -2.225)
+Transform.rotation = (0, 0, 0, 1)
+Transform.scale = (0.3, 0.3, 0.02)

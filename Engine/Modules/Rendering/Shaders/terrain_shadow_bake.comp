@@ -1,0 +1,127 @@
+#version 460
+
+// Terrain shadow bake: the sun-space clearance map (terrain_shadow.glsl) for one terrain.
+//
+// One workgroup per line of the grid, 256 threads, each owning a run of up to 16 consecutive
+// samples, so a line holds up to 4096 samples (TerrainShadowBake caps the grid side there).
+// The scan runs from the sun's side of the line downwind:
+//   1. each thread finds the highest point of its run's casters seen from the run's first sample;
+//   2. a shared-memory suffix scan over the 256 runs gives, per run, the highest point of every
+//      caster upwind of it seen from the next run's first sample;
+//   3. each thread walks its run downwind from that carry, storing every sample's clearance and
+//      occluder distance.
+// A carry holds two rays' tops and the distances to the casters that set them, the ray through the
+// sun's centre and the one through its disc's lower edge (GE_TerrainShadowHigherCarry).
+// Offsets are taken from each run's own first sample, so float precision does not degrade along
+// a long line. Heights are read with the terrain's own bilinear lattice sample, the surface the
+// terrain renders, in metres above its base height.
+
+layout(local_size_x = 256, local_size_y = 1, local_size_z = 1) in;
+
+layout(set = 0, binding = 0, std140) uniform TerrainShadowBakeParams
+{
+    // The grid in the terrain's local frame (its corner at the origin): GE_TerrainShadowGrid.
+    vec4 uCenterTerrain;  // x, y = grid centre X, Z; z, w = terrain extent X, Z
+    vec4 uSunTexel;       // x, y = sun horizontal direction X, Z; z = tan(elevation); w = texel (m)
+    vec4 uRange;          // x = u of sample 0, y = v of line 0, z = samples per line, w = lines
+    vec4 uBake;           // x = first line this dispatch bakes; y = metres per normalized height;
+                          // z = tan of the sun disc's lower edge's elevation
+};
+
+layout(set = 0, binding = 1) uniform sampler2D uHeight;
+layout(set = 0, binding = 2, rg16f) uniform writeonly image2D uClearance;
+
+float gHeightScale = 1.0;
+vec2 gTerrainSize = vec2(1.0);
+
+vec2 GE_TerrainShadowReadClearance(vec2 gridCoord)
+{
+    return vec2(0.0); // the bake writes the map; it never reads it
+}
+
+// The terrain's height at (x, z) in its local frame, clamped to its edge: CBT_SampleHeight's
+// lattice sample (cbt_atlas.glsl CBT_LatticeTextureUV) without the base height.
+float GE_TerrainShadowReadGround(float x, float z)
+{
+    vec2 dim = vec2(textureSize(uHeight, 0));
+    vec2 terrainUV = clamp(vec2(x, z) / gTerrainSize, 0.0, 1.0);
+    return textureLod(uHeight, (terrainUV * (dim - 1.0) + 0.5) / dim, 0.0).r * gHeightScale;
+}
+
+#include "Includes/terrain_shadow.glsl"
+
+const uint kRunLength = 16u;
+const uint kRuns = 256u;
+
+shared vec4 sRunTop[kRuns];
+
+GE_TerrainShadowGrid BakeGrid()
+{
+    GE_TerrainShadowGrid g;
+    g.CenterX = uCenterTerrain.x;
+    g.CenterZ = uCenterTerrain.y;
+    g.TerrainX = 0.0;
+    g.TerrainZ = 0.0;
+    g.TerrainSizeX = uCenterTerrain.z;
+    g.TerrainSizeZ = uCenterTerrain.w;
+    g.SunX = uSunTexel.x;
+    g.SunZ = uSunTexel.y;
+    g.TanElevation = uSunTexel.z;
+    g.Texel = uSunTexel.w;
+    g.UMin = uRange.x;
+    g.VMin = uRange.y;
+    g.SamplesU = uRange.z;
+    g.SamplesV = uRange.w;
+    return g;
+}
+
+void main()
+{
+    gHeightScale = uBake.y;
+    gTerrainSize = uCenterTerrain.zw;
+    GE_TerrainShadowGrid g = BakeGrid();
+    uint lineIndex = gl_WorkGroupID.x + uint(uBake.x);
+    float line = float(lineIndex);
+    uint run = gl_LocalInvocationID.x;
+    uint first = run * kRunLength;
+
+    // 1. The run's highest caster seen from its first sample.
+    float tanLower = uBake.z;
+    vec4 runTop = GE_TerrainShadowCasterCarry(kGE_TerrainShadowNoCaster);
+    for (uint i = 0u; i < kRunLength; ++i)
+    {
+        float caster = GE_TerrainShadowCasterAndGround(g, float(first + i), line).x;
+        runTop = GE_TerrainShadowHigherCarry(
+            runTop, GE_TerrainShadowCarryDownwind(g, GE_TerrainShadowCasterCarry(caster), float(i), tanLower));
+    }
+    sRunTop[run] = runTop;
+    barrier();
+
+    // 2. Suffix scan: after it, sRunTop[r] is the highest caster at or upwind of run r, seen from
+    //    run r's first sample.
+    for (uint offset = 1u; offset < kRuns; offset <<= 1u)
+    {
+        vec4 merged = sRunTop[run];
+        if (run + offset < kRuns)
+            merged = GE_TerrainShadowHigherCarry(
+                merged, GE_TerrainShadowCarryDownwind(g, sRunTop[run + offset], float(offset * kRunLength), tanLower));
+        barrier();
+        sRunTop[run] = merged;
+        barrier();
+    }
+
+    // 3. Walk the run downwind from the carry of everything upwind of it.
+    vec4 carry = run + 1u < kRuns ? sRunTop[run + 1u] : GE_TerrainShadowCasterCarry(kGE_TerrainShadowNoCaster);
+    if (lineIndex >= uint(g.SamplesV))
+        return;
+    for (int i = int(kRunLength) - 1; i >= 0; --i)
+    {
+        uint k = first + uint(i);
+        vec2 cg = GE_TerrainShadowCasterAndGround(g, float(k), line);
+        vec4 seen = GE_TerrainShadowCarryDownwind(g, carry, 1.0, tanLower);
+        if (float(k) <= g.SamplesU - 1.0)
+            imageStore(uClearance, ivec2(int(k), int(lineIndex)),
+                       vec4(GE_TerrainShadowSampleValue(g, seen, cg.y, tanLower), 0.0, 0.0));
+        carry = GE_TerrainShadowHigherCarry(GE_TerrainShadowCasterCarry(cg.x), seen);
+    }
+}

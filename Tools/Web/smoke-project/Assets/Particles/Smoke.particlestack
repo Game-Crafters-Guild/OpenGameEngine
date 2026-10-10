@@ -1,0 +1,249 @@
+{
+  "version": 1,
+  "entryPhase": 1,
+  "lifetime": 5,
+  "phases": [
+    {
+      "id": 1,
+      "label": "Smoke",
+      "processors": [
+        {
+          "type": "emitRate",
+          "id": 2,
+          "label": "Continuous Smoke",
+          "stage": "emission",
+          "parameters": {
+            "rate": {
+              "mode": "constant",
+              "value": 80
+            }
+          }
+        },
+        {
+          "type": "shape",
+          "id": 3,
+          "label": "Emitter Disc",
+          "stage": "birth",
+          "parameters": {
+            "shape": "circle",
+            "radius": 0.55
+          }
+        },
+        {
+          "type": "property",
+          "id": 4,
+          "label": "Rising Wind",
+          "stage": "birth",
+          "parameters": {
+            "target": "velocity",
+            "operation": "set",
+            "value": [
+              {
+                "mode": "range",
+                "minimum": -0.1,
+                "maximum": 0.3
+              },
+              {
+                "mode": "range",
+                "minimum": 0.525,
+                "maximum": 0.875
+              },
+              {
+                "mode": "range",
+                "minimum": -0.16,
+                "maximum": 0.24
+              }
+            ]
+          }
+        },
+        {
+          "type": "property",
+          "id": 5,
+          "label": "Smoke Tint",
+          "stage": "birth",
+          "parameters": {
+            "target": "color",
+            "operation": "set",
+            "value": [
+              {
+                "mode": "constant",
+                "value": 0.55
+              },
+              {
+                "mode": "constant",
+                "value": 0.55
+              },
+              {
+                "mode": "constant",
+                "value": 0.55
+              },
+              {
+                "mode": "constant",
+                "value": 1
+              }
+            ]
+          }
+        },
+        {
+          "type": "property",
+          "id": 6,
+          "label": "Lifetime Variation",
+          "stage": "birth",
+          "parameters": {
+            "target": "lifetime",
+            "operation": "set",
+            "value": [
+              {
+                "mode": "range",
+                "minimum": 3.75,
+                "maximum": 6.25
+              }
+            ]
+          }
+        },
+        {
+          "type": "property",
+          "id": 10,
+          "label": "Random Turn",
+          "stage": "birth",
+          "parameters": {
+            "target": "rotation",
+            "operation": "set",
+            "value": [
+              {
+                "mode": "range",
+                "minimum": 0,
+                "maximum": 6.2832
+              }
+            ]
+          }
+        },
+        {
+          "type": "property",
+          "id": 7,
+          "label": "Smoke Growth",
+          "stage": "update",
+          "parameters": {
+            "target": "size",
+            "operation": "set",
+            "value": [
+              {
+                "mode": "curveRange",
+                "minimumCurve": [
+                  {
+                    "time": 0.0,
+                    "value": 0.88
+                  },
+                  {
+                    "time": 0.2,
+                    "value": 1.0714
+                  },
+                  {
+                    "time": 0.4,
+                    "value": 1.5277
+                  },
+                  {
+                    "time": 0.6,
+                    "value": 2.0723
+                  },
+                  {
+                    "time": 0.8,
+                    "value": 2.5286
+                  },
+                  {
+                    "time": 1.0,
+                    "value": 2.72
+                  }
+                ],
+                "maximumCurve": [
+                  {
+                    "time": 0.0,
+                    "value": 1.265
+                  },
+                  {
+                    "time": 0.2,
+                    "value": 1.5328
+                  },
+                  {
+                    "time": 0.4,
+                    "value": 2.1714
+                  },
+                  {
+                    "time": 0.6,
+                    "value": 2.9336
+                  },
+                  {
+                    "time": 0.8,
+                    "value": 3.5722
+                  },
+                  {
+                    "time": 1.0,
+                    "value": 3.84
+                  }
+                ]
+              }
+            ]
+          }
+        },
+        {
+          "type": "property",
+          "id": 8,
+          "label": "Soft Lifetime Fade",
+          "stage": "update",
+          "parameters": {
+            "target": "alpha",
+            "operation": "set",
+            "value": [
+              {
+                "mode": "curve",
+                "curve": [
+                  {
+                    "time": 0.0,
+                    "value": 0.0
+                  },
+                  {
+                    "time": 0.08,
+                    "value": 0.35
+                  },
+                  {
+                    "time": 0.4,
+                    "value": 0.245
+                  },
+                  {
+                    "time": 0.8,
+                    "value": 0.1155
+                  },
+                  {
+                    "time": 1.0,
+                    "value": 0.0
+                  }
+                ]
+              }
+            ]
+          }
+        },
+        {
+          "type": "noise",
+          "id": 9,
+          "label": "Turbulence",
+          "stage": "update",
+          "parameters": {
+            "mode": "displacement",
+            "strength": {
+              "mode": "constant",
+              "value": 0.2
+            },
+            "wavelength": {
+              "mode": "constant",
+              "value": 1.5
+            },
+            "scroll": {
+              "mode": "constant",
+              "value": 0.3
+            }
+          }
+        }
+      ]
+    }
+  ]
+}

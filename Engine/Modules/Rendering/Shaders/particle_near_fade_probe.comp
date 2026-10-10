@@ -1,0 +1,36 @@
+#version 450
+
+// Test-only probe for a particle quad's near-camera fade (ParticleNearFadeTests).
+//
+// Each invocation takes one quad's view depth, half-diagonal, near plane, alignment, stretch and blend,
+// and evaluates on the device whether it fades (GE_ParticleFadesNearCamera), by how much
+// (GE_ParticleNearFade) and what its colour takes for it (GE_ParticleNearFadeColorScale), so the test
+// measures the shipped GLSL rather than a CPU copy.
+
+#include "Includes/particle_billboard.glsl"
+#include "Includes/particle_coverage.glsl"
+
+layout(local_size_x = 64) in;
+
+// Three vec4 per quad. First: xyz = the quad's centre in view space, w = its half-diagonal (in).
+// Second: x = the near plane, y = the shader's alignment code, z = the authored Velocity Stretch,
+// w = the material's near-fade colour exponent (in). Third: x = the fade, y = the factor its colour and
+// emission take (out).
+layout(set = 0, binding = 0) buffer ProbeQuads { vec4 quads[]; } uQuads;
+
+layout(push_constant) uniform ProbePC
+{
+    // x = quad count; yzw unused.
+    vec4 params;
+} pc;
+
+void main()
+{
+    uint i = gl_GlobalInvocationID.x;
+    if (i >= uint(pc.params.x))
+        return;
+    vec4 quad = uQuads.quads[3u * i];
+    vec4 look = uQuads.quads[3u * i + 1u];
+    float fade = GE_ParticleFadesNearCamera(uint(look.y), look.z) ? GE_ParticleNearFade(quad.xyz, quad.w, look.x) : 1.0;
+    uQuads.quads[3u * i + 2u].xy = vec2(fade, GE_ParticleNearFadeColorScale(fade, look.w));
+}

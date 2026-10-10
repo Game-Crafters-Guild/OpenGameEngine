@@ -1,0 +1,440 @@
+#version 450
+
+#include "Includes/storage_access.glsl"
+
+// retarget_full.comp — fused humanoid retarget compute shader.
+//
+// In a single dispatch, for each retargeted character (one workgroup per
+// character), do:
+//   Phase 1a: parallel-load source rest rotations into LDS.
+//   Phase 1b: parallel-sample clip rotation channels at clipTime → LDS (and,
+//             during an animator crossfade, the previous clip's at
+//             prevClipTime).
+//   Phase 1c: sample clip hip translation (single thread).
+//   Phase 1d: crossfade only — slerp previous → current by blendAlpha.
+//   Phase 2:  source FK walk (lane 0 serial; topo-ordered).
+//   Phase 3:  target FK walk + translation (lane 0 serial; canonical
+//             routing branch; non-canonical bones use bind local).
+//   Phase 4:  parallel build skin mat4s, write into SkinPaletteAtlas.
+//
+// All intermediate state lives in LDS — no global SSBO roundtrip between
+// phases. SSBO bindings:
+//   set=0 binding=0  Clip   (vec4[]) — clip headers + bone-recs + samples
+//   set=0 binding=1  Rig    (vec4[]) — rig-pair headers + flat data
+//   set=0 binding=2  Chars  (struct[]) — per-character params
+//   set=0 binding=3  Atlas  (mat4[]) — SkinPaletteAtlas write target
+//
+// Push constant: characterCount (the dispatch's gl_WorkGroupID.x bound).
+//
+// LDS budget: 4 × 256-bone vec4 arrays = 16 KB / workgroup.
+
+layout(local_size_x = 64) in;
+
+const uint kInvalid = 0xFFFFFFFFu;
+const uint kMaxBones = 256;
+const float kSampleRate = 30.0;
+
+// ---------------------------------------------------------------------------
+// Bindings
+// ---------------------------------------------------------------------------
+
+layout(set = 0, binding = 0, std430) restrict readonly buffer Clip {
+    vec4 data[];
+} clip;
+
+layout(set = 0, binding = 1, std430) restrict readonly buffer Rig {
+    vec4 data[];
+} rig;
+
+struct CharacterParams {
+    uint  rigPairHeaderIdx;     // vec4 offset into rig.data of the GPURigPairHeader (5 vec4)
+    uint  clipHeaderIdx;        // vec4 offset into clip.data of the GPURetargetClipHeader (2 vec4)
+    float clipTime;
+    uint  paletteOffset;        // bone-slot offset into atlas (1 slot = 3 vec4 rows)
+    uint  prevClipHeaderIdx;    // crossfade source clip header, kInvalid when not blending
+    float prevClipTime;
+    float blendAlpha;           // weight of the current clip
+    uint  _pad;
+};
+
+layout(set = 0, binding = 2, std430) restrict readonly buffer Chars {
+    CharacterParams params[];
+} chars;
+
+layout(set = 0, binding = 3, std430) restrict GE_STORAGE_WRITEONLY buffer BonePaletteAtlasSSBO {
+    vec4 rows[];
+} BonePaletteAtlas;
+
+#define GE_BONE_PALETTE_WRITABLE
+#include "Includes/bone_palette.glsl"
+
+layout(push_constant) uniform PushConstants {
+    uint characterCount;
+};
+
+// ---------------------------------------------------------------------------
+// Shared memory
+// ---------------------------------------------------------------------------
+
+shared vec4 s_srcRot[kMaxBones];      // src bone local rotations (clip-sampled or rest)
+shared vec4 s_srcWorld[kMaxBones];    // src bone world rotations (Phase 2 output); during a
+                                      // crossfade, Phase 1 holds the previous clip's local
+                                      // rotations here first
+shared vec4 s_tgtWorldRot[kMaxBones]; // tgt bone world rotations (Phase 3 output)
+shared vec3 s_tgtWorldPos[kMaxBones]; // tgt bone world positions (Phase 3 output)
+shared vec4 s_tgtLocalRot[kMaxBones]; // tgt bone local rotations (Phase 3 output, for IK consumers)
+shared vec3 s_hipTrans;               // sampled hip translation (Phase 1c output)
+
+// ---------------------------------------------------------------------------
+// Helpers
+// ---------------------------------------------------------------------------
+
+// Clip header / bone-rec readers (matches GPURetargetClipHeader/BoneRec
+// definitions in RetargetGPUDataStore.h).
+struct ClipHeader {
+    uint  firstSampleVec4;
+    uint  sampleCount;
+    uint  boneCount;
+    float duration;
+    uint  firstBoneVec4;
+    uint  transCount;
+};
+
+ClipHeader readClipHeader(uint headerVec4Off) {
+    vec4 v0 = clip.data[headerVec4Off + 0u];
+    vec4 v1 = clip.data[headerVec4Off + 1u];
+    ClipHeader h;
+    h.firstSampleVec4 = floatBitsToUint(v0.x);
+    h.sampleCount     = floatBitsToUint(v0.y);
+    h.boneCount       = floatBitsToUint(v0.z);
+    h.duration        = v0.w;
+    h.firstBoneVec4   = floatBitsToUint(v1.x);
+    h.transCount      = floatBitsToUint(v1.y);
+    return h;
+}
+
+// boneRec contents: (boneIndex, boneSlot, transSlot, _pad)
+uvec4 readClipBoneRec(uint vec4Off) {
+    return floatBitsToUint(clip.data[vec4Off]);
+}
+
+// Rig header (matches GPURigPairHeader, 5 vec4 = 20 uints).
+struct RigHeader {
+    uint  srcBoneCount;
+    uint  tgtBoneCount;
+    uint  skinJointCount;
+    uint  srcParentIndices;
+    uint  srcDepthSortedTopo;
+    uint  srcRestRot;
+    uint  tgtParentIndices;
+    uint  tgtDepthSortedTopo;
+    uint  tgtBindLocal;
+    uint  tgtRestPos;
+    uint  tgtSrcIdx;
+    uint  tgtBindCorrection;
+    uint  srcHipBoneIndex;
+    uint  tgtHipBoneIndex;
+    float hipScale;
+    uint  translationTgtBones;
+    uint  translationTgtBoneCount;
+    uint  tgtInverseBind;
+    uint  tgtJointNodes;
+    uint  tgtMeshRootInverse;
+};
+
+RigHeader readRigHeader(uint hOff) {
+    vec4 v0 = rig.data[hOff + 0u];
+    vec4 v1 = rig.data[hOff + 1u];
+    vec4 v2 = rig.data[hOff + 2u];
+    vec4 v3 = rig.data[hOff + 3u];
+    vec4 v4 = rig.data[hOff + 4u];
+    RigHeader r;
+    r.srcBoneCount             = floatBitsToUint(v0.x);
+    r.tgtBoneCount             = floatBitsToUint(v0.y);
+    r.skinJointCount           = floatBitsToUint(v0.z);
+    r.srcParentIndices         = floatBitsToUint(v0.w);
+    r.srcDepthSortedTopo       = floatBitsToUint(v1.x);
+    r.srcRestRot               = floatBitsToUint(v1.y);
+    r.tgtParentIndices         = floatBitsToUint(v1.z);
+    r.tgtDepthSortedTopo       = floatBitsToUint(v1.w);
+    r.tgtBindLocal             = floatBitsToUint(v2.x);
+    r.tgtRestPos               = floatBitsToUint(v2.y);
+    r.tgtSrcIdx                = floatBitsToUint(v2.z);
+    r.tgtBindCorrection        = floatBitsToUint(v2.w);
+    r.srcHipBoneIndex          = floatBitsToUint(v3.x);
+    r.tgtHipBoneIndex          = floatBitsToUint(v3.y);
+    r.hipScale                 = v3.z;
+    r.translationTgtBones      = floatBitsToUint(v3.w);
+    r.translationTgtBoneCount  = floatBitsToUint(v4.x);
+    r.tgtInverseBind           = floatBitsToUint(v4.y);
+    r.tgtJointNodes            = floatBitsToUint(v4.z);
+    r.tgtMeshRootInverse       = floatBitsToUint(v4.w);
+    return r;
+}
+
+// Read a single uint32 from a 4-uint-per-vec4 packed array (PushU32Packed
+// layout in RetargetGPUDataStore.cpp). idx is the 0-based packed-uint index.
+uint readRigU32Packed(uint packedBaseVec4, uint idx) {
+    vec4 v = rig.data[packedBaseVec4 + (idx >> 2u)];
+    uint lane = idx & 3u;
+    return floatBitsToUint((lane == 0u) ? v.x :
+                            (lane == 1u) ? v.y :
+                            (lane == 2u) ? v.z : v.w);
+}
+uint readClipU32Packed(uint packedBaseVec4, uint idx) {
+    vec4 v = clip.data[packedBaseVec4 + (idx >> 2u)];
+    uint lane = idx & 3u;
+    return floatBitsToUint((lane == 0u) ? v.x :
+                            (lane == 1u) ? v.y :
+                            (lane == 2u) ? v.z : v.w);
+}
+
+// Read a mat4 (4 vec4 column-major).
+mat4 readRigMat4(uint baseVec4) {
+    return mat4(rig.data[baseVec4 + 0u],
+                rig.data[baseVec4 + 1u],
+                rig.data[baseVec4 + 2u],
+                rig.data[baseVec4 + 3u]);
+}
+
+// Quaternion ops (xyzw layout, matches glm::quat::xyzw and our SSBO storage).
+vec4 qmul(vec4 a, vec4 b) {
+    return vec4(
+        a.w * b.x + a.x * b.w + a.y * b.z - a.z * b.y,
+        a.w * b.y - a.x * b.z + a.y * b.w + a.z * b.x,
+        a.w * b.z + a.x * b.y - a.y * b.x + a.z * b.w,
+        a.w * b.w - a.x * b.x - a.y * b.y - a.z * b.z);
+}
+vec4 qinv(vec4 q) { return vec4(-q.xyz, q.w); }   // unit quat: inverse = conjugate
+vec4 qnorm(vec4 q) { float l = length(q); return (l > 1e-8) ? q / l : vec4(0,0,0,1); }
+vec4 qslerpShort(vec4 a, vec4 b, float t) {
+    if (dot(a, b) < 0.0) b = -b;
+    return qnorm(mix(a, b, t));
+}
+// glm::slerp's rule (AnimationSampling.cpp BlendLocalPoses): shortest arc,
+// linear blend when the two are nearly equal.
+vec4 qslerp(vec4 a, vec4 b, float t) {
+    float c = dot(a, b);
+    if (c < 0.0) { b = -b; c = -c; }
+    if (c > 1.0 - 1.1920929e-7) return mix(a, b, t);
+    float angle = acos(c);
+    return (sin((1.0 - t) * angle) * a + sin(t * angle) * b) / sin(angle);
+}
+vec3 qrotate(vec4 q, vec3 v) {
+    vec3 t = 2.0 * cross(q.xyz, v);
+    return v + q.w * t + cross(q.xyz, t);
+}
+mat4 quatPosToMat(vec4 q, vec3 p) {
+    float xx = q.x*q.x, yy = q.y*q.y, zz = q.z*q.z;
+    float xy = q.x*q.y, xz = q.x*q.z, yz = q.y*q.z;
+    float wx = q.w*q.x, wy = q.w*q.y, wz = q.w*q.z;
+    return mat4(
+        vec4(1.0 - 2.0*(yy + zz),   2.0*(xy + wz),       2.0*(xz - wy),       0.0),
+        vec4(2.0*(xy - wz),         1.0 - 2.0*(xx + zz), 2.0*(yz + wx),       0.0),
+        vec4(2.0*(xz + wy),         2.0*(yz - wx),       1.0 - 2.0*(xx + yy), 0.0),
+        vec4(p, 1.0));
+}
+
+// Where clip time lands in a clip's 30 Hz sample table.
+struct ClipSampleAt {
+    uint  i0;
+    uint  i1;
+    float frac;
+    uint  stride;   // vec4s per sample (rotation + translation slots)
+};
+
+ClipSampleAt clipSampleAt(ClipHeader h, float time) {
+    float t = clamp(time / max(h.duration, 1.0/kSampleRate), 0.0, 1.0)
+              * float(h.sampleCount - 1u);
+    ClipSampleAt at;
+    at.i0 = uint(floor(t));
+    at.i1 = min(at.i0 + 1u, h.sampleCount - 1u);
+    at.frac = t - float(at.i0);
+    at.stride = h.boneCount + h.transCount;
+    return at;
+}
+
+// The rotation of the clip's bi-th animated bone; boneIdx is the source bone
+// it drives.
+vec4 sampleBoneRotation(ClipHeader h, ClipSampleAt at, uint bi, out uint boneIdx) {
+    uvec4 rec = readClipBoneRec(h.firstBoneVec4 + bi);  // (boneIndex, boneSlot, transSlot, _pad)
+    boneIdx = rec.x;
+    vec4 r0 = clip.data[h.firstSampleVec4 + at.i0 * at.stride + rec.y];
+    vec4 r1 = clip.data[h.firstSampleVec4 + at.i1 * at.stride + rec.y];
+    return qslerpShort(r0, r1, at.frac);
+}
+
+// The hip's sampled translation; zero when the clip has no hip channel.
+vec3 sampleHipTranslation(ClipHeader h, ClipSampleAt at, uint hipBone) {
+    if (hipBone == kInvalid || h.transCount == 0u)
+        return vec3(0.0);
+    // Find the hip's transSlot by walking the bone records.
+    for (uint bi = 0u; bi < h.boneCount; ++bi) {
+        uvec4 rec = readClipBoneRec(h.firstBoneVec4 + bi);
+        if (rec.x == hipBone) {
+            if (rec.z == kInvalid)
+                return vec3(0.0);
+            uint base = h.firstSampleVec4 + h.boneCount;
+            vec3 p0 = clip.data[base + at.i0 * at.stride + rec.z].xyz;
+            vec3 p1 = clip.data[base + at.i1 * at.stride + rec.z].xyz;
+            return mix(p0, p1, at.frac);
+        }
+    }
+    return vec3(0.0);
+}
+
+// ---------------------------------------------------------------------------
+// Main
+// ---------------------------------------------------------------------------
+
+void main() {
+    uint cIdx = gl_WorkGroupID.x;
+#if defined(GE_COMPAT_PROFILE)
+    // Over-dispatched workgroups clamp to a real character and redo its
+    // (fully defined) work with the palette store masked off, instead of
+    // returning: the phase barriers below must be reached in uniform control
+    // flow, which WGSL enforces and an early return here breaks.
+    const bool charActive = cIdx < characterCount;
+    // (A zero characterCount never dispatches this shader; the max() guards
+    // the clamp arithmetic against it anyway.)
+    cIdx = min(cIdx, max(characterCount, 1u) - 1u);
+#else
+    if (cIdx >= characterCount) return;
+#endif
+
+    CharacterParams cp = chars.params[cIdx];
+    RigHeader rh = readRigHeader(cp.rigPairHeaderIdx);
+    ClipHeader ch = readClipHeader(cp.clipHeaderIdx);
+
+    uint tid = gl_LocalInvocationIndex;
+    const uint WG = 64u;
+
+    // A crossfade blends from the previous clip; the condition is uniform
+    // across the workgroup, and every barrier below stays outside it.
+    const bool blending = cp.prevClipHeaderIdx != kInvalid;
+    // BlendLocalPoses clamps the weight once for rotations and translation alike.
+    const float blendWeight = clamp(cp.blendAlpha, 0.0, 1.0);
+    ClipHeader prevCh = readClipHeader(blending ? cp.prevClipHeaderIdx : cp.clipHeaderIdx);
+
+    // -----------------------------------------------------------------------
+    // Phase 1a — parallel load of source rest rotations into LDS.
+    // Bones with no clip channel keep this rest value (Phase 1b overrides
+    // animated bones); a crossfade's previous pose starts from rest too.
+    // -----------------------------------------------------------------------
+    for (uint b = tid; b < rh.srcBoneCount; b += WG) {
+        vec4 rest = rig.data[rh.srcRestRot + b];
+        s_srcRot[b] = rest;
+        if (blending) s_srcWorld[b] = rest;
+    }
+    barrier();
+
+    // -----------------------------------------------------------------------
+    // Phase 1b — parallel sample of clip rotation channels at clipTime.
+    // Uses sample-major layout: for each animated bone, slot bi in the
+    // per-sample rotation block. firstSampleVec4 + s * (boneCount+transCount)
+    // + boneSlot lands at sample s of bone bi.
+    // -----------------------------------------------------------------------
+    ClipSampleAt at = clipSampleAt(ch, cp.clipTime);
+    for (uint bi = tid; bi < ch.boneCount; bi += WG) {
+        uint boneIdx;
+        vec4 q = sampleBoneRotation(ch, at, bi, boneIdx);
+        if (boneIdx < rh.srcBoneCount) s_srcRot[boneIdx] = q;
+    }
+    ClipSampleAt prevAt = clipSampleAt(prevCh, cp.prevClipTime);
+    for (uint bi = tid; blending && bi < prevCh.boneCount; bi += WG) {
+        uint boneIdx;
+        vec4 q = sampleBoneRotation(prevCh, prevAt, bi, boneIdx);
+        if (boneIdx < rh.srcBoneCount) s_srcWorld[boneIdx] = q;
+    }
+
+    // -----------------------------------------------------------------------
+    // Phase 1c — single thread samples hip translation. Cheap; nobody else
+    // needs the trans block.
+    // -----------------------------------------------------------------------
+    if (tid == 0u) {
+        s_hipTrans = sampleHipTranslation(ch, at, rh.srcHipBoneIndex);
+        if (blending)
+            s_hipTrans = mix(sampleHipTranslation(prevCh, prevAt, rh.srcHipBoneIndex), s_hipTrans, blendWeight);
+    }
+    barrier();
+
+    // -----------------------------------------------------------------------
+    // Phase 1d — crossfade: blend the previous pose into the current one.
+    // -----------------------------------------------------------------------
+    for (uint b = tid; blending && b < rh.srcBoneCount; b += WG) {
+        s_srcRot[b] = qslerp(s_srcWorld[b], s_srcRot[b], blendWeight);
+    }
+    barrier();
+
+    // -----------------------------------------------------------------------
+    // Phase 2 — single-thread source FK walk over depth-sorted topology.
+    // ~50 iter for a humanoid; SM concurrency hides the lane-1..63 idle.
+    // -----------------------------------------------------------------------
+    if (tid == 0u) {
+        for (uint i = 0u; i < rh.srcBoneCount; ++i) {
+            uint b = readRigU32Packed(rh.srcDepthSortedTopo, i);
+            uint p = readRigU32Packed(rh.srcParentIndices, b);
+            vec4 pw = (p == kInvalid) ? vec4(0,0,0,1) : s_srcWorld[p];
+            s_srcWorld[b] = qnorm(qmul(pw, s_srcRot[b]));
+        }
+    }
+    barrier();
+
+    // -----------------------------------------------------------------------
+    // Phase 3 — single-thread target FK walk + translation. Canonical bones
+    // apply the precomputed BindCorrection; non-canonical fall back to bind
+    // local. Translation: hip uses sampled+scaled, others get rest.
+    // -----------------------------------------------------------------------
+    if (tid == 0u) {
+        vec3 scaledHip = s_hipTrans * rh.hipScale;
+        for (uint i = 0u; i < rh.tgtBoneCount; ++i) {
+            uint b = readRigU32Packed(rh.tgtDepthSortedTopo, i);
+            uint p = readRigU32Packed(rh.tgtParentIndices, b);
+            vec4 pwR = (p == kInvalid) ? vec4(0,0,0,1) : s_tgtWorldRot[p];
+            vec3 pwP = (p == kInvalid) ? vec3(0)       : s_tgtWorldPos[p];
+
+            uint srcIdx = readRigU32Packed(rh.tgtSrcIdx, b);
+            vec4 tgtL, tgtW;
+            if (srcIdx != kInvalid && srcIdx < rh.srcBoneCount) {
+                vec4 srcW    = s_srcWorld[srcIdx];
+                vec4 bindCor = rig.data[rh.tgtBindCorrection + b];
+                tgtW = qnorm(qmul(srcW, bindCor));
+                tgtL = qnorm(qmul(qinv(pwR), tgtW));
+            } else {
+                tgtL = rig.data[rh.tgtBindLocal + b];
+                tgtW = qnorm(qmul(pwR, tgtL));
+            }
+
+            // Translation: hip gets sampled+scaled, others rest pos.
+            vec3 localPos = (b == rh.tgtHipBoneIndex)
+                ? scaledHip
+                : rig.data[rh.tgtRestPos + b].xyz;
+            vec3 worldPos = pwP + qrotate(pwR, localPos);
+
+            s_tgtLocalRot[b] = tgtL;
+            s_tgtWorldRot[b] = tgtW;
+            s_tgtWorldPos[b] = worldPos;
+        }
+    }
+    barrier();
+
+    // -----------------------------------------------------------------------
+    // Phase 4 — parallel build skin mat4 per joint, write to atlas.
+    // -----------------------------------------------------------------------
+    mat4 mri = readRigMat4(rh.tgtMeshRootInverse);
+    for (uint j = tid; j < rh.skinJointCount; j += WG) {
+        uint b = readRigU32Packed(rh.tgtJointNodes, j);
+        if (b >= rh.tgtBoneCount) continue;
+        mat4 worldTRS = quatPosToMat(s_tgtWorldRot[b], s_tgtWorldPos[b]);
+        mat4 invBind  = readRigMat4(rh.tgtInverseBind + b * 4u);
+        // Pack as mat3x4 rows in the shared bone palette layout.
+#if defined(GE_COMPAT_PROFILE)
+        if (charActive)
+        {
+            ge_StoreBonePalette(cp.paletteOffset, j, mri * worldTRS * invBind);
+        }
+#else
+        ge_StoreBonePalette(cp.paletteOffset, j, mri * worldTRS * invBind);
+#endif
+    }
+}

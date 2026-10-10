@@ -1,0 +1,45 @@
+<UIElement>
+  <UIElement class="top-toolbar-left">
+    <UIElement class="toolbar-icons toolbar-icons-left">
+      <Button id="TopToolbarLeft1" class="small secondary icon-button save-icon">
+        <Label class="save-dirty-indicator hidden" text="*" />
+      </Button>
+      <Button id="TopToolbarLeft2" class="small secondary icon-button folder-open-icon" />
+      <Button id="TopToolbarPackages" class="small secondary icon-button box-icon" />
+      <Button id="TopToolbarLeft3" class="small secondary icon-button computer-icon" />
+      <Button id="TopToolbarTodos" class="small secondary icon-button checkmark-icon" />
+      <Button id="TopToolbarBookmarks" class="small secondary icon-button book-icon" />
+      <Button id="TopToolbarBuild" class="small secondary icon-button game-controller-icon" />
+      <Button id="TopToolbarSettings" class="small secondary icon-button settings-icon" />
+      <Button id="TopToolbarHelp" class="small secondary icon-button top-toolbar-help-icon" />
+      <Button id="TopToolbarUniversalSearch" class="small secondary icon-button top-toolbar-search-icon" />
+    </UIElement>
+  </UIElement>
+  <UIElement class="top-toolbar-center">
+    <UIElement class="toolbar-icons toolbar-icons-center">
+      <Button id="TopToolbarCenter2" class="small secondary icon-button stop-icon" />
+      <Button id="TopToolbarRecord" class="small secondary icon-button toolbar-record-icon" />
+      <Button id="TopToolbarCenter3" class="small secondary icon-button pause-icon" />
+      <Button id="TopToolbarCenter4" class="small secondary icon-button play-icon" />
+    </UIElement>
+  </UIElement>
+  <UIElement class="top-toolbar-right">
+    <UIElement class="toolbar-icons toolbar-icons-right">
+      <Button id="TopToolbarCenter1" class="small secondary icon-button fullscreen-icon" />
+      <Button id="TopToolbarUndoHistory" class="small secondary icon-button undo-icon" />
+      <Button id="TopToolbarRight1" class="small secondary icon-button script-icon" />
+      <Button id="TopToolbarNodeGraph" class="small secondary icon-button node-icon" />
+      <Button id="TopToolbarMixer" class="small secondary icon-button mixer-icon" />
+      <Button id="TopToolbarAnimation" class="small secondary icon-button alarm-icon" />
+      <Button id="TopToolbarTimeline" class="small secondary icon-button film-icon" />
+      <Button id="TopToolbarVisualProfiler" class="small secondary icon-button pulse-icon" />
+      <Button id="TopToolbarCpuProfiler" class="small secondary icon-button timer-icon" />
+      <Button id="TopToolbarMonitors" class="small secondary icon-button stats-icon" />
+      <Button id="TopToolbarVram" class="small secondary icon-button hardware-chip-icon" />
+      <Button id="TopToolbarRenderGraph" class="small secondary icon-button pie-chart-icon" />
+      <Button id="TopToolbarLog" class="small secondary icon-button alert-circle-icon" />
+      <Button id="TopToolbarRight2" class="small secondary icon-button info-icon" />
+      <Button id="TopToolbarPanelMenu" class="small secondary icon-button menulist-icon" />
+    </UIElement>
+  </UIElement>
+</UIElement>

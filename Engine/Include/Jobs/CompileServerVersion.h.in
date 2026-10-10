@@ -1,0 +1,6 @@
+#pragma once
+
+namespace GameEngine {
+    inline constexpr const char* kExpectedCompileServerVersion = "@COMPILE_SERVER_VERSION@";
+}
+

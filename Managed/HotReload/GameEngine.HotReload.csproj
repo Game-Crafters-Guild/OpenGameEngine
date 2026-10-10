@@ -1,0 +1,31 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <OutputType>Library</OutputType>
+    <AssemblyName>GameEngine.HotReload</AssemblyName>
+    <RootNamespace>GameEngine.HotReload</RootNamespace>
+    <GenerateRuntimeConfigurationFiles>true</GenerateRuntimeConfigurationFiles>
+    <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
+    <EnableDynamicLoading>true</EnableDynamicLoading>
+    <PublishAot>false</PublishAot>
+    <NativeLib>Shared</NativeLib>
+    <EnableComHosting>false</EnableComHosting>
+    <CreateComHosting>false</CreateComHosting>
+    <UseAppHost>false</UseAppHost>
+    <!-- Ensure all NuGet runtime dependencies are copied alongside the HRM dll for ADR resolution -->
+    <CopyLocalLockFileAssemblies>true</CopyLocalLockFileAssemblies>
+  </PropertyGroup>
+  <PropertyGroup>
+
+    <!-- Core hot-reload assembly - never unloaded -->
+    <AssemblyTitle>GameEngine Hot-Reload Manager</AssemblyTitle>
+    <AssemblyDescription>Core hot-reload management system using collectible AssemblyLoadContext</AssemblyDescription>
+    <AssemblyCompany>GameEngine</AssemblyCompany>
+    <AssemblyProduct>GameEngine</AssemblyProduct>
+  </PropertyGroup>
+  <!-- No package dependencies: script compilation is owned by CompileServerHost;
+       this assembly must stay minimal because it ships next to the editor/player
+       and is loaded into the default ALC forever. -->
+</Project>

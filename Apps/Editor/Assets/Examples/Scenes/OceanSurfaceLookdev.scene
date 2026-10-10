@@ -1,0 +1,116 @@
+[scene name="OceanSurfaceLookdev" version=1]
+; Open water, a sloping shallow shore, and one rock under a fixed daylight rig.
+; The ocean surface detail guide (docs/Rendering/ocean-surface-detail.html) explains the controls.
+
+[entity id="sun"]
+Name.value = "Sun"
+Light.enabled = true
+Light.type = 0
+Light.color = (1, 0.97, 0.92)
+Light.intensity = 70000
+Light.intensityUnit = Lux
+Light.castsShadows = true
+Transform.rotation = (0.3037, 0.3576, -0.1242, 0.8744)
+
+[entity id="sky"]
+Name.value = "Daylight sky"
+SkyEnvironment.Enabled = true
+SkyEnvironment.Mode = 1
+SkyEnvironment.GradientSkyTopColor = (0.16, 0.29, 0.48)
+SkyEnvironment.GradientSkyHorizonColor = (0.48, 0.58, 0.66)
+SkyEnvironment.GradientSkyBottomColor = (0.10, 0.13, 0.15)
+SkyEnvironment.GradientSkyIntensity = 32000
+SkyEnvironment.AnimateTimeOfDay = false
+SkyEnvironment.AutoSunMoon = false
+SkyEnvironment.TimeOfDayDrivesSunLight = false
+SkyEnvironment.SunLight = "sun"
+SkyEnvironment.IblIntensity = 1
+SkyEnvironment.ShowSun = false
+
+[entity id="camera"]
+Name.value = "Main Camera"
+Camera.enabled = true
+Camera.perspective = true
+Camera.fovY = 55
+Camera.nearZ = 0.05
+Camera.farZ = 3000
+Camera.exposureControl = 1
+Camera.manualExposureEV = 14.6
+Transform.position = (0, 3.5, -16)
+Transform.rotation = (0.075, 0, 0, 0.99718)
+
+[entity id="post"]
+PostProcessVolume.enabled = true
+PostProcessVolume.weight = 1
+PostProcessVolume.isGlobal = true
+PostProcessVolume.tonemap = 4
+
+[entity id="ocean"]
+Name.value = "Ocean - foam and ripple detail"
+Transform.position = (0, 0, 0)
+OceanSurface.Enabled = true
+OceanSurface.FoamTexture = [path="Examples/Materials/Ocean/crest_foam.png"]
+OceanSurface.NormalTexture = [path="Examples/Materials/Ocean/crest_wave_normals.png"]
+OceanSurface.FoamScale = 5
+OceanSurface.FoamBubbleCoverage = 0.4
+OceanSurface.FoamBubbleParallax = 0.1
+OceanSurface.FoamRoughness = 0.65
+OceanSurface.FoamColor = (0.92, 0.96, 0.95, 1)
+OceanSurface.FoamAmount = 1
+OceanSurface.FoamFadeRate = 0.4
+OceanSurface.NormalsStrength = 0.75
+OceanSurface.NormalsScale = 1
+OceanSurface.Roughness = 0.12
+OceanSurface.DeepColor = (0.015, 0.045, 0.06, 1)
+OceanSurface.Diffuse = (0.005, 0.025, 0.04, 1)
+OceanSurface.DiffuseGrazing = (0.01, 0.04, 0.055, 1)
+OceanSurface.DiffuseShadow = (0.002, 0.01, 0.016, 1)
+OceanSurface.Spray = false
+OceanSurface.Underwater = true
+OceanSurface.PlanarReflections = true
+OceanSurface.ShorelineFoamMaxDepth = 0.7
+OceanSurface.ShorelineFoamStrength = 1.3
+OceanSurface.IntersectionFoamDepth = 0.4
+OceanSurface.IntersectionFoamStrength = 0.8
+OceanRenderer.Enabled = true
+OceanRenderer.GlobalWindSpeed = 11
+OceanRenderer.GlobalWindDirection = 25
+OceanRenderer.GlobalWindTurbulence = 0.22
+OceanWaveSpectrum.Multiplier = 0.8
+OceanWaveSpectrum.Chop = 1.5
+
+[entity id="shore"]
+Name.value = "Sloping shore"
+Transform.position = (-8, -2, 12)
+Transform.rotation = (0, 0, -0.09854, 0.99513)
+Transform.scale = (50, 1, 100)
+MeshRenderer.meshPrimitive = Plane
+MeshRenderer.material = [path="Examples/Materials/Ocean/shore.material"]
+OceanSeabed.Enabled = true
+OceanSeabed.ExtentX = 25
+OceanSeabed.ExtentZ = 50
+OceanSeabed.BaseHeight = -2
+OceanSeabed.SlopeX = -0.2
+
+[entity id="rock"]
+Name.value = "Waterline rock"
+Transform.position = (-5, 0.2, 6)
+Transform.scale = (4, 3, 5)
+MeshRenderer.meshPrimitive = Sphere
+MeshRenderer.material = [path="Examples/Materials/Ocean/rock.material"]
+
+; Controlled foam input for inspecting detail at the waterline rock.
+OceanFoamInput.Enabled = true
+OceanFoamInput.Amount = 1.5
+OceanFoamInput.ExtentX = 1.2
+OceanFoamInput.ExtentZ = 1
+OceanFoamInput.Feather = 1.5
+
+[entity id="current"]
+Name.value = "Shore current"
+Transform.position = (-6, 0, 8)
+OceanFlowSource.Enabled = true
+OceanFlowSource.ExtentX = 14
+OceanFlowSource.ExtentZ = 25
+OceanFlowSource.FlowX = 0.4
+OceanFlowSource.FlowZ = 0.2

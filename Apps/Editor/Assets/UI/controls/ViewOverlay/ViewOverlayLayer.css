@@ -1,0 +1,52 @@
+/* ViewOverlayHost (Apps/Editor/Include/UI/ViewOverlayHost.h).
+ *
+ * The overlay layer the host adds to every viewport a view panel publishes, and the banner look the
+ * registered overlays share. The host requests this sheet for the layer's subtree, so nothing loads
+ * it unless a view has published a viewport.
+ */
+
+/* A column along the viewport's top edge, its overlays centered and stacked in registration order,
+   so two overlays in it shown at once never cover each other. Elements a panel places by hand (the
+   FPS label, the download pills, which stack under this column) are outside it. It takes no
+   pointer input: the viewport under it keeps every click. Its side margins keep it clear of the
+   view's corner controls (the tool column, the orientation gizmo) however narrow the view. */
+.view-overlay-layer {
+	position: absolute;
+	top: 14px;
+	left: 96px;
+	right: 96px;
+	display: flex;
+	flex-direction: column;
+	align-items: center;
+	pointer-events: none;
+}
+
+/* A one-line status pill. Its fixed width keeps a changing count from resizing it every frame;
+   text longer than the pill ends in an ellipsis. */
+.view-overlay-banner {
+	width: 240px;
+	margin-bottom: 6px;
+	padding: 6px 14px;
+	background-color: var(--ui_color_view_banner_background);
+	color: var(--ui_color_view_banner_text);
+	font-size: 14px;
+	font-family: var(--ui_font_family);
+	font-weight: 500;
+	border-radius: 999px;
+	text-align: center;
+	white-space: nowrap;
+	overflow: hidden;
+	text-overflow: ellipsis;
+	pointer-events: none;
+}
+
+/* TerrainPageCookOverlay: wider, so the terrain's name after the percentage fits. */
+.terrain-page-cook {
+	width: 360px;
+}
+
+/* SceneViewNoticeOverlay: a sentence, not a status, so it takes the width its text needs. */
+.scene-view-notice {
+	width: auto;
+	max-width: 640px;
+}

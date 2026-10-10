@@ -1,0 +1,41 @@
+#version 450
+#extension GL_GOOGLE_include_directive : require
+
+#include "Ocean/ocean_common.glsl"
+
+// Evaluates the surface's shallow clarity window (OceanShallowFogScale) from the
+// uploaded OceanParamsBuffer at the given view-ray path lengths, beside the same
+// window written with literal constants (8 m, floor 0.22). A test holds the
+// default upload to the literal form bit for bit above water (underBelow 0) and
+// to exactly 1 seen from below (underBelow 1).
+// Paths and the underBelow weights arrive at run time, as they do in the surface.
+layout(local_size_x = 1) in;
+layout(std430, set = 0, binding = 0) writeonly buffer ShallowClarityProbeResult
+{
+    float scale[8];
+    float legacy[8];
+    float seenFromBelow;
+    float neighbours[3];
+};
+layout(std430, set = 0, binding = 1) readonly buffer ShallowClarityProbeInput
+{
+    float paths[8];
+    float underBelow[2]; // [0] above the surface, [1] seen from below
+};
+
+void main()
+{
+    for (int i = 0; i < 8; ++i)
+    {
+        float waterDist = paths[i];
+        scale[i] = OceanShallowFogScale(waterDist, underBelow[0]);
+        float shallowClarity = smoothstep(0.0, 8.0, waterDist);
+        legacy[i] = mix(mix(0.22, 1.0, shallowClarity), 1.0, underBelow[0]);
+    }
+    seenFromBelow = OceanShallowFogScale(paths[0], underBelow[1]);
+    // The lane's flags and its neighbours, read through the same block, prove
+    // the window's two floats sit where the CPU wrote them and moved nothing.
+    neighbours[0] = float(uRefractionFlags.x + 2u * uRefractionFlags.y);
+    neighbours[1] = uDepthFogRefraction.a;
+    neighbours[2] = uDepthFogFalloff.x;
+}

@@ -1,0 +1,3043 @@
+#version 460
+// cbt_kernels.comp — all CBT update kernels in one source, one compute PSO per
+// kernel selected by the constant_id=0 specialization constant (KERNEL). The
+// driver dead-code-eliminates every branch but the selected kernel, so this is
+// N specialized pipelines from one TU (port-notes §2/§9).
+//
+// C2 (this slice) lands the full refinement/merge fan-out: the reference's
+// four-pattern Bisect + evaluate_neighbors, the compatibility-chain Split with
+// the 2δ−1 budget reserve/refund, the sum-tree bit-complement Allocate (free
+// slots are reused after merges), and the three-kernel decimation path — all
+// ported from github.com/AnisB/large_cbt (update_utilities.hlsl). The reference
+// targets a closed manifold; our planar unit-square base has boundary edges, so
+// the propagate/simplify paths carry INVALID-neighbor guards the reference lacks.
+//
+// Kernel ids MUST match CBTKernelSet.h::CBTKernel.
+#extension GL_GOOGLE_include_directive : require
+
+#include "cbt_layout.glsl"
+#include "cbt_domain.glsl"
+// Earth-scale df64 (sector, local) decode (arc S2a) — GLSL bit-twin of CBTDeepDecode.h.
+// Pure math, no bindings; only the VertexEval deep branch calls it, and the driver DCEs
+// it out of every other kernel (and out of VertexEval when pc.deepDecode == 0).
+#include "cbt_deep_decode.glsl"
+// Resident-window atlas resolve (Phase E). Pure math, no bindings; cbt_layout.glsl
+// includes it and binds the indirection SSBO (17) + atlas height ring (18) that
+// CBT_SampleHeight resolves through when a terrain is atlas-backed (design §3.3). The
+// include here is a guarded no-op (kept to document the dependency); the driver DCEs
+// the resolve out of every kernel but VertexEval, and out of VertexEval entirely when
+// a terrain leaves atlasParams1.z == 0 (the dark-ship / non-atlas default).
+#include "cbt_atlas.glsl"
+
+layout(local_size_x = 64, local_size_y = 1, local_size_z = 1) in;
+
+// Kernel selector. One SPIR-V blob specialized kCBTKernelCount ways on the default arm;
+// a target with no specialization constants (WGSL has none) instead cooks one program per
+// kernel with -DKERNEL=i, and the switch below folds to that kernel at compile time.
+#ifndef KERNEL
+layout(constant_id = 0) const uint KERNEL = 0u;
+#endif
+
+// Kernel ids (mirror CBTKernelSet.h).
+#define K_RESET 0u
+#define K_CLASSIFY 1u
+#define K_PREPARE_INDIRECT 2u
+#define K_SPLIT 3u
+#define K_ALLOCATE 4u
+#define K_BISECT 5u
+#define K_PROPAGATE_BISECT 6u
+#define K_PREPARE_SIMPLIFY 7u
+#define K_SIMPLIFY 8u
+#define K_PROPAGATE_SIMPLIFY 9u
+#define K_REDUCE_PREPASS 10u
+#define K_REDUCE_FIRST 11u
+#define K_REDUCE_SECOND 12u
+#define K_BISECTOR_INDEXATION 13u
+#define K_PREPARE_BISECTOR_INDIRECT 14u
+#define K_VALIDATE 15u
+#define K_VERTEX_EVAL 16u
+#define K_REGION_FREE_CLEAR 17u
+#define K_REGION_FREE_SEED 18u
+#define K_REGION_FREE_LINK 19u
+#define K_NEIGHBOR_COPY 20u
+#define K_VALIDATE_COMPACT_STREAM 21u
+#define K_HEIGHT_RANGE_BUILD 22u
+
+const uint CBT_FLAG_VIS_MOD = CBT_FLAG_VISIBLE | CBT_FLAG_MODIFIED;
+
+// ===========================================================================
+// Shared derivation helpers
+// ===========================================================================
+
+// Which root subtree a bisector descends from. The LEB root index is invariant
+// under subdivision: heapID >> (depth − baseDepth) recovers 2^baseDepth + root.
+uint CBT_RootOf(CBT_HEAPID_T h, uint depth)
+{
+    return uint(h >> (depth - pc.baseDepth));
+}
+
+// Fully (re)initialize a freshly allocated child slot's BisectorData. Child
+// slots come from the free-slot decode and may carry stale data from a slot
+// that was merged in a prior frame, so every field must be written.
+void CBT_InitChild(uint slot, uint pattern, uint state, uint i0, uint i1, uint i2, uint propID,
+                   uint problematic)
+{
+    gBisector.Bisector[slot].subdivisionPattern = pattern;
+    gBisector.Bisector[slot].bisectorState = state;
+    gBisector.Bisector[slot].flags = CBT_FLAG_VIS_MOD;
+    gBisector.Bisector[slot].problematicNeighbor = problematic;
+    gBisector.Bisector[slot].propagationID = propID;
+    gBisector.Bisector[slot].indices0 = i0;
+    gBisector.Bisector[slot].indices1 = i1;
+    gBisector.Bisector[slot].indices2 = i2;
+}
+
+// Narrow-heap arm only. A neighbor id is a live bisector, not merely a pool index:
+// CURRENT/NEXT records can still name a slot that merge or region-free zeroed, and
+// findMSB/firstLeadingBit(HeapID 0) is ~0u depth. On this arm every topology kernel
+// (Split, Bisect, PropagateBisect, PrepareSimplify) treats such an id as a boundary
+// and Reset/Validate stamp diagnostic words 4..15. The default arm keeps the reference
+// kernels' link tests (INVALID / pool bound only) and the four named counters — the
+// pool-pinned equilibrium the terrain suite's demand gate is tuned against.
+#if defined(CBT_DECODE_INT32)
+bool CBT_IsLivePointer(uint id)
+{
+    return id != CBT_INVALID_POINTER && id < CBT_POOL_SIZE &&
+           !CBT_IsFreeSlot(CBT_LoadHeapID(id));
+}
+#endif
+
+// Reference evaluate_neighbors (update_utilities.hlsl). Given currentID and one
+// of its splitting neighbors (bisectorID), returns which of the neighbor's new
+// children (resX, resY) face currentID's children. Reads the neighbor's
+// subdivisionPattern (set by Classify/Split) and indices (set by Allocate), both
+// from the single BisectorData buffer, plus the neighbor's CURRENT neighbors.
+void CBT_EvaluateNeighbors(uint currentID, uint bisectorID, out uint resX, out uint resY)
+{
+#if defined(CBT_DECODE_INT32)
+    // A freed/OOB id is a boundary, not a sibling. Wiring children to its stale
+    // pattern/indices opens a T-junction (small missing triangle).
+    if (!CBT_IsLivePointer(bisectorID))
+    {
+        resX = CBT_INVALID_POINTER;
+        resY = CBT_INVALID_POINTER;
+        return;
+    }
+#endif
+    uint pat = gBisector.Bisector[bisectorID].subdivisionPattern;
+    uvec4 nN = CBT_ReadCur(bisectorID);
+    uint i0 = gBisector.Bisector[bisectorID].indices0;
+    uint i1 = gBisector.Bisector[bisectorID].indices1;
+    uint i2 = gBisector.Bisector[bisectorID].indices2;
+
+    if (pat == CBT_NO_SPLIT)
+    {
+        // Guard the reference lacks: a referenced neighbor that did not actually
+        // split (e.g. a pool-overflow rollback). Face it directly; Validate will
+        // surface the resulting non-reciprocity if it ever fires.
+        resX = bisectorID;
+        resY = bisectorID;
+    }
+    else if (pat == CBT_CENTER_SPLIT)
+    {
+        resX = i0;
+        resY = bisectorID;
+    }
+    else if (pat == CBT_RIGHT_DOUBLE_SPLIT)
+    {
+        if (nN.x == currentID)
+        {
+            resX = i1;
+            resY = bisectorID;
+        }
+        else
+        {
+            resX = i0;
+            resY = i1;
+        }
+    }
+    else if (pat == CBT_LEFT_DOUBLE_SPLIT)
+    {
+        if (nN.y == currentID)
+        {
+            resX = i1;
+            resY = i0;
+        }
+        else
+        {
+            resX = i0;
+            resY = bisectorID;
+        }
+    }
+    else // CBT_TRIPLE_SPLIT
+    {
+        if (nN.x == currentID)
+        {
+            resX = i1;
+            resY = bisectorID;
+        }
+        else if (nN.y == currentID)
+        {
+            resX = i2;
+            resY = i0;
+        }
+        else
+        {
+            resX = i0;
+            resY = i1;
+        }
+    }
+}
+
+// ===========================================================================
+// Kernel bodies
+// ===========================================================================
+
+// Reference-parity demand gate. The screen-space Classify metric must drive splits ONLY for
+// potentially-visible geometry. CBTDemandAuditTests measured that at the 150 m R=2000 surface pose
+// ~99.8% of the ~98k/frame split demand is horizon-occluded far-side (~82%) or off-frustum (~18%) —
+// feeding that into the fixed-size bisector pool is exactly what saturates it, while the reference
+// (large_cbt) reaches centimetric from the SAME pool by refining visible-only. The two culls have
+// DIFFERENT stabilities, so Classify treats them differently instead of both coarsening to base:
+//   HORIZON — all three corners below the conservative floor-sphere horizon. VIEW-INDEPENDENT
+//             (camera POSITION, not orientation), so coarsening it to base causes no rotation pop-in.
+//             Spherical domain only. Kept as-is: coarsen to base.
+//   FRUSTUM — outside a MARGIN-widened view frustum, or fully behind the eye. VIEW-DEPENDENT: a yaw
+//             sweeps geometry across the margin, so coarsening it to base and re-refining one level/
+//             frame IS the rotation churn (round-7 finding 1). Occupancy-managed by the caller: keep
+//             depth while the pool has headroom (no churn), coarsen to base only under pool pressure.
+// A triangle straddling the near plane is RELEVANT (genuinely close), never coarsened. This shapes
+// only the split/merge DEMAND — Split's compatibility chain still force-splits neighbors — so the
+// coarsening far field grades to base through the normal LEB merge and stays conforming.
+const int CBT_GATE_RELEVANT = 0;
+const int CBT_GATE_HORIZON = 1;
+const int CBT_GATE_FRUSTUM = 2;
+const float CBT_SPLIT_NDC_MARGIN = 1.1;      // 10% NDC guard band (~1.2x screen area) for rotation pop-in
+const float CBT_OFF_FRUSTUM_KEEP_NDC = 10.0; // off-frustum keep band (NDC). Wider than
+                                             // CBT_OFF_FRUSTUM_BEHIND_NDC so a pool with headroom keeps
+                                             // ALL off-frustum geometry at depth (unconditional — a
+                                             // yaw never re-refines, the lowest-churn regime); the band
+                                             // only SHRINKS under pool pressure, coarsening the
+                                             // deepest-out-of-frustum first (graded, no burst).
+const float CBT_KEEP_RAMP = 0.30;             // the last 30% of occupancy below the keep ceiling: the
+                                             // sphere's band ramps from full to 0 across it, and it is
+                                             // the planar keep step's hold band (Kernel_Reset)
+
+// The planar off-frustum keep band at keep step `step` (NDC). Step 0 is unbounded: the ungated field.
+// Past it the band starts at CBT_OFF_FRUSTUM_KEEP_WIDEST_NDC and halves every
+// CBT_OFF_FRUSTUM_KEEP_STEPS_PER_OCTAVE steps, reaching 0 at CBT_OFF_FRUSTUM_KEEP_STEPS. The planar
+// off-frustum field's ndcExcess spans under 1 NDC to about a thousand with no half-octave holding more
+// than about a sixth of it, so equal ratios keep every step's release inside the 30% hold band, and the
+// first step releases only the thin far tail instead of everything past a fixed band.
+float CBT_PlanarKeepBand(int step)
+{
+    if (step <= 0)
+        return 3.402823e38;
+    if (step >= int(CBT_OFF_FRUSTUM_KEEP_STEPS))
+        return 0.0;
+    return CBT_OFF_FRUSTUM_KEEP_WIDEST_NDC *
+           exp2(-float(step - 1) / float(CBT_OFF_FRUSTUM_KEEP_STEPS_PER_OCTAVE));
+}
+const float CBT_OFF_FRUSTUM_BEHIND_NDC = 8.0; // fully-behind-eye "distance" — inside the full keep band
+// Distance floor (m) for the behind-the-eye as-if-visible edge metric: a facet at the eye itself
+// is the straddling case, bounded by the near-field world target, not by this.
+const float CBT_BEHIND_EYE_MIN_DIST = 1.0;
+
+// Screen-area priority ordering (round-8c look-back). The split-demand projected-area floor reaches
+// priorityParams.z (its max) at this occupancy; the ramp START rides priorityParams.y. A WIDE
+// [start, full] band keeps the feedback gain low so the floor does not oscillate — the same discipline
+// the near-bias contention ramp uses (a floor that frees slots lowers occupancy which lowers the floor).
+const float CBT_PRIORITY_OCC_FULL = 0.99;
+
+// Near-field force-split occupancy ceiling (round-8e saturation-deadlock fix). A facet with a
+// split-edge endpoint behind the near plane (grazing the eye plane) is force-split toward the
+// decode cap regardless of TargetPixelError — invisible cap-depth over-refinement that keeps
+// re-filling the deepest pool level every frame (the "treadmill"). Under pool pressure that
+// treadmill out-competes the merge fringe: the far field can never drain because the near-plane
+// grazing band re-splits into every slot the merge frees. Above this occupancy the force-split
+// stops, so the merge fringe makes net progress and the invisible over-refinement returns its
+// slots to the visible field. Below it the force-split is unchanged (the walking-headroom bound).
+const float CBT_NEAR_FIELD_OCC_CEIL = 0.90;
+// Merge threshold for the near-field branches, as a fraction of their world facet target. 1/sqrt(2)
+// makes the split/merge dead band exactly one bisection level wide — the tightest band that cannot
+// oscillate, since one LEB merge lengthens the split edge by exactly sqrt(2).
+const float CBT_NEAR_FIELD_MERGE_FRAC = 0.70710678;
+// One LEB level on the split edge: a parent's hypotenuse is exactly sqrt(2) x its children's. The
+// parent-level merge test scales the child threshold by this, so it expresses the SAME merge density
+// the per-child test did — only measured on the edge both siblings share.
+const float CBT_LEB_PARENT_EDGE_SCALE = 1.41421356;
+
+// Coarsening rule for the near-field branches: the hysteresis complement of their force-split bound,
+// so this branch decides BOTH directions. A branch that assigns only wantSplit leaves wantMerge
+// false, so its facets can never carry CBT_STATE_SIMPLIFY — and a near-field facet that has become
+// far finer than the target (because the target was raised, or the pose moved) is then pinned at its
+// old size for as long as it stays on this branch.
+//
+// The bound is WORLD-space, which removes the PROJECTION asymmetry but NOT the diamond
+// inconsistency. A facet's own split edge is a different LEG of its parent from its sibling's. On
+// flat ground the two legs are exactly congruent (measured ratio min = max = 1.000000), so both
+// children reach the same decision and this bound is diamond-consistent for free. WITH RELIEF THEY
+// ARE NOT: each leg carries its own sampled heights, and the odd/even world length ratio spreads to
+// 0.249-3.917 over a converged relief tree (CBTPlanarDemandGate.SiblingMergeMetricCensus, relief
+// arm). So this rule keeps the same per-facet asymmetry the domain metric had, and can raise merge
+// demand for one sibling only.
+//
+// It is left per-facet deliberately rather than by oversight: the domain metric's fix
+// (CBT_ParentSplitEdgeFar, measured on the parent's edge) applies here too, but changing this bound
+// moves the near field, which is the part of the frame the eye is most sensitive to, and it is a
+// separate change with its own gate. The domain metric decides its merge on the parent's split edge
+// (see the planar branch in Kernel_Classify); this one does not, yet.
+//
+// Stability WITHIN this branch: split fires above nearTargetM and merge below nearTargetM/sqrt(2),
+// so a coarsened facet lands at sqrt(2) x its old edge — inside the dead band, never back across the
+// split threshold. A facet that stays on this branch converges into [nearTargetM/sqrt(2),
+// nearTargetM] and stays.
+//
+// The bound does NOT extend across branches, and that is the near field's real steady state. A facet
+// coarsened here can leave the branch: once both split-edge endpoints clear the eye plane it is
+// re-classified by the domain metric (planar edge length, spherical projected area), which may split
+// it and hand it straight back. Where a pose's near field straddles that boundary the two rules
+// cycle a bounded set of facets — churn, not growth and not starvation. Measured at the shipped
+// planet walking pose (R=2000, alt 5 m): 408 split candidates raised per frame and all 408 served,
+// zero overflow, live count moving 156 across a 40-frame tail
+// (CBTNearFieldMerge.WalkingPoseSplitDemandIsServedNotStarved).
+//
+// Not occupancy-gated: the split gate exists to stop splits consuming a contended pool, and
+// coarsening relieves that pool rather than consuming it. nearTargetM <= 0 keeps the
+// force-split-to-cap contract, where coarsening is never wanted.
+bool CBT_NearFieldWantMerge(float nearTargetM, float nearEdgeM)
+{
+    return nearTargetM > 0.0 && nearEdgeM < nearTargetM * CBT_NEAR_FIELD_MERGE_FRAC;
+}
+
+// The FAR end of the parent's split edge, reconstructed from a child's own corners — the piece a
+// parent-level merge test needs and the only piece a facet does not already hold.
+//
+// LEB bisection leaves both children holding the parent's hypotenuse MIDPOINT as corner1, and one
+// hypotenuse ENDPOINT as the corner the sibling does not share: the even child holds it as corner0,
+// the odd as corner2. (Locked over the whole live population, not assumed from the decode's
+// documentation, by CBTPlanarDemandGate.SiblingMergeMetricCensus's shared-corner matrix.)
+// Reflecting the held endpoint through the midpoint recovers the other endpoint without reading the
+// sibling's slot.
+//
+// EXACT IN XZ, EXTRAPOLATED IN Y. The domain position is linear under subdivision, so the reflection
+// reproduces the sibling's x and z bit-for-bit. The y is the SAMPLED HEIGHT (VertexEval writes
+// h(uv) into corner.y), so the reflection yields 2*h(mid) - h(held), which equals the true h at the
+// far endpoint only where the height is linear along that edge. At heightScale 0 that is every edge
+// and the two children reconstruct one identical segment; with relief they reconstruct two segments
+// that share XZ and differ in Y, so a pair whose projected parent edge sits within that error of the
+// threshold can still split its decision.
+//
+// Measured (CBTParentMergeMetric, shipped 512 m / heightScale 60 relief): 0 disagreeing pairs flat,
+// 53 of 11,408 (mid) and 627 of 268,434 (walk) on relief — and every one of those is predicted by
+// this extrapolation, so the residual has no second cause. That is the price of the metric; the
+// per-child rule it replaced disagreed on 5,699 of 11,408 and 99,215 of 269,199 of the same pairs.
+//
+// Corners are render-origin-RELATIVE; rebasing is a translation, so it does not affect any of this.
+vec3 CBT_ParentSplitEdgeFar(CBT_HEAPID_T h, vec3 e0, vec3 e1, vec3 e2)
+{
+    return ((uint(h) & 1u) == 0u) ? (2.0 * e1 - e0) : (2.0 * e1 - e2);
+}
+
+// View-priority coarsening factor (arc slice S2) at a world point in the render-origin-relative
+// frame. Split and merge thresholds scale by this SAME factor, so the hysteresis dead band is
+// preserved wherever both are evaluated at one point. The split side evaluates it at the facet's own
+// split-edge midpoint; the merge side at the PARENT's midpoint, which is the corner both siblings
+// hold bit-identically — so the coarsening cannot re-introduce the sibling disagreement the
+// parent-level metric exists to remove. contention <= 0 (A/B off or an unsaturated pool) returns
+// exactly 1.0, leaving the thresholds byte-identical to the pre-slice metric.
+float CBT_NearBiasCoarsen(CBTFrameParams fp, float contention, vec3 pointRel, vec3 camRel)
+{
+    if (contention <= 0.0)
+        return 1.0;
+    // 0 inside the near radius (full detail), ramping to 1 at/after the far radius.
+    float farT = smoothstep(fp.nearBias.y, fp.nearBias.z, distance(pointRel, camRel));
+    return 1.0 + contention * farT * max(fp.nearBias.w - 1.0, 0.0);
+}
+
+// For a CBT_GATE_FRUSTUM triangle, ndcExcess is HOW FAR outside the margin the whole triangle sits
+// (the deepest side violation, in NDC). The caller keeps depth for small excess (the just-off-frustum
+// yaw buffer — a yaw sweeps geometry through this band, so keeping it at depth means no re-refine
+// churn) and coarsens large excess (deep off-frustum, only revealed by a big turn). Fully-behind-eye
+// is reported as a large excess (coarsen under any real pressure — a 180 turn re-refines, rare).
+int CBT_SplitGate(CBTFrameParams fp, vec3 wc0, vec3 wc1, vec3 wc2, vec2 p0, vec2 p1, vec2 p2,
+                  bool in0, bool in1, bool in2, out float ndcExcess)
+{
+    ndcExcess = 0.0;
+    // Horizon back-hemisphere cull (spherical) — mirror of the VISIBLE-flag occlusion in Classify.
+    if (pc.domainMode == CBT_DOMAIN_SPHERICAL)
+    {
+        vec3 camP = fp.cameraPos.xyz;
+        float camLen = length(camP);
+        float floorR = fp.planetParams.x - CBT_RELIEF_ENVELOPE * abs(fp.planetParams.y);
+        if (camLen > floorR)
+        {
+            float cosC = floorR / camLen;
+            float sinC = sqrt(max(1.0 - cosC * cosC, 0.0));
+            if (CBT_CornerOccluded(wc0, camP, camLen, floorR, cosC, sinC) &&
+                CBT_CornerOccluded(wc1, camP, camLen, floorR, cosC, sinC) &&
+                CBT_CornerOccluded(wc2, camP, camLen, floorR, cosC, sinC))
+                return CBT_GATE_HORIZON;
+        }
+    }
+    // Margin frustum. A corner behind the near plane (inX == false) means the triangle reaches the
+    // camera plane: ALL behind => fully behind the eye (off-frustum); SOME behind => straddling
+    // (close, keep). All in front => test the NDC AABB against the widened box.
+    bool allBehind = !in0 && !in1 && !in2;
+    if (allBehind)
+    {
+        ndcExcess = CBT_OFF_FRUSTUM_BEHIND_NDC;
+        return CBT_GATE_FRUSTUM; // fully behind the eye — not visible, occupancy-managed
+    }
+    if (!in0 || !in1 || !in2)
+        return CBT_GATE_RELEVANT; // straddles the near plane — genuinely close
+    float M = CBT_SPLIT_NDC_MARGIN;
+    vec2 n0 = vec2(p0.x / fp.screen.x, p0.y / fp.screen.y) * 2.0 - 1.0;
+    vec2 n1 = vec2(p1.x / fp.screen.x, p1.y / fp.screen.y) * 2.0 - 1.0;
+    vec2 n2 = vec2(p2.x / fp.screen.x, p2.y / fp.screen.y) * 2.0 - 1.0;
+    // Per-side excess = how far past the margin the CLOSEST corner sits (>0 only when the whole
+    // triangle is past that side). The triangle's ndcExcess is the deepest such violation.
+    float exL = min(min(-M - n0.x, -M - n1.x), -M - n2.x);
+    float exR = min(min(n0.x - M, n1.x - M), n2.x - M);
+    float exB = min(min(-M - n0.y, -M - n1.y), -M - n2.y);
+    float exT = min(min(n0.y - M, n1.y - M), n2.y - M);
+    float ex = max(max(exL, exR), max(exB, exT));
+    if (ex > 0.0)
+    {
+        ndcExcess = ex;
+        return CBT_GATE_FRUSTUM;
+    }
+    return CBT_GATE_RELEVANT;
+}
+
+// Cumulative telemetry is never consumed by the topology kernels. Keep it saturated at INT_MAX
+// rather than wrapping negative during a long saturated session. The usual path remains one atomic;
+// only the terminal increment (and concurrent increments observing its temporary wrap) clamps.
+// A dispatch has far fewer than 2^31 invocations, so it cannot wrap the negative range before the
+// outstanding clamps finish. At the dispatch boundary the value is again INT_MAX.
+void CBT_IncrementTelemetry(uint counter)
+{
+    int prior = atomicAdd(gQueue.WorkQueue[counter], 1);
+    if (prior == 2147483647 || prior < 0)
+        atomicMax(gQueue.WorkQueue[counter], 2147483647);
+}
+
+// Bound a GPU-written dispatch element count to the pool and derive the group width.
+// A corrupted count (raced sum-tree root / work-queue counter) otherwise becomes a
+// ~2^26-group indirect dispatch whose per-thread guards read the SAME corrupt value —
+// a multi-second GPU packet the OS kills (device loss / TDR). Same guard class as
+// Kernel_VertexEval's depth-underflow return. Healthy counts are <= CBT_POOL_SIZE by
+// construction (every work queue holds at most P entries; the sum-tree root is at
+// most P), so this is bit-identical outside corruption; engagements land in the
+// since-init clamp telemetry. Clamping the COUNT (not the group quotient) also keeps
+// the ceil-div free of u32 wrap for counts above 2^32 - WG (which otherwise wrap to a
+// silent 0-group no-op dispatch).
+uint CBT_BoundedDispatchGroups(uint count)
+{
+    if (count > CBT_POOL_SIZE)
+    {
+        CBT_IncrementTelemetry(CBT_WQ_DISPATCH_CLAMP_COUNTER);
+        count = CBT_POOL_SIZE;
+    }
+    return (count + CBT_WG_SIZE - 1u) / CBT_WG_SIZE;
+}
+
+// #1 Reset — single thread. Reference ResetBuffers: alloc cursor -> 0 and the
+// free budget -> pool − liveCount (the sum-tree root from the prior frame's
+// tail reduce). Clears the per-frame work counters, per-frame validation
+// counters, and the indirect-draw records. The since-init telemetry counters
+// (overflow, multi-child, dispatch-clamp) are NOT reset — a single readback
+// catches them.
+void Kernel_Reset()
+{
+    if (gl_GlobalInvocationID.x != 0u)
+        return;
+    for (uint s = 0u; s < 3u; ++s)
+    {
+        uint base = s * CBT_DRAW_STREAM_STRIDE;
+        gDraw.IndirectDraw[base + 0u] = 0u; // indexCount
+        gDraw.IndirectDraw[base + 1u] = 1u; // instanceCount
+        gDraw.IndirectDraw[base + 2u] = 0u; // firstIndex
+        gDraw.IndirectDraw[base + 3u] = 0u; // vertexOffset
+        gDraw.IndirectDraw[base + 4u] = 0u; // firstInstance
+    }
+    gQueue.WorkQueue[CBT_WQ_ALLOC_CURSOR] = 0;
+    gQueue.WorkQueue[CBT_WQ_FREE_COUNT] = int(pc.poolSize) - int(CBT_LiveCount());
+    // Planar pool-pressure scale. A planar view whose VISIBLE field alone exceeds the pool pins it at
+    // 100% and freezes the topology: every split is rolled back and no merge frees anything, so an
+    // edit or a target change in view cannot re-tessellate (the 4 km preset from 650 m holds 92% of
+    // the pool in the frustum at TargetPixelError 8). Neither the off-frustum keep gate (nothing left
+    // off-frustum to release) nor the near-bias (its near disc covers the terrain at that altitude)
+    // can act there, so the only lever is the target the pool can afford: step the planar threshold
+    // scale up one notch per frame while the pool is full, back toward 1x while it has headroom, and
+    // hold in between. One step per frame keeps a merge cascade from overshooting into a limit
+    // cycle. What rests is the pool, not the step: the climb happens while the pool is still
+    // filling, so the step it stops on is the first one that reads under the full mark for THAT
+    // refill, and the same pose reached by different histories lands within one step of itself
+    // (~4.4% of threshold). Every landing is a fixed point inside the hold band with headroom and
+    // no rolled-back splits, which is the property the user has. Step 0 is exactly 1x.
+    {
+        int step = 0;
+        if (pc.poolPressure != 0u && pc.domainMode != CBT_DOMAIN_SPHERICAL &&
+            pc.classifyMode == CBT_CLASSIFY_SCREEN_SPACE)
+        {
+            step = gQueue.WorkQueue[CBT_WQ_PRESSURE_STEP];
+            float occupancy = float(CBT_LiveCount()) / float(pc.poolSize);
+            if (occupancy >= CBT_PRESSURE_FULL_OCC)
+                step = min(step + 1, int(CBT_PRESSURE_MAX_STEP));
+            else if (occupancy < CBT_PRESSURE_RECOVER_OCC)
+                step = max(step - 1, 0);
+        }
+        gQueue.WorkQueue[CBT_WQ_PRESSURE_STEP] = step;
+    }
+    // Planar off-frustum keep step. The planar off-frustum gate is a loop through the pool: the band
+    // it keeps sets the occupancy, and the occupancy sets the band. Read straight off occupancy, the
+    // band flips the whole off-frustum field in one update (ungated below the ramp, a refill that
+    // fills the pool; collapsed above it, a merge cascade that empties it again), so a view whose
+    // ungated field does not fit alternates between the two on every update. The step integrates
+    // instead: toward coarsening while occupancy is at or above the keep ceiling (one step per
+    // update, CBT_OFF_FRUSTUM_KEEP_SATURATED_STRIDE while the pool is full and rolling splits back),
+    // one step back while it is below the ceiling minus CBT_KEEP_RAMP, held in between. The loop
+    // rests wherever the band leaves occupancy inside that hold band, and a view that fits walks back
+    // to step 0, which is exactly the ungated field.
+    {
+        int keepStep = 0;
+        float keepCeil = gParams.Params[pc.frameIndex % CBT_FRAME_RING].frame.demandTuning.y;
+        if (pc.domainMode != CBT_DOMAIN_SPHERICAL && pc.classifyMode == CBT_CLASSIFY_SCREEN_SPACE &&
+            keepCeil > 0.0)
+        {
+            keepStep = gQueue.WorkQueue[CBT_WQ_OFF_FRUSTUM_KEEP_STEP];
+            float occupancy = float(CBT_LiveCount()) / float(pc.poolSize);
+            if (occupancy >= keepCeil)
+            {
+                int stride = occupancy >= CBT_PRESSURE_FULL_OCC ? int(CBT_OFF_FRUSTUM_KEEP_SATURATED_STRIDE) : 1;
+                keepStep = min(keepStep + stride, int(CBT_OFF_FRUSTUM_KEEP_STEPS));
+            }
+            else if (occupancy < keepCeil - CBT_KEEP_RAMP)
+                keepStep = max(keepStep - 1, 0);
+        }
+        gQueue.WorkQueue[CBT_WQ_OFF_FRUSTUM_KEEP_STEP] = keepStep;
+    }
+    gQueue.WorkQueue[CBT_WQ_SPLIT_COUNTER] = 0;
+    gQueue.WorkQueue[CBT_WQ_SIMPLIFY_CLASS_COUNTER] = 0;
+    gQueue.WorkQueue[CBT_WQ_ALLOCATE_COUNTER] = 0;
+    gQueue.WorkQueue[CBT_WQ_PROPAGATE_BISECT_COUNTER] = 0;
+    gQueue.WorkQueue[CBT_WQ_PROPAGATE_SIMPLIFY_COUNTER] = 0;
+    gQueue.WorkQueue[CBT_WQ_SIMPLIFY_COUNTER] = 0;
+    gQueue.WorkQueue[CBT_WQ_VERTEX_EVAL_COUNTER] = 0; // plan §planet-shading perf counter
+    // The four counters, named: each one accumulates across frames if it is not zeroed here,
+    // and CBTLayout.GlslValidationCountersMatchCpp pins each assignment by name.
+    gValidation.Validation[CBT_VALIDATION_ERROR_COUNTER] = 0u;
+    gValidation.Validation[CBT_VALIDATION_BUDGET_COUNTER] = 0u;
+    gValidation.Validation[CBT_VALIDATION_ZOMBIE_COUNTER] = 0u;
+    gValidation.Validation[CBT_VALIDATION_COMPACT_COUNTER] = 0u;
+#if defined(CBT_DECODE_INT32)
+    // Words 4..15 are Validate's diagnostic stamps (live count, the CURRENT-buffer
+    // differential, both parity stamps, the first failure's depths) — per-update state too.
+    for (uint vw = 4u; vw < 16u; ++vw)
+        gValidation.Validation[vw] = 0u;
+    // Ping-pong parity as THIS dispatch received it (word 12; Validate stamps word 13
+    // at the frame tail). Reset and Validate bracket the update, so a disagreement
+    // means the two dispatches were fed different push constants — on a backend that
+    // emulates push constants through a ring, that is a stale ring slot, and every
+    // kernel between them read or wrote the wrong neighbor buffer.
+    gValidation.Validation[12] = 1u + pc.neighborsReadIsA;
+#endif
+
+    // Seed the frame's live-set dispatch width (arc slice S3 pool-scaling). The sum-tree root is
+    // last frame's tail live count, which == this frame's live set (topology is frozen across the
+    // frame boundary), and IndicesAll still holds last frame's tail compact list of exactly those
+    // slots — so a kernel launches ceil(liveCount/64) groups and maps each compact index through
+    // IndicesAll instead of scanning the whole pool. Self-healing on frame 0 (the InitializeRoots
+    // reduce seeds the root = rootCount and seeds IndicesAll = [0..rootCount-1]).
+    //
+    // Two consumers, two slots. Classify runs first and takes the STAGE slot, which
+    // PrepareBisectorIndirect later rewrites post-reduce for VertexEval's (changed) live count and
+    // which every PrepareIndirect rewrites in between. The neighbor copy runs after the split path
+    // has done exactly that, so it reads the LIVE slot, written once here and untouched for the
+    // rest of the frame.
+    uint liveGroups = CBT_BoundedDispatchGroups(CBT_LiveCount());
+    gDispatch.IndirectDispatch[CBT_DISPATCH_SLOT_STAGE * CBT_DISPATCH_SLOT_WORDS + 0u] = liveGroups;
+    gDispatch.IndirectDispatch[CBT_DISPATCH_SLOT_STAGE * CBT_DISPATCH_SLOT_WORDS + 1u] = 1u;
+    gDispatch.IndirectDispatch[CBT_DISPATCH_SLOT_STAGE * CBT_DISPATCH_SLOT_WORDS + 2u] = 1u;
+    gDispatch.IndirectDispatch[CBT_DISPATCH_SLOT_LIVE * CBT_DISPATCH_SLOT_WORDS + 0u] = liveGroups;
+    gDispatch.IndirectDispatch[CBT_DISPATCH_SLOT_LIVE * CBT_DISPATCH_SLOT_WORDS + 1u] = 1u;
+    gDispatch.IndirectDispatch[CBT_DISPATCH_SLOT_LIVE * CBT_DISPATCH_SLOT_WORDS + 2u] = 1u;
+}
+
+// Geometric-error (crease) demand for a live SCULPT edit — the edit-driven retessellation term
+// (round-8b). The screen-space AREA metric reacts to a facet's projected SIZE, which is invariant
+// to what the facet APPROXIMATES: a coarse facet straddling a freshly-sculpted cliff keeps its
+// projected area (so the area metric never demands a split) while the flat triangle now mis-
+// represents a near-vertical wall — the jagged stair-step the user sees, which only heals when the
+// camera moves far (merge) and re-approaches (re-split against the new heights). This adds the
+// missing ROAM-style term: for a bisector whose split-edge midpoint or corners sit on a RESIDENT
+// sculpt page (user content exists there), sample the composed height at the split-edge midpoint,
+// compare against the LINEAR interpolation of the corner heights, and demand a split while that
+// deviation projects to more than the pixel error the area metric targets. Concentrates subdivision
+// exactly at the crease and nowhere else; self-limits once the projected error falls under the
+// threshold; bounded by maxDepth. Runs ONLY on the sphere, ONLY once edits exist
+// (pc.sphereSculptEnabled), and ONLY for facets overlapping an edited page — a smooth region and an
+// unedited planet cost one page-table read and skip. Residency (not a corner-height gradient) is the
+// gate precisely so an edit INTERIOR to a coarse facet, whose corners are both on the flat surround,
+// still gets its midpoint sampled and refined — the corner-gradient gate was blind to it.
+//
+// Isolated to the SCULPT layer (the composed corner height minus the closed-form base relief), NOT
+// the full composed height: an edited relief planet must keep refining its base relief by AREA
+// alone (the demand-bounded metric the #598/#599 audits tuned), so the crease term must fire only
+// where the USER cut a discontinuity the area metric cannot see — never on a smooth relief slope.
+// Returns 0 (no effect), 1 (force split — the crease is under-resolved), or 2 (hold: do not coarsen
+// a crease still above the merge band — the hysteresis that keeps a converged crease from
+// oscillating split<->merge against the area metric).
+const int CBT_CREASE_NONE = 0;
+const int CBT_CREASE_SPLIT = 1;
+const int CBT_CREASE_HOLD = 2;
+// World sculpt deviation below which the flat facet is treated as already approximating the sculpt
+// (no crease): the self-limit on the midpoint error, evaluated only on resident pages. Safely above
+// the fp32 length()-radius noise at planetary radius (~cm) and well below any real cliff/dab (metres).
+const float CBT_CREASE_GATE_M = 0.25;
+// Live-pool occupancy ceiling above which the crease term backs off (bounded-demand discipline).
+// A saturated pool cannot satisfy a crease split's compatibility-chain reservation, so firing there
+// only burns Split work on rolled-back demand; below it, the crease refines and the near-bias
+// coarsening keeps occupancy under the ceiling (the R=2000 oracle converges at ~0.95, under this).
+const float CBT_CREASE_OCC_CEIL = 0.98;
+// wc0/wc2 are the split-edge corners in the PLANET-CENTER frame (S2a: handed in by the
+// caller's CBT_FetchCorners — a deep slot's fp32 recomposition, a legacy slot's stored
+// world corner; the radius math below was always planet-magnitude fp32, so the quality
+// class is unchanged either way).
+int CBT_SculptCreaseDemand(CBTFrameParams fp, uint slot, CBT_HEAPID_T h, uint depth, uint maxDepth,
+                           vec3 origin, vec3 wc0, vec3 wc2)
+{
+    if (depth >= maxDepth)
+        return CBT_CREASE_NONE; // already at the decode cap — the term cannot ask for more
+
+    // The bisector's cube face (invariant under subdivision) selects the sculpt face; the split-edge
+    // midpoint face-UV is the exact average of the corner face-UVs (the cube->faceUV map is affine).
+    uint numSubdiv = depth - pc.baseDepth;
+    uint rootIndex = uint(h >> numSubdiv) - (1u << pc.baseDepth);
+    if (rootIndex >= CBT_SPHERE_ROOT_COUNT)
+        return CBT_CREASE_NONE;
+    uint face = CBT_FaceOfRoot(rootIndex);
+    vec2 fuv0 = vec2(gVertex.Vertex[slot].corner0.w, gVertex.Vertex[slot].meta.x);
+    vec2 fuv2 = vec2(gVertex.Vertex[slot].corner2.w, gVertex.Vertex[slot].meta.z);
+    vec2 midUV = 0.5 * (fuv0 + fuv2);
+
+    // Residency gate (round-8d). The old gate skipped any facet whose two CORNERS matched in height,
+    // which is exactly wrong for an edit INTERIOR to a coarse facet: a plateau smaller than the facet
+    // leaves both corners on the flat surround (equal heights) while the sculpt lives at the midpoint —
+    // the corner gate declared "flat" and never sampled the midpoint, so the facet never refined until
+    // camera motion shrank it enough to straddle the crease (her twice-reported complaint: a new/moved
+    // modifier does not re-tessellate until the camera moves). Instead, evaluate the midpoint whenever
+    // user content EXISTS on the sculpt page under the midpoint OR under either split-edge corner — the
+    // same page-table read the sampler does, without the texel fetch. Untouched terrain (no resident
+    // page anywhere under the facet) skips for three Table[] loads, cheaper than the two length() calls
+    // it replaces (no sqrt, no base-relief eval), and an un-edited planet has zero resident pages so
+    // every facet takes this skip. The corner taps carry the complementary coverage the midpoint tap
+    // misses: a facet whose midpoint lands OUTSIDE a disc but a corner INSIDE it (a disc-edge straddle)
+    // still fires, because the dab allocated the page under that corner — the old corner-gradient path,
+    // now expressed as residency (a corner that differs in sculpt height necessarily sits on a resident
+    // page) so it costs a table read instead of a length()+relief evaluation.
+    CBTSculptGeom geom = CBT_SculptGeomFromFrame(fp);
+    bool resident = CBT_SculptPageResident(face, midUV, geom) ||
+                    CBT_SculptPageResident(face, fuv0, geom) ||
+                    CBT_SculptPageResident(face, fuv2, geom);
+    // Analytic sphere modifiers (S2) allocate NO sculpt pages, so the residency gate extends to
+    // their closed-form footprint: page-resident OR analytic-footprint-covers (design §3.a).
+    // Without this the pad rim would never crease-refine — the exact shape would still render on
+    // coarse facets. S3 per-cell culling: the three test points' cell masks are OR'd first, so a
+    // facet outside every placement's support pays three UBO mask reads instead of the all-N
+    // covers loop (the measured N=1 -> 8 CBT.Update driver) — the normalizes + covers math run
+    // only when a placement can actually reach this facet.
+    if (!resident && CBT_SphereAnalyticTotal(fp) != 0u)
+    {
+        uint am = CBT_AnalyticCellMask(face, midUV) | CBT_AnalyticCellMask(face, fuv0) |
+                  CBT_AnalyticCellMask(face, fuv2);
+        if (am != 0u)
+        {
+            vec3 cdir0 = normalize(wc0);
+            vec3 cdir2 = normalize(wc2);
+            resident = CBT_SphereAnalyticCoversMasked(fp, am, cdir0) ||
+                       CBT_SphereAnalyticCoversMasked(fp, am, cdir2) ||
+                       CBT_SphereAnalyticCoversMasked(fp, am, normalize(cdir0 + cdir2));
+        }
+    }
+    if (!resident)
+        return CBT_CREASE_NONE; // no user edit under this facet — the common untouched skip
+
+    // A resident page is a conservative superset of "has non-zero sculpt" (a page is allocated whole),
+    // so evaluate the actual geometric error and let the pixel threshold below self-limit. Isolate the
+    // sculpt layer: subtract the closed-form base relief so a pure relief slope (handled by the area
+    // metric) does not trip the crease term. CBT_PlanetRelief early-returns 0 at amplitude 0.
+    float radius = fp.planetParams.x;
+    float h0 = length(wc0) - radius; // composed corner heights (relief + sculpt), from VertexEval
+    float h2 = length(wc2) - radius;
+    float amp = fp.planetParams.y;
+    float freq = fp.planetParams.z;
+    uint oct = uint(max(fp.planetParams.w, 1.0));
+    vec3 dir0 = normalize(wc0);
+    vec3 dir2 = normalize(wc2);
+    float sc0 = h0 - CBT_PlanetRelief(dir0, amp, freq, oct);
+    float sc2 = h2 - CBT_PlanetRelief(dir2, amp, freq, oct);
+
+    vec3 midDir = normalize(dir0 + dir2);
+    float scMid = CBT_SampleSphereSculpt(face, midUV, geom); // the one sculpt sample the term costs
+    if (CBT_SphereAnalyticTotal(fp) != 0u)
+    {
+        // The corners' sculpt isolation (sc0/sc2) already carries the analytic term (VertexEval
+        // composed it into the corner heights), so the midpoint sample must compose it too — with
+        // the closed-form relief at the midpoint direction, the same cancellation VertexEval uses.
+        // Cell-masked (S3): midDir lies exactly in midUV's cell (the cube->faceUV map is affine
+        // and normalize keeps the direction), so the mask is an exact contributor superset. One
+        // relief eval, only on facets that passed the residency/footprint gate with a live mask.
+        uint am = CBT_AnalyticCellMask(face, midUV);
+        if (am != 0u)
+            scMid += CBT_SphereAnalyticOffsetMasked(fp, am, midDir,
+                                                    CBT_PlanetRelief(midDir, amp, freq, oct));
+    }
+    float scLerp = 0.5 * (sc0 + sc2);
+    float errM = abs(scMid - scLerp); // world-space sculpt deviation of the flat facet at its midpoint
+    if (errM <= CBT_CREASE_GATE_M)
+        return CBT_CREASE_NONE; // the flat facet already approximates the sculpt within a hair
+
+    // Project the deviation to pixels: a radial segment of length errM at the midpoint distance, so
+    // the threshold is a true screen-space error (perspective foreshortening handled by the same
+    // rebased projection the area metric uses). A midpoint at/behind the eye plane is left to the
+    // area metric's behind-eye force-split; the crease term does not add near-plane demand.
+    float hLerp = 0.5 * (h0 + h2);
+    vec2 baseP, tipP;
+    bool bIn = CBT_ProjectPixels(midDir * (radius + hLerp) - origin, fp, baseP);
+    bool tIn = CBT_ProjectPixels(midDir * (radius + hLerp + errM) - origin, fp, tipP);
+    if (!bIn || !tIn)
+        return CBT_CREASE_NONE;
+    float errPx = distance(baseP, tipP);
+    // fp.screen.z/.w are the split/merge pixel thresholds derived from TargetPixelError — reuse them
+    // so the crease resolves to the same pixel budget the area metric targets, with the same 2:1
+    // hysteresis dead-band that stops a converged crease oscillating split<->merge.
+    if (errPx > fp.screen.z)
+        return CBT_CREASE_SPLIT;
+    if (errPx > fp.screen.w)
+        return CBT_CREASE_HOLD;
+    return CBT_CREASE_NONE;
+}
+
+// #2 Classify — per slot (whole pool). Decides split/merge per bisector via the
+// selected metric, then drives the reference ClassifyElement state machine (BISECT
+// / SIMPLIFY, even-heapID simplify enqueue). Two metrics (pc.classifyMode):
+//   SCREEN_SPACE (C4 production): projected edge length of the LEB split edge vs a
+//     target pixel error, with a split/merge hysteresis band. Camera + terrain
+//     params come from the CBTFrameParams UBO; corners are the world positions the
+//     PREVIOUS frame's VertexEval wrote (topology is unchanged across the boundary).
+//   DEPTH_TARGET (tests / bring-up): FocusRoot's subtree to TargetDepth, rest to
+//     BaseDepth — deterministic, geometry-independent.
+#if !defined(CBT_DECODE_INT32)
+// ---------------------------------------------------------------------------
+// Height-range pyramid (content-aware split). Mirror CBTLayout.h CBTHeightRange*: the CPU sizes
+// the build dispatches with the same arithmetic. Classify reads the level table the build writes
+// into the header, so a mismatch shows as levels the CPU never dispatched (CBTContentAwareSplit).
+// Each entry is two words, the lowest and highest normalized height over its block as raw floats:
+// the heights a terrain holds are not bounded to [0, 1] (a terrain centred on zero, a subtractive
+// modifier), so the range is stored exactly rather than quantized into a fixed span.
+// ---------------------------------------------------------------------------
+// Blocks per axis at level k over an axis of `cells` lattice cells (a level-k block is 2^k cells).
+uint CBT_HeightRangeDim(uint cells, uint level)
+{
+    return (cells + (1u << level) - 1u) >> level;
+}
+
+// The level at which both axes are one block.
+uint CBT_HeightRangeTopLevel(uvec2 cells)
+{
+    uint level = 0u;
+    while (CBT_HeightRangeDim(cells.x, level) > 1u || CBT_HeightRangeDim(cells.y, level) > 1u)
+        ++level;
+    return level;
+}
+
+// The entry where level `level` starts when the stored levels begin at `first`. Entry e sits at
+// words CBT_HEIGHT_RANGE_HEADER + 2e (low) and + 2e + 1 (high). The header holds [0] the lattice
+// cells (x | y << 16) the pyramid was built from, [1] first | top << 8, [2 + k] level k's entry.
+uint CBT_HeightRangeOffset(uvec2 cells, uint first, uint level)
+{
+    uint offset = 0u;
+    for (uint k = first; k < level; ++k)
+        offset += CBT_HeightRangeDim(cells.x, k) * CBT_HeightRangeDim(cells.y, k);
+    return offset;
+}
+
+// The first stored level: the finest of 1..CBT_HEIGHT_RANGE_MAX_FIRST_LEVEL whose levels up to the
+// top fit the buffer. 0 = the lattice is too large for the buffer (the content-aware split is off).
+uint CBT_HeightRangeFirstLevel(uvec2 cells)
+{
+    uint top = CBT_HeightRangeTopLevel(cells);
+    for (uint first = 1u; first <= CBT_HEIGHT_RANGE_MAX_FIRST_LEVEL; ++first)
+        if (CBT_HeightRangeOffset(cells, first, max(top, first) + 1u) <= CBT_HEIGHT_RANGE_ENTRIES)
+            return first;
+    return 0u;
+}
+
+vec2 CBT_LoadHeightRange(uint entry)
+{
+    uint w = CBT_HEIGHT_RANGE_HEADER + 2u * entry;
+    return vec2(uintBitsToFloat(gHeightRange.Range[w]), uintBitsToFloat(gHeightRange.Range[w + 1u]));
+}
+
+void CBT_StoreHeightRange(uint entry, vec2 lowHigh)
+{
+    uint w = CBT_HEIGHT_RANGE_HEADER + 2u * entry;
+    gHeightRange.Range[w] = floatBitsToUint(lowHigh.x);
+    gHeightRange.Range[w + 1u] = floatBitsToUint(lowHigh.y);
+}
+
+// The lowest and highest normalized height over the lattice cells a UV box touches. A box within
+// one cell's reach reads the height texture directly (at most 3 x 3 samples); a larger one reads at
+// most 2 x 2 blocks of the coarsest level that holds it to two blocks per axis (the first stored
+// level when that is coarser: conservative, never narrower). Reads the level table from the header.
+// false when there is no pyramid for the bound lattice (a 1 x 1 default, or too large).
+bool CBT_HeightRangeOverUV(vec2 uvMin, vec2 uvMax, out vec2 lowHigh)
+{
+    lowHigh = vec2(0.0);
+    uint frameSlot = pc.frameIndex % CBT_FRAME_RING;
+    ivec2 dim = textureSize(CBT_RING(gHeight, frameSlot), 0);
+    if (dim.x < 2 || dim.y < 2)
+        return false;
+    uvec2 cells = uvec2(dim - 1);
+    if (gHeightRange.Range[0] != (cells.x | (cells.y << 16u)))
+        return false; // no pyramid for this lattice (never built, or too large for the buffer)
+    uint firstTop = gHeightRange.Range[1];
+    uint first = firstTop & 0xFFu;
+    uint top = firstTop >> 8u;
+    vec2 cf = vec2(cells);
+    uvec2 c0 = uvec2(clamp(floor(clamp(uvMin, 0.0, 1.0) * cf), vec2(0.0), cf - 1.0));
+    uvec2 c1 = uvec2(clamp(ceil(clamp(uvMax, 0.0, 1.0) * cf) - 1.0, vec2(c0), cf - 1.0));
+    uint span = max(c1.x - c0.x, c1.y - c0.y);
+    uint level = (span <= 1u) ? 0u : uint(findMSB(span - 1u)) + 1u;
+    vec2 acc = vec2(3.0e38, -3.0e38);
+    if (level == 0u)
+    {
+        for (uint y = c0.y; y <= c1.y + 1u; ++y)
+            for (uint x = c0.x; x <= c1.x + 1u; ++x)
+            {
+                float hgt = texelFetch(CBT_RING(gHeight, frameSlot), ivec2(x, y), 0).r;
+                acc = vec2(min(acc.x, hgt), max(acc.y, hgt));
+            }
+        lowHigh = acc;
+        return true;
+    }
+    level = min(max(level, first), top);
+    uint offset = gHeightRange.Range[2u + level];
+    uint dimX = CBT_HeightRangeDim(cells.x, level);
+    uvec2 b0 = c0 >> level;
+    uvec2 b1 = c1 >> level;
+    for (uint y = b0.y; y <= b1.y; ++y)
+        for (uint x = b0.x; x <= b1.x; ++x)
+        {
+            vec2 r = CBT_LoadHeightRange(offset + y * dimX + x);
+            acc = vec2(min(acc.x, r.x), max(acc.y, r.y));
+        }
+    lowHigh = acc;
+    return true;
+}
+
+// Distance from the camera to an axis-aligned box in the render-origin-relative frame: zero inside.
+float CBT_DistanceToBox(vec3 boxMin, vec3 boxMax, vec3 camRel)
+{
+    vec3 d = max(max(boxMin - camRel, camRel - boxMax), vec3(0.0));
+    return length(d);
+}
+#endif
+
+void Kernel_Classify()
+{
+    // Indirect over the LIVE bisector count (arc slice S3 pool-scaling — reference Fig 6): the
+    // dispatch launches ceil(liveCount/64) groups (Reset seeded slot 0 from the sum-tree root) and
+    // each thread maps its compact index i to a physical slot through IndicesAll, the PREVIOUS frame's
+    // tail BisectorIndexation compact list (every live slot exactly once; topology is frozen across the
+    // boundary so it is this frame's live set). This decouples Classify's cost from POOL size — a 1M
+    // pool with 131k live dispatches 131k threads, not 1M — so the whole-pool idle floor stops growing
+    // with the pool. free-slot guard is belt-and-braces (IndicesAll holds only live slots).
+    uint i = gl_GlobalInvocationID.x;
+    if (i >= CBT_LiveCount())
+        return;
+    uint slot = gIdxAll.IndicesAll[i];
+    CBT_HEAPID_T h = CBT_LoadHeapID(slot);
+    if (CBT_IsFreeSlot(h))
+        return;
+
+    uint depth = CBT_HeapIDDepth(h);
+    gBisector.Bisector[slot].subdivisionPattern = CBT_NO_SPLIT;
+    gBisector.Bisector[slot].problematicNeighbor = CBT_INVALID_POINTER;
+
+    // Camera-frustum cull into the VISIBLE draw stream (plan §8 C6). The forward
+    // camera draw rides the VISIBLE stream; shadows ride the ALL stream (off-screen
+    // casters must still cast), so this cull is camera-only and never touches the ALL
+    // binning in BisectorIndexation. Screen-space mode only — the depth-target metric
+    // (tests / bring-up) has no camera, so it keeps every bisector visible. The corners
+    // are the PREVIOUS frame's VertexEval world positions (topology is unchanged across
+    // the frame boundary); a bisector CREATED this frame has none yet, but Bisect /
+    // Simplify force-flag it CBT_FLAG_VIS_MOD, so it is always drawn the frame it
+    // changes and frustum-tested from the next. Frustum visibility does NOT feed the
+    // split/merge decision below (that stays the screen-space edge metric), so the ALL
+    // stream and convergence are unchanged by culling.
+    uint flags = CBT_FLAG_VISIBLE;
+    if (pc.classifyMode == CBT_CLASSIFY_SCREEN_SPACE)
+    {
+        CBTFrameParams fpv = CBT_Frame();
+        // Frustum cull in the render-origin-relative frame (slice 1b): the rebased corners
+        // against the rebased viewProjRel, so the plane distances stay fp32-precise at
+        // planetary distance (a full-world test big-minus-big cancels and mis-culls near
+        // the frustum edge). CBT_FetchCorners (S2a) supplies both frames: a legacy slot
+        // reproduces corner - originW bit-for-bit (byte-identical dark-ship); a deep
+        // (sector, local) slot reconstructs the relative frame from the EXACT integer
+        // sector delta. The horizon cull below keeps the WORLD corners + world cameraPos:
+        // it is a conservative occlusion test about the PLANET CENTER, not the camera, so
+        // it needs true radii, not the rebased frame.
+        CBTCornersWS cwv = CBT_FetchCorners(slot, fpv);
+        vec3 fc0 = cwv.W0;
+        vec3 fc1 = cwv.W1;
+        vec3 fc2 = cwv.W2;
+        flags = CBT_TriangleInFrustum(fpv.viewProjRel, cwv.R0, cwv.R1, cwv.R2)
+                    ? CBT_FLAG_VISIBLE : 0u;
+
+        // Horizon (back-hemisphere) cull for the spherical planet (plan §planet-shading).
+        // The material is double-sided (no GPU backface cull), so ~half the globe's triangles
+        // — the far hemisphere occluded by the near one — were rasterized every frame at orbit
+        // distance. Drop a triangle from the VISIBLE draw stream when ALL three corners are on
+        // the far hemisphere: a corner P is occluded by the sphere iff dot(P, camPos) < Reff*|P|
+        // (Reff = radius shrunk by 2x the max relief so near-horizon relief peaks are never
+        // wrongly culled — conservative, like the frustum cull). This touches ONLY the VISIBLE
+        // flag: the split/merge decision below and the ALL stream (shadow casters) are
+        // untouched, so tessellation + shadows are unaffected (conformity oracle stays green).
+        if (pc.domainMode == CBT_DOMAIN_SPHERICAL && flags != 0u)
+        {
+            vec3 camP = fpv.cameraPos.xyz;
+            float camLen = length(camP);
+            // Conservative FLOOR radius: the lowest the surface can sit (radius minus the max
+            // relief drop). Using the floor as the occluder + the exact cone test guarantees no
+            // visible limb terrain is culled (the horizon-plane test's bug). camLen <= floor
+            // means the camera is at/under the surface -> cull nothing.
+            float floorR = fpv.planetParams.x - CBT_RELIEF_ENVELOPE * abs(fpv.planetParams.y);
+            if (camLen > floorR)
+            {
+                float cosC = floorR / camLen;
+                float sinC = sqrt(max(1.0 - cosC * cosC, 0.0));
+                bool o0 = CBT_CornerOccluded(fc0, camP, camLen, floorR, cosC, sinC);
+                bool o1 = CBT_CornerOccluded(fc1, camP, camLen, floorR, cosC, sinC);
+                bool o2 = CBT_CornerOccluded(fc2, camP, camLen, floorR, cosC, sinC);
+                if (o0 && o1 && o2)
+                    flags = 0u;
+            }
+        }
+    }
+    gBisector.Bisector[slot].flags = flags;
+
+    // Corruption guard (see VertexEval): a live bisector below the root band would
+    // underflow CBT_RootOf's shift. Leave it UNCHANGED so it neither splits nor
+    // merges — degrade rather than propagate the corruption.
+    if (depth < pc.baseDepth)
+    {
+        gBisector.Bisector[slot].bisectorState = CBT_STATE_UNCHANGED;
+        return;
+    }
+
+    // C5 region-dirty reclassification (plan §8 C5): does this bisector's UV
+    // footprint overlap the region a terrain edit touched this frame? The corners
+    // carry the exact LEB UV (corner.w = uv.x, meta.xyz = uv.y) the PREVIOUS
+    // frame's VertexEval wrote; UVs are subdivision-derived topology, so they are
+    // valid for the current bisector regardless of the one-frame height lag.
+    // Overlap => flag MODIFIED (into the modified draw stream). This does NOT change
+    // the split/merge decision below (an edit must never coarsen, and biasing the
+    // thresholds oscillates the density); the edit's new heights re-refine the region
+    // through the normal screen-space metric once VertexEval re-samples them. An empty
+    // rect (no edit) skips this entirely, keeping the loop quiescent (the #405 pattern).
+    // (face,rect) region identity (plan §planet-editing). The stored per-corner UV is
+    // the terrain UV (planar) or the FACE-LOCAL UV (spherical) VertexEval wrote last
+    // frame. Planar: overlap the bisector's UV AABB with the dirty rect. Spherical: the
+    // dirty rect is face-local and pc.dirtyFace selects the face — this bisector only
+    // qualifies when it lives on that face (region-proportional per face; a cross-face
+    // edit is handed one face per update, the others re-refine via the normal metric).
+    // Overlap => bin MODIFIED; the new heights reach the split test through VertexEval's
+    // re-sample. An empty rect (no edit) skips this, keeping the loop quiescent.
+    bool dirtyOverlap = false;
+    if (pc.dirtyMaxU > pc.dirtyMinU && pc.dirtyMaxV > pc.dirtyMinV)
+    {
+        bool faceMatch = true;
+        if (pc.domainMode == CBT_DOMAIN_SPHERICAL)
+        {
+            uint numSubdiv = depth - pc.baseDepth;
+            uint rootIndex = uint(h >> numSubdiv) - (1u << pc.baseDepth);
+            faceMatch = (rootIndex < CBT_SPHERE_ROOT_COUNT) &&
+                        (CBT_FaceOfRoot(rootIndex) == pc.dirtyFace);
+        }
+        if (faceMatch)
+        {
+            vec2 uv0 = vec2(gVertex.Vertex[slot].corner0.w, gVertex.Vertex[slot].meta.x);
+            vec2 uv1 = vec2(gVertex.Vertex[slot].corner1.w, gVertex.Vertex[slot].meta.y);
+            vec2 uv2 = vec2(gVertex.Vertex[slot].corner2.w, gVertex.Vertex[slot].meta.z);
+            vec2 uvMin = min(uv0, min(uv1, uv2));
+            vec2 uvMax = max(uv0, max(uv1, uv2));
+            dirtyOverlap = uvMax.x >= pc.dirtyMinU && uvMin.x <= pc.dirtyMaxU &&
+                           uvMax.y >= pc.dirtyMinV && uvMin.y <= pc.dirtyMaxV;
+            if (dirtyOverlap)
+                gBisector.Bisector[slot].flags = CBT_FLAG_VIS_MOD; // bin into the MODIFIED stream
+        }
+    }
+
+    bool wantSplit = false;
+    bool wantMerge = false;
+    // The behind-the-eye bound's own merge wish, carried past the off-frustum keep gate below. The
+    // keep band is the yaw buffer for facets just outside the frustum; a facet entirely behind the
+    // eye (ndcExcess = CBT_OFF_FRUSTUM_BEHIND_NDC) is not one, so the band must never cancel the
+    // coarsening the bound asked for. Otherwise the field behind the camera freezes wherever the
+    // band is at least CBT_OFF_FRUSTUM_BEHIND_NDC wide under pressure: on planar, every keep step
+    // whose CBT_PlanarKeepBand is at least that wide; on the sphere, which enters the gate's arm
+    // unconditionally, every occupancy up to keepCeil - CBT_KEEP_RAMP * CBT_OFF_FRUSTUM_BEHIND_NDC /
+    // CBT_OFF_FRUSTUM_KEEP_NDC.
+    bool behindEyeWantsMerge = false;
+    if (pc.classifyMode == CBT_CLASSIFY_SCREEN_SPACE)
+    {
+        // The LEB split edge is (corner0, corner2) — the triangle's longest edge,
+        // the one a bisection halves. Project both endpoints to pixels and compare
+        // the screen-space edge length to the split/merge thresholds. splitPx >
+        // mergePx is a hysteresis margin that discourages oscillation: a bisector that
+        // just split has a shorter longest edge (exactly 1/sqrt(2) under an ortho
+        // camera; perspective can grow a child edge, so this is a heuristic, not a
+        // guarantee — bounded by the force-split-when-behind path + the depth cap).
+        // pc.targetDepth caps the subdivision — a TDR-class guard against runaway
+        // near-camera refinement (findMSB already bounds depth, this bounds work).
+        CBTFrameParams fp = CBT_Frame();
+        // Screen-space split metric in the render-origin-relative frame (slice 1b): project
+        // the LEB split-edge endpoints in the rebased frame through the rebased viewProjRel,
+        // so the projected edge length is stable under camera motion at planetary distance (a
+        // full-world projection swims => the pixel metric oscillates => tessellation boils).
+        // S2a: CBT_FetchCorners supplies the frames per the slot's storage — legacy slots
+        // reproduce corner - origin bit-for-bit; deep (sector, local) slots reconstruct the
+        // relative frame from the EXACT integer sector delta (fp32-precise at Earth radius,
+        // where the legacy world store's ~0.5 m quantization dominated the metric inputs).
+        vec3 origin = CBT_RenderOriginWorld(fp);
+        CBTCornersWS cw = CBT_FetchCorners(slot, fp);
+        vec3 wc0 = cw.W0;
+        vec3 wc1 = cw.W1;
+        vec3 wc2 = cw.W2;
+        vec3 e0 = cw.R0;
+        vec3 e1 = cw.R1;
+        vec3 e2 = cw.R2;
+        vec2 p0, p1, p2;
+        bool v0In = CBT_ProjectPixels(e0, fp, p0);
+        bool v1In = CBT_ProjectPixels(e1, fp, p1);
+        bool v2In = CBT_ProjectPixels(e2, fp, p2);
+        uint maxDepth = uint(max(fp.terrainOrigin.z, float(pc.baseDepth)));
+
+        // Live-pool occupancy (sum-tree root, rebuilt at the previous frame's tail — a stable,
+        // race-free datum). THE shared pool-pressure signal: the walking-headroom demand shaping
+        // (near-field force-split bound, off-frustum keep-depth, flat-disc edge-rescue) and the S2
+        // near-bias contention ramp all read it, so a frame reads CBT_LiveCount() at most once.
+        float occupancy = float(CBT_LiveCount()) / float(pc.poolSize);
+        // Near-field world facet target for the behind-eye/straddle force-split bound (finding 2);
+        // 0 => the pre-slice force-split-to-cap.
+        float nearTargetM = fp.demandTuning.x;
+
+        // View-prioritised split metric (arc slice S2, Option C — clipmap/bisector-pool arc §5C).
+        // Scale the split/merge pixel thresholds UP with distance from the camera so a CONTENDED
+        // pool spends its fixed budget near the camera (base threshold => fine) and lets the far
+        // field stay coarse (raised threshold => it stops splitting sooner and merges, freeing
+        // slots the near patch then claims through the normal FreeCount gate). This shapes only
+        // the split/merge DEMAND; the Split kernel's compatibility-chain forced splits are
+        // untouched, so conformity is never broken by the bias. Both thresholds scale by the SAME
+        // factor, so the split/merge hysteresis dead-band ratio is preserved (no oscillation).
+        // Gated by pool occupancy: nearBias.x == 0 (A/B off) or an unsaturated pool => coarsen is
+        // exactly 1.0 and the thresholds are byte-identical to the pre-slice metric.
+        // Contention = the shared live occupancy ramped over [LO, HI]. Camera -> midpoint distances
+        // are taken in the render-origin-relative frame (the same rebasing the projection uses — it
+        // stays fp32-precise at planetary distance).
+        float contention =
+            fp.nearBias.x != 0.0
+                ? smoothstep(CBT_NEAR_BIAS_CONTENTION_LO, CBT_NEAR_BIAS_CONTENTION_HI, occupancy)
+                : 0.0;
+        vec3 camRel = fp.cameraPos.xyz - origin;
+
+        // Water plane. A planar bisector whose three corners all sit more than the margin below the
+        // calm water surface is hidden by the water whenever the camera is above that surface: every
+        // view ray to it crosses the plane first. Refining it to the pixel target spends the pool on
+        // triangles no pixel shows, so its split AND merge thresholds are scaled by waterPlane.z —
+        // the near-bias mechanism,
+        // both thresholds, so the hysteresis band is preserved and the seabed converges at ~z x the
+        // visible target. Corners within the margin (the shoreline, and the seabed still visible
+        // through shallow water) refine normally; a camera below the surface sees everything, so the
+        // term is off. Decided per facet on both sides: a pair the margin splits (one sibling
+        // submerged, the other not) merely holds — the submerged sibling asks to merge at its coarse
+        // threshold, the other does not, and a blocked merge is stable (nothing re-splits). Compared
+        // in the render-origin-relative frame like the metric. Planar only: a planet's ocean would be
+        // a sphere, not a plane.
+        float submergedCoarsen = 1.0;
+        if (pc.domainMode != CBT_DOMAIN_SPHERICAL && fp.waterPlane.z > 1.0)
+        {
+            float surfaceRel = fp.waterPlane.x - origin.y;
+            float hiddenBelow = surfaceRel - fp.waterPlane.y;
+            if (camRel.y > surfaceRel && e0.y < hiddenBelow && e1.y < hiddenBelow && e2.y < hiddenBelow)
+                submergedCoarsen = fp.waterPlane.z;
+        }
+        // Planar pool-pressure scale (Kernel_Reset): the base target the pool can afford. It multiplies
+        // the near-bias and water-plane weights — WHERE the affordable budget is spent — so the
+        // view-prioritisation survives at any scale. Step 0 selects a literal 1.0 rather than trusting
+        // exp2 to be exact there, so every scene under the full mark — and the whole spherical domain,
+        // where Reset pins the step at 0 — classifies with the same arithmetic as an unscaled build
+        // on any driver (CBT_NearBiasCoarsen carries its identity the same way).
+        int pressureStep = gQueue.WorkQueue[CBT_WQ_PRESSURE_STEP];
+        float pressureScale =
+            (pressureStep == 0)
+                ? 1.0
+                : exp2(float(pressureStep) / float(CBT_PRESSURE_STEPS_PER_OCTAVE));
+        float coarsen = CBT_NearBiasCoarsen(fp, contention, 0.5 * (e0 + e2), camRel) * pressureScale *
+                        submergedCoarsen;
+        float splitPx = fp.screen.z * coarsen;
+        float mergePx = fp.screen.w * coarsen;
+
+        // Projected triangle area (px^2), hoisted so the round-8c priority floor + keep-large below can
+        // read it. >= 0 only in the area branch (all three corners in front); a behind-eye / straddle
+        // facet leaves it -1 so the area-based gates never touch the genuinely-close near field.
+        float areaPx = -1.0;
+        if (!v0In || !v2In)
+        {
+            // A split-edge endpoint at/behind the eye plane = genuinely close, but a facet AT the eye
+            // plane needs no decode-cap detail — force-splitting these to the cap is invisible
+            // over-refinement that saturates the walking pose (finding 2). Bound it at the near-field
+            // world facet target: stop once the world-space split edge is that short. distance(e0, e2)
+            // is the world split-edge length (render-origin-relative diff => fp32-precise). 0 => the
+            // pre-slice force-split-to-cap. Occupancy-gated (round-8e): stop the invisible near-plane
+            // grazing treadmill once the pool is under pressure so the visible field keeps headroom.
+            bool nearFieldAllows = pc.nearFieldGate == 0u || occupancy < CBT_NEAR_FIELD_OCC_CEIL;
+            float nearEdgeM = distance(e0, e2);
+            bool wantsByTarget = (nearTargetM <= 0.0 || nearEdgeM > nearTargetM);
+            wantMerge = CBT_NearFieldWantMerge(nearTargetM, nearEdgeM);
+            // A facet with all three corners behind the eye plane is unprojectable, not close: it
+            // must not inherit the straddling facet's force-split to the world target. Its bound is
+            // the density the SCREEN metric would give it in front — the world split edge scaled by
+            // the perspective's pixels per metre at its distance from the eye (the y focal length in
+            // pixels over that distance; an orthographic camera has no behind) — against the same
+            // coarsened thresholds the visible field uses, so the near-bias and the water plane apply
+            // and shadow casters on the ALL stream keep a bounded tessellation behind the camera. The
+            // straddling facet keeps the world target. Part of that target's contract: nearTargetM
+            // <= 0 keeps the force-split-to-cap.
+            bool allBehind = !v0In && !v1In && !v2In;
+            if (allBehind && nearTargetM > 0.0)
+            {
+                float focalPx = length(vec3(fp.viewProjRel[0][1], fp.viewProjRel[1][1],
+                                            fp.viewProjRel[2][1])) * 0.5 * fp.screen.y;
+                float dist = max(distance(0.5 * (e0 + e2), camRel), CBT_BEHIND_EYE_MIN_DIST);
+                float edgePxEquiv = nearEdgeM * focalPx / dist;
+                wantsByTarget = wantsByTarget && (edgePxEquiv > splitPx);
+                behindEyeWantsMerge = edgePxEquiv < mergePx;
+                wantMerge = wantMerge || behindEyeWantsMerge;
+            }
+            wantSplit = (depth < maxDepth) && nearFieldAllows && wantsByTarget;
+        }
+        else if (pc.domainMode == CBT_DOMAIN_SPHERICAL)
+        {
+            // Reference-parity screen-space AREA metric (large_cbt targets ~49 px^2/triangle).
+            // PROJECTED TRIANGLE AREA, not split-edge length, is the demand driver: area bounds
+            // total demand by the screen budget (~screen_px / target, a few 10^4) and makes a
+            // foreshortened grazing/limb facet stop splitting (its projected area collapses to ~0
+            // while its edge stays long). The pure edge metric drove those limb facets to the
+            // decode cap and, together with the (now culled) far field, saturated the pool with
+            // ~10^5/frame demand while the visible screen justified ~10^4. splitPx/mergePx are the
+            // edge-space thresholds carrying the optional view-priority near-bias; a right-isoceles
+            // LEB facet has area = edge^2/4, so square them into the area dead-band (split >
+            // splitPx^2/4, merge < mergePx^2/4 — the same 4:1 hysteresis the edge 2:1 band gave).
+            // The merge threshold stays the lower bound (an edit must never coarsen — the dirtyOverlap
+            // MODIFIED binning above is separate). Apex behind the near plane => area undefined =>
+            // genuinely close => force split up to the cap. The AREA metric is spherical only — the
+            // demand audit that tuned it is the planet, and a bounded heightfield does not have the
+            // limb-inflation failure it cures; the planar domain keeps the edge metric below. (The
+            // off-frustum VISIBILITY gate is separate and runs in both domains — see the demand gate
+            // at the end of this branch.)
+            if (!v1In)
+            {
+                // Apex behind the near plane => genuinely close; same behind-eye bound + occupancy
+                // gate as above (round-8e: no near-plane force-split treadmill under pool pressure).
+                bool nearFieldAllows = pc.nearFieldGate == 0u || occupancy < CBT_NEAR_FIELD_OCC_CEIL;
+                float nearEdgeM = distance(e0, e2);
+                wantSplit = (depth < maxDepth) && nearFieldAllows &&
+                            (nearTargetM <= 0.0 || nearEdgeM > nearTargetM);
+                wantMerge = CBT_NearFieldWantMerge(nearTargetM, nearEdgeM);
+            }
+            else
+            {
+                areaPx = 0.5 * abs((p1.x - p0.x) * (p2.y - p0.y) - (p1.y - p0.y) * (p2.x - p0.x));
+                float splitArea = 0.25 * splitPx * splitPx;
+                float mergeArea = 0.25 * mergePx * mergePx;
+                wantSplit = (depth < maxDepth) && (areaPx > splitArea);
+                wantMerge = (areaPx < mergeArea);
+                // Flat-disc edge-rescue (finding 4): a near facet viewed at ~90deg (grazing/flattened)
+                // has its projected AREA collapse to ~0 while its projected LEB edge stays long, so the
+                // area metric starves it. Rescue-split while the projected edge is long AND the pool
+                // has headroom. Self-limiting: each split ~halves the edge, so it stops once the edge
+                // falls under the threshold; a foreshortened LIMB facet is FAR => short projected edge
+                // => never rescued (limb inflation stays dead — the #598 win). z <= 0 => disabled.
+                if (!wantSplit && depth < maxDepth && fp.demandTuning.z > 0.0 &&
+                    occupancy < fp.demandTuning.w && distance(p0, p2) > fp.demandTuning.z)
+                {
+                    wantSplit = true;
+                    wantMerge = false;
+                }
+                // The rescue's merge counterpart. A rescued parent's two children can both sit below
+                // the AREA merge threshold while the parent's split edge still exceeds the rescue
+                // threshold; merging them would re-issue the same rescue split next frame, so the
+                // diamond would oscillate. Hold the merge while the parent edge is still long. The
+                // parent's far endpoint is read from the sibling's cached corners: reflecting the
+                // midpoint is not valid on a curved or displaced sphere. Topology is frozen and the
+                // corners cached for the whole Classify pass, so both siblings measure the same edge
+                // (deep-sector storage included).
+                if (wantMerge && depth > pc.baseDepth && depth <= maxDepth &&
+                    fp.demandTuning.z > 0.0 && occupancy < fp.demandTuning.w)
+                {
+                    bool oddChild = (uint(h) & 1u) != 0u;
+                    uvec4 neighbors = CBT_ReadCur(slot);
+                    uint sibling = oddChild ? neighbors.y : neighbors.x;
+#if defined(GE_CBT_HEAP32)
+                    // The narrow heap packs two ids per uvec2 slot; only the loader
+                    // knows the lane. The wide arm keeps the direct read.
+                    if (sibling < CBT_POOL_SIZE && CBT_LoadHeapID(sibling) == CBT_SiblingHeapID(h))
+#else
+                    if (sibling < CBT_POOL_SIZE && gHeap.HeapID[sibling] == CBT_SiblingHeapID(h))
+#endif
+                    {
+                        CBTCornersWS siblingCorners = CBT_FetchCorners(sibling, fp);
+                        vec3 parentFar = oddChild ? siblingCorners.R0 : siblingCorners.R2;
+                        vec2 parentFarPx;
+                        if (CBT_ProjectPixels(parentFar, fp, parentFarPx))
+                        {
+                            vec2 parentHeldPx = oddChild ? p2 : p0;
+                            if (distance(parentHeldPx, parentFarPx) > fp.demandTuning.z)
+                                wantMerge = false;
+                        }
+                    }
+                }
+            }
+        }
+        else
+        {
+            // Planar: the screen-space edge-length metric. It is the whole demand model while the
+            // pool can serve it; the off-frustum visibility gate below overrides it only once the
+            // pool comes under pressure.
+            float edgePx = distance(p0, p2);
+            wantSplit = (depth < maxDepth) && (edgePx > splitPx);
+
+            // A merge is a decision about the PARENT, so it is measured on the parent. Deciding it
+            // on the facet's OWN split edge asks a question the diamond cannot answer: that edge is
+            // one LEG of the parent and the sibling's is the other, and under a grazing camera the
+            // two legs project up to ~10x apart. So exactly one sibling ever asked to merge,
+            // PrepareSimplify's pair-state test rejected every candidate, and the unserved SIMPLIFY
+            // flags went on starving neighbouring splits through Split's facing-neighbour bail.
+            //
+            // THE PARENT EDGE IS SHARED IN XZ, NOT IN Y. Corner1 is the parent's hypotenuse midpoint
+            // for both children and is bit-identical between them, so the threshold below is
+            // diamond-consistent. The reconstructed far endpoint is exact in XZ but extrapolates the
+            // sampled height (see CBT_ParentSplitEdgeFar), so on relief the two children measure
+            // segments that differ in Y and a pair near the threshold can still split its decision.
+            // Do not restate this as "the one edge both siblings agree on", and do not claim the two
+            // legs are congruent in world space: that holds only at heightScale 0, and a converged
+            // relief tree measures the odd/even world length ratio at 0.680-1.480 at these poses
+            // (0.249-3.917 on the steeper census arm). The residual is 53 of 11,408 pairs (mid) and
+            // 646 of 268,435 (walk) against 5,699 and 99,215 for the per-child rule this replaced.
+            //
+            // sqrt(2) restates the child threshold on that edge (a parent hypotenuse is sqrt(2) x a
+            // child's), and the threshold itself is evaluated at the parent's midpoint — corner1,
+            // shared bit-identically — so the view-priority coarsening is diamond-consistent too.
+            //
+            // A parent endpoint at/behind the eye plane cannot be projected. That facet keeps the
+            // per-child answer: the endpoint that failed is the sibling's unshared corner, so the
+            // sibling is on the near-field branch, where the world-space rule decides the pair.
+            vec3 parentFar = CBT_ParentSplitEdgeFar(h, e0, e1, e2);
+            vec2 parentFarPx;
+            if (CBT_ProjectPixels(parentFar, fp, parentFarPx))
+            {
+                vec2 parentHeldPx = ((uint(h) & 1u) == 0u) ? p0 : p2;
+                float mergePxParent = fp.screen.w * CBT_NearBiasCoarsen(fp, contention, e1, camRel) *
+                                      pressureScale * submergedCoarsen;
+                wantMerge = distance(parentHeldPx, parentFarPx) <
+                            mergePxParent * CBT_LEB_PARENT_EDGE_SCALE;
+            }
+            else
+            {
+                wantMerge = (edgePx < mergePx);
+            }
+        }
+
+#if !defined(CBT_DECODE_INT32)
+        // Content-aware split (planar, the bound unified height texture, which the paged resolve
+        // keeps bound too; the atlas source keeps the screen-space rule alone, and so does an
+        // atlas-backed terrain on its pages: it binds the 1x1 default at binding 15, so the range
+        // lookup returns nothing and only the screen-space rule splits). A facet whose heights are flat at the screen's resolution gains
+        // nothing from children, whatever its edge measures: it splits only while its height range
+        // (the pyramid's low-high over its lattice cells, in metres) projects above flatPx at the
+        // NEAREST point of its 3D box (the UV box in XZ, the range in Y). The midpoint would not do:
+        // a large facet's midpoint can sit hundreds of metres away while its far corner is under the
+        // camera, and it would then veto the split of relief right in front of the eye.
+        // A pair merges once the PARENT's range projects below half that at the nearest point of the
+        // parent's box. Both siblings rebuild that box identically (their own corners plus the
+        // reflected far endpoint), so they agree; and a parent that merged reads the same box at its
+        // own split test, so it stays merged. The factor of two is a margin that keeps a pair whose
+        // range sits near the threshold from flipping on a small camera move; no test pins its value.
+        // Off when flatPx is 0 (the A/B arm).
+        float flatPx = fp.waterPlane.w;
+        if (pc.domainMode != CBT_DOMAIN_SPHERICAL && flatPx > 0.0 && fp.atlasParams1.z != 1.0 &&
+            (wantSplit || (!wantMerge && depth > pc.baseDepth)))
+        {
+            float focalPx = length(vec3(fp.viewProjRel[0][1], fp.viewProjRel[1][1],
+                                        fp.viewProjRel[2][1])) * 0.5 * fp.screen.y;
+            vec2 originXZ = fp.terrainOrigin.xy - origin.xz;
+            vec2 sizeXZ = fp.terrainSize.xy;
+            float heightScale = fp.terrainSize.z;
+            float baseY = fp.terrainSize.w - origin.y;
+            // The facet's own corners bound its range from below and its box from inside, so a test
+            // the corners already decide needs no pyramid read. On relief that is most facets.
+            float cornerLow = min(e0.y, min(e1.y, e2.y));
+            float cornerHigh = max(e0.y, max(e1.y, e2.y));
+            vec2 uv0 = vec2(gVertex.Vertex[slot].corner0.w, gVertex.Vertex[slot].meta.x);
+            vec2 uv1 = vec2(gVertex.Vertex[slot].corner1.w, gVertex.Vertex[slot].meta.y);
+            vec2 uv2 = vec2(gVertex.Vertex[slot].corner2.w, gVertex.Vertex[slot].meta.z);
+            vec2 range;
+            if (wantSplit)
+            {
+                vec2 uvMin = min(uv0, min(uv1, uv2));
+                vec2 uvMax = max(uv0, max(uv1, uv2));
+                vec2 xzMin = originXZ + uvMin * sizeXZ;
+                vec2 xzMax = originXZ + uvMax * sizeXZ;
+                float cornerDist = max(CBT_DistanceToBox(vec3(xzMin.x, cornerLow, xzMin.y),
+                                                         vec3(xzMax.x, cornerHigh, xzMax.y), camRel),
+                                       CBT_BEHIND_EYE_MIN_DIST);
+                if ((cornerHigh - cornerLow) * focalPx / cornerDist <= flatPx &&
+                    CBT_HeightRangeOverUV(uvMin, uvMax, range))
+                {
+                    float low = range.x * heightScale + baseY;
+                    float high = range.y * heightScale + baseY;
+                    float dist = max(CBT_DistanceToBox(vec3(xzMin.x, low, xzMin.y),
+                                                       vec3(xzMax.x, high, xzMax.y), camRel),
+                                     CBT_BEHIND_EYE_MIN_DIST);
+                    if ((high - low) * focalPx / dist <= flatPx)
+                        wantSplit = false;
+                }
+            }
+            if (!wantSplit && !wantMerge && depth > pc.baseDepth)
+            {
+                vec2 uvFar = ((uint(h) & 1u) == 0u) ? (2.0 * uv1 - uv0) : (2.0 * uv1 - uv2);
+                vec2 uvMin = min(min(uv0, uv1), min(uv2, uvFar));
+                vec2 uvMax = max(max(uv0, uv1), max(uv2, uvFar));
+                vec2 xzMin = originXZ + uvMin * sizeXZ;
+                vec2 xzMax = originXZ + uvMax * sizeXZ;
+                float cornerDist = max(CBT_DistanceToBox(vec3(xzMin.x, cornerLow, xzMin.y),
+                                                         vec3(xzMax.x, cornerHigh, xzMax.y), camRel),
+                                       CBT_BEHIND_EYE_MIN_DIST);
+                if ((cornerHigh - cornerLow) * focalPx / cornerDist < 0.5 * flatPx &&
+                    CBT_HeightRangeOverUV(uvMin, uvMax, range))
+                {
+                    float low = range.x * heightScale + baseY;
+                    float high = range.y * heightScale + baseY;
+                    float dist = max(CBT_DistanceToBox(vec3(xzMin.x, low, xzMin.y),
+                                                       vec3(xzMax.x, high, xzMax.y), camRel),
+                                     CBT_BEHIND_EYE_MIN_DIST);
+                    if ((high - low) * focalPx / dist < 0.5 * flatPx)
+                        wantMerge = true;
+                }
+            }
+        }
+#endif
+
+        // Screen-area priority FLOOR (round-8c look-back) — computed here so the crease gate below can
+        // relax against it and the frustum keep-large below can reuse it. Raises a projected-area cutoff
+        // on split DEMAND as the pool contends, along the WIDE occupancy ramp [priorityParams.y,
+        // CBT_PRIORITY_OCC_FULL] (low feedback gain, no oscillation — the near-bias discipline), so the
+        // largest-on-screen facets claim the fixed pool first and a look-back rebuilds biggest-facets-
+        // first instead of tiny far facets winning slots as often as the huge near blob. An unsaturated
+        // pool leaves it 0 (neutrality — TPE=8 unaffected). It is APPLIED after the crease term (so it
+        // orders crease demand too); the value is computed first only for the crease-gate composition.
+        float priorityFloor = 0.0;
+        if (fp.priorityParams.x != 0.0 && pc.domainMode == CBT_DOMAIN_SPHERICAL)
+            priorityFloor = smoothstep(fp.priorityParams.y, CBT_PRIORITY_OCC_FULL, occupancy) *
+                            max(fp.priorityParams.z, 0.0);
+        // Does this facet clear the floor? A facet that does is PRIORITIZED, so under saturation its
+        // split is satisfied rather than endlessly rolled back — which is what lets the crease term
+        // relax its occupancy ceiling for it (round-8c gate c). Needs a real projected area (areaPx >= 0).
+        bool clearsPriorityFloor = priorityFloor > 0.0 && areaPx >= priorityFloor;
+
+        // Edit-driven retessellation (round-8b): a live sculpt crease the area metric cannot see —
+        // a coarse facet straddling a freshly-cut cliff whose projected size did not change. Sample
+        // the composed height at the split-edge midpoint and demand a split while it projects past
+        // the pixel target, concentrating subdivision at the crease. Overrides the area metric's
+        // keep/merge (an under-resolved crease must never coarsen) but is itself overridden by the
+        // visibility gate below (an occluded or off-frustum crease is not worth the pool). Costs one
+        // sculpt sample for facets straddling a sculpt gradient only; free everywhere else.
+        //
+        // Occupancy-gated (the #598/#599 bounded-demand discipline): a crease split needs free pool
+        // slots (its compatibility chain reserves 2·depth−1). When the pool is SATURATED those splits
+        // roll back every frame — an unsatisfiable demand that burns Split work forever while the
+        // crease never refines (the R=50000/TargetPixelError=1 regime). Fire while the pool has headroom
+        // below the ceiling OR — round-8c composition (gate c) — when the facet is LARGE enough to clear
+        // the priority floor: under priority ordering a large-area crease split is prioritized and gets
+        // satisfied (not endlessly rolled back), so the ceiling that existed only to stop unsatisfiable
+        // SMALL-crease work can be relaxed for the large ones. The plateau rim then sharpens even at
+        // TargetPixelError=1, while tiny far creases stay gated (bounded demand held).
+        if (pc.domainMode == CBT_DOMAIN_SPHERICAL && pc.sphereSculptEnabled != 0u &&
+            pc.editRetessEnabled != 0u && (occupancy < CBT_CREASE_OCC_CEIL || clearsPriorityFloor))
+        {
+            int crease = CBT_SculptCreaseDemand(fp, slot, h, depth, maxDepth, origin, wc0, wc2);
+            if (crease == CBT_CREASE_SPLIT)
+            {
+                wantSplit = true;
+                wantMerge = false;
+            }
+            else if (crease == CBT_CREASE_HOLD)
+            {
+                wantMerge = false;
+            }
+        }
+
+        // Screen-area priority ordering (round-8c look-back): APPLY the floor. A facet under it yields
+        // its would-be split (from the area metric OR the crease term) to a bigger, more jarring one, so
+        // a saturated pool refines biggest-first. A tiny far crease yields to a big plateau; a large
+        // crease already cleared the floor above and keeps its split (the composition). Needs a real
+        // projected area (areaPx >= 0) so a genuinely-close behind-eye/straddle facet is never gated.
+        if (priorityFloor > 0.0 && wantSplit && areaPx >= 0.0 && areaPx < priorityFloor)
+            wantSplit = false;
+
+        // Demand gate (see CBT_SplitGate): shape non-visible geometry instead of refining it,
+        // overriding the metric above. This is the demand cure — the audit found ~99.8% of split
+        // requests at the surface pose are for horizon-occluded far-side or off-frustum geometry,
+        // which is what saturates the fixed pool. Runs in BOTH domains: the HORIZON half is
+        // spherical by construction (CBT_SplitGate reaches it only under CBT_DOMAIN_SPHERICAL — a
+        // planar heightfield has no horizon), and the FRUSTUM half differs between the domains in
+        // exactly one respect, documented below. Only the DEMAND is shaped; Split's compatibility
+        // chain still force-splits neighbors, so the shaped field grades to base via the normal LEB
+        // merge (conformity held).
+        bool spherical = pc.domainMode == CBT_DOMAIN_SPHERICAL;
+        float ndcExcess;
+        int gate = CBT_SplitGate(fp, wc0, wc1, wc2, p0, p1, p2, v0In, v1In, v2In, ndcExcess);
+        if (gate == CBT_GATE_HORIZON)
+        {
+            // View-INDEPENDENT (camera position, not orientation): coarsen to base — no rotation
+            // pop-in, so this half of the gate is unconditional (correct at any occupancy).
+            wantSplit = false;
+            wantMerge = (depth > pc.baseDepth);
+        }
+        else if (gate == CBT_GATE_FRUSTUM)
+        {
+            // View-DEPENDENT (off-frustum / behind the eye). Coarsening to base and re-refining
+            // one level/frame as a yaw sweeps geometry across the margin IS the rotation churn
+            // (finding 1). Keep depth for a NDC BAND just outside the frustum (the yaw buffer) so
+            // a yaw does not churn it, and coarsen only DEEPER off-frustum — the "longest out of
+            // frustum" first. The band is a FIXED modest annulus (bounded retained geometry) that
+            // collapses to 0 only under pool pressure, releasing the annulus without an all-at-once
+            // threshold burst. The sphere ramps it across the last CBT_KEEP_RAMP of occupancy before
+            // the keep ceiling. Planar takes it from the keep step Kernel_Reset integrates, because an
+            // ungated planar field re-refines off-frustum and a band read straight off occupancy
+            // would cycle that field through the pool; the sphere never re-refines it, so its ramp
+            // has nothing to cycle. keepCeil <= 0 => keepBand 0 => always coarsen (the pre-slice
+            // frustum gate).
+            float keepCeil = fp.demandTuning.y;
+            float keepBand = 0.0;
+            bool poolUnderPressure = false;
+            if (keepCeil > 0.0 && spherical)
+            {
+                float ramp = clamp((keepCeil - occupancy) / CBT_KEEP_RAMP, 0.0, 1.0);
+                keepBand = ramp * CBT_OFF_FRUSTUM_KEEP_NDC;
+                poolUnderPressure = ramp < 1.0;
+            }
+            else if (keepCeil > 0.0)
+            {
+                int keepStep = gQueue.WorkQueue[CBT_WQ_OFF_FRUSTUM_KEEP_STEP];
+                keepBand = CBT_PlanarKeepBand(keepStep);
+                poolUnderPressure = keepStep > 0;
+            }
+            bool keepDepth = ndcExcess <= keepBand;
+            // Keep-large (round-8c look-back, direction 3): a LARGE facet just off the frustum edge
+            // was almost-certainly in view a moment ago (the plateau you glanced away from). Hold its
+            // depth even under saturation while it sits within the keep-large NDC annulus
+            // (priorityParams.w) AND clears the priority area floor, so a quick glance away does not
+            // demote it — the look-back then shows full detail with no rebuild. Bounded two ways so it
+            // cannot starve in-view refinement: the annulus is a fixed modest band (deep-off-frustum
+            // still coarsens), and the floor rises with occupancy (only the largest recently-viewed
+            // facets are retained, and fewer as the pool tightens). Needs a real projected area.
+            // Rides priorityFloor, which is spherical-only, so this retention is too.
+            if (spherical && fp.priorityParams.x != 0.0 && fp.priorityParams.w > 0.0 && areaPx >= 0.0 &&
+                ndcExcess <= fp.priorityParams.w && areaPx >= priorityFloor)
+                keepDepth = true;
+            // WHEN the shaping engages is the one domain difference (round-10 planar parity). The
+            // planet's off-frustum field is unboundedly large — it never fits the pool at any
+            // occupancy — so the sphere suppresses the off-frustum split UNCONDITIONALLY. A planar
+            // heightfield's off-frustum field is BOUNDED and affordable whenever the pool can serve
+            // it, and keeping it at depth means a yaw re-refines nothing, so a planar terrain that
+            // fits keeps its tessellation exactly. Planar therefore retains TOTALLY at keep step 0
+            // and rides the band the step collapses (CBT_PlanarKeepBand): the term switches on with
+            // only the far tail of the field past the widest band and grows step by step while the
+            // pool stays at the keep ceiling. A view that fits never reaches the ceiling, so its
+            // step stays 0. keepCeil <= 0 leaves planar entirely ungated (the "every DemandTuning
+            // field 0 => the pre-slice metric" contract).
+            if (spherical || poolUnderPressure)
+            {
+                wantSplit = false;
+                // Only the bound's own term survives the gate, not the straddle branch's
+                // near-field merge wish, so a facet shorter than CBT_NEAR_FIELD_MERGE_FRAC *
+                // nearTargetM close behind the eye holds its depth inside the band where it would
+                // merge below it — a density step at the band edge, not a freeze, because the
+                // bound's term converges on its own.
+                wantMerge = ((!keepDepth) || behindEyeWantsMerge) && (depth > pc.baseDepth);
+            }
+        }
+    }
+    else
+    {
+        bool inFocus = (pc.focusRoot == CBT_FOCUS_ROOT_ALL) ||
+                       (CBT_RootOf(h, depth) == ((1u << pc.baseDepth) + pc.focusRoot));
+        uint want = inFocus ? pc.targetDepth : pc.baseDepth;
+        wantSplit = (depth < want);
+        wantMerge = (depth > want);
+    }
+
+    uint state = CBT_STATE_UNCHANGED;
+    if (wantSplit)
+    {
+        state = CBT_STATE_BISECT;
+        CBT_QueuePush(CBT_WQ_SPLIT_COUNTER, CBT_WQ_SPLIT_QUEUE, slot);
+    }
+    else if (wantMerge && depth > pc.baseDepth)
+    {
+        // Both twins carry the SIMPLIFY state (PrepareSimplify's pair-agreement
+        // test reads it) but only the even heapID enqueues the merge candidate.
+        state = CBT_STATE_SIMPLIFY;
+        if ((uint(h) & 1u) == 0u)
+            CBT_QueuePush(CBT_WQ_SIMPLIFY_CLASS_COUNTER, CBT_WQ_SIMPLIFY_CLASS_QUEUE, slot);
+    }
+    gBisector.Bisector[slot].bisectorState = state;
+}
+
+// #3 PrepareIndirect — single thread. Promotes the counter selected by
+// pc.passIndex into dispatch slot 0 (port-notes §10 Q5).
+void Kernel_PrepareIndirect()
+{
+    if (gl_GlobalInvocationID.x != 0u)
+        return;
+    int c = gQueue.WorkQueue[pc.passIndex];
+    uint count = (c > 0) ? uint(c) : 0u;
+    gDispatch.IndirectDispatch[0] = CBT_BoundedDispatchGroups(count);
+    gDispatch.IndirectDispatch[1] = 1u;
+    gDispatch.IndirectDispatch[2] = 1u;
+}
+
+// #4 Split — per split candidate. Reference SplitElement: skip if a
+// modified-and-facing neighbor will drive this split; reserve the 2δ−1 budget
+// (short-circuited to 1 boundary / 2 perfect-pair) with rollback on exhaustion;
+// atomically claim CENTER; then walk the compatibility chain up the coarser
+// twins raising CENTER (same depth) or RIGHT/LEFT_DOUBLE (coarser). Refunds the
+// unused reservation on exit so FreeCount stays exact (port-notes §5, §10 Q1/Q3).
+void Kernel_Split()
+{
+    uint qi = gl_GlobalInvocationID.x;
+    int splitCount = gQueue.WorkQueue[CBT_WQ_SPLIT_COUNTER];
+    if (splitCount <= 0 || qi >= uint(splitCount))
+        return;
+    uint currentID = uint(gQueue.WorkQueue[CBT_WQ_SPLIT_QUEUE + qi]);
+    uvec4 cNeighbors = CBT_ReadCur(currentID);
+
+    // Yield only to a facing neighbor that will ACTUALLY drive this subdivision: one that is
+    // SPLITTING, whose compatibility-chain walk claims this facet on the way up. Any other
+    // modified state does no split work, so yielding to it forfeits the split outright — and a
+    // neighbor flagged SIMPLIFY may hold that flag indefinitely, because a merge needs its whole
+    // LEB diamond to agree: the parent-level planar metric buys sibling agreement but not the pair
+    // across the split edge, and the spherical area metric is still decided per facet. The
+    // atomicOr on subdivisionPattern below is the double-processing guard; this test is only an
+    // early-out ahead of it. The narrow arm also refuses a free or out-of-pool id.
+#if defined(CBT_DECODE_INT32)
+    if (cNeighbors.x != CBT_INVALID_POINTER && cNeighbors.x < CBT_POOL_SIZE &&
+        !CBT_IsFreeSlot(CBT_LoadHeapID(cNeighbors.x)))
+#else
+    if (cNeighbors.x != CBT_INVALID_POINTER)
+#endif
+    {
+        uvec4 xN = CBT_ReadCur(cNeighbors.x);
+        if (xN.z == currentID &&
+            gBisector.Bisector[cNeighbors.x].bisectorState == CBT_STATE_BISECT)
+            return;
+    }
+#if defined(CBT_DECODE_INT32)
+    if (cNeighbors.y != CBT_INVALID_POINTER && cNeighbors.y < CBT_POOL_SIZE &&
+        !CBT_IsFreeSlot(CBT_LoadHeapID(cNeighbors.y)))
+#else
+    if (cNeighbors.y != CBT_INVALID_POINTER)
+#endif
+    {
+        uvec4 yN = CBT_ReadCur(cNeighbors.y);
+        if (yN.z == currentID &&
+            gBisector.Bisector[cNeighbors.y].bisectorState == CBT_STATE_BISECT)
+            return;
+    }
+
+    CBT_HEAPID_T h = CBT_LoadHeapID(currentID);
+    if (CBT_IsFreeSlot(h))
+        return; // Classify only enqueues live bisectors; guard HeapIDDepth(0) regardless
+    uint currentDepth = CBT_HeapIDDepth(h);
+    // Corruption guard (see VertexEval): below the root band, (currentDepth -
+    // baseDepth) underflows the budget reservation. Refuse to split a corrupt slot.
+    if (currentDepth < pc.baseDepth)
+        return;
+    int maxRequired = int(2u * (currentDepth - pc.baseDepth)) - 1;
+    uint twinID = cNeighbors.z;
+#if defined(CBT_DECODE_INT32)
+    // A free or out-of-pool twin is not a live bisector; treat as INVALID so
+    // we reserve 1 slot and do not ReadCur an unbound index.
+    if (twinID == CBT_INVALID_POINTER || twinID >= CBT_POOL_SIZE ||
+        CBT_IsFreeSlot(CBT_LoadHeapID(twinID)))
+#else
+    if (twinID == CBT_INVALID_POINTER)
+#endif
+        maxRequired = 1;
+    else if (CBT_ReadCur(twinID).z == currentID)
+        maxRequired = 2;
+    if (maxRequired < 1)
+        maxRequired = 1;
+
+    int oldFree = atomicAdd(gQueue.WorkQueue[CBT_WQ_FREE_COUNT], -maxRequired);
+    if (oldFree < maxRequired)
+    {
+        atomicAdd(gQueue.WorkQueue[CBT_WQ_FREE_COUNT], maxRequired); // rollback
+        CBT_IncrementTelemetry(CBT_WQ_OVERFLOW_COUNTER);
+        return;
+    }
+
+    uint prevPattern = atomicOr(gBisector.Bisector[currentID].subdivisionPattern, CBT_CENTER_SPLIT);
+    if (prevPattern != 0u)
+    {
+        atomicAdd(gQueue.WorkQueue[CBT_WQ_FREE_COUNT], maxRequired); // someone else claimed us
+        return;
+    }
+    CBT_QueuePush(CBT_WQ_ALLOCATE_COUNTER, CBT_WQ_ALLOCATE_QUEUE, currentID);
+    uint usedMemory = 1u;
+
+    bool done = false;
+    for (uint step = 0u; step < 64u && !done; ++step)
+    {
+        if (twinID == CBT_INVALID_POINTER)
+            break;
+#if defined(CBT_DECODE_INT32)
+        // HeapIDDepth is findMSB; a free slot (HeapID 0) yields ~0u depth and
+        // would take the coarser branch, OR LEFT/RIGHT_DOUBLE onto that dead
+        // slot, and enqueue it. Stop the chain; the reservation refund still runs.
+        if (twinID >= CBT_POOL_SIZE || CBT_IsFreeSlot(CBT_LoadHeapID(twinID)))
+            break;
+#endif
+        CBT_HEAPID_T nHeapID = CBT_LoadHeapID(twinID);
+        uint nDepth = CBT_HeapIDDepth(nHeapID);
+        uvec4 nNeighbors = CBT_ReadCur(twinID);
+        if (nDepth == currentDepth)
+        {
+            uint pp = atomicOr(gBisector.Bisector[twinID].subdivisionPattern, CBT_CENTER_SPLIT);
+            if (pp == 0u)
+            {
+                CBT_QueuePush(CBT_WQ_ALLOCATE_COUNTER, CBT_WQ_ALLOCATE_QUEUE, twinID);
+                usedMemory += 1u;
+            }
+            done = true;
+        }
+        else
+        {
+            uint bit = (nNeighbors.x == currentID) ? CBT_RIGHT_DOUBLE_SPLIT : CBT_LEFT_DOUBLE_SPLIT;
+            uint pp = atomicOr(gBisector.Bisector[twinID].subdivisionPattern, bit);
+            if (pp != 0u)
+            {
+                usedMemory += 1u;
+                done = true;
+            }
+            else
+            {
+                CBT_QueuePush(CBT_WQ_ALLOCATE_COUNTER, CBT_WQ_ALLOCATE_QUEUE, twinID);
+                usedMemory += 2u;
+                currentID = twinID;
+                currentDepth = nDepth;
+                twinID = CBT_ReadCur(currentID).z;
+            }
+        }
+    }
+
+    int slack = maxRequired - int(usedMemory);
+    if (slack > 0)
+        atomicAdd(gQueue.WorkQueue[CBT_WQ_FREE_COUNT], slack); // refund unused reservation
+}
+
+// #5 Allocate — per queued allocation. Reference AllocateElement: reserve
+// bitCount(pattern) slots on the alloc cursor and decode each via the sum-tree
+// bit-complement (free-slot) decoder. Occupancy bits are set later by Bisect;
+// the decode reads the prior frame's sum-tree snapshot, so distinct cursor
+// offsets map to distinct currently-free slots — which is how merged slots get
+// reused (port-notes §5/§6, §10 Q4).
+void Kernel_Allocate()
+{
+    uint qi = gl_GlobalInvocationID.x;
+    int allocCount = gQueue.WorkQueue[CBT_WQ_ALLOCATE_COUNTER];
+    if (allocCount <= 0 || qi >= uint(allocCount))
+        return;
+    uint currentID = uint(gQueue.WorkQueue[CBT_WQ_ALLOCATE_QUEUE + qi]);
+    uint pattern = gBisector.Bisector[currentID].subdivisionPattern;
+    if (pattern == CBT_NO_SPLIT)
+        return;
+
+    uint numSlots = bitCount(pattern); // CENTER=1, RIGHT/LEFT_DOUBLE=2, TRIPLE=3
+    // Per-pattern fan-out telemetry (which variants the frame exercised).
+    if (pattern == CBT_RIGHT_DOUBLE_SPLIT)
+        CBT_IncrementTelemetry(CBT_WQ_RIGHT_DOUBLE_COUNTER);
+    else if (pattern == CBT_LEFT_DOUBLE_SPLIT)
+        CBT_IncrementTelemetry(CBT_WQ_LEFT_DOUBLE_COUNTER);
+    else if (pattern == CBT_TRIPLE_SPLIT)
+        CBT_IncrementTelemetry(CBT_WQ_TRIPLE_COUNTER);
+
+    uint firstBit = uint(atomicAdd(gQueue.WorkQueue[CBT_WQ_ALLOC_CURSOR], int(numSlots)));
+    for (uint i = 0u; i < numSlots; ++i)
+    {
+        uint idx = CBT_DecodeFreeSlot(firstBit + i);
+        if (i == 0u)
+            gBisector.Bisector[currentID].indices0 = idx;
+        else if (i == 1u)
+            gBisector.Bisector[currentID].indices1 = idx;
+        else
+            gBisector.Bisector[currentID].indices2 = idx;
+    }
+}
+
+// #21 NeighborCopy — per LIVE bisector, indirect over the live-set width (dispatch slot LIVE).
+// Carries CURRENT -> NEXT so Bisect only has to write the bisectors it changes and the unchanged
+// ones survive into NEXT (port-notes §8, mesh_updater's pre-Bisect buffer copy). The carry-over
+// is mandatory, not an optimisation: PropagateBisect, PrepareSimplify, Simplify,
+// PropagateSimplify and Validate all read NEXT at arbitrary live slots that Bisect never touches.
+//
+// A SCATTER through IndicesAll rather than a range copy, because the live set is not a pool
+// prefix: CBT_DecodeFreeSlot hands out the k-th free slot so allocation refills low holes first,
+// but Simplify frees arbitrary slots, leaving live bisectors strewn above the live count. A
+// [0, liveCount) copy would silently skip them.
+//
+// Coverage: IndicesAll is the compact list rebuilt at the tail of whatever last changed the tree
+// — the previous update, or RegionFreeToBase — so it is exactly this frame's pre-split live set
+// (topology is frozen in between), and the slots Bisect creates
+// this frame get full uvec4 stores. Together they cover every slot any later kernel reads from
+// NEXT. Free slots are deliberately left stale — every consumer guards on the free-slot HeapID
+// before reading a neighbor record (Validate returns outright), the two paths that can touch a
+// dead record only gate a write to that same dead slot, and a slot handed back out by Allocate is
+// fully rewritten by Bisect before anything reads it.
+void Kernel_NeighborCopy()
+{
+    uint i = gl_GlobalInvocationID.x;
+    if (i >= CBT_LiveCount())
+        return;
+    uint slot = gIdxAll.IndicesAll[i];
+    if (slot >= CBT_POOL_SIZE)
+        return;
+    CBT_WriteNext(slot, CBT_ReadCur(slot));
+}
+
+// #6 Bisect — per queued allocation. Reference BisectElement four-pattern
+// dispatch. Reads CURRENT neighbors + neighbor children (evaluate_neighbors),
+// writes 64-bit child heap ids (plain stores — thread-owned slots), the child
+// neighbor links into the NEXT (ping-pong) buffer, and fully initializes each
+// child's BisectorData. Sets each new child's occupancy bit. Enqueues the sibling
+// that owns a still-stale neighbor for PropagateBisect (port-notes §2 K6/K7, §8).
+void Kernel_Bisect()
+{
+    uint qi = gl_GlobalInvocationID.x;
+    int allocCount = gQueue.WorkQueue[CBT_WQ_ALLOCATE_COUNTER];
+    if (allocCount <= 0 || qi >= uint(allocCount))
+        return;
+    uint currentID = uint(gQueue.WorkQueue[CBT_WQ_ALLOCATE_QUEUE + qi]);
+    CBT_HEAPID_T baseHeapID = CBT_LoadHeapID(currentID);
+    uint pattern = gBisector.Bisector[currentID].subdivisionPattern;
+    if (CBT_IsFreeSlot(baseHeapID) || pattern == CBT_NO_SPLIT)
+        return;
+
+    uvec4 cN = CBT_ReadCur(currentID);
+    uint p_n0 = cN.x;
+    uint p_n1 = cN.y;
+    uint p_n2 = cN.z;
+#if defined(CBT_DECODE_INT32)
+    if (!CBT_IsLivePointer(p_n0))
+        p_n0 = CBT_INVALID_POINTER;
+    if (!CBT_IsLivePointer(p_n1))
+        p_n1 = CBT_INVALID_POINTER;
+    if (!CBT_IsLivePointer(p_n2))
+        p_n2 = CBT_INVALID_POINTER;
+#endif
+    uint s0 = gBisector.Bisector[currentID].indices0;
+    uint s1 = gBisector.Bisector[currentID].indices1;
+    uint s2 = gBisector.Bisector[currentID].indices2;
+    uint pState = gBisector.Bisector[currentID].bisectorState;
+
+    // Guard every child-slot-indexed store below (HeapID / neighbors / InitChild
+    // / bit-set) against a decode miss. The Split FreeCount gate makes an
+    // INVALID slot unreachable, so this is a contained no-op: the bisector stays
+    // unsplit (parent HeapID untouched, pattern cleared by next Classify) rather
+    // than performing a wild out-of-bounds store.
+    uint numSiblings = bitCount(pattern); // CENTER=1, RIGHT/LEFT_DOUBLE=2, TRIPLE=3
+    bool childrenValid = (s0 < CBT_POOL_SIZE) && (numSiblings < 2u || s1 < CBT_POOL_SIZE) &&
+                         (numSiblings < 3u || s2 < CBT_POOL_SIZE);
+    if (!childrenValid)
+        return;
+
+    if (pattern == CBT_CENTER_SPLIT)
+    {
+        uint resX = CBT_INVALID_POINTER, resY = CBT_INVALID_POINTER;
+        if (p_n2 != CBT_INVALID_POINTER)
+            CBT_EvaluateNeighbors(currentID, p_n2, resX, resY);
+
+        CBT_StoreHeapID(currentID, CBT_HEAPID_T(2) * baseHeapID);
+        CBT_StoreHeapID(s0, CBT_HEAPID_T(2) * baseHeapID + CBT_HEAPID_T(1));
+
+        CBT_WriteNext(currentID, uvec4(s0, resX, p_n0, 0u));
+        CBT_WriteNext(s0, uvec4(resY, currentID, p_n1, 0u));
+
+        gBisector.Bisector[currentID].propagationID = currentID;
+        gBisector.Bisector[currentID].problematicNeighbor = CBT_INVALID_POINTER;
+        gBisector.Bisector[currentID].flags = CBT_FLAG_VIS_MOD;
+        CBT_InitChild(s0, pattern, pState, s0, s1, s2, currentID, p_n1);
+
+        if (p_n1 != CBT_INVALID_POINTER)
+            CBT_QueuePush(CBT_WQ_PROPAGATE_BISECT_COUNTER, CBT_WQ_PROPAGATE_BISECT_QUEUE, s0);
+    }
+    else if (pattern == CBT_RIGHT_DOUBLE_SPLIT)
+    {
+        uint r0x = CBT_INVALID_POINTER, r0y = CBT_INVALID_POINTER;
+        if (p_n0 != CBT_INVALID_POINTER)
+            CBT_EvaluateNeighbors(currentID, p_n0, r0x, r0y);
+        uint r1x = CBT_INVALID_POINTER, r1y = CBT_INVALID_POINTER;
+        if (p_n2 != CBT_INVALID_POINTER)
+            CBT_EvaluateNeighbors(currentID, p_n2, r1x, r1y);
+
+        CBT_StoreHeapID(currentID, CBT_HEAPID_T(4) * baseHeapID);
+        CBT_StoreHeapID(s0, CBT_HEAPID_T(2) * baseHeapID + CBT_HEAPID_T(1));
+        CBT_StoreHeapID(s1, CBT_HEAPID_T(4) * baseHeapID + CBT_HEAPID_T(1));
+
+        CBT_WriteNext(currentID, uvec4(s1, r0x, s0, 0u));
+        CBT_WriteNext(s0, uvec4(r1y, currentID, p_n1, 0u));
+        CBT_WriteNext(s1, uvec4(r0y, currentID, r1x, 0u));
+
+        gBisector.Bisector[currentID].propagationID = currentID;
+        gBisector.Bisector[currentID].problematicNeighbor = CBT_INVALID_POINTER;
+        gBisector.Bisector[currentID].flags = CBT_FLAG_VIS_MOD;
+        CBT_InitChild(s0, pattern, pState, s0, s1, s2, currentID, p_n1);
+        CBT_InitChild(s1, pattern, pState, s0, s1, s2, currentID, CBT_INVALID_POINTER);
+
+        if (p_n1 != CBT_INVALID_POINTER)
+            CBT_QueuePush(CBT_WQ_PROPAGATE_BISECT_COUNTER, CBT_WQ_PROPAGATE_BISECT_QUEUE, s0);
+    }
+    else if (pattern == CBT_LEFT_DOUBLE_SPLIT)
+    {
+        uint r0x = CBT_INVALID_POINTER, r0y = CBT_INVALID_POINTER;
+        if (p_n1 != CBT_INVALID_POINTER)
+            CBT_EvaluateNeighbors(currentID, p_n1, r0x, r0y);
+        uint r1x = CBT_INVALID_POINTER, r1y = CBT_INVALID_POINTER;
+        if (p_n2 != CBT_INVALID_POINTER)
+            CBT_EvaluateNeighbors(currentID, p_n2, r1x, r1y);
+
+        CBT_StoreHeapID(currentID, CBT_HEAPID_T(2) * baseHeapID);
+        CBT_StoreHeapID(s0, CBT_HEAPID_T(4) * baseHeapID + CBT_HEAPID_T(2));
+        CBT_StoreHeapID(s1, CBT_HEAPID_T(4) * baseHeapID + CBT_HEAPID_T(3));
+
+        CBT_WriteNext(currentID, uvec4(s1, r1x, p_n0, 0u));
+        CBT_WriteNext(s0, uvec4(s1, r0x, r1y, 0u));
+        CBT_WriteNext(s1, uvec4(r0y, s0, currentID, 0u));
+
+        gBisector.Bisector[currentID].propagationID = currentID;
+        gBisector.Bisector[currentID].problematicNeighbor = CBT_INVALID_POINTER;
+        gBisector.Bisector[currentID].flags = CBT_FLAG_VIS_MOD;
+        CBT_InitChild(s0, pattern, pState, s0, s1, s2, currentID, CBT_INVALID_POINTER);
+        CBT_InitChild(s1, pattern, pState, s0, s1, s2, currentID, CBT_INVALID_POINTER);
+    }
+    else // CBT_TRIPLE_SPLIT
+    {
+        uint r0x = CBT_INVALID_POINTER, r0y = CBT_INVALID_POINTER;
+        if (p_n0 != CBT_INVALID_POINTER)
+            CBT_EvaluateNeighbors(currentID, p_n0, r0x, r0y);
+        uint r1x = CBT_INVALID_POINTER, r1y = CBT_INVALID_POINTER;
+        if (p_n1 != CBT_INVALID_POINTER)
+            CBT_EvaluateNeighbors(currentID, p_n1, r1x, r1y);
+        uint r2x = CBT_INVALID_POINTER, r2y = CBT_INVALID_POINTER;
+        if (p_n2 != CBT_INVALID_POINTER)
+            CBT_EvaluateNeighbors(currentID, p_n2, r2x, r2y);
+
+        CBT_StoreHeapID(currentID, CBT_HEAPID_T(4) * baseHeapID);
+        CBT_StoreHeapID(s0, CBT_HEAPID_T(4) * baseHeapID + CBT_HEAPID_T(2));
+        CBT_StoreHeapID(s1, CBT_HEAPID_T(4) * baseHeapID + CBT_HEAPID_T(1));
+        CBT_StoreHeapID(s2, CBT_HEAPID_T(4) * baseHeapID + CBT_HEAPID_T(3));
+
+        CBT_WriteNext(currentID, uvec4(s1, r0x, s2, 0u));
+        CBT_WriteNext(s0, uvec4(s2, r1x, r2y, 0u));
+        CBT_WriteNext(s1, uvec4(r0y, currentID, r2x, 0u));
+        CBT_WriteNext(s2, uvec4(r1y, s0, currentID, 0u));
+
+        gBisector.Bisector[currentID].propagationID = currentID;
+        gBisector.Bisector[currentID].problematicNeighbor = CBT_INVALID_POINTER;
+        gBisector.Bisector[currentID].flags = CBT_FLAG_VIS_MOD;
+        CBT_InitChild(s0, pattern, pState, s0, s1, s2, currentID, CBT_INVALID_POINTER);
+        CBT_InitChild(s1, pattern, pState, s0, s1, s2, currentID, CBT_INVALID_POINTER);
+        CBT_InitChild(s2, pattern, pState, s0, s1, s2, currentID, CBT_INVALID_POINTER);
+    }
+
+    // Raise the occupancy bit for each newly allocated child (slots validated
+    // by the childrenValid guard above).
+    if (numSiblings >= 1u)
+        CBT_SetBitAtomic(s0);
+    if (numSiblings >= 2u)
+        CBT_SetBitAtomic(s1);
+    if (numSiblings >= 3u)
+        CBT_SetBitAtomic(s2);
+}
+
+// #7 PropagateBisect — per propagate entry. Reference PropagateBisectElement:
+// redirect the "problematic neighbor" (the one edge Bisect could not fix from
+// currentID's side) so its back-pointer targets currentID instead of the parent.
+// Reads/writes the NEXT (ping-pong) buffer with per-component stores (unique
+// slots, no atomics). Boundary guard: a NULL problematic neighbor has no back
+// edge to fix (port-notes §2 K7).
+void Kernel_PropagateBisect()
+{
+    uint qi = gl_GlobalInvocationID.x;
+    int cnt = gQueue.WorkQueue[CBT_WQ_PROPAGATE_BISECT_COUNTER];
+    if (cnt <= 0 || qi >= uint(cnt))
+        return;
+    uint currentID = uint(gQueue.WorkQueue[CBT_WQ_PROPAGATE_BISECT_QUEUE + qi]);
+    uint parentID = gBisector.Bisector[currentID].propagationID;
+    uint problematic = gBisector.Bisector[currentID].problematicNeighbor;
+#if defined(CBT_DECODE_INT32)
+    if (!CBT_IsLivePointer(problematic))
+#else
+    if (problematic == CBT_INVALID_POINTER || problematic >= CBT_POOL_SIZE)
+#endif
+    {
+        gBisector.Bisector[currentID].problematicNeighbor = CBT_INVALID_POINTER;
+        gBisector.Bisector[currentID].bisectorState = CBT_STATE_UNCHANGED;
+        return;
+    }
+
+    uint pat = gBisector.Bisector[problematic].subdivisionPattern;
+    uvec4 tN = CBT_ReadNext(problematic);
+
+    if (pat == CBT_NO_SPLIT)
+    {
+        if (tN.x == parentID)
+            CBT_WriteNextComp(problematic, 0u, currentID);
+        if (tN.y == parentID)
+            CBT_WriteNextComp(problematic, 1u, currentID);
+        if (tN.z == parentID)
+            CBT_WriteNextComp(problematic, 2u, currentID);
+    }
+    else if (pat == CBT_CENTER_SPLIT)
+    {
+        if (CBT_ReadNext(problematic).z == parentID)
+            CBT_WriteNextComp(problematic, 2u, currentID);
+        uint pp = gBisector.Bisector[problematic].propagationID;
+        if (pp < CBT_POOL_SIZE && CBT_ReadNext(pp).z == parentID)
+            CBT_WriteNextComp(pp, 2u, currentID);
+    }
+    else if (pat == CBT_RIGHT_DOUBLE_SPLIT)
+    {
+        uint sibling1 = gBisector.Bisector[problematic].indices1;
+        if (sibling1 < CBT_POOL_SIZE)
+            CBT_WriteNextComp(sibling1, 2u, currentID);
+    }
+    else if (pat == CBT_LEFT_DOUBLE_SPLIT)
+    {
+        CBT_WriteNextComp(problematic, 2u, currentID);
+    }
+
+    gBisector.Bisector[currentID].problematicNeighbor = CBT_INVALID_POINTER;
+    gBisector.Bisector[currentID].bisectorState = CBT_STATE_UNCHANGED;
+}
+
+// #8 PrepareSimplify — per simplify candidate. Reference PrepareSimplifyElement:
+// densify only the merge groups where every participant (pair, and the facing
+// twin pair if present) is at the same depth and also flagged SIMPLIFY, and
+// where currentID is the lowest heapID of the group. Reads NEXT neighbors.
+// Boundary guards protect against absent pair / facing-pair edges.
+void Kernel_PrepareSimplify()
+{
+    uint qi = gl_GlobalInvocationID.x;
+    int cnt = gQueue.WorkQueue[CBT_WQ_SIMPLIFY_CLASS_COUNTER];
+    if (cnt <= 0 || qi >= uint(cnt))
+        return;
+    uint currentID = uint(gQueue.WorkQueue[CBT_WQ_SIMPLIFY_CLASS_QUEUE + qi]);
+    CBT_HEAPID_T cHeapID = CBT_LoadHeapID(currentID);
+    if (CBT_IsFreeSlot(cHeapID))
+        return;
+    uvec4 cN = CBT_ReadNext(currentID);
+    uint currentDepth = CBT_HeapIDDepth(cHeapID);
+
+    uint pairID = cN.x;
+    if (pairID == CBT_INVALID_POINTER || pairID >= CBT_POOL_SIZE)
+        return;
+    CBT_HEAPID_T pHeapID = CBT_LoadHeapID(pairID);
+    if (CBT_IsFreeSlot(pHeapID))
+        return;
+    uint pairDepth = CBT_HeapIDDepth(pHeapID);
+    if (pairDepth != currentDepth || gBisector.Bisector[pairID].bisectorState != CBT_STATE_SIMPLIFY)
+        return;
+    uvec4 pN = CBT_ReadNext(pairID);
+
+    uint twinLowID = pN.x;
+    uint twinHighID = cN.y;
+    if (twinLowID != CBT_INVALID_POINTER)
+    {
+        if (twinHighID == CBT_INVALID_POINTER || twinHighID >= CBT_POOL_SIZE ||
+            twinLowID >= CBT_POOL_SIZE)
+            return;
+        CBT_HEAPID_T twinLowHeapID = CBT_LoadHeapID(twinLowID);
+        CBT_HEAPID_T twinHighHeapID = CBT_LoadHeapID(twinHighID);
+#if defined(CBT_DECODE_INT32)
+        if (CBT_IsFreeSlot(twinLowHeapID) || CBT_IsFreeSlot(twinHighHeapID))
+            return;
+#endif
+        if (cHeapID > twinLowHeapID)
+            return; // the lower-id twin drives this merge
+        if (CBT_HeapIDDepth(twinLowHeapID) != currentDepth ||
+            CBT_HeapIDDepth(twinHighHeapID) != currentDepth)
+            return;
+        if (gBisector.Bisector[twinLowID].bisectorState != CBT_STATE_SIMPLIFY ||
+            gBisector.Bisector[twinHighID].bisectorState != CBT_STATE_SIMPLIFY)
+            return;
+    }
+
+    CBT_QueuePush(CBT_WQ_SIMPLIFY_COUNTER, CBT_WQ_SIMPLIFY_QUEUE, currentID);
+}
+
+// #9 Simplify — per queued merge. Reference SimplifyElement: promote currentID
+// (and the facing twinLow) to the parent depth in place, free the pair (and
+// twinHigh) by zeroing its heap id and CLEARING its occupancy bit (u32 atomicAnd
+// — no int64 atomics; plan §6). The freed slots are returned to the pool via the
+// sum tree (next Reset recomputes FreeCount = pool − liveCount), so no explicit
+// FreeCount credit here. Enqueues the survivor for the neighbor scatter.
+void Kernel_Simplify()
+{
+    uint qi = gl_GlobalInvocationID.x;
+    int cnt = gQueue.WorkQueue[CBT_WQ_SIMPLIFY_COUNTER];
+    if (cnt <= 0 || qi >= uint(cnt))
+        return;
+    uint currentID = uint(gQueue.WorkQueue[CBT_WQ_SIMPLIFY_QUEUE + qi]);
+    uvec4 cN = CBT_ReadNext(currentID);
+    uint pairID = cN.x;
+    if (pairID >= CBT_POOL_SIZE)
+        return;
+    uvec4 pN = CBT_ReadNext(pairID);
+    uint twinLowID = pN.x;
+    uint twinHighID = cN.y;
+
+    CBT_StoreHeapID(currentID, CBT_ParentHeapID(CBT_LoadHeapID(currentID)));
+    CBT_StoreHeapID(pairID, CBT_HEAPID_T(0));
+
+    CBT_WriteNext(currentID, uvec4(cN.z, pN.z, twinLowID, 0u));
+    gBisector.Bisector[currentID].propagationID = pairID;
+    gBisector.Bisector[currentID].problematicNeighbor = pN.z;
+    gBisector.Bisector[currentID].bisectorState = CBT_STATE_MERGED;
+    gBisector.Bisector[currentID].flags = CBT_FLAG_VIS_MOD;
+    if (pN.z != CBT_INVALID_POINTER)
+        CBT_QueuePush(CBT_WQ_PROPAGATE_SIMPLIFY_COUNTER, CBT_WQ_PROPAGATE_SIMPLIFY_QUEUE, currentID);
+
+    gBisector.Bisector[pairID].bisectorState = CBT_STATE_MERGED;
+    gBisector.Bisector[pairID].flags = 0u;
+    CBT_ClearBitAtomic(pairID);
+
+    if (twinLowID != CBT_INVALID_POINTER && twinLowID < CBT_POOL_SIZE &&
+        twinHighID != CBT_INVALID_POINTER && twinHighID < CBT_POOL_SIZE)
+    {
+        CBT_StoreHeapID(twinLowID, CBT_ParentHeapID(CBT_LoadHeapID(twinLowID)));
+        CBT_StoreHeapID(twinHighID, CBT_HEAPID_T(0));
+        uvec4 lfN = CBT_ReadNext(twinLowID);
+        uvec4 hfN = CBT_ReadNext(twinHighID);
+        CBT_WriteNext(twinLowID, uvec4(lfN.z, hfN.z, currentID, 0u));
+        gBisector.Bisector[twinLowID].propagationID = twinHighID;
+        gBisector.Bisector[twinLowID].problematicNeighbor = hfN.z;
+        gBisector.Bisector[twinLowID].bisectorState = CBT_STATE_MERGED;
+        gBisector.Bisector[twinLowID].flags = CBT_FLAG_VIS_MOD;
+        if (hfN.z != CBT_INVALID_POINTER)
+            CBT_QueuePush(CBT_WQ_PROPAGATE_SIMPLIFY_COUNTER, CBT_WQ_PROPAGATE_SIMPLIFY_QUEUE,
+                          twinLowID);
+
+        gBisector.Bisector[twinHighID].bisectorState = CBT_STATE_MERGED;
+        gBisector.Bisector[twinHighID].flags = 0u;
+        CBT_ClearBitAtomic(twinHighID);
+    }
+}
+
+// #10 PropagateSimplify — per propagate entry. Reference PropagateElementSimplify:
+// redirect the surviving neighbor's pointer away from the deleted pair to
+// currentID, following the neighbor up one depth (or to its own pair) if it also
+// merged. NEXT buffer, per-component stores, no atomics (port-notes §2 K10).
+void Kernel_PropagateSimplify()
+{
+    uint qi = gl_GlobalInvocationID.x;
+    int cnt = gQueue.WorkQueue[CBT_WQ_PROPAGATE_SIMPLIFY_COUNTER];
+    if (cnt <= 0 || qi >= uint(cnt))
+        return;
+    uint currentID = uint(gQueue.WorkQueue[CBT_WQ_PROPAGATE_SIMPLIFY_QUEUE + qi]);
+    uint deletedPair = gBisector.Bisector[currentID].propagationID;
+    uint neighborID = gBisector.Bisector[currentID].problematicNeighbor;
+    if (neighborID == CBT_INVALID_POINTER || neighborID >= CBT_POOL_SIZE)
+    {
+        gBisector.Bisector[currentID].problematicNeighbor = CBT_INVALID_POINTER;
+        return;
+    }
+
+    uint nState = gBisector.Bisector[neighborID].bisectorState;
+    uvec4 nN = CBT_ReadNext(neighborID);
+    if (nState != CBT_STATE_MERGED)
+    {
+        if (nN.x == deletedPair)
+            CBT_WriteNextComp(neighborID, 0u, currentID);
+        if (nN.y == deletedPair)
+            CBT_WriteNextComp(neighborID, 1u, currentID);
+        if (nN.z == deletedPair)
+            CBT_WriteNextComp(neighborID, 2u, currentID);
+    }
+    else
+    {
+        if (!CBT_IsFreeSlot(CBT_LoadHeapID(neighborID)))
+        {
+            if (nN.x == deletedPair)
+                CBT_WriteNextComp(neighborID, 0u, currentID);
+            if (nN.y == deletedPair)
+                CBT_WriteNextComp(neighborID, 1u, currentID);
+            if (nN.z == deletedPair)
+                CBT_WriteNextComp(neighborID, 2u, currentID);
+        }
+        else
+        {
+            uint neighborPair = nN.y;
+            if (neighborPair != CBT_INVALID_POINTER && neighborPair < CBT_POOL_SIZE)
+            {
+                uvec4 npN = CBT_ReadNext(neighborPair);
+                if (npN.x == deletedPair)
+                    CBT_WriteNextComp(neighborPair, 0u, currentID);
+                if (npN.y == deletedPair)
+                    CBT_WriteNextComp(neighborPair, 1u, currentID);
+                if (npN.z == deletedPair)
+                    CBT_WriteNextComp(neighborPair, 2u, currentID);
+            }
+        }
+    }
+
+    gBisector.Bisector[currentID].problematicNeighbor = CBT_INVALID_POINTER;
+}
+
+// #11 ReducePrePass — bitfield u32 -> packed popcount bytes (4 leaves per u32
+// output). u32 re-derivation of the reference's u64 prepass (plan §6, CBTLayout.h).
+void Kernel_ReducePrePass()
+{
+    uint w = gl_GlobalInvocationID.x; // packed output word
+    if (w >= CBT_LEAF_PACKED_WORDS)
+        return;
+    uint base = w * 4u;
+    uint c0 = bitCount(gBitfield.Bitfield[base + 0u]);
+    uint c1 = bitCount(gBitfield.Bitfield[base + 1u]);
+    uint c2 = bitCount(gBitfield.Bitfield[base + 2u]);
+    uint c3 = bitCount(gBitfield.Bitfield[base + 3u]);
+    gSumTree.SumTree[w] = c0 | (c1 << 8u) | (c2 << 16u) | (c3 << 24u);
+}
+
+// The sum tree is rebuilt in two dispatches, and neither reads a node another invocation of the
+// same dispatch wrote. Reducing level by level through the buffer in one dispatch does: those
+// reads were measured stale at levels 8 to 10, which inflated the root (#2555).
+// - ReduceFirstPass, one workgroup per CBT_WG_SIZE leaves: writes the leaves, then reduces its
+//   own block in workgroup memory and writes every level from CBT_SUMTREE_DEPTH - 1 up to
+//   CBT_SUMTREE_SHARED_DEPTH + 1. A block of CBT_WG_SIZE leaves holds whole subtrees of those
+//   levels while CBT_SUMTREE_DEPTH - CBT_SUMTREE_SHARED_DEPTH - 1 <= log2(CBT_WG_SIZE) (4 <= 6 at
+//   the 1M pool); CBTLayout.h asserts it on kSumTreeSharedDepth, which mirrors this constant.
+// - ReduceSecondPass, one workgroup: reads level CBT_SUMTREE_SHARED_DEPTH + 1, reduces levels
+//   0..CBT_SUMTREE_SHARED_DEPTH in workgroup memory and writes them out once.
+const uint CBT_SUMTREE_SHARED_DEPTH = 10u; // MUST equal kSumTreeSharedDepth (CBTLayout.h); 1024 nodes at the shared bottom
+const uint CBT_SUMTREE_SHARED_NODES = (2u << CBT_SUMTREE_SHARED_DEPTH) - 1u; // 2047 nodes, 8 KiB
+// Sized by the kernel: every CBT pipeline is this one module specialized by KERNEL, and a
+// module-scope array is reserved by all of them, so only the two reduce passes get theirs.
+shared uint sSumTree[KERNEL == K_REDUCE_SECOND ? CBT_SUMTREE_SHARED_NODES
+                                               : (KERNEL == K_REDUCE_FIRST ? CBT_WG_SIZE : 1u)];
+
+// #12 ReduceFirstPass — unpack packed leaves into the heap leaf level, then sum this workgroup's
+// block of leaves up to level CBT_SUMTREE_SHARED_DEPTH + 1. Each level's reads and writes are
+// consecutive across the workgroup. Barriers stay in uniform control flow.
+void Kernel_ReduceFirstPass()
+{
+    uint i = gl_GlobalInvocationID.x; // leaf node index
+    uint tid = gl_LocalInvocationID.x;
+    uint val = 0u;
+    if (i < CBT_LEAF_NODE_COUNT)
+    {
+        uint packed = gSumTree.SumTree[i >> 2u];
+        val = (packed >> ((i & 3u) * 8u)) & 0xFFu;
+        gSumTree.SumTree[CBT_SUMTREE_HEAP_BASE + CBT_SUMTREE_LEAF_OFFSET + i] = val;
+    }
+    sSumTree[tid] = val;
+    barrier();
+    uint blockFirstLeaf = gl_WorkGroupID.x * CBT_WG_SIZE;
+    for (uint level = CBT_SUMTREE_DEPTH - 1u; level > CBT_SUMTREE_SHARED_DEPTH; --level)
+    {
+        uint shift = CBT_SUMTREE_DEPTH - level;
+        uint count = CBT_WG_SIZE >> shift;
+        uint sum = 0u;
+        if (tid < count)
+            sum = sSumTree[2u * tid] + sSumTree[2u * tid + 1u];
+        barrier();
+        if (tid < count)
+        {
+            sSumTree[tid] = sum;
+            uint node = (blockFirstLeaf >> shift) + tid;
+            if (node < (1u << level))
+                gSumTree.SumTree[CBT_SUMTREE_HEAP_BASE + (1u << level) - 1u + node] = sum;
+        }
+        barrier();
+    }
+}
+
+// #13 ReduceSecondPass — single-workgroup up-sweep from level CBT_SUMTREE_SHARED_DEPTH + 1 (written
+// by ReduceFirstPass) to the root. Root (heap node 0) == live-bisector occupancy.
+
+void Kernel_ReduceSecondPass()
+{
+    // The work is workgroup 0's alone; the barriers stay in uniform control flow (the WGSL
+    // uniformity analysis rejects a barrier behind a workgroup-id branch). This kernel dispatches
+    // exactly one workgroup (CBTInstance DispatchDirect).
+    bool isRootWorkgroup = (gl_WorkGroupID.x == 0u);
+    uint tid = gl_LocalInvocationID.x;
+    const uint sharedBottomOffset = (1u << CBT_SUMTREE_SHARED_DEPTH) - 1u;
+    const uint sharedBottomCount = 1u << CBT_SUMTREE_SHARED_DEPTH;
+    if (isRootWorkgroup)
+    {
+        const uint childOffset = (2u << CBT_SUMTREE_SHARED_DEPTH) - 1u;
+        for (uint n = tid; n < sharedBottomCount; n += CBT_WG_SIZE)
+            sSumTree[sharedBottomOffset + n] = gSumTree.SumTree[CBT_SUMTREE_HEAP_BASE + childOffset + 2u * n] +
+                                               gSumTree.SumTree[CBT_SUMTREE_HEAP_BASE + childOffset + 2u * n + 1u];
+    }
+    barrier();
+    for (uint level = CBT_SUMTREE_SHARED_DEPTH; level > 0u; --level)
+    {
+        if (isRootWorkgroup)
+        {
+            uint parentCount = 1u << (level - 1u);
+            uint parentOffset = parentCount - 1u;
+            uint childOffset = (1u << level) - 1u;
+            for (uint p = tid; p < parentCount; p += CBT_WG_SIZE)
+                sSumTree[parentOffset + p] = sSumTree[childOffset + 2u * p] + sSumTree[childOffset + 2u * p + 1u];
+        }
+        barrier();
+    }
+    if (isRootWorkgroup)
+    {
+        for (uint i = tid; i < CBT_SUMTREE_SHARED_NODES; i += CBT_WG_SIZE)
+            gSumTree.SumTree[CBT_SUMTREE_HEAP_BASE + i] = sSumTree[i];
+    }
+}
+
+// #14 BisectorIndexation — per slot. Bins live bisectors into the 3 index
+// streams and drives the indirect draw: atomicAdd 3 to indexCount per bisector
+// (3 indices/triangle), storing the slot at the returned index. HeapID 0 == free
+// slot, skipped (port-notes §2 K14 / §10 Q6). Emits the 5-word
+// VkDrawIndexedIndirectCommand indexCount field (plan §8 C3).
+void Kernel_BisectorIndexation()
+{
+    uint slot = gl_GlobalInvocationID.x;
+    if (slot >= pc.totalElements)
+        return;
+    if (CBT_IsFreeSlot(CBT_LoadHeapID(slot)))
+        return;
+    uint flags = gBisector.Bisector[slot].flags;
+
+    uint sAll = uint(atomicAdd(gDraw.IndirectDraw[CBT_DRAW_STREAM_ALL * CBT_DRAW_STREAM_STRIDE + 0u], 3));
+    if (sAll / 3u < CBT_POOL_SIZE)
+        gIdxAll.IndicesAll[sAll / 3u] = slot;
+
+    if ((flags & CBT_FLAG_VISIBLE) != 0u)
+    {
+        uint sVis = uint(atomicAdd(gDraw.IndirectDraw[CBT_DRAW_STREAM_VISIBLE * CBT_DRAW_STREAM_STRIDE + 0u], 3));
+        if (sVis / 3u < CBT_POOL_SIZE)
+            gIdxVis.IndicesVisible[sVis / 3u] = slot;
+    }
+    if ((flags & CBT_FLAG_MODIFIED) != 0u)
+    {
+        uint sMod = uint(atomicAdd(gDraw.IndirectDraw[CBT_DRAW_STREAM_MODIFIED * CBT_DRAW_STREAM_STRIDE + 0u], 3));
+        if (sMod / 3u < CBT_POOL_SIZE)
+            gIdxMod.IndicesModified[sMod / 3u] = slot;
+    }
+}
+
+// #15 PrepareBisectorIndirect — single thread, dispatched once per update directly
+// after BisectorIndexation. Clamps the three draw records (see below) and promotes
+// the live-bisector draw count into dispatch slot 0, which the VertexEval dispatch
+// that follows reads — the loop-back step that keeps the pipeline GPU-driven
+// (port-notes §2 K15). Slot 2 holds the modified count for gated VertexEval, so
+// a settled tree launches no vertex-evaluation workgroups.
+void Kernel_PrepareBisectorIndirect()
+{
+    if (gl_GlobalInvocationID.x != 0u)
+        return;
+
+    // Belt-and-braces: sanitize + clamp all three VkDrawIndexedIndirectCommand
+    // records to bounded, well-formed values before the graphics pass consumes
+    // them. The largest valid indexCount is 3*POOL (3 indices per live bisector,
+    // live <= pool); the identity index buffer covers exactly that range. A racy
+    // or corrupt indexCount (e.g. a dropped compute->indirect barrier) would
+    // otherwise walk billions of vertex invocations and TDR the GPU — no
+    // vertex-stage guard can stop that, only bounding the draw at the source can.
+    // instanceCount is pinned to 1 and the offsets to 0 for the same reason.
+    const uint kMaxIndexCount = 3u * CBT_POOL_SIZE;
+    for (uint s = 0u; s < 3u; ++s)
+    {
+        uint base = s * CBT_DRAW_STREAM_STRIDE;
+        gDraw.IndirectDraw[base + 0u] = min(gDraw.IndirectDraw[base + 0u], kMaxIndexCount); // indexCount
+        gDraw.IndirectDraw[base + 1u] = 1u; // instanceCount
+        gDraw.IndirectDraw[base + 2u] = 0u; // firstIndex
+        gDraw.IndirectDraw[base + 3u] = 0u; // vertexOffset
+        gDraw.IndirectDraw[base + 4u] = 0u; // firstInstance
+    }
+
+    uint liveCount = gDraw.IndirectDraw[CBT_DRAW_STREAM_ALL * CBT_DRAW_STREAM_STRIDE + 0u] / 3u;
+    uint groups = (liveCount + CBT_WG_SIZE - 1u) / CBT_WG_SIZE;
+    gDispatch.IndirectDispatch[0] = groups;
+    gDispatch.IndirectDispatch[1] = 1u;
+    gDispatch.IndirectDispatch[2] = 1u;
+
+    uint modCount = gDraw.IndirectDraw[CBT_DRAW_STREAM_MODIFIED * CBT_DRAW_STREAM_STRIDE + 0u] / 3u;
+    uint mg = (modCount + CBT_WG_SIZE - 1u) / CBT_WG_SIZE;
+    gDispatch.IndirectDispatch[6] = mg;
+    gDispatch.IndirectDispatch[7] = 1u;
+    gDispatch.IndirectDispatch[8] = 1u;
+}
+
+// #22 ValidateCompactStream — per compact index, debug, indirect over the LIVE-set width. Runs at
+// the HEAD of the update, before any kernel has touched the tree, because that is the only point
+// where the state the frame's indirect-over-live kernels dereference still exists.
+//
+// The invariant: IndicesAll[0 .. CBT_LiveCount()) is exactly the live set — every live slot once,
+// nothing else. Load-bearing topology state, not bookkeeping: Classify and the neighbor carry-over
+// both map a compact index through it, and the carry-over is the only writer of NEXT at a slot
+// Bisect does not touch, so a live slot missing from the stream keeps a stale NEXT record and
+// surfaces several kernels later as broken link reciprocity.
+//
+// Two arms, each placed where its inputs exist:
+//   * here, per entry — the slot named must still be live. Indexation bins a repeat-free list of
+//     exactly one entry per live slot (each atomicAdd returns a distinct index), and the coverage
+//     arm in Kernel_Validate pins that the list it built has the right LENGTH, so "every entry is
+//     live" over a repeat-free list of the right length means the stream IS the live set.
+//   * Kernel_Validate at the frame tail — entry count == sum-tree live count.
+// What can break the invariant between the two is anything that changes occupancy without
+// rebuilding the stream; RegionFreeToBase is the one such path, and it runs on its own command
+// list, between updates, where the tail Validate cannot see it.
+//
+// Occupancy comes from the BITFIELD — the same authority the sum tree reduces — so both arms
+// measure one definite live set. The zombie arm separately pins the bitfield against HeapID.
+//
+// Not sufficient against an arbitrary write that swaps one live entry for a duplicate of another
+// (entries stay live, the count stays right). Catching that needs either per-slot visited memory
+// or a checksum over every entry, and no kernel can produce it — every writer of IndicesAll writes
+// a repeat-free list.
+// Content-aware split: writes level pc.passIndex of the height-range pyramid (CBT_HeightRange*).
+// The first stored level reads the bound height texture (every lattice sample a block's cells
+// touch); each coarser level folds 2 x 2 blocks of the level below. The CPU dispatches the levels
+// in order with a barrier between them. The narrow-heap arm has no pyramid.
+void Kernel_HeightRangeBuild()
+{
+#if !defined(CBT_DECODE_INT32)
+    uint frameSlot = pc.frameIndex % CBT_FRAME_RING;
+    ivec2 dim = textureSize(CBT_RING(gHeight, frameSlot), 0);
+    if (dim.x < 2 || dim.y < 2)
+        return;
+    uvec2 cells = uvec2(dim - 1);
+    uint first = CBT_HeightRangeFirstLevel(cells);
+    uint level = pc.passIndex;
+    if (first == 0u || level < first)
+        return;
+    uint top = max(CBT_HeightRangeTopLevel(cells), first);
+    if (level == first && gl_GlobalInvocationID.x == 0u)
+    {
+        gHeightRange.Range[0] = cells.x | (cells.y << 16u);
+        gHeightRange.Range[1] = first | (top << 8u);
+        for (uint k = first; k <= top; ++k)
+            gHeightRange.Range[2u + k] = CBT_HeightRangeOffset(cells, first, k);
+    }
+    uvec2 levelDim = uvec2(CBT_HeightRangeDim(cells.x, level), CBT_HeightRangeDim(cells.y, level));
+    uint i = gl_GlobalInvocationID.x;
+    if (i >= levelDim.x * levelDim.y)
+        return;
+    uvec2 block = uvec2(i % levelDim.x, i / levelDim.x);
+    vec2 acc = vec2(3.0e38, -3.0e38);
+    if (level == first)
+    {
+        uvec2 s0 = block << level;
+        uvec2 s1 = min((block + 1u) << level, cells);
+        for (uint y = s0.y; y <= s1.y; ++y)
+            for (uint x = s0.x; x <= s1.x; ++x)
+            {
+                float hgt = texelFetch(CBT_RING(gHeight, frameSlot), ivec2(x, y), 0).r;
+                acc = vec2(min(acc.x, hgt), max(acc.y, hgt));
+            }
+    }
+    else
+    {
+        uint below = level - 1u;
+        uint belowOffset = CBT_HeightRangeOffset(cells, first, below);
+        uvec2 belowDim = uvec2(CBT_HeightRangeDim(cells.x, below), CBT_HeightRangeDim(cells.y, below));
+        for (uint dy = 0u; dy < 2u; ++dy)
+            for (uint dx = 0u; dx < 2u; ++dx)
+            {
+                uvec2 c = min(block * 2u + uvec2(dx, dy), belowDim - 1u);
+                vec2 r = CBT_LoadHeightRange(belowOffset + c.y * belowDim.x + c.x);
+                acc = vec2(min(acc.x, r.x), max(acc.y, r.y));
+            }
+    }
+    CBT_StoreHeightRange(CBT_HeightRangeOffset(cells, first, level) + i, acc);
+#endif
+}
+
+void Kernel_ValidateCompactStream()
+{
+    uint i = gl_GlobalInvocationID.x;
+    if (i >= CBT_LiveCount())
+        return;
+    uint slot = gIdxAll.IndicesAll[i];
+    if (slot >= CBT_POOL_SIZE || CBT_GetBit(slot) == 0u)
+        atomicAdd(gValidation.Validation[CBT_VALIDATION_COMPACT_COUNTER], 1u);
+}
+
+// #16 Validate — per slot, debug. Four independent invariants: (1) neighbor
+// link reciprocity over the final NEXT buffer, (2) the FreeCount budget never
+// negative (thread 0), (3) the zombie invariant bit-set XOR HeapID!=0
+// (port-notes §2 K16 / §8.5, task §1 Validate), (4) the compact stream's
+// coverage — see Kernel_ValidateCompactStream for the whole invariant.
+//
+// Reciprocity is edge-aware: any live neighbor must reference slot back (the
+// reference ValidateBisector's any-component test — a shared edge maps to an
+// arbitrary component on the neighbor), AND the twin edge (.z) between two
+// SAME-DEPTH bisectors must be strictly mutual (nn.z == slot), because equal
+// depth twins share their longest/bisection edge so each is the other's twin.
+// Finer/coarser twin links are only any-component verifiable; INVALID links on
+// the planar boundary have no neighbor and are unverifiable by design.
+void Kernel_Validate()
+{
+    uint slot = gl_GlobalInvocationID.x;
+    if (slot >= pc.totalElements)
+        return;
+
+    if (slot == 0u && gQueue.WorkQueue[CBT_WQ_FREE_COUNT] < 0)
+        atomicAdd(gValidation.Validation[CBT_VALIDATION_BUDGET_COUNTER], 1u);
+
+    // Coverage arm of the compact-stream invariant. Indexation bins one entry per live slot at a
+    // distinct index, so the stream it just rebuilt reaches EVERY live slot iff it holds as many
+    // entries as the reduce counted live — the half a per-entry check cannot see. Both values are
+    // this update's tail state: the reduce ran before Indexation and nothing changes occupancy
+    // between them.
+    if (slot == 0u)
+    {
+        uint streamCount =
+            gDraw.IndirectDraw[CBT_DRAW_STREAM_ALL * CBT_DRAW_STREAM_STRIDE + 0u] / 3u;
+        if (streamCount != CBT_LiveCount())
+            atomicAdd(gValidation.Validation[CBT_VALIDATION_COMPACT_COUNTER], 1u);
+#if defined(CBT_DECODE_INT32)
+        gValidation.Validation[10] = CBT_LiveCount(); // denominator for the link error rate
+        gValidation.Validation[13] = 1u + pc.neighborsReadIsA; // parity at the frame TAIL
+        // This frame's work-queue demand, read at the tail (words 4..9). Comparing
+        // these against the same counters on a backend whose links stay reciprocal
+        // says whether a propagate stage is being handed less work than was queued.
+        gValidation.Validation[4] = uint(gQueue.WorkQueue[CBT_WQ_SPLIT_COUNTER]);
+        gValidation.Validation[5] = uint(gQueue.WorkQueue[CBT_WQ_ALLOCATE_COUNTER]);
+        gValidation.Validation[6] = uint(gQueue.WorkQueue[CBT_WQ_PROPAGATE_BISECT_COUNTER]);
+        gValidation.Validation[7] = uint(gQueue.WorkQueue[CBT_WQ_PROPAGATE_SIMPLIFY_COUNTER]);
+        gValidation.Validation[8] = uint(gQueue.WorkQueue[CBT_WQ_SIMPLIFY_COUNTER]);
+        gValidation.Validation[9] = uint(gQueue.WorkQueue[CBT_WQ_SIMPLIFY_CLASS_COUNTER]);
+#endif
+    }
+
+    CBT_HEAPID_T h = CBT_LoadHeapID(slot);
+    bool live = !CBT_IsFreeSlot(h);
+    bool bitSet = CBT_GetBit(slot) != 0u;
+    if (bitSet != live)
+        atomicAdd(gValidation.Validation[CBT_VALIDATION_ZOMBIE_COUNTER], 1u);
+    if (!live)
+        return;
+
+    uint myDepth = CBT_HeapIDDepth(h);
+    // Depth-band corruption: a live bisector below the root band is malformed (it
+    // is exactly what would have TDR'd VertexEval before the decode guard). Count
+    // it as a zombie so the soak test surfaces the corruption deterministically.
+    if (myDepth < pc.baseDepth)
+        atomicAdd(gValidation.Validation[CBT_VALIDATION_ZOMBIE_COUNTER], 1u);
+#if defined(CBT_DECODE_INT32)
+    // Instrument self-check (word 11): the same reciprocity test against CURRENT
+    // instead of NEXT. Validate runs at the update tail, where NEXT is the settled
+    // state and CURRENT is last frame's — so NEXT must be clean and CURRENT may not
+    // be. If a backend ever reports the inverse, the ping-pong parity it fed this
+    // dispatch is wrong and the error count above is measuring the wrong buffer.
+    {
+        uvec4 c = CBT_ReadCur(slot);
+        for (uint i = 0u; i < 3u; ++i)
+        {
+            uint nb = c[i];
+            if (nb == CBT_INVALID_POINTER || nb >= CBT_POOL_SIZE)
+                continue;
+            if (CBT_IsFreeSlot(CBT_LoadHeapID(nb)))
+                continue;
+            uvec4 cn = CBT_ReadCur(nb);
+            if (cn.x != slot && cn.y != slot && cn.z != slot)
+            {
+                atomicAdd(gValidation.Validation[11], 1u);
+                break;
+            }
+        }
+    }
+#endif
+
+    uvec4 n = CBT_ReadNext(slot);
+    for (uint i = 0u; i < 3u; ++i)
+    {
+        uint nb = n[i];
+        if (nb == CBT_INVALID_POINTER || nb >= CBT_POOL_SIZE)
+            continue; // planar-boundary link — no neighbor to verify
+        CBT_HEAPID_T nbh = CBT_LoadHeapID(nb);
+        if (CBT_IsFreeSlot(nbh))
+            continue;
+        uvec4 nn = CBT_ReadNext(nb);
+        bool back = (nn.x == slot || nn.y == slot || nn.z == slot);
+        bool twinOk = true;
+        if (i == 2u && CBT_HeapIDDepth(nbh) == myDepth)
+            twinOk = (nn.z == slot);
+        if (!back || !twinOk)
+        {
+            atomicAdd(gValidation.Validation[CBT_VALIDATION_ERROR_COUNTER], 1u);
+#if defined(CBT_DECODE_INT32)
+            // Word 14 records the first failure's (myDepth << 16 | neighbourDepth),
+            // word 15 counts failures for sampling. Cleared with the counters each update.
+            uint sampleIdx = atomicAdd(gValidation.Validation[15], 1u);
+            if (sampleIdx == 0u)
+                gValidation.Validation[14u] = (myDepth << 16u) | uint(CBT_HeapIDDepth(nbh));
+#endif
+            break;
+        }
+    }
+}
+
+// #17 VertexEval — per bisector. LEB-decodes the HeapID into 3 corner barycentric
+// weights, then the domain adapter (cbt_domain.glsl) maps them to world positions.
+// Writes CurrentVertexBuffer (world position + uv; Classify + the vertex modifier read
+// it). pc.domainMode picks planar (unit-square + heightmap) vs spherical (cube-sphere).
+//
+// LEB convention (Dupuy / AnisB/large_cbt leb__SplittingMatrix): a bisector triangle is
+// (v0, v1, v2) whose LONGEST edge is (v0, v2); v1 is the apex opposite it. A split
+// bisects (v0, v2) at its midpoint m, producing two children per the reference matrix
+// { {0,b,c},{0.5,0,0.5},{b,c,0} }: bit 0 -> (v2, m, v1); bit 1 -> (v1, m, v0). This
+// exact bit->half mapping MUST match the neighbor topology (Bisect, ported from the same
+// reference) — a different convention opens T-junction cracks (C4 fix).
+//
+// C7 refactor: the decode is now DOMAIN-INDEPENDENT — it walks the path bits in
+// integer BARYCENTRIC space (each corner's weights w.r.t. its ROOT triangle) rather than
+// directly in unit-square coords. The barycentric walk is bit-for-bit equivalent to the
+// old 2D walk (the map uv = bary . rootCorners is linear, so it commutes with the
+// bisection swaps): planar output is unchanged. cbt_domain.glsl maps barycentric ->
+// world per domain (planar: unit-square roots; spherical: cube-face pie-slice roots).
+#if defined(CBT_DECODE_INT32)
+// Narrow-heap arm: collapse a slot's triangle to a point so it rasterises to nothing.
+//
+// The corruption guards in VertexEval below cannot evaluate a slot, and returning early leaves
+// gVertex holding whatever the PREVIOUS occupant wrote — a stale triangle drawn somewhere it does
+// not belong, plus a hole where this one should have been. Zero area is invisible whatever the
+// draw stream does with the slot, and the counters still record the corruption. The default arm
+// leaves the record untouched (CBTDeepDecodeGpu pins that).
+void CBT_WriteDegenerateVertex(uint slot)
+{
+    CBTVertexData vd;
+    vd.corner0 = vec4(0.0);
+    vd.corner1 = vec4(0.0);
+    vd.corner2 = vec4(0.0);
+    vd.meta = vec4(0.0);
+    vd.sector0 = uvec2(0u);
+    vd.sector1 = uvec2(0u);
+    vd.sector2 = uvec2(0u);
+    vd.deepTag = uvec2(0u); // world corners, not (sector, local)
+    gVertex.Vertex[slot] = vd;
+}
+#endif
+
+void Kernel_VertexEval()
+{
+    // Gated updates walk only the compact modified stream; forced refreshes walk all live slots.
+    // Indexation includes new children, promoted parents, and height-dirty bisectors in the modified
+    // stream, so the cost follows changed geometry rather than launching every live slot to branch.
+    uint i = gl_GlobalInvocationID.x;
+    uint count = pc.gateVertexEval != 0u
+        ? gDraw.IndirectDraw[CBT_DRAW_STREAM_MODIFIED * CBT_DRAW_STREAM_STRIDE] / 3u
+        : CBT_LiveCount();
+    if (i >= count)
+        return;
+#if defined(GE_CBT_HEAP32)
+    // The narrow-heap arm runs on WebGPU, whose per-stage storage-buffer limit
+    // (10) this kernel already fills; the modified stream would be the 11th.
+    // The host never gates VertexEval on that arm (CBTInstance), so the walk
+    // is always the full live stream.
+    uint slot = gIdxAll.IndicesAll[i];
+#else
+    uint slot = pc.gateVertexEval != 0u ? gIdxMod.IndicesModified[i] : gIdxAll.IndicesAll[i];
+#endif
+    CBT_HEAPID_T h = CBT_LoadHeapID(slot);
+    if (CBT_IsFreeSlot(h))
+        return;
+
+    // Quiescence gate (plan §planet-shading perf). When enabled, only (re)evaluate a bisector
+    // whose corners are stale THIS frame — created (Bisect), promoted (Simplify) or edit-dirty
+    // (Classify), all flagged CBT_FLAG_MODIFIED. Unchanged bisectors keep their prior world
+    // corners (camera-independent), so Classify's screen-space metric and the draw stay correct
+    // while the expensive multi-octave relief eval is skipped — a quiescent frame re-evaluates
+    // ~0 vertices, not the whole live pool (the CBT.Update regression fix). gateVertexEval == 0
+    // is the full-pool force pass (init / param change), which also skips the counter.
+    if (pc.gateVertexEval != 0u)
+    {
+        if ((gBisector.Bisector[slot].flags & CBT_FLAG_MODIFIED) == 0u)
+            return;
+        atomicAdd(gQueue.WorkQueue[CBT_WQ_VERTEX_EVAL_COUNTER], 1);
+    }
+
+    uint depth = CBT_HeapIDDepth(h);
+    // TDR guard: a live bisector must sit at or below the root band (depth >=
+    // baseDepth). A stray/corrupt HeapID with depth < baseDepth underflows
+    // numSubdiv (depth - baseDepth) into a ~4-billion-iteration decode loop that
+    // hangs the GPU (device lost / TDR). Skip the corrupt slot (the narrow arm writes it
+    // as a degenerate triangle) and let Validate flag it, instead of killing the device.
+    // depth is bounded above by findMSB (<= 63), so numSubdiv <= 62 once this guard holds:
+    // the loop is then always bounded.
+    if (depth < pc.baseDepth)
+    {
+#if defined(CBT_DECODE_INT32)
+        CBT_WriteDegenerateVertex(slot);
+#endif
+        return;
+    }
+    uint numSubdiv = depth - pc.baseDepth;
+    // Decode-precision cap (slice 1). The barycentric walk is a wide integer and the domain
+    // forms the numerator N = bary·corners EXACTLY before a single float cast, so the
+    // decode is crack-free by construction well past the old fp32-exact rung (numSubdiv 23,
+    // where bary < 2^24 kept the float sum exact WITHOUT widening).
+    // CBT_MAX_NUM_SUBDIV_EFFECTIVE stops ~2x above the fp32 world-storage degeneracy ULP on
+    // the u64 arm (40, mirror of kMaxDecodeSubdiv) and at the u32 heap's own range on the
+    // narrow arm (25, mirror of kHeap32DecodeSubdiv); a deeper slot is treated like the
+    // corruption case (skipped, Validate flags it). depth is findMSB-bounded, so numSubdiv
+    // is bounded and the loop terminates.
+    // Deep (sector, local) mode raises the guard to CBT_DEEP_NUM_SUBDIV (mirror of
+    // DeepDecode::SubdivCap); it is int64-only by construction (df64 sector arithmetic), so
+    // the narrow arm compiles it out and always takes the effective cap. S2b lifted
+    // classification to match: the provisioning cap (TerrainProvisioning SubdivCapFor ->
+    // fp.terrainOrigin.z) is always <= this guard — the flag->cap coupling is a single
+    // CPU-side read (CBTUpdateSystem), so a production bisector never exceeds the depth
+    // its storage representation can carry.
+#if defined(CBT_DECODE_INT32)
+    const uint decodeCap = CBT_MAX_NUM_SUBDIV_EFFECTIVE;
+#else
+    const uint decodeCap = (pc.deepDecode != 0u) ? CBT_DEEP_NUM_SUBDIV : CBT_MAX_NUM_SUBDIV_EFFECTIVE;
+#endif
+    if (numSubdiv > decodeCap)
+    {
+#if defined(CBT_DECODE_INT32)
+        CBT_WriteDegenerateVertex(slot);
+#endif
+        return;
+    }
+    // Root ancestor: shift off the path bits (invariant under subdivision).
+    uint rootIndex = uint(h >> numSubdiv) - (1u << pc.baseDepth);
+
+    // Crack-free INTEGER barycentric decode (plan §8 C4/C7; int64 widening in slice 1).
+    // Each corner's weights (bx,by,bz) sum to scale = 2^numSubdiv; the split-edge midpoint
+    // is an exact integer average (b0+b2 is even at every step — the same argument that kept
+    // the pre-C7 2D walk exact), so two bisectors that reach the same logical vertex via
+    // different bit-paths produce BIT-IDENTICAL weights -> bit-identical world vertex, in
+    // EVERY domain (the domain map is a deterministic function of the exact input). The walk
+    // is as wide as the arm allows: the u64 arm carries scale = 2^40 (< 2^63) with room to
+    // spare, and the u32 arm caps at 2^25 — well inside i32, where `1<<numSubdiv` would only
+    // wrap at 31. At numSubdiv <= 23 every value is < 2^24, so both arms are bit-identical
+    // to each other and to the pre-slice i32 walk (dark-ship).
+    CBT_BINT scale = CBT_BINT(1) << numSubdiv;
+    CBT_BVEC3 b0 = CBT_BVEC3(scale, 0, 0); // barycentric of corner 0 w.r.t. (rootV0, rootV1, rootV2)
+    CBT_BVEC3 b1 = CBT_BVEC3(0, scale, 0);
+    CBT_BVEC3 b2 = CBT_BVEC3(0, 0, scale);
+    for (uint s = numSubdiv; s > 0u; --s)
+    {
+        uint bit = uint(h >> (s - 1u)) & 1u;
+        // Per component on scalars, never as a 64-bit vector (the trap in cbt_domain.glsl).
+        // Exact: b0+b2 is always even here.
+        CBT_BVEC3 mid = CBT_BVEC3((b0.x + b2.x) / 2, (b0.y + b2.y) / 2, (b0.z + b2.z) / 2);
+        if (bit == 0u)
+        {
+            // child = (v2, mid, v1)
+            CBT_BVEC3 nb0 = b2;
+            CBT_BVEC3 nb2 = b1;
+            b0 = nb0;
+            b1 = mid;
+            b2 = nb2;
+        }
+        else
+        {
+            // child = (v1, mid, v0)
+            CBT_BVEC3 nb0 = b1;
+            CBT_BVEC3 nb2 = b0;
+            b0 = nb0;
+            b1 = mid;
+            b2 = nb2;
+        }
+    }
+
+    // The reference splitting matrix PRESERVES orientation: each child's signed area is
+    // exactly half the parent's, so every descendant shares the roots' winding — uniform
+    // by construction, no per-triangle correction (guarded by the winding oracle).
+
+    float invScale = 1.0 / float(scale);
+    CBTFrameParams fp = CBT_Frame();
+    CBTVertexData vd;
+    // S2a (sector, local) tail — zero (legacy world-corner mode) unless the deep
+    // branch below overwrites it. Zero matches the buffer's init fill, so a flag-off
+    // frame rewrites the tail with the bytes it already holds (dark-ship inert).
+    vd.sector0 = uvec2(0u);
+    vd.sector1 = uvec2(0u);
+    vd.sector2 = uvec2(0u);
+    vd.deepTag = uvec2(0u);
+
+    if (pc.domainMode == CBT_DOMAIN_SPHERICAL)
+    {
+        // Degrade-don't-crash: a corrupt HeapID in the unused heap band (56..63) would
+        // decode to rootIndex 24..31 and index CBT_CUBE_FACES (int[24]) out of bounds
+        // (GLSL UB). Skip it (the narrow arm writes a degenerate triangle); Validate flags it.
+        if (rootIndex >= CBT_SPHERE_ROOT_COUNT)
+        {
+#if defined(CBT_DECODE_INT32)
+            CBT_WriteDegenerateVertex(slot);
+#endif
+            return;
+        }
+        // Cube-sphere: barycentric -> cube-face position -> normalize -> displaced sphere
+        // point (cbt_domain.glsl). Relief = procedural base + the editable per-face sculpt
+        // layer (plan §planet-editing): all three corners lie on one cube face (= root/4),
+        // so the face-local UV is exact and the additive sculpt is crack-free (a shared
+        // cube-edge vertex has the same face-local UV from both faces -> same sampled
+        // offset when the cross-face edit wrote both bands). The sculpt sample is gated on
+        // pc.sphereSculptEnabled so the C7 default (no edits) is byte-identical + free.
+        uint sphereFace = CBT_FaceOfRoot(rootIndex);
+        // Exact int64 numerators, shared by BOTH stores: the fp32 cube cast below (relief /
+        // face-UV inputs, bit-identical to the pre-S2a decode) and the deep df64 decode.
+        CBT_BVEC3 num0 = CBT_SphereBaryToCubeNum(rootIndex, b0);
+        CBT_BVEC3 num1 = CBT_SphereBaryToCubeNum(rootIndex, b1);
+        CBT_BVEC3 num2 = CBT_SphereBaryToCubeNum(rootIndex, b2);
+        // Per-component conversions of the exact numerators (never a 64-bit vector convert —
+        // see CBT_PlanarBaryToUV).
+        vec3 cube0 = vec3(float(num0.x), float(num0.y), float(num0.z)) * invScale;
+        vec3 cube1 = vec3(float(num1.x), float(num1.y), float(num1.z)) * invScale;
+        vec3 cube2 = vec3(float(num2.x), float(num2.y), float(num2.z)) * invScale;
+        vec2 fuv0 = CBT_FaceUVFromCube(sphereFace, cube0);
+        vec2 fuv1 = CBT_FaceUVFromCube(sphereFace, cube1);
+        vec2 fuv2 = CBT_FaceUVFromCube(sphereFace, cube2);
+        vec3 dir0 = normalize(cube0);
+        vec3 dir1 = normalize(cube1);
+        vec3 dir2 = normalize(cube2);
+        float radius = fp.planetParams.x;
+        // Octave count rides planetParams.w (0 -> single octave, matching the pre-multi-octave
+        // output so the CBTSphereDomainTests on-shell bound stays valid). Vertex displacement
+        // uses the SAME multi-octave relief the fragment shades with, so geometry + normals agree.
+        uint reliefOctaves = uint(max(fp.planetParams.w, 1.0));
+        float relief0 = CBT_PlanetRelief(dir0, fp.planetParams.y, fp.planetParams.z, reliefOctaves);
+        float relief1 = CBT_PlanetRelief(dir1, fp.planetParams.y, fp.planetParams.z, reliefOctaves);
+        float relief2 = CBT_PlanetRelief(dir2, fp.planetParams.y, fp.planetParams.z, reliefOctaves);
+        if (pc.sphereSculptEnabled != 0u)
+        {
+            CBTSculptGeom sculptGeom = CBT_SculptGeomFromFrame(fp);
+            float sc0 = CBT_SampleSphereSculpt(sphereFace, fuv0, sculptGeom);
+            float sc1 = CBT_SampleSphereSculpt(sphereFace, fuv1, sculptGeom);
+            float sc2 = CBT_SampleSphereSculpt(sphereFace, fuv2, sculptGeom);
+            // Analytic sphere modifiers (sculpt shape-accuracy S2): the closed-form set composes on
+            // top of the store sample, evaluated at the corner's BASE relief (relief* still holds
+            // the pure closed form here) so a flatten pad lands exactly on its target radius — the
+            // sample-time twin of the store bake, exact at any planet radius. Cell-masked (S3):
+            // each corner direction lies in its own face-UV's cell, so the mask is an exact
+            // contributor superset — a vertex outside every placement pays one mask read per
+            // corner instead of the all-N eval. An empty set (the GE_TERRAIN_ANALYTIC_MODIFIERS-
+            // off dark-ship) adds no float op.
+            if (CBT_SphereAnalyticTotal(fp) != 0u)
+            {
+                uint am0 = CBT_AnalyticCellMask(sphereFace, fuv0);
+                uint am1 = CBT_AnalyticCellMask(sphereFace, fuv1);
+                uint am2 = CBT_AnalyticCellMask(sphereFace, fuv2);
+                if (am0 != 0u)
+                    sc0 += CBT_SphereAnalyticOffsetMasked(fp, am0, dir0, relief0);
+                if (am1 != 0u)
+                    sc1 += CBT_SphereAnalyticOffsetMasked(fp, am1, dir1, relief1);
+                if (am2 != 0u)
+                    sc2 += CBT_SphereAnalyticOffsetMasked(fp, am2, dir2, relief2);
+            }
+            relief0 += sc0;
+            relief1 += sc1;
+            relief2 += sc2;
+        }
+        // corner.w = face-local uv.x, meta.xyz = face-local uv.y (per corner): Classify's
+        // spherical (face,rect) reclassification reads these. meta.w = -1 stays the SPHERE
+        // sentinel the surface branches on (outward derivative normal; it ignores uv0).
+        vd.meta = vec4(fuv0.y, fuv1.y, fuv2.y, -1.0);
+        // The deep store's df64 sector arithmetic is int64 through and through, so the
+        // narrow arm has no decode to call: cbt_deep_decode.glsl declares nothing there and
+        // the host never sets pc.deepDecode (SubdivCapFor's narrow arm ignores it). The
+        // branch vanishes with it and the fp32 world store below becomes the only path.
+#if !defined(CBT_DECODE_INT32)
+        if (pc.deepDecode != 0u)
+        {
+            // (sector, local) df64 store (arc S2a): decode each corner from its EXACT int64
+            // numerator through cbt_deep_decode.glsl — bit-twin of CBTDeepDecode.h — and
+            // persist (packed sector anchor, fp32 local offset) instead of the fp32 world
+            // position whose ~0.5 m Earth-magnitude store quantization is the measured S1
+            // wall. relief* is a pure fp32 function of the shared numerator (dir is), so
+            // two bisectors sharing a corner feed DecodeCorner bit-identical inputs and
+            // store bit-identical (sector, local) — crack-free by determinism.
+            CBTDeepVertex d0 = CBT_DeepDecodeCorner(num0, numSubdiv, radius, relief0);
+            CBTDeepVertex d1 = CBT_DeepDecodeCorner(num1, numSubdiv, radius, relief1);
+            CBTDeepVertex d2 = CBT_DeepDecodeCorner(num2, numSubdiv, radius, relief2);
+            vd.corner0 = vec4(d0.Local, fuv0.x);
+            vd.corner1 = vec4(d1.Local, fuv1.x);
+            vd.corner2 = vec4(d2.Local, fuv2.x);
+            vd.sector0 = CBT_PackCornerSector(d0.Sector);
+            vd.sector1 = CBT_PackCornerSector(d1.Sector);
+            vd.sector2 = CBT_PackCornerSector(d2.Sector);
+            vd.deepTag = uvec2(1u, 0u);
+        }
+        else
+#endif
+        {
+            vd.corner0 = vec4(dir0 * (radius + relief0), fuv0.x);
+            vd.corner1 = vec4(dir1 * (radius + relief1), fuv1.x);
+            vd.corner2 = vec4(dir2 * (radius + relief2), fuv2.x);
+        }
+    }
+    else
+    {
+        // Planar: barycentric -> unit-square UV -> world XZ + heightmap displacement.
+        // The unit-square corner IS the terrain UV. Height flows into corner.y so
+        // Classify's screen-space metric operates on true 3D geometry; the normalmap
+        // bindless index rides in meta.w for smooth per-pixel A/B-parity shading (C4).
+        vec2 uv0 = CBT_PlanarBaryToUV(rootIndex, b0, invScale);
+        vec2 uv1 = CBT_PlanarBaryToUV(rootIndex, b1, invScale);
+        vec2 uv2 = CBT_PlanarBaryToUV(rootIndex, b2, invScale);
+        float hy0 = CBT_SampleHeight(uv0, fp);
+        float hy1 = CBT_SampleHeight(uv1, fp);
+        float hy2 = CBT_SampleHeight(uv2, fp);
+        vec2 w0 = CBT_TerrainToWorldXZ(uv0, fp);
+        vec2 w1 = CBT_TerrainToWorldXZ(uv1, fp);
+        vec2 w2 = CBT_TerrainToWorldXZ(uv2, fp);
+        vd.corner0 = vec4(w0.x, hy0, w0.y, uv0.x);
+        vd.corner1 = vec4(w1.x, hy1, w1.y, uv1.x);
+        vd.corner2 = vec4(w2.x, hy2, w2.y, uv2.x);
+        vd.meta = vec4(uv0.y, uv1.y, uv2.y, fp.terrainOrigin.w); // uv.y x3 + normalmap index
+    }
+    gVertex.Vertex[slot] = vd;
+}
+
+// ===========================================================================
+// Far-field region reseed (round-9 far-field-drain, design candidate 3). Three kernels that bulk-
+// free a CONTIGUOUS set of wholly-horizon-invisible root subtrees back to base in one event.
+// UNWIRED: no production caller, and the premise it was built for does not hold. The far field was
+// measured to have nothing to drain, and the "merge deadlock the staircased far field cannot
+// cascade out of" it was meant to sidestep is not a deadlock at all — a converged tree's unserved
+// merge is demand Classify raises for one facet at a time, which PrepareSimplify can only serve
+// when the whole diamond agrees (far-field-drain-design.html §1/§7).
+// The set (pc.regionFreeMask) is the INTERIOR of the invisible region (FarFieldReseedDetector on
+// the CPU), so every freed root borders only other invisible roots; the retained one-root ring
+// keeps the base/refined seam out of the visible boundary. Recorded as a standalone hand-barriered
+// sequence (CBTInstance::RegionFreeToBase): CLEAR -> reduce -> SEED -> LINK -> reduce.
+//
+// Conformity (Validate green — design's boundary gate): a freed root's link toward a NON-freed
+// (retained/visible) neighbor is set INVALID so (a) Validate treats it as an unverifiable domain
+// boundary and (b) the Split compatibility chain never force-splits the base root back up (the
+// free STICKS). The retained neighbor's stale link toward the freed subtree now points at a slot
+// whose HeapID is 0, which Validate skips as a free slot. Links between two freed roots are wired
+// to each other's freshly-decoded slots (reciprocal same-depth base twins).
+
+// Which root subtree a slot's HeapID descends from (0..rootCount-1), or 0xFFFFFFFF if it is below
+// the root band (corrupt). Mirror of CBT_RootOf minus the base offset.
+uint CBT_RegionRootIndex(CBT_HEAPID_T h)
+{
+    uint depth = CBT_HeapIDDepth(h);
+    if (depth < pc.baseDepth)
+        return CBT_INVALID_POINTER;
+    return uint(h >> (depth - pc.baseDepth)) - (1u << pc.baseDepth);
+}
+
+bool CBT_RegionFreeSelected(uint rootIndex)
+{
+    return rootIndex < 32u && ((pc.regionFreeMask >> rootIndex) & 1u) != 0u;
+}
+
+// #18 RegionFreeClear — per slot (whole pool). Frees every live bisector whose root is in the
+// free mask back to nothing: HeapID 0, occupancy bit cleared, flags/state reset. Thread 0 also
+// zeroes the alloc cursor so the SEED kernel's free-slot decode starts fresh. The neighbor buffers
+// are left as-is (stale links into these now-free slots are skipped by every consumer's free-slot
+// guard); LINK rewrites the reseeded roots' links, and Validate skips free slots.
+void Kernel_RegionFreeClear()
+{
+    uint slot = gl_GlobalInvocationID.x;
+    if (slot == 0u)
+        gQueue.WorkQueue[CBT_WQ_ALLOC_CURSOR] = 0;
+    if (slot >= pc.totalElements)
+        return;
+    CBT_HEAPID_T h = CBT_LoadHeapID(slot);
+    if (CBT_IsFreeSlot(h))
+        return;
+    if (!CBT_RegionFreeSelected(CBT_RegionRootIndex(h)))
+        return;
+
+    // Boundary sanitation (the conformity gate): before freeing this bisector, sever any RETAINED
+    // neighbor's back-link to it. Otherwise a retained bisector across the freed region's edge keeps
+    // pointing at this slot, and when SEED later reseeds a base root into it (the free-slot decoder
+    // hands out low slots first, including just-freed ones) that neighbor would reference an unrelated
+    // base root that never links back — a non-reciprocity Validate flags. Setting the retained side to
+    // INVALID makes it a domain boundary (Validate skips it, the compatibility chain never crosses it),
+    // matching the INVALID links LINK writes on the freed side: both sides of the seam agree. The
+    // per-component writes never clobber a shared neighbor (distinct freed siblings occupy distinct
+    // components of it), the reference's propagate-scatter discipline. The seam is in invisible space.
+    uvec4 fa = CBT_LoadNeighbors(gNbrA.NeighborsA[slot]);
+    uvec4 fb = CBT_LoadNeighbors(gNbrB.NeighborsB[slot]);
+    uint nbrs[6] = uint[6](fa.x, fa.y, fa.z, fb.x, fb.y, fb.z);
+    for (uint j = 0u; j < 6u; ++j)
+    {
+        uint ni = nbrs[j];
+        if (ni == CBT_INVALID_POINTER || ni >= CBT_POOL_SIZE)
+            continue;
+        CBT_HEAPID_T nh = CBT_LoadHeapID(ni);
+        if (CBT_IsFreeSlot(nh) || CBT_RegionFreeSelected(CBT_RegionRootIndex(nh)))
+            continue; // free or also-freed neighbor — nothing to sanitize
+        for (uint d = 0u; d < 3u; ++d)
+        {
+            if (CBT_NEIGHBOR_COMPONENT(gNbrA.NeighborsA[ni], d) == slot)
+                CBT_NEIGHBOR_COMPONENT(gNbrA.NeighborsA[ni], d) = CBT_INVALID_POINTER;
+            if (CBT_NEIGHBOR_COMPONENT(gNbrB.NeighborsB[ni], d) == slot)
+                CBT_NEIGHBOR_COMPONENT(gNbrB.NeighborsB[ni], d) = CBT_INVALID_POINTER;
+        }
+    }
+
+    CBT_StoreHeapID(slot, CBT_HEAPID_T(0));
+    CBT_ClearBitAtomic(slot);
+    gBisector.Bisector[slot].subdivisionPattern = CBT_NO_SPLIT;
+    gBisector.Bisector[slot].bisectorState = CBT_STATE_UNCHANGED;
+    gBisector.Bisector[slot].flags = 0u;
+    gBisector.Bisector[slot].problematicNeighbor = CBT_INVALID_POINTER;
+}
+
+// #19 RegionFreeSeed — per root (rootCount threads). Each selected root decodes ONE free slot
+// (the reference bit-complement decoder, off the reduce that ran after CLEAR, so distinct cursor
+// offsets map to distinct free slots — the Allocate pattern) and seeds the base bisector there:
+// HeapID = 2^baseDepth + r, occupancy bit set, BisectorData initialized. The slot is recorded in
+// the region scratch so LINK can wire cross-root base adjacency. Sphere domain only (the planar
+// 2-triangle base never saturates a far field).
+void Kernel_RegionFreeSeed()
+{
+    uint r = gl_GlobalInvocationID.x;
+    if (r >= pc.totalElements) // dispatched with totalElements == rootCount
+        return;
+    // Default the scratch to INVALID so LINK treats an unseeded (or unselected) root as a boundary.
+    gQueue.WorkQueue[CBT_WQ_REGION_ROOT_SLOT + r] = int(CBT_INVALID_POINTER);
+    if (!CBT_RegionFreeSelected(r))
+        return;
+    uint k = uint(atomicAdd(gQueue.WorkQueue[CBT_WQ_ALLOC_CURSOR], 1));
+    uint slot = CBT_DecodeFreeSlot(k);
+    if (slot >= CBT_POOL_SIZE)
+        return; // pool exhausted (never at a far-field stall — plenty of freed slots)
+    // Write HeapID + payload now, but DEFER the occupancy bit to LINK: the free-slot decoder scans
+    // the LIVE bitfield leaf word, so setting a bit here would race a sibling thread's decode into
+    // the same word (the reference defers Bisect's bit-set past Allocate's decode for the same
+    // reason). All decodes complete against the stable post-CLEAR bitfield; LINK then sets the bits.
+    CBT_StoreHeapID(slot, (CBT_HEAPID_T(1) << pc.baseDepth) + CBT_HEAPID_T(r));
+    gBisector.Bisector[slot].subdivisionPattern = CBT_NO_SPLIT;
+    gBisector.Bisector[slot].bisectorState = CBT_STATE_UNCHANGED;
+    gBisector.Bisector[slot].flags = CBT_FLAG_VISIBLE;
+    gBisector.Bisector[slot].problematicNeighbor = CBT_INVALID_POINTER;
+    gBisector.Bisector[slot].propagationID = CBT_INVALID_POINTER;
+    gBisector.Bisector[slot].indices0 = CBT_INVALID_POINTER;
+    gBisector.Bisector[slot].indices1 = CBT_INVALID_POINTER;
+    gBisector.Bisector[slot].indices2 = CBT_INVALID_POINTER;
+    gQueue.WorkQueue[CBT_WQ_REGION_ROOT_SLOT + r] = int(slot);
+}
+
+// #20 RegionFreeLink — per root (rootCount threads). Wires each reseeded base root's three neighbor
+// links into the CURRENT neighbor buffer (the one next frame's Classify reads, then copies to NEXT
+// before Bisect). A neighbor root that was ALSO reseeded gets its decoded slot (reciprocal base
+// twin); a neighbor root NOT in the free set gets INVALID — the boundary that keeps the free
+// conforming (Validate skips it) and stops the compatibility chain re-splitting the base root.
+void Kernel_RegionFreeLink()
+{
+    uint r = gl_GlobalInvocationID.x;
+    if (r >= pc.totalElements) // dispatched with totalElements == rootCount
+        return;
+    if (!CBT_RegionFreeSelected(r))
+        return;
+    int mySlotI = gQueue.WorkQueue[CBT_WQ_REGION_ROOT_SLOT + r];
+    if (mySlotI < 0 || uint(mySlotI) >= CBT_POOL_SIZE)
+        return;
+    uint mySlot = uint(mySlotI);
+    // The occupancy bit deferred from SEED (so every decode ran against the stable post-CLEAR
+    // bitfield); the following reduce folds it into the live count.
+    CBT_SetBitAtomic(mySlot);
+
+    // Resolve a base neighbor root to a live slot: its decoded slot if it was reseeded too, else
+    // INVALID (a retained/visible neighbor across the seam). Planar (rootCount < 24) has no twin
+    // table entry; the region reseed is sphere-only, so guard the table index.
+    // (declared as a lambda-free helper inline for portability.)
+    uint n0 = CBT_RootNeighbor0(r);
+    uint n1 = CBT_RootNeighbor1(r);
+    uint tw = (r < CBT_SPHERE_ROOT_COUNT_LOCAL) ? CBT_ROOT_TWIN[r] : CBT_INVALID_POINTER;
+
+    uint linkN0 = CBT_INVALID_POINTER;
+    uint linkN1 = CBT_INVALID_POINTER;
+    uint linkTw = CBT_INVALID_POINTER;
+    if (CBT_RegionFreeSelected(n0))
+    {
+        int s = gQueue.WorkQueue[CBT_WQ_REGION_ROOT_SLOT + n0];
+        if (s >= 0 && uint(s) < CBT_POOL_SIZE)
+            linkN0 = uint(s);
+    }
+    if (CBT_RegionFreeSelected(n1))
+    {
+        int s = gQueue.WorkQueue[CBT_WQ_REGION_ROOT_SLOT + n1];
+        if (s >= 0 && uint(s) < CBT_POOL_SIZE)
+            linkN1 = uint(s);
+    }
+    if (tw != CBT_INVALID_POINTER && CBT_RegionFreeSelected(tw))
+    {
+        int s = gQueue.WorkQueue[CBT_WQ_REGION_ROOT_SLOT + tw];
+        if (s >= 0 && uint(s) < CBT_POOL_SIZE)
+            linkTw = uint(s);
+    }
+    // Write BOTH ping-pong buffers so the reseeded links are the CURRENT links whichever parity the
+    // next RecordUpdate runs with, without this kernel tracking the ping-pong (Split reads CURRENT;
+    // the neighbor copy then carries them to NEXT for Validate — RegionFreeToBase rebuilds
+    // IndicesAll at its tail precisely so that carry-over sees these slots). Cheap at <=24 roots.
+    uvec4 links = uvec4(linkN0, linkN1, linkTw, 0u);
+    gNbrA.NeighborsA[mySlot] = CBT_StoreNeighbors(links);
+    gNbrB.NeighborsB[mySlot] = CBT_StoreNeighbors(links);
+}
+
+void main()
+{
+    switch (KERNEL)
+    {
+    case K_RESET: Kernel_Reset(); break;
+    case K_CLASSIFY: Kernel_Classify(); break;
+    case K_PREPARE_INDIRECT: Kernel_PrepareIndirect(); break;
+    case K_SPLIT: Kernel_Split(); break;
+    case K_ALLOCATE: Kernel_Allocate(); break;
+    case K_BISECT: Kernel_Bisect(); break;
+    case K_PROPAGATE_BISECT: Kernel_PropagateBisect(); break;
+    case K_PREPARE_SIMPLIFY: Kernel_PrepareSimplify(); break;
+    case K_SIMPLIFY: Kernel_Simplify(); break;
+    case K_PROPAGATE_SIMPLIFY: Kernel_PropagateSimplify(); break;
+    case K_REDUCE_PREPASS: Kernel_ReducePrePass(); break;
+    case K_REDUCE_FIRST: Kernel_ReduceFirstPass(); break;
+    case K_REDUCE_SECOND: Kernel_ReduceSecondPass(); break;
+    case K_BISECTOR_INDEXATION: Kernel_BisectorIndexation(); break;
+    case K_PREPARE_BISECTOR_INDIRECT: Kernel_PrepareBisectorIndirect(); break;
+    case K_VALIDATE: Kernel_Validate(); break;
+    case K_VERTEX_EVAL: Kernel_VertexEval(); break;
+    case K_REGION_FREE_CLEAR: Kernel_RegionFreeClear(); break;
+    case K_REGION_FREE_SEED: Kernel_RegionFreeSeed(); break;
+    case K_REGION_FREE_LINK: Kernel_RegionFreeLink(); break;
+    case K_NEIGHBOR_COPY: Kernel_NeighborCopy(); break;
+    case K_VALIDATE_COMPACT_STREAM: Kernel_ValidateCompactStream(); break;
+    case K_HEIGHT_RANGE_BUILD: Kernel_HeightRangeBuild(); break;
+    default: break;
+    }
+}

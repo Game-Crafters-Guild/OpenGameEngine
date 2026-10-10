@@ -1,0 +1,7 @@
+{
+  "name": "renderdoc-app-api-upstream",
+  "version-string": "1.44",
+  "description": "Pinned RenderDoc in-application API header and license used by editor capture integration.",
+  "homepage": "https://github.com/baldurk/renderdoc",
+  "license": "MIT"
+}

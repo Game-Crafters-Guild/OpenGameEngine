@@ -1,0 +1,168 @@
+/*
+ * Shared version-control presentation.
+ *
+ * Keep provider-neutral VCS markers and diff tooltip content here instead of
+ * coupling the general Inspector, view, and widget themes to VCS features.
+ */
+
+/* Assets list status column. */
+.list-item .list-git {
+	flex-grow: 0;
+	flex-shrink: 0;
+	flex-basis: 140px;
+	min-width: 0;
+	font-size: var(--ui_font_size_list);
+	color: var(--ui_color_text_dim);
+	overflow-x: hidden;
+	overflow-y: visible;
+	text-align: left;
+	min-height: 0;
+	line-height: normal;
+	align-self: center;
+	display: flex;
+	align-items: center;
+}
+
+.list-item .list-git.git-container {
+	display: flex;
+	flex-direction: row;
+	align-items: center;
+}
+
+.list-item .list-git .git-text {
+	flex-grow: 1;
+	min-width: 0;
+	min-height: 0;
+	overflow: hidden;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+	line-height: normal;
+	color: var(--ui_color_text_dim);
+}
+
+.list-item:hover .list-git .git-text,
+.list-item.hover .list-git .git-text,
+.list-item.selected .list-git .git-text {
+	color: #FFFFFF;
+}
+
+.table-view-row .table-view-cell .list-git {
+	flex-grow: 1;
+	flex-shrink: 1;
+	flex-basis: auto;
+	min-width: 0;
+	max-width: none;
+}
+
+/* Assets list/grid/tree status markers use a 4px visual inside a consistent
+   16px interaction and alignment box. */
+.list-item .list-git .git-dot {
+	flex-shrink: 0;
+	width: 16px;
+	height: 16px;
+	min-width: 16px;
+	min-height: 16px;
+	background-image: url("editor:Icons/dot.png");
+	background-size: 4px 4px;
+	background-repeat: no-repeat;
+	background-position: center;
+	margin-left: -5px;
+	margin-right: 4px;
+	align-self: center;
+}
+
+.grid-git-dot {
+	position: absolute;
+	bottom: 17px;
+	left: -5px;
+	width: 16px;
+	height: 16px;
+	min-width: 16px;
+	min-height: 16px;
+	background-image: url("editor:Icons/dot.png");
+	background-size: 4px 4px;
+	background-repeat: no-repeat;
+	background-position: center;
+	margin: 0;
+}
+
+.tree-git-dot {
+	flex-shrink: 0;
+	width: 16px;
+	height: 16px;
+	min-width: 16px;
+	min-height: 16px;
+	background-image: url("editor:Icons/dot.png");
+	background-size: 4px 4px;
+	background-repeat: no-repeat;
+	background-position: center;
+	align-self: center;
+	margin-left: -5px;
+	margin-right: -1px;
+	order: 1;
+}
+
+/* Reserve the extra marker slot on the rows that actually carry a dot; every
+   other row keeps the general theme's 24px lock margin, so a name is not cut
+   short for a marker it does not have. HierarchyVcsController owns the class,
+   and TreeView measures this margin for the horizontal scroll extent. */
+.tree .tree-item.has-vcs-diff .tree-title {
+	margin-right: 42px;
+}
+
+/* Self-contained: the Hierarchy marker must not inherit its visual from the
+   Assets browser's .tree-git-dot rule — the two are styled independently. */
+.tree .tree-item .hierarchy-vcs-diff-dot {
+	position: absolute;
+	right: 25px;
+	top: 50%;
+	width: 16px;
+	height: 16px;
+	min-width: 16px;
+	min-height: 16px;
+	background-image: url("editor:Icons/dot.png");
+	background-size: 4px 4px;
+	background-repeat: no-repeat;
+	background-position: center;
+	margin-top: -8px;
+	margin-left: 0;
+	margin-right: 0;
+	order: 4;
+}
+
+.tree .tree-item .hierarchy-vcs-diff-dot.hierarchy-vcs-diff-descendant {
+	background-size: 2px 2px;
+	opacity: 0.75;
+}
+
+/* Property-level VCS marker at the Inspector label/value split. */
+.inspector-vcs-diff-dot {
+	flex: 0 0 16px;
+	width: 16px;
+	height: 16px;
+	min-width: 16px;
+	min-height: 16px;
+	margin-left: -8px;
+	margin-right: 0;
+	align-self: center;
+	background-image: url("editor:Icons/dot.png");
+	background-size: 4px 4px;
+	background-repeat: no-repeat;
+	background-position: center;
+	cursor: pointer;
+}
+
+.inspector-vcs-diff-dot-placeholder {
+	opacity: 0;
+	pointer-events: none;
+	cursor: default;
+}
+
+/* Baseline-only rows: present in version control, deleted from the working
+   scene. Italic and tinted with the Removed marker's own color, softened by
+   opacity so the row reads as absent rather than as content. */
+.tree .tree-item.hierarchy-ghost-row .tree-title {
+	color: var(--ui_color_vcs_removed);
+	font-style: italic;
+	opacity: 0.7;
+}

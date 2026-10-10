@@ -1,0 +1,75 @@
+<!-- UIDemoPanel layout: mirrors the structure previously built in UIDemoPanel.cpp
+     so we can attach it as a subtree under the panel. -->
+<UIElement id="UIDemoPanelRoot" class="ui-demo-panel-root">
+    <Label id="UIDemoHeader" class="ui-demo-header">UI Controls Demo</Label>
+
+    <Checkbox id="UIDemoCheckbox" class="ui-demo-checkbox" checked="true" text="Enable debug flag" />
+
+    <UIElement class="ui-demo-row">
+        <Label class="ui-demo-label">Toggle sample</Label>
+        <Toggle id="UIDemoToggle" class="ui-demo-toggle" />
+    </UIElement>
+
+	    <UIElement class="ui-demo-row">
+	        <Label class="ui-demo-label">Slider</Label>
+	        <Slider id="UIDemoSliderContinuous" class="ui-demo-slider" min="0" max="100" value="40" />
+	    </UIElement>
+
+	    <UIElement class="ui-demo-row">
+	        <Label class="ui-demo-label">Discrete slider</Label>
+	        <Slider id="UIDemoSliderDiscrete" class="ui-demo-slider" min="0" max="10" step="1" ticks="true" value="5" />
+	    </UIElement>
+
+	    <UIElement class="ui-demo-row">
+	        <Label class="ui-demo-label">Centered slider</Label>
+	        <Slider id="UIDemoSliderCentered" class="ui-demo-slider centered" min="-100" max="100" value="0" centered="true" />
+	    </UIElement>
+
+	    <UIElement class="ui-demo-row">
+	        <Label class="ui-demo-label">Range slider</Label>
+	        <Slider id="UIDemoSliderRange" class="ui-demo-slider" min="0" max="100" range="true" rangestart="20" value="80" />
+	    </UIElement>
+
+	    	<Dropdown id="UIDemoDropdownUi" class="dropdown-ui" options="Low, Medium, High" />
+	    	<Dropdown id="UIDemoDropdownNative" class="dropdown-native" mode="native" options="Option A, Option B, Option C" />
+
+    <!-- Foldout Demo -->
+    <Label class="ui-demo-section-header">Foldout</Label>
+    <Foldout id="UIDemoFoldout" title="Collapsible Section" expanded="true">
+        <Label>This content can be collapsed by clicking the header.</Label>
+        <Checkbox text="Option inside foldout" />
+        <Toggle />
+    </Foldout>
+
+    <!-- Accordion Demo (Multiple Mode) -->
+    <Label class="ui-demo-section-header">Accordion (Multiple)</Label>
+    <Accordion id="UIDemoAccordionMultiple" mode="multiple">
+        <AccordionItem title="General Settings" expanded="true">
+            <Label>Configure general application settings here.</Label>
+            <Checkbox text="Enable notifications" checked="true" />
+        </AccordionItem>
+        <AccordionItem title="Display Options">
+            <Label>Adjust display and appearance settings.</Label>
+            <Slider min="0" max="100" value="75" />
+        </AccordionItem>
+        <AccordionItem title="Advanced">
+            <Label>Advanced configuration options for power users.</Label>
+            <Toggle />
+        </AccordionItem>
+    </Accordion>
+
+    <!-- Accordion Demo (Exclusive Mode) -->
+    <Label class="ui-demo-section-header">Accordion (Exclusive)</Label>
+    <Accordion id="UIDemoAccordionExclusive" mode="exclusive">
+        <AccordionItem title="Section A" expanded="true">
+            <Label>Only one section can be open at a time.</Label>
+        </AccordionItem>
+        <AccordionItem title="Section B">
+            <Label>Opening this will close Section A.</Label>
+        </AccordionItem>
+        <AccordionItem title="Section C">
+            <Label>And this will close whatever is open.</Label>
+        </AccordionItem>
+    </Accordion>
+</UIElement>
+

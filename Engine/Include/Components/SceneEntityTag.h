@@ -1,0 +1,26 @@
+#pragma once
+
+#include "Types/StringUtils.h"
+#include "Types/Types.h"
+
+#include <string_view>
+
+namespace GameEngine::Components
+{
+// Stable per-entity identifier for persistence in human-readable .scene/.blueprint files.
+// Stored as a fixed-size buffer to satisfy ECS component constraints.
+// [DoNotSerialize] — SceneIO manages the tag via the entity `id=` header attribute, not as a reflected field.
+struct SceneEntityTag
+{
+    // The entity's scene identity, not a feature: it has no off state.
+    static constexpr bool NotToggleable = true;
+
+    // Not guaranteed to be null-terminated: a raw component write
+    // (GE_ECSABI_SetComponentBytes) can fill all 64 bytes. Read it through View().
+    char value[64];
+
+    // The tag up to its first null byte, or all of value when there is none.
+    [[nodiscard]] std::string_view View() const { return FixedStringView(value); }
+};
+
+} // namespace GameEngine::Components

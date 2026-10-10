@@ -1,0 +1,21 @@
+<uielement id="hud-root" class="hud-root">
+    <uielement id="health-panel" class="panel panel-tl">
+        <label class="panel-title" text="HEALTH" />
+        <uielement class="bar-track">
+            <uielement class="bar-fill" />
+        </uielement>
+        <label class="panel-sub" text="78 / 100" />
+    </uielement>
+
+    <uielement id="score-panel" class="panel panel-tr">
+        <label class="panel-title" text="SCORE" />
+        <label class="score-value" text="12,450" />
+    </uielement>
+
+    <uielement id="ability-bar" class="ability-bar">
+        <uielement class="slot slot-ready"><label class="slot-key" text="Q" /></uielement>
+        <uielement class="slot slot-ready"><label class="slot-key" text="W" /></uielement>
+        <uielement class="slot slot-cd"><label class="slot-key" text="E" /></uielement>
+        <uielement class="slot slot-ult"><label class="slot-key" text="R" /></uielement>
+    </uielement>
+</uielement>

@@ -1,0 +1,4 @@
+# The overlay patch is applied verbatim by vcpkg's `git apply` against the
+# LF-only lexbor source tarball. Force LF in the working tree so the patch never
+# picks up CRLF on a checkout with core.autocrlf=true (which would fail to apply).
+*.patch text eol=lf

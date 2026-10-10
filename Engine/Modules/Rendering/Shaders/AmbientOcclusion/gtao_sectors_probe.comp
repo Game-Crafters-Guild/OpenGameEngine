@@ -1,0 +1,14 @@
+#version 450
+// Test-only probe of the shipping sector integrator; compared with independent
+// numerical hemisphere quadrature in GtaoComputeTests.
+layout(local_size_x = 8, local_size_y = 8) in;
+layout(set = 0, binding = 0, rgba32f) uniform writeonly image2D uMoments;
+#include "AmbientOcclusion/gtao_sectors.glsl"
+void main()
+{
+    ivec2 pix = ivec2(gl_GlobalInvocationID.xy);
+    if (any(greaterThanEqual(pix, imageSize(uMoments)))) return;
+    const uint masks[4] = uint[4](0u, 0xFFFFFFFFu, 0x0000FFFFu, 0x55555555u);
+    float n = -1.4 + float(pix.x) * 2.8 / 32.0;
+    imageStore(uMoments, pix, vec4(GE_GtaoVisibleMoments(masks[pix.y], n, sin(n), cos(n)), 0.0));
+}

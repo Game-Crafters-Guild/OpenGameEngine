@@ -1,0 +1,84 @@
+/* Complex HUD — light theme. Same selectors as GameHudComplex.css with a
+   distinct palette, used to demonstrate runtime style hot-swap (Dark -> Light
+   must fully replace, with no dark-theme remnants cascading). */
+
+.hud-root {
+    position: absolute;
+    left: 0;
+    top: 0;
+    width: 100%;
+    height: 100%;
+}
+
+.panel {
+    position: absolute;
+    display: flex;
+    flex-direction: column;
+    padding: 14px 18px;
+    gap: 8px;
+    background-color: rgba(247, 249, 253, 0.92);
+    border: 2px solid rgba(49, 91, 160, 0.9);
+    border-radius: 10px;
+    box-shadow: 0 6px 20px rgba(0, 0, 0, 0.25);
+}
+
+.panel-tl { left: 32px; top: 32px; width: 280px; }
+.panel-tr { right: 32px; top: 32px; width: 200px; align-items: flex-end; }
+
+.panel-title {
+    color: rgba(45, 90, 160, 0.95);
+    font-size: 14px;
+    letter-spacing: 2px;
+}
+
+.panel-sub { color: #18202e; font-size: 16px; }
+
+.bar-track {
+    width: 100%;
+    height: 16px;
+    background-color: rgba(0, 0, 0, 0.06);
+    border: 1px solid rgba(65, 94, 162, 0.5);
+    border-radius: 8px;
+}
+
+.bar-fill {
+    width: 78%;
+    height: 100%;
+    background-color: rgba(220, 92, 92, 0.95);
+    border-radius: 8px;
+}
+
+.score-value {
+    color: #c8761a;
+    font-size: 30px;
+    letter-spacing: 1px;
+}
+
+.ability-bar {
+    position: absolute;
+    left: 0;
+    bottom: 36px;
+    width: 100%;
+    flex-direction: row;
+    justify-content: center;
+    gap: 14px;
+}
+
+.slot {
+    width: 64px;
+    height: 64px;
+    align-items: center;
+    justify-content: center;
+    background-color: rgba(239, 242, 248, 0.92);
+    border: 2px solid rgba(62, 93, 162, 0.6);
+    border-radius: 12px;
+}
+
+.slot-ready { border: 2px solid rgba(49, 160, 91, 0.9); }
+.slot-cd { opacity: 0.45; }
+.slot-ult {
+    border: 2px solid rgba(221, 150, 45, 0.95);
+    background-color: rgba(252, 240, 211, 0.95);
+}
+
+.slot-key { color: #18202e; font-size: 22px; }

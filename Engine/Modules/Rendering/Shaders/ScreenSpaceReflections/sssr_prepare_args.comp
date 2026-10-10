@@ -1,0 +1,37 @@
+#version 450
+
+// Turns classify's append counters into the two indirect dispatch grids.
+//
+// One thread. It exists because a counter cannot also be a dispatch width: the
+// grid has to be bounded at kSssrMaxDispatchWidth and the overflow spilled into
+// Y, and neither is something an atomicAdd can produce. Deriving both grids here
+// also retires the per-ray atomicMax classify used to maintain, which recomputed
+// ceil(rayCount / 64) once per traced pixel — order 10^6 same-address atomics a
+// frame for a value one thread can divide.
+//
+// Runs between Classify and Intersect, so both counters are final. The render
+// graph supplies the barriers from the Write declarations.
+
+layout(local_size_x = 1, local_size_y = 1, local_size_z = 1) in;
+
+#define GE_SSSR_ARGS_BINDING 0
+#include "ScreenSpaceReflections/sssr_dispatch.glsl"
+
+// One 64-lane workgroup per 64 appended rays. Must match sssr_intersect.comp's
+// local_size_x, which is what the linear ray index is derived from.
+const uint kRaysPerGroup = 64u;
+
+void main()
+{
+    const uvec2 rayGrid = GE_SssrDispatchGrid((Args.rayCount + kRaysPerGroup - 1u) /
+                                              kRaysPerGroup);
+    Args.rayGroupCountX = rayGrid.x;
+    Args.rayGroupCountY = rayGrid.y;
+    Args.rayGroupCountZ = 1u;
+
+    // One workgroup per listed denoise tile.
+    const uvec2 tileGrid = GE_SssrDispatchGrid(Args.tileCount);
+    Args.tileGroupCountX = tileGrid.x;
+    Args.tileGroupCountY = tileGrid.y;
+    Args.tileGroupCountZ = 1u;
+}

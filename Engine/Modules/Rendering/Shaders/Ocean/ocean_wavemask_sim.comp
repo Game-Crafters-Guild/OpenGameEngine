@@ -1,0 +1,274 @@
+#version 450
+// Local wave-mask bake. Writes RGBA data into a camera-snapped cascade:
+// R = wave weight/amplitude, G = horizontal chop scale, B = local wave height,
+// A = aggregate local FFT blend. Companion RGBA cascades store one local FFT
+// blend weight per local spectrum stream, four streams per page. Defaults are
+// (1,1,0,0) and zero local FFT masks.
+
+#include "Ocean/ocean_cascade_common.glsl"
+
+layout(local_size_x = 8, local_size_y = 8, local_size_z = 1) in;
+
+const int GE_OCEAN_MAX_WAVEMASK = 8;
+const int GE_OCEAN_MAX_WAVEMASK_POLYGONS = 4;
+const int GE_OCEAN_MAX_WAVEMASK_POLYGON_POINTS = 8;
+const int GE_OCEAN_MAX_WAVEMASK_LOCAL_WAVES = 4;
+const int GE_OCEAN_MAX_WAVEMASK_TEXTURES = 4;
+const int GE_OCEAN_LOCALFFT_STREAMS = 8;
+
+struct OceanWaveMaskSourceGPU
+{
+    vec4 OriginExtent;    // xy = center XZ, zw = half-extent (X, Z)
+    vec4 WaveChopFeather; // x = weight, y = chop, z = inward feather, w = wave count
+    vec4 LocalWaves[GE_OCEAN_MAX_WAVEMASK_LOCAL_WAVES];
+    vec4 LocalFFTBlend;   // x = local FFT blend, y = stream, z = height, w = blend mode
+};
+
+struct OceanWaveMaskPolygonGPU
+{
+    vec4 Meta;     // x = point count, y = inward feather meters, z = wave count
+    vec4 Bounds;   // xy = min XZ, zw = max XZ
+    vec4 WaveChop; // x = weight, y = chop, z = local FFT blend weight, w = local FFT stream index
+    vec4 LocalWaves[GE_OCEAN_MAX_WAVEMASK_LOCAL_WAVES];
+    vec4 Points[GE_OCEAN_MAX_WAVEMASK_POLYGON_POINTS]; // xy = world XZ
+};
+
+struct OceanWaveMaskTextureSourceGPU
+{
+    vec4 OriginExtent;    // xy = center XZ, zw = half-extent (X, Z)
+    vec4 ScaleBias;       // xy = RG scale, zw = RG bias
+    vec4 FeatherCoverage; // x = inward feather meters, y = coverage
+};
+
+layout(std140, set = 0, binding = 0) uniform OceanWaveMaskParams
+{
+    uint uResolution;
+    uint uLodCount;
+    uint uSourceCount;
+    uint uPolygonCount;
+
+    vec4 uTimePad;
+
+    vec4  uCascadeOriginScale[GE_OCEAN_LOD_CASCADES];
+    uvec4 uCascadeMeta;
+
+    OceanWaveMaskSourceGPU uSources[GE_OCEAN_MAX_WAVEMASK];
+    OceanWaveMaskPolygonGPU uPolygons[GE_OCEAN_MAX_WAVEMASK_POLYGONS];
+
+    uint uTextureSourceCount;
+    uint uTexturePad0;
+    uint uTexturePad1;
+    uint uTexturePad2;
+    OceanWaveMaskTextureSourceGPU uTextureSources[GE_OCEAN_MAX_WAVEMASK_TEXTURES];
+};
+
+layout(set = 0, binding = 1, rgba16f) uniform writeonly image2DArray uWaveMaskOut;
+layout(set = 0, binding = 2, rgba16f) uniform writeonly image2DArray uLocalFFTMaskOut0;
+layout(set = 0, binding = 3, rgba16f) uniform writeonly image2DArray uLocalFFTMaskOut1;
+layout(set = 0, binding = 4) uniform sampler2D uWaveMaskMap0;
+layout(set = 0, binding = 5) uniform sampler2D uWaveMaskMap1;
+layout(set = 0, binding = 6) uniform sampler2D uWaveMaskMap2;
+layout(set = 0, binding = 7) uniform sampler2D uWaveMaskMap3;
+
+vec2 OceanSampleWaveMaskMap(uint sourceIndex, vec2 uv)
+{
+    if (sourceIndex == 0u)
+        return texture(uWaveMaskMap0, uv).rg;
+    if (sourceIndex == 1u)
+        return texture(uWaveMaskMap1, uv).rg;
+    if (sourceIndex == 2u)
+        return texture(uWaveMaskMap2, uv).rg;
+    return texture(uWaveMaskMap3, uv).rg;
+}
+
+float OceanLocalWaveHeight(vec2 worldXZ, vec4 wave)
+{
+    float amp = max(wave.x, 0.0);
+    float wavelength = max(wave.y, 1e-3);
+    if (amp <= 1e-5)
+        return 0.0;
+    vec2 dir = wave.zw;
+    float dirLen = max(length(dir), 1e-4);
+    dir /= dirLen;
+    float k = 6.2831853 / wavelength;
+    float c = sqrt(9.81 / k);
+    vec2 phaseXZ = worldXZ + uTimePad.yz;
+    float phase = k * dot(dir, phaseXZ) + uTimePad.x * k * c;
+    return amp * sin(phase);
+}
+
+float OceanLocalWavePacketHeight(vec2 worldXZ,
+                                 vec4 waves[GE_OCEAN_MAX_WAVEMASK_LOCAL_WAVES],
+                                 uint waveCount)
+{
+    float height = 0.0;
+    uint count = min(waveCount, uint(GE_OCEAN_MAX_WAVEMASK_LOCAL_WAVES));
+    for (uint i = 0u; i < count; ++i)
+        height += OceanLocalWaveHeight(worldXZ, waves[i]);
+    return height;
+}
+
+void OceanLocalFFTWeights(float blend, float streamIndex, out vec4 weights0, out vec4 weights1)
+{
+    blend = clamp(blend, 0.0, 1.0);
+    int stream = int(clamp(floor(streamIndex + 0.5), 0.0,
+                           float(GE_OCEAN_LOCALFFT_STREAMS - 1)));
+    weights0 = vec4(0.0);
+    weights1 = vec4(0.0);
+    if (stream < 4)
+        weights0[stream] = blend;
+    else
+        weights1[stream - 4] = blend;
+}
+
+float OceanSegmentDistance(vec2 p, vec2 a, vec2 b)
+{
+    vec2 ab = b - a;
+    float t = clamp(dot(p - a, ab) / max(dot(ab, ab), 1e-12), 0.0, 1.0);
+    return length(p - (a + ab * t));
+}
+
+float OceanPolygonWeight(vec2 p, OceanWaveMaskPolygonGPU poly)
+{
+    uint count = uint(clamp(poly.Meta.x, 0.0, float(GE_OCEAN_MAX_WAVEMASK_POLYGON_POINTS)));
+    if (count < 3u)
+        return 0.0;
+    if (p.x < poly.Bounds.x || p.y < poly.Bounds.y || p.x > poly.Bounds.z || p.y > poly.Bounds.w)
+        return 0.0;
+
+    bool inside = false;
+    float minEdgeDist = 1e20;
+    vec2 prev = poly.Points[count - 1u].xy;
+    for (uint i = 0u; i < count; ++i)
+    {
+        vec2 curr = poly.Points[i].xy;
+        minEdgeDist = min(minEdgeDist, OceanSegmentDistance(p, curr, prev));
+        bool crosses = ((curr.y > p.y) != (prev.y > p.y));
+        float denom = prev.y - curr.y;
+        denom = abs(denom) < 1e-6 ? (denom < 0.0 ? -1e-6 : 1e-6) : denom;
+        float xAtY = (prev.x - curr.x) * (p.y - curr.y) / denom + curr.x;
+        if (crosses && p.x < xAtY)
+            inside = !inside;
+        prev = curr;
+    }
+    if (!inside)
+        return 0.0;
+
+    float feather = max(poly.Meta.y, 0.0);
+    if (feather <= 1e-3)
+        return 1.0;
+    return smoothstep(0.0, feather, minEdgeDist);
+}
+
+float OceanRectWeight(vec2 d, vec2 halfExtent, float feather)
+{
+    if (feather > 1e-3)
+    {
+        float insideDist = min(halfExtent.x - d.x, halfExtent.y - d.y);
+        return smoothstep(0.0, feather, insideDist);
+    }
+    vec2 edge = vec2(1.0) - smoothstep(0.7, 1.0, d / max(halfExtent, vec2(1e-3)));
+    return min(edge.x, edge.y);
+}
+
+vec4 OceanBlendInput(vec4 current, vec4 value, float weight, float encodedMode)
+{
+    int mode = int(clamp(floor(encodedMode + 0.5), 0.0, 4.0));
+    vec4 combined = value;
+    if (mode == 1)
+        combined = current + value;
+    else if (mode == 2)
+        combined = current * value;
+    else if (mode == 3)
+        combined = min(current, value);
+    else if (mode == 4)
+        combined = max(current, value);
+    return mix(current, combined, weight);
+}
+
+void main()
+{
+    const ivec3 id = ivec3(gl_GlobalInvocationID);
+    if (uint(id.x) >= uResolution || uint(id.y) >= uResolution || uint(id.z) >= uLodCount)
+        return;
+
+    const vec4 layer = uCascadeOriginScale[id.z];
+    const vec2 worldXZ = OceanCascadeTexelToWorld(id.xy, layer.xy, layer.z);
+
+    vec4 mask = vec4(1.0, 1.0, 0.0, 0.0);
+    vec4 localFFTMask0 = vec4(0.0);
+    vec4 localFFTMask1 = vec4(0.0);
+
+    uint count = min(uSourceCount, uint(GE_OCEAN_MAX_WAVEMASK));
+    for (uint s = 0u; s < count; ++s)
+    {
+        OceanWaveMaskSourceGPU src = uSources[s];
+        vec2 d = abs(worldXZ - src.OriginExtent.xy);
+        if (d.x > src.OriginExtent.z || d.y > src.OriginExtent.w)
+            continue;
+        float w = OceanRectWeight(d, src.OriginExtent.zw, src.WaveChopFeather.z);
+        uint localWaveCount = uint(clamp(src.WaveChopFeather.w, 0.0,
+                                         float(GE_OCEAN_MAX_WAVEMASK_LOCAL_WAVES)));
+        vec4 value = vec4(max(src.WaveChopFeather.xy, vec2(0.0)),
+                          OceanLocalWavePacketHeight(worldXZ, src.LocalWaves,
+                                                     localWaveCount) + src.LocalFFTBlend.z,
+                          clamp(src.LocalFFTBlend.x, 0.0, 1.0));
+        vec4 localFFTValue0;
+        vec4 localFFTValue1;
+        OceanLocalFFTWeights(src.LocalFFTBlend.x, src.LocalFFTBlend.y,
+                             localFFTValue0, localFFTValue1);
+        mask = OceanBlendInput(mask, value, w, src.LocalFFTBlend.w);
+        localFFTMask0 = mix(localFFTMask0, localFFTValue0, w);
+        localFFTMask1 = mix(localFFTMask1, localFFTValue1, w);
+    }
+
+    uint polygonCount = min(uPolygonCount, uint(GE_OCEAN_MAX_WAVEMASK_POLYGONS));
+    for (uint p = 0u; p < polygonCount; ++p)
+    {
+        OceanWaveMaskPolygonGPU poly = uPolygons[p];
+        float w = OceanPolygonWeight(worldXZ, poly);
+        if (w <= 0.0)
+            continue;
+        uint localWaveCount = uint(clamp(poly.Meta.z, 0.0,
+                                         float(GE_OCEAN_MAX_WAVEMASK_LOCAL_WAVES)));
+        vec4 value = vec4(max(poly.WaveChop.xy, vec2(0.0)),
+                          OceanLocalWavePacketHeight(worldXZ, poly.LocalWaves,
+                                                     localWaveCount),
+                          clamp(poly.WaveChop.z, 0.0, 1.0));
+        vec4 localFFTValue0;
+        vec4 localFFTValue1;
+        OceanLocalFFTWeights(poly.WaveChop.z, poly.WaveChop.w,
+                             localFFTValue0, localFFTValue1);
+        mask = mix(mask, value, w);
+        localFFTMask0 = mix(localFFTMask0, localFFTValue0, w);
+        localFFTMask1 = mix(localFFTMask1, localFFTValue1, w);
+    }
+
+    uint textureCount = min(uTextureSourceCount, uint(GE_OCEAN_MAX_WAVEMASK_TEXTURES));
+    for (uint t = 0u; t < textureCount; ++t)
+    {
+        OceanWaveMaskTextureSourceGPU src = uTextureSources[t];
+        vec2 halfExtent = max(src.OriginExtent.zw, vec2(1e-3));
+        vec2 d = abs(worldXZ - src.OriginExtent.xy);
+        if (d.x > halfExtent.x || d.y > halfExtent.y)
+            continue;
+
+        float w = OceanRectWeight(d, halfExtent, src.FeatherCoverage.x);
+        w *= clamp(src.FeatherCoverage.y, 0.0, 1.0);
+        if (w <= 0.0)
+            continue;
+
+        vec2 uv = (worldXZ - (src.OriginExtent.xy - halfExtent)) / (halfExtent * 2.0);
+        vec2 rg = OceanSampleWaveMaskMap(t, clamp(uv, vec2(0.0), vec2(1.0)));
+        vec2 target = max(rg * src.ScaleBias.xy + src.ScaleBias.zw, vec2(0.0));
+        mask.xy = mix(mask.xy, target, w);
+    }
+
+    mask.a = max(max(max(localFFTMask0.x, localFFTMask0.y),
+                     max(localFFTMask0.z, localFFTMask0.w)),
+                 max(max(localFFTMask1.x, localFFTMask1.y),
+                     max(localFFTMask1.z, localFFTMask1.w)));
+    imageStore(uWaveMaskOut, id, mask);
+    imageStore(uLocalFFTMaskOut0, id, localFFTMask0);
+    imageStore(uLocalFFTMaskOut1, id, localFFTMask1);
+}

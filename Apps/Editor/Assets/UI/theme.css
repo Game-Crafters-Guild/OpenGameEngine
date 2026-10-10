@@ -1,0 +1,36 @@
+/* Master theme file: composed via @import */
+@import "theme/tokens.css";
+@import "controls/Modal.css";
+@import "controls/AddTagModal.css";
+@import "controls/CameraCustomAspectModal.css";
+@import "controls/PlayModeChangeReviewModal.css";
+@import "controls/RenameLayoutModal.css";
+@import "controls/SaveSceneAsModal.css";
+@import "controls/VideoPlayerModal.css";
+@import "theme/core.css";
+/* After core.css: the panel icons override nothing there, but the panel
+   launcher resolves them out of the loaded cascade, where later wins. */
+@import "theme/dock-panel-icons.css";
+@import "theme/views.css";
+@import "theme/inspector.css";
+@import "theme/widgets.css";
+/* After widgets.css: the option artwork overrides nothing in the icon slot
+   rules there, and a native menu host resolves these classes out of the loaded
+   cascade, where later wins. */
+@import "theme/dropdown-option-icons.css";
+@import "theme/version-control.css";
+@import "theme/toggle.css";
+@import "theme/slider.css";
+@import "theme/smartfolders.css";
+@import "theme/settings.css";
+@import "theme/todos.css";
+@import "theme/bookmarks.css";
+@import "theme/undo-history.css";
+@import "panels/DiffPanel.css";
+@import "panels/BuildPanel.css";
+@import "panels/MovieRecorderPanel.css";
+@import "theme/node-graph.css";
+@import "theme/graph-node-icons.css";
+@import "panels/ScriptErrorsPanel.css";
+@import "panels/MissingAssetsPanel.css";
+@import "theme/download-pill.css";

@@ -1,0 +1,421 @@
+[scene name="ShadowCutRepro-live" version=1]
+
+[entity id="physics_settings"]
+HierarchyOrder.order = 0
+Name.value = "Physics Settings"
+PhysicsWorldSettingsComponent.gravity = (0, -9.81, 0)
+PhysicsWorldSettingsComponent.fixedTimeStep = 0.016666668
+PhysicsWorldSettingsComponent.maxSubSteps = 4
+PhysicsWorldSettingsComponent.collisionSteps = 1
+PhysicsWorldSettingsComponent.maxBodies = 65536
+PhysicsWorldSettingsComponent.maxBodyPairs = 65536
+PhysicsWorldSettingsComponent.maxContactConstraints = 65536
+PhysicsWorldSettingsComponent.tempAllocatorBytes = 67108864
+PhysicsWorldSettingsComponent.numThreads = -1
+
+[entity id="directional_light"]
+HierarchyOrder.order = 10
+Light.enabled = true
+Light.type = 0
+Light.color = (1, 1, 1)
+Light.intensity = 1e+05
+Light.range = 10
+Light.innerAngle = 0.5
+Light.outerAngle = 0.8
+Light.areaShape = 0
+Light.areaWidth = 1
+Light.areaHeight = 1
+Light.areaRadius = 0.5
+Light.falloff = 0
+Light.decay = 2
+Light.fogContribution = 1
+Light.fogDensityBoost = 0
+Light.fogAnisotropy = 0.25
+Light.fogOriginFade = 0.2
+Light.castsLight = true
+Light.castsShadows = true
+Light.cascadeCount = 4
+Light.shadowResolutionTier = 0
+Light.shadowAngularDiameter = 2
+Light.intensityUnit = Lux
+Light.useColorTemperature = false
+Light.colorTemperature = 6500
+Name.value = "Directional Light"
+Transform.position = (0, 3, 0)
+Transform.rotation = (0.7071067, 3.090862e-08, 2.5121477e-15, 0.7071068)
+Transform.scale = (0.9999992, 0.9999873, 0.9999868)
+
+[entity id="sky_environment"]
+HierarchyOrder.order = 20
+Name.value = "Sky Environment"
+SkyEnvironment.Enabled = true
+SkyEnvironment.TimeOfDayHours = 12
+SkyEnvironment.DayKeyTimeMidnight = 0
+SkyEnvironment.DayKeyTimeDawn = 6
+SkyEnvironment.DayKeyTimeMidday = 12
+SkyEnvironment.DayKeyTimeSunset = 18
+SkyEnvironment.AnimateTimeOfDay = false
+SkyEnvironment.TimeOfDayCycleSeconds = 120
+SkyEnvironment.SkyExposureTrim = 0
+SkyEnvironment.IblIntensity = 1
+SkyEnvironment.IblLowerHemisphereDarkness = 0.3
+SkyEnvironment.AmbientTintSky = (1, 1, 1)
+SkyEnvironment.AmbientTintEquator = (1, 1, 1)
+SkyEnvironment.AmbientTintGround = (1, 1, 1)
+SkyEnvironment.Mode = 0
+SkyEnvironment.GradientSkyTopColor = (0.2, 0.42, 0.78)
+SkyEnvironment.GradientSkyHorizonColor = (0.6, 0.72, 0.86)
+SkyEnvironment.GradientSkyBottomColor = (0.32, 0.3, 0.28)
+SkyEnvironment.GradientSkyIntensity = 4000
+SkyEnvironment.BelowHorizonMode = 0
+SkyEnvironment.GroundHazeStrength = 1
+SkyEnvironment.SunLight = "directional_light"
+SkyEnvironment.TimeOfDayDrivesSunLight = true
+SkyEnvironment.AutoSunMoon = true
+SkyEnvironment.ShowSun = true
+SkyEnvironment.ShowMoon = true
+SkyEnvironment.SunSize2D = 1
+SkyEnvironment.SkyPan2D = 0
+SkyEnvironment.MoonPhase01 = 0.5
+SkyEnvironment.MoonArcPosition = 0.5
+SkyEnvironment.AutoMoonArc = true
+SkyEnvironment.MoonCycleDays = 29.5
+SkyEnvironment.MoonSize = 2.39
+SkyEnvironment.MoonSize2D = 0.334
+SkyEnvironment.MoonExposureEV = 4
+SkyEnvironment.FallingStarsEnabled = true
+SkyEnvironment.FallingStarAmount = 0.35
+SkyEnvironment.FallingStarFrequency = 0.35
+SkyEnvironment.FallingStarSpeed = 4
+SkyEnvironment.FallingStarLength = 1
+SkyEnvironment.FallingStarThickness = 0.485
+SkyEnvironment.FallingStarDotSize = 0.1
+SkyEnvironment.FallingStarDotSize2D = 0.979
+SkyEnvironment.SunDirOverride = (0, 1, 0)
+SkyEnvironment.GroundAlbedoMidnight = (0.04, 0.045, 0.055)
+SkyEnvironment.GroundAlbedoDawn = (0.085, 0.078, 0.072)
+SkyEnvironment.GroundAlbedoMidday = (0.3, 0.3, 0.3)
+SkyEnvironment.GroundAlbedoSunset = (0.18, 0.14, 0.11)
+SkyEnvironment.GroundNightColorMidnight = (0.03, 0.032, 0.045)
+SkyEnvironment.GroundNightColorDawn = (0.022, 0.022, 0.03)
+SkyEnvironment.GroundNightColorMidday = (0.008, 0.008, 0.012)
+SkyEnvironment.GroundNightColorSunset = (0.02, 0.018, 0.028)
+SkyEnvironment.GroundBrightnessCurve = 0,0.22;6,0.34;12,0.9;18,0.5
+SkyEnvironment.GroundBrightnessCurveMode = keyCurve
+SkyEnvironment.GroundBrightnessBezier = 0.25,0.34,0.75,0.9,0.22,0.22
+SkyEnvironment.BelowHorizonBlendSharpnessCurve = 0,2.3;6,1.4;12,1.8;18,2.1
+SkyEnvironment.BelowHorizonBlendSharpnessCurveMode = keyCurve
+SkyEnvironment.BelowHorizonBlendSharpnessBezier = 0.25,1.4,0.75,1.8,2.3,2.3
+SkyEnvironment.BelowHorizonDarknessCurve = 0,1;6,0.8;12,0.35;18,0.75
+SkyEnvironment.BelowHorizonDarknessCurveMode = keyCurve
+SkyEnvironment.BelowHorizonDarknessBezier = 0.25,0.8,0.75,0.35,1,1
+SkyEnvironment.BelowHorizonDarkColorMidnight = (0.012, 0.014, 0.022)
+SkyEnvironment.BelowHorizonDarkColorDawn = (0.018, 0.017, 0.02)
+SkyEnvironment.BelowHorizonDarkColorMidday = (0.03, 0.031, 0.034)
+SkyEnvironment.BelowHorizonDarkColorSunset = (0.024, 0.018, 0.02)
+SkyEnvironment.GroundHorizonColorMidnight = (0.01, 0.015, 0.03)
+SkyEnvironment.GroundHorizonColorDawn = (0.08, 0.065, 0.055)
+SkyEnvironment.GroundHorizonColorMidday = (0.07843137, 0.12156863, 0.21960784)
+SkyEnvironment.GroundHorizonColorSunset = (0.13, 0.08, 0.09)
+SkyEnvironment.GroundHorizonNightColorMidnight = (0.000607054, 0.000910581, 0.001517635)
+SkyEnvironment.GroundHorizonNightColorDawn = (0.003, 0.0025, 0.0035)
+SkyEnvironment.GroundHorizonNightColorMidday = (0.000607054, 0.000910581, 0.001517635)
+SkyEnvironment.GroundHorizonNightColorSunset = (0.002, 0.0016, 0.0026)
+SkyEnvironment.NightSkyHorizonColorMidnight = (0.0012, 0.00035, 0.0019)
+SkyEnvironment.NightSkyHorizonColorDawn = (9e-04, 5e-04, 0.0011)
+SkyEnvironment.NightSkyHorizonColorMidday = (2e-04, 2e-04, 3e-04)
+SkyEnvironment.NightSkyHorizonColorSunset = (0.0018, 7e-04, 0.0016)
+SkyEnvironment.GroundHorizonCosWidthCurve = 0,0.02;6,0.03;12,0.03;18,0.055
+SkyEnvironment.GroundHorizonCosWidthCurveMode = keyCurve
+SkyEnvironment.GroundHorizonCosWidthBezier = 0.25,0.03,0.75,0.03,0.02,0.02
+SkyEnvironment.GroundHorizonNightCosWidthCurve = 0,0.06;6,0.03;12,0.02;18,0.05
+SkyEnvironment.GroundHorizonNightCosWidthCurveMode = keyCurve
+SkyEnvironment.GroundHorizonNightCosWidthBezier = 0.25,0.03,0.75,0.02,0.06,0.06
+SkyEnvironment.StarDensity = 0.5
+SkyEnvironment.StarBrightness = 0.6
+SkyEnvironment.StarSize = 1
+SkyEnvironment.StarDiamondShape = 0.5
+SkyEnvironment.StarCoreSize = 0.15
+SkyEnvironment.StarGlowFalloff = 10
+SkyEnvironment.TwinkleSpeed = 0.5
+SkyEnvironment.TwinkleIntensity = 0.3
+Transform.position = (0, 0, 0)
+Transform.rotation = (-0, -0, -0, 1)
+Transform.scale = (1, 1, 1)
+
+[entity id="main_camera"]
+Camera.enabled = true
+Camera.perspective = true
+Camera.fovY = 60
+Camera.orthographicSize = 10
+Camera.nearZ = 0.01
+Camera.farZ = 1000
+Camera.cullingMask = 4294967295
+Camera.postProcessProfileId = 0
+Camera.msaaSamples = 0
+Camera.antiAliasing = 0
+Camera.postProcessMask = 4294967295
+Camera.aspectPreset = 0
+Camera.customAspectWidth = 16
+Camera.customAspectHeight = 9
+Camera.pixelPerfect = false
+Camera.pixelPerfectPixelsPerUnit = 32
+Camera.pixelPerfectReferenceWidth = 320
+Camera.pixelPerfectReferenceHeight = 180
+Camera.pixelPerfectPixelSnap = true
+Camera.pixelPerfectExpand = false
+Camera.exposureControl = 3
+Camera.exposure = 1
+Camera.manualExposureEV = 15.4
+Camera.exposureCompensation = 0
+Camera.aperture = 16
+Camera.focusDistance = 10
+Camera.focusDebugMode = 0
+Camera.focusDebugAlpha = 0.5
+Camera.apertureBladeCount = 7
+Camera.apertureRoundness = 1
+Camera.apertureRotation = 0
+Camera.anamorphicSqueeze = 1
+Camera.sensorPreset = 13
+Camera.sensorHeightMm = 24
+Camera.shutterTime = 0.01
+Camera.iso = 100
+Camera.autoExposureMinEv = 4
+Camera.autoExposureMaxEv = 18
+Camera.autoExposureSpeedUp = 1
+Camera.autoExposureSpeedDown = 3
+HierarchyOrder.order = 30
+Name.value = "Main Camera"
+Transform.position = (0, 3, -10)
+Transform.rotation = (-0, -0, -0, 1)
+Transform.scale = (1, 1, 1)
+
+[entity id="post_process_volume"]
+HierarchyOrder.order = 40
+Name.value = "Post Process Volume"
+PostProcessVolume.enabled = true
+PostProcessVolume.weight = 1
+PostProcessVolume.priority = 0
+PostProcessVolume.postProcessMask = 4294967295
+PostProcessVolume.tonemap = 4
+PostProcessVolume.ditherMode = 0
+PostProcessVolume.isGlobal = true
+PostProcessVolume.shape = 0
+PostProcessVolume.blendDistance = 1
+Transform.position = (0, 0, 0)
+Transform.rotation = (-0, -0, -0, 1)
+Transform.scale = (1, 1, 1)
+
+[entity id="plane"]
+HierarchyOrder.order = 50
+MeshRenderer.meshPrimitive = Plane
+MeshRenderer.material = [guid="9aae4628-ba39-4546-b3c7-55730e59d1ca"]
+MeshRenderer.enabled = true
+MeshRenderer.renderLayerMask = 1
+MeshRenderer.castShadows = true
+MeshRenderer.receiveShadows = true
+MeshRenderer.motionVectors = true
+Name.value = "Plane"
+PhysicsBody.enabled = true
+PhysicsBody.motionType = 0
+PhysicsBody.mass = 1
+PhysicsBody.linearDamping = 0.05
+PhysicsBody.angularDamping = 0.05
+PhysicsBody.gravityScale = 0
+PhysicsBody.centerOfMassOffset = (0, 0, 0)
+PhysicsBody.materialFriction = 0.5
+PhysicsBody.materialRestitution = 0.1
+PhysicsBody.linearVelocity = (0, 0, 0)
+PhysicsBody.angularVelocity = (0, 0, 0)
+PhysicsBody.allowSleep = true
+PhysicsBody.startAwake = true
+PhysicsBody.continuousCollision = false
+PhysicsCollider.enabled = true
+PhysicsCollider.layer = 0
+PhysicsCollider.groupId = 0
+PhysicsCollider.subGroupId = 0
+PhysicsCollider.belongsToMask = 4294967295
+PhysicsCollider.collidesWithMask = 4294967295
+PhysicsCollider.isTrigger = false
+PhysicsCollider.overrideMaterial = false
+PhysicsCollider.materialFriction = 0.5
+PhysicsCollider.materialRestitution = 0.1
+PlaneColliderShape.normal = (0, 1, 0)
+PlaneColliderShape.d = 0
+PlaneColliderShape.halfExtent = 1000
+Transform.position = (0, 0, 0)
+Transform.rotation = (-0, -0, -0, 1)
+Transform.scale = (100, 1, 100)
+
+[entity id="sphere"]
+HierarchyOrder.order = 60
+MeshRenderer.meshPrimitive = Sphere
+MeshRenderer.material = [guid="9aae4628-ba39-4546-b3c7-55730e59d1ca"]
+MeshRenderer.enabled = true
+MeshRenderer.renderLayerMask = 1
+MeshRenderer.castShadows = true
+MeshRenderer.receiveShadows = true
+MeshRenderer.motionVectors = true
+Name.value = "Sphere"
+PhysicsBody.enabled = true
+PhysicsBody.motionType = 2
+PhysicsBody.mass = 1
+PhysicsBody.linearDamping = 0.05
+PhysicsBody.angularDamping = 0.05
+PhysicsBody.gravityScale = 1
+PhysicsBody.centerOfMassOffset = (0, 0, 0)
+PhysicsBody.materialFriction = 0.5
+PhysicsBody.materialRestitution = 0.1
+PhysicsBody.linearVelocity = (0, 0, 0)
+PhysicsBody.angularVelocity = (0, 0, 0)
+PhysicsBody.allowSleep = true
+PhysicsBody.startAwake = true
+PhysicsBody.continuousCollision = false
+PhysicsCollider.enabled = true
+PhysicsCollider.layer = 1
+PhysicsCollider.groupId = 0
+PhysicsCollider.subGroupId = 0
+PhysicsCollider.belongsToMask = 4294967295
+PhysicsCollider.collidesWithMask = 4294967295
+PhysicsCollider.isTrigger = false
+PhysicsCollider.overrideMaterial = false
+PhysicsCollider.materialFriction = 0.5
+PhysicsCollider.materialRestitution = 0.1
+SphereColliderShape.enabled = true
+SphereColliderShape.radius = 0.5
+Transform.position = (-1.25, 22.5, 0)
+Transform.rotation = (-0, -0, -0, 1)
+Transform.scale = (1, 1, 1)
+
+[entity id="reflection_probe_test_sphere"]
+HierarchyOrder.order = 70
+MeshRenderer.meshPrimitive = Sphere
+MeshRenderer.material = [guid="61feaec8-7114-499d-93b7-7ac6603b7165"]
+MeshRenderer.enabled = true
+MeshRenderer.renderLayerMask = 1
+MeshRenderer.castShadows = true
+MeshRenderer.receiveShadows = true
+MeshRenderer.motionVectors = true
+Name.value = "Reflection Probe Test Sphere"
+PhysicsBody.enabled = true
+PhysicsBody.motionType = 2
+PhysicsBody.mass = 1
+PhysicsBody.linearDamping = 0.05
+PhysicsBody.angularDamping = 0.05
+PhysicsBody.gravityScale = 1
+PhysicsBody.centerOfMassOffset = (0, 0, 0)
+PhysicsBody.materialFriction = 0.5
+PhysicsBody.materialRestitution = 0.1
+PhysicsBody.linearVelocity = (0, 0, 0)
+PhysicsBody.angularVelocity = (0, 0, 0)
+PhysicsBody.allowSleep = true
+PhysicsBody.startAwake = true
+PhysicsBody.continuousCollision = false
+PhysicsCollider.enabled = true
+PhysicsCollider.layer = 1
+PhysicsCollider.groupId = 0
+PhysicsCollider.subGroupId = 0
+PhysicsCollider.belongsToMask = 4294967295
+PhysicsCollider.collidesWithMask = 4294967295
+PhysicsCollider.isTrigger = false
+PhysicsCollider.overrideMaterial = false
+PhysicsCollider.materialFriction = 0.5
+PhysicsCollider.materialRestitution = 0.1
+SphereColliderShape.enabled = true
+SphereColliderShape.radius = 0.5
+Transform.position = (1.25, 1, 0)
+Transform.rotation = (-0, -0, -0, 1)
+Transform.scale = (1, 1, 1)
+
+[entity id="reflection_probe"]
+HierarchyOrder.order = 80
+Name.value = "Reflection Probe"
+Transform.position = (0, 2, 0)
+Transform.rotation = (-0, -0, -0, 1)
+Transform.scale = (100, 100, 100)
+ReflectionProbe.Enabled = true
+ReflectionProbe.BlendDistance = 2
+ReflectionProbe.Priority = 0
+ReflectionProbe.BoxProjection = true
+ReflectionProbe.OriginOffsetX = 0
+ReflectionProbe.OriginOffsetY = 0
+ReflectionProbe.OriginOffsetZ = 0
+ReflectionProbe.Intensity = 1
+ReflectionProbe.ExposureEV = 0
+ReflectionProbe.RotationDegrees = 0
+ReflectionProbe.IblLowerHemisphereDarkness = 0.3
+ReflectionProbe.CaptureResolution = 256
+ReflectionProbe.UpdateMode = Once
+ReflectionProbe.RealtimeUpdateInterval = 0.5
+ReflectionProbe.MaxDistance = 0
+ReflectionProbe.CullMask = 4294967295
+
+
+[hierarchy_ui]
+expanded = ""
+selection = ""
+
+[editor_tilemap]
+width = 24
+height = 16
+tile_size_px = 32
+selected_tile_id = 1
+selected_tileset = 0
+active_layer = 0
+selected_tile_ids = "1"
+
+[editor_tilemap_tileset index=0 name="Meadow" tile_size_px=32]
+[editor_tilemap_tile tileset=0 id=1 name="Grass" color=4283150447 accent_color=4282220614 height=0.15 solid=true pixel_width=32 pixel_height=32 source_path=""]
+[editor_tilemap_tile tileset=0 id=2 name="Dirt" color=4282740886 accent_color=4281551971 height=0.12 solid=true pixel_width=32 pixel_height=32 source_path=""]
+[editor_tilemap_tile tileset=0 id=3 name="Water" color=4290347319 accent_color=4287058463 height=0.03 solid=false pixel_width=32 pixel_height=32 source_path=""]
+[editor_tilemap_tile tileset=0 id=4 name="Stone" color=4287925895 accent_color=4285293404 height=0.2 solid=true pixel_width=32 pixel_height=32 source_path=""]
+[editor_tilemap_tile tileset=0 id=5 name="Tree" color=4282942518 accent_color=4281291042 height=0.62 solid=true pixel_width=32 pixel_height=32 source_path=""]
+[editor_tilemap_tile tileset=0 id=6 name="Slope" color=4284462507 accent_color=4282548854 height=0.35 solid=true pixel_width=32 pixel_height=32 source_path=""]
+
+[editor_tilemap_tileset index=1 name="Dungeon" tile_size_px=32]
+[editor_tilemap_tile tileset=1 id=1 name="Floor" color=4285160539 accent_color=4282529846 height=0.16 solid=true pixel_width=32 pixel_height=32 source_path=""]
+[editor_tilemap_tile tileset=1 id=2 name="Wall" color=4287265143 accent_color=4283713605 height=0.75 solid=true pixel_width=32 pixel_height=32 source_path=""]
+[editor_tilemap_tile tileset=1 id=3 name="Lava" color=4281029592 accent_color=4280495226 height=0.06 solid=false pixel_width=32 pixel_height=32 source_path=""]
+[editor_tilemap_tile tileset=1 id=4 name="Rune" color=4289284717 accent_color=4285937225 height=0.18 solid=true pixel_width=32 pixel_height=32 source_path=""]
+[editor_tilemap_tile tileset=1 id=5 name="Gate" color=4282403410 accent_color=4280625711 height=0.82 solid=true pixel_width=32 pixel_height=32 source_path=""]
+[editor_tilemap_tile tileset=1 id=6 name="Pillar" color=4286351504 accent_color=4283323224 height=0.95 solid=true pixel_width=32 pixel_height=32 source_path=""]
+
+[editor_tilemap_tileset index=2 name="City" tile_size_px=32]
+[editor_tilemap_tile tileset=2 id=1 name="Pavement" color=4287202430 accent_color=4284438866 height=0.13 solid=true pixel_width=32 pixel_height=32 source_path=""]
+[editor_tilemap_tile tileset=2 id=2 name="Road" color=4282596921 accent_color=4280820769 height=0.08 solid=true pixel_width=32 pixel_height=32 source_path=""]
+[editor_tilemap_tile tileset=2 id=3 name="Curb" color=4288722359 accent_color=4285299323 height=0.22 solid=true pixel_width=32 pixel_height=32 source_path=""]
+[editor_tilemap_tile tileset=2 id=4 name="Facade" color=4284182444 accent_color=4281811824 height=0.82 solid=true pixel_width=32 pixel_height=32 source_path=""]
+[editor_tilemap_tile tileset=2 id=5 name="Glass" color=4289500994 accent_color=4286013479 height=0.7 solid=true pixel_width=32 pixel_height=32 source_path=""]
+[editor_tilemap_tile tileset=2 id=6 name="Roof" color=4284765256 accent_color=4282463275 height=0.55 solid=true pixel_width=32 pixel_height=32 source_path=""]
+
+[editor_tilemap_layer index=0 name="Ground" visible=true locked=false opacity=1 tileset=0]
+
+[editor_tilemap_layer index=1 name="Water" visible=true locked=false opacity=0.72 tileset=0]
+
+[editor_tilemap_layer index=2 name="Objects" visible=true locked=false opacity=1 tileset=0]
+
+[editor_tilemap_layer index=3 name="Collision" visible=false locked=true opacity=0.45 tileset=1]
+
+[editor_tilemap_placed x=3 y=10 tile=1 tileset=0 layer=0 height=0.15]
+[editor_tilemap_placed x=4 y=10 tile=1 tileset=0 layer=0 height=0.15]
+[editor_tilemap_placed x=5 y=10 tile=1 tileset=0 layer=0 height=0.15]
+[editor_tilemap_placed x=6 y=10 tile=1 tileset=0 layer=0 height=0.15]
+[editor_tilemap_placed x=7 y=10 tile=1 tileset=0 layer=0 height=0.15]
+[editor_tilemap_placed x=8 y=10 tile=1 tileset=0 layer=0 height=0.15]
+[editor_tilemap_placed x=9 y=10 tile=3 tileset=0 layer=1 height=0.03]
+[editor_tilemap_placed x=10 y=10 tile=3 tileset=0 layer=1 height=0.03]
+[editor_tilemap_placed x=11 y=10 tile=3 tileset=0 layer=1 height=0.03]
+[editor_tilemap_placed x=12 y=9 tile=4 tileset=0 layer=0 height=0.2]
+[editor_tilemap_placed x=13 y=9 tile=4 tileset=0 layer=0 height=0.2]
+[editor_tilemap_placed x=16 y=8 tile=5 tileset=0 layer=2 height=0.62]
+[editor_tilemap_placed x=17 y=8 tile=5 tileset=0 layer=2 height=0.62]
+[editor_tilemap_placed x=18 y=9 tile=2 tileset=0 layer=0 height=0.12]
+
+[editor_camera]
+pos_x = -1.02138
+pos_y = 0.315292
+pos_z = -0.625559
+yaw_deg = 110
+pitch_deg = -42.8001
+distance = 6
+is_2d = false

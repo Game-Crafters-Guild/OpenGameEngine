@@ -1,0 +1,79 @@
+/* The UI module's default stylesheet: what a control looks like before any
+ * document styles it, the way a browser's user-agent sheet sits under every
+ * page. The build compiles it into the UI module and every UIManager loads it
+ * (UI/Source/DefaultStylesheet.cpp), so no executable stages it. It is engine
+ * code: an edit takes a rebuild, and nothing hot-reloads it.
+ *
+ * Its rules have the cascade's user-agent origin: a theme or document rule
+ * that sets the same property wins over it whatever the selector's
+ * specificity and wherever its sheet is loaded. No !important here: the
+ * cascade does not reverse origin order for important declarations, and the
+ * loader refuses them.
+ *
+ * It covers the control parts that draw nothing without a stylesheet: the
+ * slider's track (Slider::OnGeneratePrimitives reads --slider-track-fill, the
+ * filled part; --slider-track, the rest of the rail; --slider-tick, the step
+ * ticks) and its thumb, the toggle's knob, the checkbox's box and the scrollbar's
+ * thumb; and the `hidden` class the controls set on parts they are not showing
+ * (a slider's second thumb outside range mode, a dock tab bar's scroll buttons).
+ * Colours are the variables below; a theme recolours a control by setting the
+ * variable.
+ */
+
+:root {
+    --slider-track-fill: #3B85E0;
+    --slider-track: #595959;
+    --slider-tick: #BFBFBF;
+    --ui_color_slider_thumb: #FFFFFF;
+    --ui_color_toggle_knob: #DDDDDD;
+    --ui_color_checkbox_box: #202020;
+    --ui_color_checkbox_box_border: #777777;
+    --ui_color_checkbox_box_checked: #3B85E0;
+    --ui_color_scrollbar_thumb: #808080;
+}
+
+.hidden {
+    display: none;
+}
+
+.slider-thumb {
+    width: 8px;
+    height: 8px;
+    border-radius: 4px;
+    background-color: var(--ui_color_slider_thumb);
+}
+
+.toggle {
+    display: flex;
+    flex-direction: row;
+    align-items: center;
+    justify-content: flex-start;
+}
+
+.toggle:checked {
+    justify-content: flex-end;
+}
+
+.toggle-knob {
+    width: 12px;
+    height: 12px;
+    margin: 2px;
+    border-radius: 6px;
+    background-color: var(--ui_color_toggle_knob);
+}
+
+.checkbox:checked {
+    --ui_checkbox_box_fill: var(--ui_color_checkbox_box_checked);
+}
+
+.checkbox-box {
+    width: 16px;
+    height: 16px;
+    border-width: 1px;
+    border-color: var(--ui_color_checkbox_box_border);
+    background-color: var(--ui_checkbox_box_fill, var(--ui_color_checkbox_box));
+}
+
+.scrollbar-thumb {
+    background-color: var(--ui_color_scrollbar_thumb);
+}

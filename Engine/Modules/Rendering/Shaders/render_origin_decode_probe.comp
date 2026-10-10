@@ -1,0 +1,32 @@
+#version 450
+
+#include "Includes/storage_access.glsl"
+// Device coverage for the camera-relative sector decode (closes the review's
+// zero-device-coverage gap). Reads a full 240 B GPUInstance through the SHIPPED
+// std430 layout (gpu_instance_fields.glsl) and runs the SHIPPED
+// ge_UnpackInstanceSector (instance_io.glsl) on its packed words, writing the
+// decoded ivec3 out. A transposed mask, wrong shift, sign-extension slip, or
+// std430 offset drift of sectorPacked fails HERE on real hardware instead of
+// silently shipping green.
+#extension GL_GOOGLE_include_directive : require
+
+layout(local_size_x = 1, local_size_y = 1, local_size_z = 1) in;
+
+// ge_UnpackInstanceSector is defined at file scope in instance_io.glsl (before
+// its GE_INSTANCED / CUSTOM_VERTEX_SHADER branches), so including it without
+// either define yields just the InstanceData struct + the decode helper.
+#include "Includes/instance_io.glsl"
+
+struct GEInstanceProbe {
+#include "Includes/gpu_instance_fields.glsl"
+};
+
+layout(std430, set = 0, binding = 0) readonly buffer InstancesIn { GEInstanceProbe instances[]; };
+layout(std430, set = 0, binding = 1) GE_STORAGE_WRITEONLY buffer SectorsOut { ivec4 sectors[]; };
+
+void main()
+{
+    uint i = gl_GlobalInvocationID.x;
+    ivec3 s = ge_UnpackInstanceSector(instances[i].sectorPacked0, instances[i].sectorPacked1);
+    sectors[i] = ivec4(s, 1);
+}

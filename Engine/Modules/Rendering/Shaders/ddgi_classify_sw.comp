@@ -1,0 +1,471 @@
+#version 450
+
+// DDGI SOFTWARE probe-classification kernel — the portable twin of
+// ddgi_classify.comp, in exactly the same relationship ddgi_trace_sw.comp has
+// to ddgi_trace_hw.comp. Same 32-ray set with the same per-tick rotation, same
+// >25%-backface burial test, same capped relocation nudge, same
+// ge_ddgiProbeState output layout (xyz = relocation offset, w = active). The
+// ONLY difference is how a ray finds its hit: this kernel walks the CPU-built
+// threaded BVH (Engine/Modules/SceneBvh, packed and uploaded by
+// DDGISceneService) instead of GL_EXT_ray_query against a hardware
+// acceleration structure.
+//
+// Plain compute, deliberately: no ray_query, no buffer_reference, no int64,
+// no subgroup ops — nothing beyond GLSL 450 / SPIR-V 1.0, so this kernel runs
+// on the same tier ddgi_trace_sw.comp targets (MoltenVK and other non-ray-
+// query backends, and the web/compat profile). Adding an extension here would
+// defeat the entire point of the lane.
+//
+// SCENE DATA LAYOUT — authoritative documentation lives in
+// SceneBvh/ThreadedBvh.h and SceneBvh/TlasPacker.h. The stride constants below
+// mirror ddgi_trace_sw.comp's copies of those headers' constants; all three
+// must change together.
+//
+// BINDINGS (set 0). b0/b1 match ddgi_classify.comp (the UBO is one uvec4
+// longer — see DDGIClassifyParams below); b9..b11 and b13 are the same
+// buffers, by the same names, ddgi_trace_sw.comp binds, so both software
+// kernels' descriptor writes come from one set of C++ handles.
+//
+//   b0  DDGIClassifyParams   (UBO)
+//   b1  DDGIProbeState       (read AND written — self-only per probe)
+//   b9  DDGISwPackedScene    (float: uber materials | instances | TLAS)
+//   b10 DDGISwNodes          (uint:  pooled BLAS nodes)
+//   b11 DDGISwTriangleIndices(uint:  pooled triangle -> vertex indices)
+//   b13 DDGISwVertexData     (float: pooled vertex records)
+//
+// SSBO COUNT: 5 (b1, b9, b10, b11, b13) — inside the documented <=7 per-pass
+// web/compat budget. Classification needs neither material records nor UVs,
+// so the triangle-material buffer ddgi_trace_sw.comp binds at b12 is absent
+// here rather than bound and ignored.
+
+#include "Includes/ddgi_common.glsl"
+
+const uint GE_DDGI_CLASSIFY_RAYS = 32u;
+const float GE_DDGI_CLASSIFY_BURIED_FRACTION = 0.25;
+const float GE_DDGI_CLASSIFY_MAX_RELOCATE_CELL = 0.45;  // fraction of minCellWS
+// Clearance a probe wants from the nearest FRONTFACE, as a fraction of the
+// cell — the same value ddgi_classify.comp uses; the two lanes must relocate
+// identically or their probe fields stop being comparable.
+const float GE_DDGI_CLASSIFY_MIN_FRONTFACE_CELL = 0.2;
+
+// Mirrors of the C++ wire-format strides — see ddgi_trace_sw.comp's identical
+// block for which header each one comes from.
+const uint GE_DDGI_SW_NODE_STRIDE = 8u;
+const uint GE_DDGI_SW_TRI_STRIDE = 3u;
+const uint GE_DDGI_SW_VERTEX_STRIDE = 8u;
+const uint GE_DDGI_SW_RECORD_STRIDE = 28u;   // uber material AND instance record
+const uint GE_DDGI_SW_TLAS_STRIDE = 12u;
+const uint GE_DDGI_SW_INTERIOR_LEAF = 0xFFFFFFFFu;
+const uint GE_DDGI_SW_TRI_OFFSET_MASK = 0x00FFFFFFu;
+const uint GE_DDGI_SW_TRI_COUNT_SHIFT = 24u;
+
+// Absolute, not relative: the local-space ray direction is left UNNORMALIZED
+// (see the instance record below), so the determinant already carries the
+// instance's scale.
+const float GE_DDGI_SW_DET_EPS = 1.0e-12;
+
+layout(local_size_x = GE_DDGI_CLASSIFY_RAYS, local_size_y = 1, local_size_z = 1) in;
+
+// Same layout as ddgi_classify.comp's DDGIClassifyParams plus one trailing
+// uvec4 (uSwScene), exactly as ddgi_trace_sw.comp extends the hardware trace
+// kernel's UBO — so both classify kernels' std140 offsets agree up to that
+// point and the C++ fill stays one shared struct with a software-only tail.
+layout(std140, set = 0, binding = 0) uniform DDGIClassifyParams
+{
+    vec4 uGridMinWS;
+    vec4 uGridSizeWS;
+    ivec4 uProbeCount;   // xyz = res; w = probeTotal
+    vec4 uParams0;       // x = minCellWS
+    uvec4 uDispatch0;    // x = probeBase, y = probesThisTick, z = frameIndex (ray-set rotation)
+    uvec4 uSwScene;      // x = tlasNodeCount, y = instanceBase, z = tlasBase (float-element offsets), w unused
+} DDGIParams;
+
+// Pre-scroll cell record (Includes/ddgi_common.glsl's GE_DDGIProbeCellId);
+// ddgi_blend.comp stamps it after this pass.
+layout(std430, set = 0, binding = 3) buffer DDGIProbeCellRW
+{
+    vec4 ge_ddgiProbeCell[];
+};
+
+layout(std430, set = 0, binding = 1) buffer DDGIProbeState
+{
+    vec4 ge_ddgiProbeState[];
+};
+
+layout(std430, set = 0, binding = 9) readonly buffer DDGISwPackedScene
+{
+    float ge_ddgiSwPacked[];
+};
+
+layout(std430, set = 0, binding = 10) readonly buffer DDGISwNodes
+{
+    uint ge_ddgiSwNodes[];
+};
+
+layout(std430, set = 0, binding = 11) readonly buffer DDGISwTriangleIndices
+{
+    uint ge_ddgiSwTriangleIndices[];
+};
+
+layout(std430, set = 0, binding = 13) readonly buffer DDGISwVertexData
+{
+    float ge_ddgiSwVertexData[];
+};
+
+// xyz = hit direction (only meaningful when w < GE_DDGI_T_MAX), w = backface
+// hit distance or GE_DDGI_T_MAX as a "not a backface hit" sentinel. Each
+// invocation writes only its own slot — no race; invocation 0 reduces after
+// the barrier. Identical structure to ddgi_classify.comp's.
+shared vec4 sSlot[GE_DDGI_CLASSIFY_RAYS];    // backface hits: xyz = dir, w = t
+shared vec4 sFront[GE_DDGI_CLASSIFY_RAYS];   // frontface hits, same packing
+
+// See ddgi_trace_sw.comp's GE_DDGISwSafeInvDir: a raw 1.0/0.0 is fine for the
+// slab min/max until the origin sits exactly on a slab plane, where inf*0
+// silently NaNs the node away.
+vec3 GE_DDGISwSafeInvDir(vec3 d)
+{
+    const float kTiny = 1.0e-20;
+    vec3 signs = vec3(d.x < 0.0 ? -1.0 : 1.0, d.y < 0.0 ? -1.0 : 1.0, d.z < 0.0 ? -1.0 : 1.0);
+    vec3 safe = mix(d, signs * kTiny, lessThan(abs(d), vec3(kTiny)));
+    return 1.0 / safe;
+}
+
+bool GE_DDGISwSlabHit(vec3 boundsMin, vec3 boundsMax, vec3 origin, vec3 invDir, float bestT)
+{
+    vec3 t0 = (boundsMin - origin) * invDir;
+    vec3 t1 = (boundsMax - origin) * invDir;
+    vec3 tSmall = min(t0, t1);
+    vec3 tLarge = max(t0, t1);
+    float tNear = max(max(tSmall.x, tSmall.y), tSmall.z);
+    float tFar = min(min(tLarge.x, tLarge.y), tLarge.z);
+    return tFar >= max(tNear, 0.0) && tNear < bestT;
+}
+
+vec3 GE_DDGISwVertexPosition(uint vertexIndex)
+{
+    uint base = vertexIndex * GE_DDGI_SW_VERTEX_STRIDE;
+    return vec3(ge_ddgiSwVertexData[base + 0u],
+                ge_ddgiSwVertexData[base + 1u],
+                ge_ddgiSwVertexData[base + 2u]);
+}
+
+struct GE_DDGIClassifyHit
+{
+    bool Hit;
+    float T;
+    bool Backface;  // the ray struck the triangle from behind its winding normal
+};
+
+// Closest-hit traversal of the pooled TLAS/BLAS, reduced to what
+// classification needs: distance plus facing. No UV interpolation, no
+// material lookup — a buried probe is a geometric fact, not a shaded one.
+//
+// Written as one function with all three levels inlined for the same reason
+// ddgi_trace_sw.comp's GE_DDGISwTrace is: GLSL storage blocks are not opaque
+// types, so an SSBO cannot cross a function boundary and each level needs a
+// different buffer. The traversal contract is ThreadedBvh.h's — pre-order
+// nodes, left child at cursor+1, miss link past the whole subtree — and the
+// per-level visit counters turn a corrupt link (which would otherwise spin a
+// GPU thread forever and take the device with it) into a dropped ray.
+GE_DDGIClassifyHit GE_DDGISwClassifyTrace(vec3 originWS, vec3 dirWS, float tMin, float tMax)
+{
+    GE_DDGIClassifyHit best;
+    best.Hit = false;
+    best.T = tMax;
+    best.Backface = false;
+
+    uint tlasNodeCount = DDGIParams.uSwScene.x;
+    if (tlasNodeCount == 0u)
+        return best;
+
+    uint instanceBase = DDGIParams.uSwScene.y;
+    uint tlasBase = DDGIParams.uSwScene.z;
+    vec3 invDirWS = GE_DDGISwSafeInvDir(dirWS);
+
+    uint cursor = 0u;
+    uint visits = 0u;
+    uint visitLimit = tlasNodeCount * 2u + 8u;
+
+    while (cursor < tlasNodeCount)
+    {
+        if (visits++ >= visitLimit)
+            break;
+
+        uint node = tlasBase + cursor * GE_DDGI_SW_TLAS_STRIDE;
+        vec3 boundsMin = vec3(ge_ddgiSwPacked[node + 0u], ge_ddgiSwPacked[node + 1u],
+                              ge_ddgiSwPacked[node + 2u]);
+        vec3 boundsMax = vec3(ge_ddgiSwPacked[node + 3u], ge_ddgiSwPacked[node + 4u],
+                              ge_ddgiSwPacked[node + 5u]);
+        uint missLink = uint(ge_ddgiSwPacked[node + 6u]);
+        uint instanceOffset = uint(ge_ddgiSwPacked[node + 7u]);
+        uint instanceCount = uint(ge_ddgiSwPacked[node + 8u]);
+
+        if (!GE_DDGISwSlabHit(boundsMin, boundsMax, originWS, invDirWS, best.T))
+        {
+            cursor = missLink;
+            continue;
+        }
+        if (instanceCount == 0u)
+        {
+            cursor += 1u;  // interior: descend into the left child
+            continue;
+        }
+
+        for (uint slot = 0u; slot < instanceCount; ++slot)
+        {
+            uint record = instanceBase + (instanceOffset + slot) * GE_DDGI_SW_RECORD_STRIDE;
+            // Three ROWS of the inverse world matrix. The local direction is
+            // deliberately NOT renormalized, so `t` stays identical in local
+            // and world space and best-t comparisons remain valid across
+            // instances with different (even non-uniform) scale.
+            vec4 row0 = vec4(ge_ddgiSwPacked[record + 0u], ge_ddgiSwPacked[record + 1u],
+                             ge_ddgiSwPacked[record + 2u], ge_ddgiSwPacked[record + 3u]);
+            vec4 row1 = vec4(ge_ddgiSwPacked[record + 4u], ge_ddgiSwPacked[record + 5u],
+                             ge_ddgiSwPacked[record + 6u], ge_ddgiSwPacked[record + 7u]);
+            vec4 row2 = vec4(ge_ddgiSwPacked[record + 8u], ge_ddgiSwPacked[record + 9u],
+                             ge_ddgiSwPacked[record + 10u], ge_ddgiSwPacked[record + 11u]);
+            uint blasRoot = uint(ge_ddgiSwPacked[record + 12u]);
+            uint blasEnd = uint(ge_ddgiSwPacked[record + 13u]);
+            if (blasEnd <= blasRoot)
+                continue;
+
+            vec3 originLS = vec3(dot(row0.xyz, originWS) + row0.w,
+                                 dot(row1.xyz, originWS) + row1.w,
+                                 dot(row2.xyz, originWS) + row2.w);
+            vec3 dirLS = vec3(dot(row0.xyz, dirWS), dot(row1.xyz, dirWS), dot(row2.xyz, dirWS));
+            vec3 invDirLS = GE_DDGISwSafeInvDir(dirLS);
+
+            uint blasCursor = blasRoot;
+            uint blasVisits = 0u;
+            uint blasVisitLimit = (blasEnd - blasRoot) * 2u + 8u;
+
+            while (blasCursor < blasEnd)
+            {
+                if (blasVisits++ >= blasVisitLimit)
+                    break;
+
+                uint bnode = blasCursor * GE_DDGI_SW_NODE_STRIDE;
+                vec3 bMin = vec3(uintBitsToFloat(ge_ddgiSwNodes[bnode + 0u]),
+                                 uintBitsToFloat(ge_ddgiSwNodes[bnode + 1u]),
+                                 uintBitsToFloat(ge_ddgiSwNodes[bnode + 2u]));
+                vec3 bMax = vec3(uintBitsToFloat(ge_ddgiSwNodes[bnode + 3u]),
+                                 uintBitsToFloat(ge_ddgiSwNodes[bnode + 4u]),
+                                 uintBitsToFloat(ge_ddgiSwNodes[bnode + 5u]));
+                uint bMiss = ge_ddgiSwNodes[bnode + 6u];
+                uint leafWord = ge_ddgiSwNodes[bnode + 7u];
+
+                if (!GE_DDGISwSlabHit(bMin, bMax, originLS, invDirLS, best.T))
+                {
+                    blasCursor = bMiss;
+                    continue;
+                }
+                if (leafWord == GE_DDGI_SW_INTERIOR_LEAF)
+                {
+                    blasCursor += 1u;
+                    continue;
+                }
+
+                uint triangleOffset = leafWord & GE_DDGI_SW_TRI_OFFSET_MASK;
+                uint triangleCount = leafWord >> GE_DDGI_SW_TRI_COUNT_SHIFT;
+                for (uint i = 0u; i < triangleCount; ++i)
+                {
+                    uint indexBase = (triangleOffset + i) * GE_DDGI_SW_TRI_STRIDE;
+                    vec3 p0 = GE_DDGISwVertexPosition(ge_ddgiSwTriangleIndices[indexBase + 0u]);
+                    vec3 p1 = GE_DDGISwVertexPosition(ge_ddgiSwTriangleIndices[indexBase + 1u]);
+                    vec3 p2 = GE_DDGISwVertexPosition(ge_ddgiSwTriangleIndices[indexBase + 2u]);
+
+                    // Moller-Trumbore, two-sided — a classification ray MUST
+                    // see back faces, they are the entire signal.
+                    vec3 edge1 = p1 - p0;
+                    vec3 edge2 = p2 - p0;
+                    vec3 pvec = cross(dirLS, edge2);
+                    float det = dot(edge1, pvec);
+                    if (abs(det) < GE_DDGI_SW_DET_EPS)
+                        continue;
+                    float invDet = 1.0 / det;
+                    vec3 tvec = originLS - p0;
+                    float u = dot(tvec, pvec) * invDet;
+                    if (u < 0.0 || u > 1.0)
+                        continue;
+                    vec3 qvec = cross(tvec, edge1);
+                    float v = dot(dirLS, qvec) * invDet;
+                    if (v < 0.0 || u + v > 1.0)
+                        continue;
+                    float t = dot(edge2, qvec) * invDet;
+                    if (t <= tMin || t >= best.T)
+                        continue;
+
+                    // Facing is decided in WORLD space on the geometric
+                    // normal, not from the local determinant's sign: the
+                    // instance record's rows are the inverse matrix's rows, so
+                    // weighting them by the local normal applies the inverse
+                    // transpose without forming it, and that carries a
+                    // mirrored (negative-determinant) instance's winding flip
+                    // for free — the same answer a hardware ray query's
+                    // front-face bit reports.
+                    vec3 nLS = cross(edge1, edge2);
+                    vec3 nWS = nLS.x * row0.xyz + nLS.y * row1.xyz + nLS.z * row2.xyz;
+
+                    best.Hit = true;
+                    best.T = t;
+                    best.Backface = dot(nWS, dirWS) > 0.0;
+                }
+                blasCursor = bMiss;
+            }
+        }
+        cursor = missLink;  // leaf finished: skip past its own subtree
+    }
+    return best;
+}
+
+void main()
+{
+    uint probeLocal = gl_WorkGroupID.x;
+    int probeIdx = int(DDGIParams.uDispatch0.x) + int(probeLocal);
+#if defined(GE_COMPAT_PROFILE)
+    // Every invocation must reach barrier() below, so an out-of-range workgroup cannot early-return
+    // ahead of it: WGSL rejects a barrier under control flow it cannot prove workgroup-uniform, and
+    // naga routes gl_WorkGroupID through a private var the analysis reads as non-uniform. The bound
+    // is workgroup-uniform in fact, so `probeActive` is too; the guarded work is skipped and the shared
+    // slot written to its miss default, which the tap after the barrier already treats as no-hit.
+    bool probeActive = probeLocal < DDGIParams.uDispatch0.y && probeIdx < DDGIParams.uProbeCount.w;
+#else
+    if (probeLocal >= DDGIParams.uDispatch0.y || probeIdx >= DDGIParams.uProbeCount.w)
+        return;
+#endif
+
+    GE_DDGIGridInfo grid;
+    grid.gridMinWS = DDGIParams.uGridMinWS.xyz;
+    grid.gridSizeWS = DDGIParams.uGridSizeWS.xyz;
+    grid.probeCount = DDGIParams.uProbeCount.xyz;
+    grid.probeTotal = DDGIParams.uProbeCount.w;
+    grid.minCellWS = DDGIParams.uParams0.x;
+
+    // A slot handed to a new world cell by a scroll carries another place's
+    // relocation; start it from the lattice like a fresh probe. An inactive
+    // workgroup's probeIdx is out of range, so it reads neither buffer.
+#if defined(GE_COMPAT_PROFILE)
+    vec3 prevOffset =
+        (!probeActive || GE_DDGIProbeCellChanged(ge_ddgiProbeCell[probeIdx], grid, probeIdx))
+            ? vec3(0.0)
+            : ge_ddgiProbeState[probeIdx].xyz;
+#else
+    vec3 prevOffset = GE_DDGIProbeCellChanged(ge_ddgiProbeCell[probeIdx], grid, probeIdx)
+                          ? vec3(0.0)
+                          : ge_ddgiProbeState[probeIdx].xyz;
+#endif
+    vec3 probePosWS = GE_DDGIProbePosition(grid, probeIdx) + prevOffset;
+
+    uint rayIdx = gl_LocalInvocationID.x;
+    // Same rotating 32-ray set as the hardware twin: different directions
+    // probe the same neighbourhood over consecutive ticks instead of
+    // perpetually missing whatever the fixed set's blind spots miss.
+    vec3 dir = GE_DDGIRayDirection(rayIdx, GE_DDGI_CLASSIFY_RAYS, GE_DDGIRayBasis(DDGIParams.uDispatch0.z));
+    float maxDist = max(grid.minCellWS * 2.0, 1.0e-3);
+
+#if defined(GE_COMPAT_PROFILE)
+    vec4 mySlot = vec4(0.0, 0.0, 0.0, GE_DDGI_T_MAX);
+    vec4 myFront = vec4(0.0, 0.0, 0.0, GE_DDGI_T_MAX);
+    if (probeActive)
+    {
+        GE_DDGIClassifyHit hit = GE_DDGISwClassifyTrace(probePosWS, dir, GE_DDGI_RAY_EPS, maxDist);
+        if (hit.Hit)
+        {
+            if (hit.Backface)
+                mySlot = vec4(dir, hit.T);
+            else
+                myFront = vec4(dir, hit.T);
+        }
+    }
+    sSlot[rayIdx] = mySlot;
+    sFront[rayIdx] = myFront;
+    barrier();
+
+    if (!probeActive || rayIdx != 0u)
+        return;
+#else
+    GE_DDGIClassifyHit hit = GE_DDGISwClassifyTrace(probePosWS, dir, GE_DDGI_RAY_EPS, maxDist);
+
+    vec4 mySlot = vec4(0.0, 0.0, 0.0, GE_DDGI_T_MAX);
+    vec4 myFront = vec4(0.0, 0.0, 0.0, GE_DDGI_T_MAX);
+    if (hit.Hit)
+    {
+        if (hit.Backface)
+            mySlot = vec4(dir, hit.T);
+        else
+            myFront = vec4(dir, hit.T);
+    }
+    sSlot[rayIdx] = mySlot;
+    sFront[rayIdx] = myFront;
+    barrier();
+
+    if (rayIdx != 0u)
+        return;
+#endif
+
+    uint backfaceCount = 0u;
+    float closestT = GE_DDGI_T_MAX;
+    vec3 closestDir = vec3(0.0);
+    float closestFrontT = GE_DDGI_T_MAX;
+    vec3 closestFrontDir = vec3(0.0);
+    float farthestFrontT = 0.0;
+    vec3 farthestFrontDir = vec3(0.0);
+    for (uint i = 0u; i < GE_DDGI_CLASSIFY_RAYS; ++i)
+    {
+        vec4 f = sFront[i];
+        if (f.w < GE_DDGI_T_MAX)
+        {
+            if (f.w < closestFrontT) { closestFrontT = f.w; closestFrontDir = f.xyz; }
+            if (f.w > farthestFrontT) { farthestFrontT = f.w; farthestFrontDir = f.xyz; }
+        }
+        vec4 s = sSlot[i];
+        if (s.w >= GE_DDGI_T_MAX)
+            continue;
+        ++backfaceCount;
+        if (s.w < closestT)
+        {
+            closestT = s.w;
+            closestDir = s.xyz;
+        }
+    }
+
+    bool buried = (float(backfaceCount) / float(GE_DDGI_CLASSIFY_RAYS)) > GE_DDGI_CLASSIFY_BURIED_FRACTION;
+    // The same three branches as ddgi_classify.comp: step out of geometry,
+    // step away from a crowding surface, or walk the offset back down once
+    // there is room.
+    float maxRelocate = grid.minCellWS * GE_DDGI_CLASSIFY_MAX_RELOCATE_CELL;
+    float minFront = grid.minCellWS * GE_DDGI_CLASSIFY_MIN_FRONTFACE_CELL;
+    vec3 newOffset = prevOffset;
+    if (buried && closestT < GE_DDGI_T_MAX)
+    {
+        newOffset += closestDir * (closestT + minFront * 0.5);
+    }
+    else if (closestFrontT < minFront)
+    {
+        if (farthestFrontT > 0.0 && dot(closestFrontDir, farthestFrontDir) <= 0.0)
+            newOffset += farthestFrontDir * min(farthestFrontT, minFront);
+    }
+    else if (closestFrontT > minFront)
+    {
+        float offsetLen = length(prevOffset);
+        if (offsetLen > 1.0e-5)
+            newOffset -= normalize(prevOffset) * min(closestFrontT - minFront, offsetLen);
+    }
+    float newLen = length(newOffset);
+    if (newLen > maxRelocate)
+        newOffset *= maxRelocate / newLen;
+
+    newOffset = GE_DDGIStableRelocation(prevOffset, newOffset, grid.minCellWS);
+    vec3 displacement = newOffset - prevOffset;
+    float relocationDelta = length(displacement);
+    bool crossedGeometry = false;
+    if (relocationDelta > GE_DDGI_RAY_EPS)
+        crossedGeometry = GE_DDGISwClassifyTrace(probePosWS, displacement / relocationDelta,
+                                                GE_DDGI_RAY_EPS, relocationDelta).Hit;
+    newOffset = GE_DDGIConstrainRelocation(prevOffset, newOffset, buried, crossedGeometry);
+    crossedGeometry = crossedGeometry && any(notEqual(newOffset, prevOffset));
+    if (GE_DDGIResetRelocationHistory(ge_ddgiProbeState[probeIdx].w > 0.5, buried, crossedGeometry))
+        ge_ddgiProbeCell[probeIdx] = vec4(vec3(GE_DDGI_PROBE_CELL_UNSTAMPED), 1.0);
+
+    ge_ddgiProbeState[probeIdx] = vec4(newOffset, buried ? 0.0 : 1.0);
+}

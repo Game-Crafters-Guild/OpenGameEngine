@@ -1,0 +1,31 @@
+#version 450
+// Runs the production visibility-distance bound (GE_DDGIProbeMaxDistance and
+// GE_DDGIBoundedProbeDistance) on authored grids, one case per invocation.
+#include "Includes/ddgi_common.glsl"
+layout(local_size_x = 1) in;
+struct DistanceCase
+{
+    vec4 GridSizeWS;
+    ivec4 ProbeCount;
+    vec4 RayDistances;  // xyz = traced hit distances; a negative distance is a miss
+};
+layout(std430, set = 0, binding = 0) readonly buffer DistanceCases
+{
+    DistanceCase cases[];
+};
+layout(std430, set = 0, binding = 1) writeonly buffer DistanceResults
+{
+    vec4 results[];  // x = bound, yzw = the bounded ray distances
+};
+void main()
+{
+    DistanceCase c = cases[gl_GlobalInvocationID.x];
+    GE_DDGIGridInfo grid;
+    grid.gridSizeWS = c.GridSizeWS.xyz;
+    grid.probeCount = c.ProbeCount.xyz;
+    float bound = GE_DDGIProbeMaxDistance(grid);
+    results[gl_GlobalInvocationID.x] = vec4(bound,
+        GE_DDGIBoundedProbeDistance(c.RayDistances.x, bound),
+        GE_DDGIBoundedProbeDistance(c.RayDistances.y, bound),
+        GE_DDGIBoundedProbeDistance(c.RayDistances.z, bound));
+}

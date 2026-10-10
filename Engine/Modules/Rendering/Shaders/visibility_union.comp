@@ -1,0 +1,52 @@
+#version 450
+
+#include "Includes/storage_access.glsl"
+
+// Phase 6-ii: Visibility Union Pass
+//
+// ORs all per-view visibility slices into a single per-instance "any view
+// visible" flag buffer. One thread per instance walks the per-view offsets
+// array and accumulates the OR result.
+//
+// Slice layout produced by GPUCullingPipeline::PerformCulling:
+//   visibility[view0_offset + i .. view0_offset + count - 1]   (view 0)
+//   visibility[view1_offset + i .. view1_offset + count - 1]   (view 1)
+//   ...
+// Each view's slice has the SAME instanceCount today (FrustumCullingStrategy
+// submits firstInstance=0 + scene->GetInstanceCount() for every view). The
+// shader asserts this implicitly by walking instanceCount-length slices.
+
+layout(local_size_x = 64, local_size_y = 1, local_size_z = 1) in;
+
+layout(set = 0, binding = 0, std430) restrict readonly buffer VisibilityBuffer {
+    uint visibility[];
+};
+
+layout(set = 0, binding = 1, std430) restrict GE_STORAGE_WRITEONLY buffer AnyVisibleFlags {
+    uint anyVisible[];
+};
+
+// Per-view offsets into the visibility buffer (in element units). Sized at
+// host-side and uploaded each frame. viewCount in push constants tells us
+// how many entries are live.
+layout(set = 0, binding = 2, std430) restrict readonly buffer ViewOffsets {
+    uint viewOffsets[];
+};
+
+layout(push_constant) uniform PushConstants {
+    uint instanceCount;
+    uint viewCount;
+} pc;
+
+void main() {
+    uint i = gl_GlobalInvocationID.x;
+    if (i >= pc.instanceCount) {
+        return;
+    }
+
+    uint result = 0u;
+    for (uint v = 0u; v < pc.viewCount; ++v) {
+        result |= visibility[viewOffsets[v] + i];
+    }
+    anyVisible[i] = result;
+}

@@ -1,0 +1,142 @@
+/* Version-control dialog styles (Editor app asset)
+ *
+ * Loaded by VcsCommitDialog.cpp / VcsLogViewer.cpp via
+ * RequestSubtreeStyleAssetPath. Both dialogs share the `.vcs-modal` root
+ * idiom: a full-screen flex-centered backdrop holding one bounded-width
+ * window, matching the editor's ProjectFolderPickerModal / SearchDialog
+ * overlay pattern. Without these rules the dialog roots flow as unstyled
+ * full-width strips at the bottom of the UI root.
+ *
+ * Buttons inside the window keep the editor's base `button` theme
+ * (Button.css, attached per-button by the control) — this sheet only owns
+ * the overlay, window frame, typography, and the button row layout, so
+ * there is nothing here to lose the file-order cascade against.
+ */
+
+/* ---- Full-screen backdrop: centers the window and blocks the tree below ---- */
+.vcs-modal {
+	position: absolute;
+	left: 0;
+	top: 0;
+	width: 100%;
+	height: 100%;
+	z-index: 9000;
+	display: flex;
+	flex-direction: column;
+	align-items: center;
+	justify-content: center;
+	background-color: rgba(0, 0, 0, 0.4);
+	pointer-events: auto;
+	/* Modals must not follow the user-selected Editor UI font. */
+	font-family: var(--ui_font_family_default);
+}
+
+/* ---- Bounded window frame ---- */
+.vcs-modal-window {
+	display: flex;
+	flex-direction: column;
+	background-color: var(--ui_color_bg_panel);
+	border-width: 1px;
+	border-color: var(--ui_color_border_panel);
+	border-radius: var(--ui_radius_md);
+	box-shadow: var(--popup-shadow, 0 -1px 24px rgba(0, 0, 0, 0.25));
+	padding: 20px;
+	gap: 12px;
+}
+
+.vcs-commit-dialog .vcs-modal-window {
+	width: 100%;
+	max-width: 480px;
+}
+
+.vcs-log-viewer .vcs-modal-window {
+	width: 100%;
+	max-width: 640px;
+	/* Bounded so a long history scrolls inside the window instead of
+	   stretching it past the viewport. */
+	max-height: 70%;
+}
+
+/* ---- Title / labels ---- */
+.vcs-modal-title {
+	color: var(--ui_color_text_bright);
+	font-size: var(--ui_font_size_header);
+	font-weight: 600;
+	flex-shrink: 0;
+}
+
+.vcs-modal-label {
+	color: var(--ui_color_text_dim);
+	font-size: var(--ui_font_size_base);
+	flex-shrink: 0;
+}
+
+/* ---- Header row: title on the left, actions on the right ---- */
+.vcs-modal-header {
+	display: flex;
+	flex-direction: row;
+	align-items: center;
+	justify-content: space-between;
+	gap: 8px;
+	flex-shrink: 0;
+}
+
+.vcs-modal-header-actions {
+	display: flex;
+	flex-direction: row;
+	align-items: center;
+	gap: 8px;
+	flex-shrink: 0;
+}
+
+/* ---- Commit message field ---- */
+.vcs-commit-dialog #commit-message-field {
+	width: 100%;
+	min-height: 88px;
+}
+
+/* ---- Footer button row (Commit / Cancel) ---- */
+.vcs-modal-buttons {
+	display: flex;
+	flex-direction: row;
+	align-items: center;
+	justify-content: flex-end;
+	gap: 8px;
+	flex-shrink: 0;
+}
+
+/* ---- Log list: scrolls within the bounded window ---- */
+.vcs-log-viewer .log-entries {
+	display: flex;
+	flex-direction: column;
+	gap: 8px;
+	flex-grow: 1;
+	flex-shrink: 1;
+	min-height: 0;
+	overflow: auto;
+}
+
+.vcs-log-viewer .log-entry {
+	display: flex;
+	flex-direction: column;
+	gap: 2px;
+	padding: 8px 10px;
+	background-color: var(--ui_color_bg_hover_alt);
+	border-radius: var(--ui_radius_sm);
+}
+
+.vcs-log-viewer .log-hash {
+	color: var(--ui_color_accent_blue);
+	font-family: var(--ui_font_mono);
+	font-size: var(--ui_font_size_small);
+}
+
+.vcs-log-viewer .log-meta {
+	color: var(--ui_color_text_dim);
+	font-size: var(--ui_font_size_small);
+}
+
+.vcs-log-viewer .log-message {
+	color: var(--ui_color_text);
+	font-size: var(--ui_font_size_base);
+}

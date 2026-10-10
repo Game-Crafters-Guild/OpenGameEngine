@@ -1,0 +1,49 @@
+{
+  "name": "repro_tearout_sceneview_playmode_smoke",
+  "windowIndex": 0,
+  "minFrames": 520,
+  "probe": {
+    "elementId": "dock",
+    "pixelHash": {
+      "enabled": true,
+      "frameStart": 120,
+      "frameEnd": 420,
+      "everyNFrames": 1,
+      "maxPending": 1,
+      "readbackDelayFrames": 4,
+      "failOnAllBlack": true,
+      "failIfMeanByteBelow": 5.0,
+      "failIfNonZeroBytesBelow": 256,
+      "dumpPpm": false,
+      "center": true,
+      "sampleWidth": 64,
+      "sampleHeight": 64
+    }
+  },
+  "events": [
+    { "frame": 0, "type": "mouseMove", "target": { "kind": "elementId", "id": "dock", "relX": 0.5, "relY": 0.5 } },
+    { "frame": 10, "type": "invokeCommand", "commandId": 4042000020 },
+    { "frame": 20, "type": "invokeCommand", "commandId": 4042000003 },
+    { "frame": 21, "type": "waitWindowCount", "atLeast": 2, "timeoutFrames": 180 },
+    { "frame": 40, "type": "invokeCommand", "commandId": 4042000032 },
+
+    { "frame": 80, "type": "invokeCommand", "commandId": 4042000010 },
+    { "frame": 81, "type": "waitFrames", "frames": 10 },
+    { "frame": 92, "type": "invokeCommand", "commandId": 4042000021 },
+
+    { "frame": 120, "type": "invokeCommand", "commandId": 4042000011 },
+    { "frame": 121, "type": "waitFrames", "frames": 8 },
+    { "frame": 130, "type": "invokeCommand", "commandId": 4042000022 },
+
+    { "frame": 150, "type": "invokeCommand", "commandId": 4042000011 },
+    { "frame": 151, "type": "waitFrames", "frames": 8 },
+    { "frame": 160, "type": "invokeCommand", "commandId": 4042000021 },
+
+    { "frame": 220, "type": "invokeCommand", "commandId": 4042000012 },
+    { "frame": 221, "type": "waitFrames", "frames": 12 },
+    { "frame": 234, "type": "invokeCommand", "commandId": 4042000023 },
+
+    { "frame": 300, "type": "invokeCommand", "commandId": 4042000002 },
+    { "frame": 301, "type": "waitWindowCount", "exact": 1, "timeoutFrames": 180 }
+  ]
+}

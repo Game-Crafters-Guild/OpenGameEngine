@@ -1,0 +1,529 @@
+/* One rule per icon stem: the artwork for the gn-icon--<stem> classes that
+   GraphNodeIcons::ApplyIconClass toggles on node and palette icon holders.
+
+   Geometry and the unknown-type fallback glyph live with the holder classes
+   in node-graph.css (.graph-node-icon, .graph-node-palette-icon) — this file
+   carries only what differs per stem, which is the image.
+
+   GENERATED SHAPE: one class per icon under editor:Icons/GraphNodes/.
+   GraphNodeIconsTests asserts every registered stem has a rule here. */
+
+.gn-icon--abs {
+	background-image: url("editor:Icons/GraphNodes/abs.svg");
+}
+
+.gn-icon--add {
+	background-image: url("editor:Icons/GraphNodes/add.svg");
+}
+
+.gn-icon--addforce {
+	background-image: url("editor:Icons/GraphNodes/addforce.svg");
+}
+
+.gn-icon--billboard {
+	background-image: url("editor:Icons/GraphNodes/billboard.svg");
+}
+
+.gn-icon--blend {
+	background-image: url("editor:Icons/GraphNodes/blend.svg");
+}
+
+.gn-icon--blendspace {
+	background-image: url("editor:Icons/GraphNodes/blendspace.svg");
+}
+
+.gn-icon--camera {
+	background-image: url("editor:Icons/GraphNodes/camera.svg");
+}
+
+.gn-icon--camerafollow {
+	background-image: url("editor:Icons/GraphNodes/camerafollow.svg");
+}
+
+.gn-icon--category-audio {
+	background-image: url("editor:Icons/GraphNodes/category-audio.svg");
+}
+
+.gn-icon--category-color {
+	background-image: url("editor:Icons/GraphNodes/category-color.svg");
+}
+
+.gn-icon--category-debug {
+	background-image: url("editor:Icons/GraphNodes/category-debug.svg");
+}
+
+.gn-icon--category-flow {
+	background-image: url("editor:Icons/GraphNodes/category-flow.svg");
+}
+
+.gn-icon--category-gameobject {
+	background-image: url("editor:Icons/GraphNodes/category-gameobject.svg");
+}
+
+.gn-icon--category-ik {
+	background-image: url("editor:Icons/GraphNodes/category-ik.svg");
+}
+
+.gn-icon--category-input {
+	background-image: url("editor:Icons/GraphNodes/category-input.svg");
+}
+
+.gn-icon--category-logic {
+	background-image: url("editor:Icons/GraphNodes/category-logic.svg");
+}
+
+.gn-icon--category-math {
+	background-image: url("editor:Icons/GraphNodes/category-math.svg");
+}
+
+.gn-icon--category-motion {
+	background-image: url("editor:Icons/GraphNodes/category-motion.svg");
+}
+
+.gn-icon--category-navigation {
+	background-image: url("editor:Icons/GraphNodes/category-navigation.svg");
+}
+
+.gn-icon--category-normal {
+	background-image: url("editor:Icons/GraphNodes/category-normal.svg");
+}
+
+.gn-icon--category-organization {
+	background-image: url("editor:Icons/GraphNodes/category-organization.svg");
+}
+
+.gn-icon--category-output {
+	background-image: url("editor:Icons/GraphNodes/category-output.svg");
+}
+
+.gn-icon--category-parameters {
+	background-image: url("editor:Icons/GraphNodes/category-parameters.svg");
+}
+
+.gn-icon--category-physics {
+	background-image: url("editor:Icons/GraphNodes/category-physics.svg");
+}
+
+.gn-icon--category-pose {
+	background-image: url("editor:Icons/GraphNodes/category-pose.svg");
+}
+
+.gn-icon--category-rendering {
+	background-image: url("editor:Icons/GraphNodes/category-rendering.svg");
+}
+
+.gn-icon--category-sampling {
+	background-image: url("editor:Icons/GraphNodes/category-sampling.svg");
+}
+
+.gn-icon--category-scene {
+	background-image: url("editor:Icons/GraphNodes/category-scene.svg");
+}
+
+.gn-icon--category-sky {
+	background-image: url("editor:Icons/GraphNodes/category-sky.svg");
+}
+
+.gn-icon--category-state {
+	background-image: url("editor:Icons/GraphNodes/category-state.svg");
+}
+
+.gn-icon--category-time {
+	background-image: url("editor:Icons/GraphNodes/category-time.svg");
+}
+
+.gn-icon--category-transform {
+	background-image: url("editor:Icons/GraphNodes/category-transform.svg");
+}
+
+.gn-icon--category-ui {
+	background-image: url("editor:Icons/GraphNodes/category-ui.svg");
+}
+
+.gn-icon--category-utility {
+	background-image: url("editor:Icons/GraphNodes/category-utility.svg");
+}
+
+.gn-icon--category-vector {
+	background-image: url("editor:Icons/GraphNodes/category-vector.svg");
+}
+
+.gn-icon--ceil {
+	background-image: url("editor:Icons/GraphNodes/ceil.svg");
+}
+
+.gn-icon--clamp {
+	background-image: url("editor:Icons/GraphNodes/clamp.svg");
+}
+
+.gn-icon--clip {
+	background-image: url("editor:Icons/GraphNodes/clip.svg");
+}
+
+.gn-icon--collisionevent {
+	background-image: url("editor:Icons/GraphNodes/collisionevent.svg");
+}
+
+.gn-icon--color {
+	background-image: url("editor:Icons/GraphNodes/color.svg");
+}
+
+.gn-icon--compare {
+	background-image: url("editor:Icons/GraphNodes/compare.svg");
+}
+
+.gn-icon--compose {
+	background-image: url("editor:Icons/GraphNodes/compose.svg");
+}
+
+.gn-icon--cos {
+	background-image: url("editor:Icons/GraphNodes/cos.svg");
+}
+
+.gn-icon--cross {
+	background-image: url("editor:Icons/GraphNodes/cross.svg");
+}
+
+.gn-icon--curve {
+	background-image: url("editor:Icons/GraphNodes/curve.svg");
+}
+
+.gn-icon--debug-line {
+	background-image: url("editor:Icons/GraphNodes/debug-line.svg");
+}
+
+.gn-icon--decompose {
+	background-image: url("editor:Icons/GraphNodes/decompose.svg");
+}
+
+.gn-icon--derivative {
+	background-image: url("editor:Icons/GraphNodes/derivative.svg");
+}
+
+.gn-icon--distance {
+	background-image: url("editor:Icons/GraphNodes/distance.svg");
+}
+
+.gn-icon--divide {
+	background-image: url("editor:Icons/GraphNodes/divide.svg");
+}
+
+.gn-icon--dot {
+	background-image: url("editor:Icons/GraphNodes/dot.svg");
+}
+
+.gn-icon--entry {
+	background-image: url("editor:Icons/GraphNodes/entry.svg");
+}
+
+.gn-icon--exp {
+	background-image: url("editor:Icons/GraphNodes/exp.svg");
+}
+
+.gn-icon--fade {
+	background-image: url("editor:Icons/GraphNodes/fade.svg");
+}
+
+.gn-icon--findentity {
+	background-image: url("editor:Icons/GraphNodes/findentity.svg");
+}
+
+.gn-icon--float {
+	background-image: url("editor:Icons/GraphNodes/float.svg");
+}
+
+.gn-icon--floor {
+	background-image: url("editor:Icons/GraphNodes/floor.svg");
+}
+
+.gn-icon--fract {
+	background-image: url("editor:Icons/GraphNodes/fract.svg");
+}
+
+.gn-icon--fresnel {
+	background-image: url("editor:Icons/GraphNodes/fresnel.svg");
+}
+
+.gn-icon--grayscale {
+	background-image: url("editor:Icons/GraphNodes/grayscale.svg");
+}
+
+.gn-icon--hidepanel {
+	background-image: url("editor:Icons/GraphNodes/hidepanel.svg");
+}
+
+.gn-icon--hsv {
+	background-image: url("editor:Icons/GraphNodes/hsv.svg");
+}
+
+.gn-icon--if {
+	background-image: url("editor:Icons/GraphNodes/if.svg");
+}
+
+.gn-icon--ik {
+	background-image: url("editor:Icons/GraphNodes/ik.svg");
+}
+
+.gn-icon--input-action {
+	background-image: url("editor:Icons/GraphNodes/input-action.svg");
+}
+
+.gn-icon--input-axis {
+	background-image: url("editor:Icons/GraphNodes/input-axis.svg");
+}
+
+.gn-icon--length {
+	background-image: url("editor:Icons/GraphNodes/length.svg");
+}
+
+.gn-icon--lerp {
+	background-image: url("editor:Icons/GraphNodes/lerp.svg");
+}
+
+.gn-icon--loadscene {
+	background-image: url("editor:Icons/GraphNodes/loadscene.svg");
+}
+
+.gn-icon--log {
+	background-image: url("editor:Icons/GraphNodes/log.svg");
+}
+
+.gn-icon--madd {
+	background-image: url("editor:Icons/GraphNodes/madd.svg");
+}
+
+.gn-icon--max {
+	background-image: url("editor:Icons/GraphNodes/max.svg");
+}
+
+.gn-icon--min {
+	background-image: url("editor:Icons/GraphNodes/min.svg");
+}
+
+.gn-icon--mod {
+	background-image: url("editor:Icons/GraphNodes/mod.svg");
+}
+
+.gn-icon--moveto {
+	background-image: url("editor:Icons/GraphNodes/moveto.svg");
+}
+
+.gn-icon--multiply {
+	background-image: url("editor:Icons/GraphNodes/multiply.svg");
+}
+
+.gn-icon--negate {
+	background-image: url("editor:Icons/GraphNodes/negate.svg");
+}
+
+.gn-icon--normal-blend {
+	background-image: url("editor:Icons/GraphNodes/normal-blend.svg");
+}
+
+.gn-icon--normal-input {
+	background-image: url("editor:Icons/GraphNodes/normal-input.svg");
+}
+
+.gn-icon--normal-strength {
+	background-image: url("editor:Icons/GraphNodes/normal-strength.svg");
+}
+
+.gn-icon--normalize {
+	background-image: url("editor:Icons/GraphNodes/normalize.svg");
+}
+
+.gn-icon--oneminus {
+	background-image: url("editor:Icons/GraphNodes/oneminus.svg");
+}
+
+.gn-icon--organization {
+	background-image: url("editor:Icons/GraphNodes/organization.svg");
+}
+
+.gn-icon--output {
+	background-image: url("editor:Icons/GraphNodes/output.svg");
+}
+
+.gn-icon--parameter {
+	background-image: url("editor:Icons/GraphNodes/parameter.svg");
+}
+
+.gn-icon--position {
+	background-image: url("editor:Icons/GraphNodes/position.svg");
+}
+
+.gn-icon--power {
+	background-image: url("editor:Icons/GraphNodes/power.svg");
+}
+
+.gn-icon--random {
+	background-image: url("editor:Icons/GraphNodes/random.svg");
+}
+
+.gn-icon--raycast {
+	background-image: url("editor:Icons/GraphNodes/raycast.svg");
+}
+
+.gn-icon--reflect {
+	background-image: url("editor:Icons/GraphNodes/reflect.svg");
+}
+
+.gn-icon--refract {
+	background-image: url("editor:Icons/GraphNodes/refract.svg");
+}
+
+.gn-icon--reloadscene {
+	background-image: url("editor:Icons/GraphNodes/reloadscene.svg");
+}
+
+.gn-icon--remap {
+	background-image: url("editor:Icons/GraphNodes/remap.svg");
+}
+
+.gn-icon--reroute {
+	background-image: url("editor:Icons/GraphNodes/reroute.svg");
+}
+
+.gn-icon--rotate {
+	background-image: url("editor:Icons/GraphNodes/rotate.svg");
+}
+
+.gn-icon--sample-array {
+	background-image: url("editor:Icons/GraphNodes/sample-array.svg");
+}
+
+.gn-icon--sample-cube {
+	background-image: url("editor:Icons/GraphNodes/sample-cube.svg");
+}
+
+.gn-icon--sample-lod {
+	background-image: url("editor:Icons/GraphNodes/sample-lod.svg");
+}
+
+.gn-icon--sample2d {
+	background-image: url("editor:Icons/GraphNodes/sample2d.svg");
+}
+
+.gn-icon--saturate {
+	background-image: url("editor:Icons/GraphNodes/saturate.svg");
+}
+
+.gn-icon--setenabled {
+	background-image: url("editor:Icons/GraphNodes/setenabled.svg");
+}
+
+.gn-icon--setlight {
+	background-image: url("editor:Icons/GraphNodes/setlight.svg");
+}
+
+.gn-icon--settext {
+	background-image: url("editor:Icons/GraphNodes/settext.svg");
+}
+
+.gn-icon--setvelocity {
+	background-image: url("editor:Icons/GraphNodes/setvelocity.svg");
+}
+
+.gn-icon--sign {
+	background-image: url("editor:Icons/GraphNodes/sign.svg");
+}
+
+.gn-icon--sin {
+	background-image: url("editor:Icons/GraphNodes/sin.svg");
+}
+
+.gn-icon--slot {
+	background-image: url("editor:Icons/GraphNodes/slot.svg");
+}
+
+.gn-icon--smoothstep {
+	background-image: url("editor:Icons/GraphNodes/smoothstep.svg");
+}
+
+.gn-icon--sqrt {
+	background-image: url("editor:Icons/GraphNodes/sqrt.svg");
+}
+
+.gn-icon--state {
+	background-image: url("editor:Icons/GraphNodes/state.svg");
+}
+
+.gn-icon--statemachine {
+	background-image: url("editor:Icons/GraphNodes/statemachine.svg");
+}
+
+.gn-icon--step {
+	background-image: url("editor:Icons/GraphNodes/step.svg");
+}
+
+.gn-icon--stopmove {
+	background-image: url("editor:Icons/GraphNodes/stopmove.svg");
+}
+
+.gn-icon--subtract {
+	background-image: url("editor:Icons/GraphNodes/subtract.svg");
+}
+
+.gn-icon--tan {
+	background-image: url("editor:Icons/GraphNodes/tan.svg");
+}
+
+.gn-icon--tangent {
+	background-image: url("editor:Icons/GraphNodes/tangent.svg");
+}
+
+.gn-icon--time {
+	background-image: url("editor:Icons/GraphNodes/time.svg");
+}
+
+.gn-icon--transform-dir {
+	background-image: url("editor:Icons/GraphNodes/transform-dir.svg");
+}
+
+.gn-icon--transform-nrm {
+	background-image: url("editor:Icons/GraphNodes/transform-nrm.svg");
+}
+
+.gn-icon--transform-pos {
+	background-image: url("editor:Icons/GraphNodes/transform-pos.svg");
+}
+
+.gn-icon--transform-uv {
+	background-image: url("editor:Icons/GraphNodes/transform-uv.svg");
+}
+
+.gn-icon--triggerevent {
+	background-image: url("editor:Icons/GraphNodes/triggerevent.svg");
+}
+
+.gn-icon--triplanar {
+	background-image: url("editor:Icons/GraphNodes/triplanar.svg");
+}
+
+.gn-icon--uv {
+	background-image: url("editor:Icons/GraphNodes/uv.svg");
+}
+
+.gn-icon--vec2 {
+	background-image: url("editor:Icons/GraphNodes/vec2.svg");
+}
+
+.gn-icon--vec3 {
+	background-image: url("editor:Icons/GraphNodes/vec3.svg");
+}
+
+.gn-icon--vec4 {
+	background-image: url("editor:Icons/GraphNodes/vec4.svg");
+}
+
+.gn-icon--vertex-color {
+	background-image: url("editor:Icons/GraphNodes/vertex-color.svg");
+}
+
+.gn-icon--view {
+	background-image: url("editor:Icons/GraphNodes/view.svg");
+}
+
+.gn-icon--wind {
+	background-image: url("editor:Icons/GraphNodes/wind.svg");
+}

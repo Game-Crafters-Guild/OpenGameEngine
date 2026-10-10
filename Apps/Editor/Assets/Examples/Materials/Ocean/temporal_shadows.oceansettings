@@ -1,0 +1,15 @@
+{
+  "FormatVersion": 1,
+  "Kind": 3,
+  "Shadows": {
+    "Enabled": true,
+    "SimulationFrequency": 60,
+    "TemporalWeight": 0.92,
+    "JitterDiameter": 12,
+    "HardJitterDiameter": 0.6,
+    "HardChannelScale": 1,
+    "SoftChannelScale": 1,
+    "CascadeCount": 7,
+    "Resolution": 256
+  }
+}

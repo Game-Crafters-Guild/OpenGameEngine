@@ -1,0 +1,120 @@
+#version 450
+
+#include "Includes/storage_access.glsl"
+
+// Frustum Culling Compute Shader
+// Performs GPU-driven frustum culling for large numbers of instances.
+//
+// Specialization-constant `kViewCount` selects how many frusta the dispatch
+// tests each instance against. With the default value (1) the shader is
+// bit-identical to the historical single-view path. Setting kViewCount > 1
+// at PSO creation time unrolls the per-cascade loop so a single dispatch
+// can fan a candidate set out into multiple visibility-buffer slices.
+
+layout(local_size_x = 64, local_size_y = 1, local_size_z = 1) in;
+
+layout(constant_id = 0) const uint kViewCount = 1u;
+
+// Maximum number of views (cascades) supported in a single dispatch. Sized to
+// match kMaxShadowCascades on the CPU side. Must stay in sync with the storage
+// allocated for GPUCullingData::frustumPlanes and the PushConstants array.
+const uint kMaxViewsPerDispatch = 4u;
+
+// Input structures
+struct GPUInstance {
+#include "Includes/gpu_instance_fields.glsl"
+};
+
+// Complete std430 mirror of GPUScene.h::GPUCullingData (656 bytes), shared
+// with hzb_culling.comp through the include; the HZB fields are unused here.
+struct GPUCullingData {
+#include "Includes/gpu_culling_data_fields.glsl"
+};
+
+// Buffers
+layout(set = 0, binding = 0, std430) restrict readonly buffer InstanceBuffer {
+    GPUInstance instances[];
+};
+
+layout(set = 0, binding = 1, std430) restrict readonly buffer CullingDataBuffer {
+    GPUCullingData cullingData;
+};
+
+layout(set = 0, binding = 2, std430) restrict GE_STORAGE_WRITEONLY buffer FrustumResultsBuffer {
+    uint frustumResults[];  // 1 = visible, 0 = culled
+};
+
+layout(push_constant) uniform PushConstants {
+	    // Number of candidate instances for this dispatch. The base index for
+	    // those candidates is provided via cullingData.firstInstance.
+	    uint instanceCount;
+	    uint padding1;
+	    uint padding2;
+	    uint padding3;
+	    // Per-view output base offset in *element* units into the shared
+	    // visibility buffer. The shader writes to
+	    //   frustumResults[sliceOffsets[c] + localIndex]
+	    // so the CPU can bind the whole visibility buffer and still address
+	    // an arbitrary per-view slice. For kViewCount==1, only sliceOffsets[0]
+	    // is read.
+	    uint sliceOffsets[4];
+} pushConstants;
+
+// Frustum culling test. Plane equations are ax + by + cz + d = 0 with inward-
+// pointing, CPU-normalized normals from ExtractFrustumPlanes(), whose offset d
+// was TRANSLATED by n*cameraPos on the CPU (MakeFrustumPlanesCameraRelative). So
+// the test runs camera-relative: (center - cameraPos) stays small-magnitude,
+// avoiding the big-minus-big collapse of dot(center, n) + d at planetary distance
+// (which culls everything). Mathematically identical to the world-space test, and
+// bit-identical when cameraPos is (0,0,0) (origin inactive => dark-ship).
+bool TestSphereFrustum(vec3 center, float radius, vec4 planes[6], vec3 cameraPos) {
+    vec3 rel = center - cameraPos;
+    for (int i = 0; i < 6; ++i) {
+        vec4 p = planes[i];
+        float dist = dot(rel, p.xyz) + p.w;
+        if (dist < -radius) return false;
+    }
+    return true;
+}
+
+void main() {
+	    uint localIndex = gl_GlobalInvocationID.x;
+
+	    // Bounds check - use push constant for proper bounds
+	    if (localIndex >= pushConstants.instanceCount) {
+	        return;
+	    }
+
+	    // Map the local candidate index into the global instance buffer using
+	    // the per-pass candidate range encoded in cullingData.
+	    uint instanceIndex = cullingData.firstInstance + localIndex;
+
+	    // Get the instance data
+	    GPUInstance instance = instances[instanceIndex];
+
+	    // Test against each active frustum. The specialization-constant
+	    // `kViewCount` allows the SPIR-V compiler to fully unroll this loop at
+	    // PSO creation time, so the N=1 variant collapses to a single test.
+	    // Per-frustum radius inflation comes from the CPU (conservative for
+	    // main view / cascade 0, tight for distant cascades — SCALE-11).
+	    for (uint c = 0u; c < kViewCount; ++c) {
+	        bool isVisible = TestSphereFrustum(
+	            instance.boundingCenter,
+	            instance.boundingRadius * cullingData.cullMargins[c],
+	            cullingData.frustumPlanes[c], cullingData.cameraPosition
+	        );
+
+	        // Every color and shadow slice honors the requesting view's layers.
+	        isVisible = isVisible && (instance.renderLayerMask & cullingData.renderLayerMask) != 0u;
+
+	        // Shadow dispatches drop non-casters: bit 0 of instance.flags is the
+	        // cast-shadows flag (set at extraction). Main/reflection views leave
+	        // cullShadowCasters at 0 so everything stays visible.
+	        if (cullingData.cullShadowCasters != 0u && (instance.flags & 1u) == 0u)
+	            isVisible = false;
+
+	        // Each view writes into its own slice of the shared visibility
+	        // buffer at `sliceOffsets[c] + localIndex`.
+	        frustumResults[pushConstants.sliceOffsets[c] + localIndex] = isVisible ? 1u : 0u;
+	    }
+}

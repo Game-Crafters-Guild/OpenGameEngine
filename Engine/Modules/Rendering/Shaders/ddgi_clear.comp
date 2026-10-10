@@ -1,0 +1,34 @@
+#version 450
+
+// DDGI clear kernel: fills a vec4-strided STATE SSBO with `uFillValue` on
+// grid (re)allocation (first enable, or a resize — component-edited
+// density/extents/rays) so a fresh buffer never presents stale or
+// uninitialized data before the first tick lands. Generic across every DDGI
+// per-probe/per-texel state buffer (irradiance state, depth-moment state,
+// the per-probe classify state) — a single dispatch per target buffer, fill
+// value chosen by the caller (irradiance/depth: zero; classify state: zero
+// offset + active=1, so a freshly allocated probe starts usable rather than
+// spuriously inactive). One thread per element.
+
+#include "Includes/ddgi_common.glsl"
+
+layout(local_size_x = 256, local_size_y = 1, local_size_z = 1) in;
+
+layout(std140, set = 0, binding = 0) uniform DDGIClearParams
+{
+    uvec4 uElementCount;  // x = total elements to clear
+    vec4 uFillValue;
+} DDGIParams;
+
+layout(std430, set = 0, binding = 1) buffer DDGIClearTarget
+{
+    vec4 ge_ddgiClearTarget[];
+};
+
+void main()
+{
+    uint idx = gl_GlobalInvocationID.x;
+    if (idx >= DDGIParams.uElementCount.x)
+        return;
+    ge_ddgiClearTarget[idx] = DDGIParams.uFillValue;
+}

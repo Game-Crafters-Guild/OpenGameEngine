@@ -1,0 +1,50 @@
+/* ======================================
+   GameView root & Viewport
+   ====================================== */
+.gameview-panel {
+    display: flex;
+    flex-direction: column;
+    height: 100%;
+    width: 100%;
+    /* The plate behind the viewport, seen through its rounded corners. No
+       toolbar sits above this panel, so it wears the leaf's own color and the
+       corners read as the leaf rather than a darker sheet. */
+    background-color: var(--ui_color_bg_panel);
+}
+
+.game-viewport {
+    display: flex;
+    flex: 1;
+    flex-grow: 1;
+    justify-content: center;
+    align-items: center;
+
+    position: relative;
+    min-width: 0;
+    min-height: 0;
+    width: 100%;
+    height: 100%;
+
+    background-image: engine("game_main");
+    background-size: 100% 100%;
+    background-position: center;
+    background-repeat: no-repeat;
+    /* Matches the Scene View: all four corners equal, the top ones because the
+       leaf is square there. Keep in step with .dock-content in theme/core.css. */
+    border-radius: 5px;
+    overflow: hidden;
+}
+
+.gameview-no-camera {
+    color: rgba(233, 233, 233, 0.9);
+    background-color: rgba(0, 0, 0, 0.44);
+    padding: 10px 14px;
+    border-radius: 8px;
+    font-size: 14px;
+    pointer-events: none;
+    text-align: center;
+    white-space: nowrap;
+    max-width: 80%;
+    z-index: 1000;
+}
+

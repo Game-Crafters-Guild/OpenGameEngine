@@ -1,0 +1,155 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Humanoid Retargeting — Overview</title>
+<style>
+:root {
+  --bg: #0f1115; --panel: #161a22; --panel-light: #1d2330; --border: #2a3245;
+  --text: #d8dee9; --muted: #8792a8; --accent: #5aa0f2;
+  --danger: #e06c75; --bad: #e06c75; --ok: #7fd18b; --good: #7fd18b; --warn: #e5c07b;
+}
+* { box-sizing: border-box; }
+body { background: var(--bg); color: var(--text); font: 15px/1.6 "Segoe UI", system-ui, sans-serif; margin: 0; padding: 32px 24px 64px; }
+.wrap { max-width: 1080px; margin: 0 auto; }
+h1 { font-size: 30px; margin: 0 0 4px; }
+h2 { font-size: 22px; margin-top: 48px; border-top: 1px solid var(--border); padding-top: 24px; }
+h3 { font-size: 17px; margin-top: 28px; color: var(--accent); }
+.lede { color: var(--muted); margin-bottom: 28px; }
+code { background: var(--panel-light); border: 1px solid var(--border); border-radius: 4px; padding: 1px 6px; font-size: 13px; }
+pre { background: var(--panel-light); border: 1px solid var(--border); border-radius: 8px; padding: 14px 16px; overflow-x: auto; font-size: 13px; line-height: 1.5; }
+pre code { background: none; border: none; padding: 0; }
+.panel { background: var(--panel); border: 1px solid var(--border); border-left: 4px solid var(--accent); border-radius: 8px; padding: 14px 18px; margin: 18px 0; }
+.panel.ok { border-left-color: var(--ok); }
+.panel.warn { border-left-color: var(--warn); }
+.panel.danger { border-left-color: var(--danger); }
+.panel b.tag { text-transform: uppercase; font-size: 11px; letter-spacing: .08em; display: block; margin-bottom: 4px; }
+.panel.ok b.tag { color: var(--ok); } .panel.warn b.tag { color: var(--warn); } .panel.danger b.tag { color: var(--danger); } .panel b.tag { color: var(--accent); }
+table { border-collapse: collapse; width: 100%; margin: 16px 0; font-size: 14px; }
+th { background: var(--panel-light); text-align: left; padding: 8px 12px; border: 1px solid var(--border); font-size: 12px; text-transform: uppercase; letter-spacing: .05em; color: var(--muted); }
+td { padding: 8px 12px; border: 1px solid var(--border); vertical-align: top; }
+tr:hover td { background: var(--panel); }
+footer { color: var(--muted); font-size: 13px; margin-top: 56px; border-top: 1px solid var(--border); padding-top: 16px; }
+</style>
+</head>
+<body>
+<div class="wrap">
+
+<h1>Humanoid Retargeting — Overview</h1>
+<p class="lede">GUIDE · animation · humanoid retargeting</p>
+
+<p>Humanoid retargeting plays an animation clip authored on one humanoid skeleton (the <b>source rig</b>) on
+another (the <b>target rig</b>), even when the two differ in bone names (<code>mixamorig:LeftArm</code> vs
+<code>Bip001 L Shoulder</code>), hierarchy, proportions or bind pose (T-pose vs A-pose). See
+<a href="README.md">README.md</a> for the reading order.</p>
+
+<h2>Assets</h2>
+<p>Three JSON asset types describe a retarget. All are GUID-keyed and hot-reload-watched.</p>
+<table>
+<tr><th>Type</th><th>Filename pattern</th><th>Where it lives</th><th>Purpose</th></tr>
+<tr><td><code>SkeletonProfile</code></td><td><code>*.profile.json</code></td><td>Default: <code>Assets/SkeletonProfiles/HumanoidStandard.profile.json</code>, staged beside Editor/Player, or included in a packaged project manifest with its original GUID</td><td>The canonical humanoid bone set and reference T-pose that rigs map onto</td></tr>
+<tr><td><code>HumanoidRig</code></td><td><code>*.humanoidrig.json</code></td><td>Next to the model, named after it: <code>&lt;model&gt;.humanoidrig.json</code></td><td>Per-model bone map, retarget pose, chains, attachments and translation bones</td></tr>
+<tr><td><code>RetargetMap</code></td><td><code>*.retargetmap.json</code></td><td>Next to the target model: <code>&lt;source&gt;_to_&lt;target&gt;.retargetmap.json</code></td><td>Source-to-target pairing: the two rigs, per-chain settings and an op stack</td></tr>
+</table>
+
+<h2>Import</h2>
+<p>Importing a skinned model writes its <code>HumanoidRig</code> sidecar beside it. Bones are mapped to the
+profile by name, and the importer bakes a retarget pose: for each mapped bone whose bind rotation differs from
+the profile's T-pose, the rotation that takes the bind pose to the T-pose. A T-pose bind gets identity
+rotations; an A-pose bind gets the shoulder and arm corrections that let it drive a T-pose target.</p>
+<p>A sidecar the user has edited (<code>auto: false</code>) is never overwritten. A model whose
+<code>rigKind</code> import setting is <code>none</code> gets no sidecar, and a generated one is removed.</p>
+
+<h2>Auto-bootstrap</h2>
+<p>Assigning a clip to an entity whose skeleton the clip was not authored on sets up retargeting without a
+dialog. When the clip's source model differs from the entity's model and the clip's bone indices do not match
+the entity's skeleton, the animation system:</p>
+<ol>
+<li>loads the target model's <code>HumanoidRig</code>, importing it if needed;</li>
+<li>loads the source model's <code>HumanoidRig</code>, which must already exist (it is written when the
+source model is imported);</li>
+<li>loads <code>&lt;source&gt;_to_&lt;target&gt;.retargetmap.json</code> next to the target model, or creates
+and saves it;</li>
+<li>adds a <code>HumanoidRetargeterComponent</code> to the entity.</li>
+</ol>
+<p>Each skeleton-and-clip pair is tried once until its assets or the world change. A clip authored on the
+entity's own skeleton plays through the normal animation path, with no component.</p>
+
+<h2><code>HumanoidRetargeterComponent</code></h2>
+<table>
+<tr><th>Field</th><th>Meaning</th></tr>
+<tr><td><code>Map</code></td><td>The <code>RetargetMap</code> asset. A null map skips the entity.</td></tr>
+<tr><td><code>SourceClipIndex</code></td><td>Runtime clip handle, rebuilt from the clip GUID at load (not serialized).</td></tr>
+<tr><td><code>SourceSkeletonId</code></td><td>The skeleton the clip is authored against. For a clip that names a source model, re-resolved from that model every update.</td></tr>
+<tr><td><code>ClipTimeSeconds</code>, <code>Speed</code>, <code>Loop</code>, <code>Paused</code></td><td>Playback state. When the entity also has an <code>AnimatorRef</code>, these follow it.</td></tr>
+<tr><td><code>IKEnabled</code>, <code>IKBlendAlpha</code></td><td>Stored; retargeting runs no IK (see <a href="#authored-but-not-evaluated">Authored but not evaluated</a>).</td></tr>
+<tr><td><code>LODOverride</code>, <code>LODOverrideEnabled</code></td><td>Force a level (<code>Full</code>, <code>NoOps</code>, <code>FKOnly</code>, <code>PoseHold</code>). <code>PoseHold</code> skips retargeting for the character.</td></tr>
+</table>
+<p>An entity with this component is animated by <code>HumanoidRetargetSystem</code> instead of the normal
+animation system.</p>
+
+<h2>What runs each frame</h2>
+<p>For each retargeted character:</p>
+<ol>
+<li>The source clip is sampled onto the source skeleton. During an <code>AnimatorRef</code> crossfade, the clip it blends from is sampled too, and the two source poses are blended by the crossfade weight (rotations slerped, the hip translation interpolated) before retargeting.</li>
+<li><b>Rotations:</b> every target bone mapped to a profile bone that the source also maps takes the source
+bone's world rotation, carried from the source bind onto the target bind. Other target bones keep their rest
+rotation.</li>
+<li><b>Translation:</b> the hips take the source hip translation scaled by the ratio of target to source hip
+height. Every other bone keeps its rest position.</li>
+<li>The resulting pose becomes the character's skin palette in <code>SkinPaletteAtlas</code>, which the
+instanced skinned draw path reads.</li>
+</ol>
+<p>By default this runs on the GPU: one compute kernel, <code>retarget_full.comp</code>, processes every
+character in a single dispatch and writes the palettes into the atlas directly. A character whose rig pair or
+clip cannot be uploaded, or which gets no atlas slot, is evaluated on the CPU by <code>RetargetNode</code> with
+the same rotation and hip-translation math. Setting the environment variable <code>GE_RETARGET_CPU=1</code>
+before the process starts turns the GPU dispatch off.</p>
+<p><code>RetargetNode</code> runs only inside <code>HumanoidRetargetSystem</code>; animation graph assets cannot
+contain it.</p>
+
+<h2 id="authored-but-not-evaluated">Authored but not evaluated</h2>
+<div class="panel warn">
+<b class="tag">Stored, not run</b>
+A <code>RetargetMap</code> stores more than the runtime reads today:
+<ul>
+<li><b>Per-chain FK modes</b> (<code>OneToOne</code>, <code>Transport</code>, <code>SlerpAlongArc</code>),
+rotation alpha and translation modes are saved and edited, but every mapped bone is retargeted as described
+above.</li>
+<li><b>Per-chain IK settings</b> are saved and edited; no IK runs.</li>
+<li><b>The op stack</b> accepts the three registered ops, <code>FootLockOp</code>,
+<code>AttachmentPassthroughOp</code> and <code>LookAtOp</code>, but neither the GPU kernel nor
+<code>RetargetNode</code> evaluates it.</li>
+</ul>
+</div>
+
+<h2>Editor inspectors</h2>
+<ul>
+<li><b><code>SkeletonProfileInspector</code></b> — read-only view of a profile.</li>
+<li><b><code>HumanoidRigInspector</code></b> — edits a rig and saves on each change: one row per profile bone
+with a status pill, the mapped source bone as text and a clear button; retarget-pose buttons ("Force bind =
+retarget pose" resets every retarget-pose rotation to identity, so the bind pose is the anchor); an
+attachments list.</li>
+<li><b><code>RetargetMapInspector</code></b> — edits a map: per-chain FK and IK settings and the op stack
+(reorder, remove, add, parameters as JSON).</li>
+</ul>
+<p>Hand-editing the JSON works as well; hot reload picks up the change.</p>
+
+<h2>What this does not do</h2>
+<ul>
+<li>Non-humanoid rigs (quadrupeds, tentacles, vehicles).</li>
+<li>Cloth simulation.</li>
+<li>Facial blendshape retargeting.</li>
+</ul>
+
+<h2>Changelog</h2>
+<table>
+<tr><th>Version</th><th>Date</th><th>Change</th></tr>
+<tr><td>1.0</td><td>2026-10-01</td><td>Converted from <code>HumanoidRetargeting.md</code>, which this page replaces; adds that an <code>AnimatorRef</code> crossfade samples and blends both clips.</td></tr>
+</table>
+
+<footer>HumanoidRetargeting.html · v1.0 · 2026-10-01 · humanoid retargeting overview</footer>
+</div>
+</body>
+</html>

@@ -1,0 +1,54 @@
+#version 450
+
+// DDGI rough-lobe atlas upload kernel: copies the persistent rough reflection
+// STATE SSBO (ddgi_rough_blend.comp's doc) into the write-only rough atlas
+// STORAGE TEXTURE the forward pass samples. A DEDICATED kernel rather than a
+// third target folded into ddgi_upload.comp: that kernel's descriptor layout
+// is shared by BOTH cascades' upload dispatch (C0 and C1), but the reflection
+// lobes are C0-only (DDGIProbeFeature::DeclareReflectionPasses's doc) —
+// growing the shared layout with a reflection binding would force C1's
+// dispatch to also bind something there even though it has no such resources.
+// Same tile-addressing logic as ddgi_upload.comp, one target only.
+//
+// rgba passes through unchanged: rgb is coverage-premultiplied radiance and a
+// is the coverage fraction the consumer composites with — resolving or
+// renormalizing either here would break that pairing.
+//
+// One workgroup per probe (matches ddgi_rough_blend.comp's dispatch shape),
+// one thread per atlas texel.
+
+#include "Includes/ddgi_common.glsl"
+
+layout(local_size_x = GE_DDGI_TILE, local_size_y = GE_DDGI_TILE, local_size_z = 1) in;
+
+layout(std140, set = 0, binding = 0) uniform DDGIRoughUploadParams
+{
+    ivec4 uProbeCount;   // xyz = res; w = probeTotal
+    uvec4 uDispatch0;    // x = probeBase, y = probesThisTick
+} DDGIParams;
+
+layout(std430, set = 0, binding = 1) readonly buffer DDGIRoughStateRO
+{
+    vec4 ge_ddgiRoughState[];
+};
+
+layout(set = 0, binding = 2, rgba16f) uniform writeonly image2D uRoughAtlas;
+
+void main()
+{
+    uint probeLocal = gl_WorkGroupID.x;
+    int probeIdx = int(DDGIParams.uDispatch0.x) + int(probeLocal);
+    if (probeLocal >= DDGIParams.uDispatch0.y || probeIdx >= DDGIParams.uProbeCount.w)
+        return;
+
+    GE_DDGIGridInfo grid;
+    grid.probeCount = DDGIParams.uProbeCount.xyz;
+    grid.probeTotal = DDGIParams.uProbeCount.w;
+
+    uvec2 texel = gl_LocalInvocationID.xy;
+    uint stateBase = uint(probeIdx) * uint(GE_DDGI_TILE * GE_DDGI_TILE);
+    uint stateIdx = stateBase + texel.y * uint(GE_DDGI_TILE) + texel.x;
+
+    ivec2 tileOrigin = GE_DDGIProbeTileOrigin(grid, probeIdx);
+    imageStore(uRoughAtlas, tileOrigin + ivec2(texel), ge_ddgiRoughState[stateIdx]);
+}

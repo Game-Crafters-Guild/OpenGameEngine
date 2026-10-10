@@ -1,0 +1,15 @@
+{
+  "name": "diversion-vcs",
+  "version": "1.0.0",
+  "displayName": "Diversion Version Control",
+  "assets": "Assets/",
+  "modules": [
+    {
+      "name": "diversion-vcs-editor",
+      "kind": "Editor",
+      "lang": "Cpp",
+      "root": "Editor/",
+      "prebuilt": "Binaries/"
+    }
+  ]
+}

@@ -1,0 +1,6 @@
+<UIElement class="gameview-panel">
+  <UIElement id="GameViewViewport" class="game-viewport">
+    <Label id="GameViewNoCameraLabel" class="gameview-no-camera" text="No camera in scene (add an ECS Camera component)." />
+  </UIElement>
+</UIElement>
+

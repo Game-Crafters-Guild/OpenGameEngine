@@ -1,0 +1,173 @@
+#version 450
+
+// MSM4 fused per-cascade compute pass: writes 4 raw depth moments AND
+// performs the separable Gaussian blur in a single dispatch using shared
+// memory. Replaces the 3-pass graphics chain (msm_write + msm_blur_h +
+// msm_blur_v) per cascade with one compute dispatch — saves 8 RT-state
+// transitions and 3 fullscreen-quad pipelines per cascade per frame, and
+// eliminates the per-cascade ping-pong texture entirely.
+//
+// Tile layout:
+//   - One workgroup processes a 16x16 output tile.
+//   - Shared memory tile is 24x24 (16 + 4-texel halo on each side) so
+//     both 5-tap linear and 9-tap discrete blurs fit (max offset = 4).
+//   - Phase 1: each thread loads + encodes moments at depth-array texels
+//     covering the tile + halo.
+//   - Phase 2: horizontal blur reads sMoments, writes sBlurH (size 24x16
+//     because the X halo collapses but the Y halo persists for phase 3).
+//   - Phase 3: vertical blur reads sBlurH, writes via imageStore to the
+//     moments-array layer the lighting pass samples at runtime.
+//
+// Reverse-Z handling matches msm_write.frag: depth array stores reverse-Z
+// (1=near, 0=far), we un-reverse to forward-Z (`z = 1 - storedZ`) so the
+// Hamburger bound's CDF semantics on the read side line up.
+
+layout(local_size_x = 16, local_size_y = 16, local_size_z = 1) in;
+
+layout(set = 0, binding = 0) uniform sampler2DArray uDepth;
+layout(set = 0, binding = 1, rgba16) uniform writeonly image2DArray uMoments;
+
+layout(push_constant) uniform PC
+{
+    int cascadeIdx;
+    int momentsResolution;
+    int depthResolution;
+    int blurMode;          // 0 = Linear5Tap (fast), 1 = Discrete9Tap
+} pc;
+
+// HLSL row-major encode matrix from Peters & Klein 2015 supplementary
+// listing 1, transposed for GLSL column-major (each GLSL column = one
+// HLSL row). See msm_write.frag for the verification round-trip.
+const mat4 kMomentEncode = mat4(
+    vec4(-2.07224649,    13.7948857237,   0.105877704,    9.7924062118),
+    vec4(32.23703778,   -59.4683975703,  -1.9077466311,  -33.7652110555),
+    vec4(-68.571074599,  82.0359750338,   9.3496555107,   47.9456096605),
+    vec4(39.3703274134, -35.364903257,   -6.6543490743,  -23.9728048165));
+const float kMomentBiasChannel0 = 0.035955884801;
+
+const int kTileSize  = 16;
+const int kHalo      = 4;
+const int kSharedDim = kTileSize + 2 * kHalo;  // 24
+
+shared vec4 sMoments[kSharedDim][kSharedDim];      // 24x24 encoded moments + halo
+shared vec4 sBlurH  [kSharedDim][kTileSize];       // 24x16 after horizontal blur
+
+vec4 EncodeAt(ivec2 momentsXY)
+{
+    // Map moments-fragment to depth-texel via the explicit res ratio,
+    // matching msm_write.frag's nearest-neighbor downsampling.
+    ivec3 depthSize = textureSize(uDepth, 0);
+    vec2 depthXY_f = (vec2(momentsXY) + vec2(0.5))
+                   * float(pc.depthResolution) / float(max(pc.momentsResolution, 1));
+    ivec2 depthXY = clamp(ivec2(depthXY_f), ivec2(0), depthSize.xy - ivec2(1));
+    float storedZ = texelFetch(uDepth, ivec3(depthXY, pc.cascadeIdx), 0).r;
+    float z = clamp(1.0 - storedZ, 0.0001, 0.9999);
+    vec4 raw = vec4(z, z * z, z * z * z, z * z * z * z);
+    vec4 quantized = kMomentEncode * raw;
+    quantized.x += kMomentBiasChannel0;
+    return quantized;
+}
+
+void main()
+{
+    ivec2 tileBase = ivec2(gl_WorkGroupID.xy) * kTileSize;
+    ivec2 localID  = ivec2(gl_LocalInvocationID.xy);
+
+    // ---- Phase 1: cooperative load + encode (each thread covers ~2.25 texels) ----
+    for (int dy = localID.y; dy < kSharedDim; dy += kTileSize)
+    {
+        for (int dx = localID.x; dx < kSharedDim; dx += kTileSize)
+        {
+            ivec2 momentsXY = tileBase + ivec2(dx - kHalo, dy - kHalo);
+            momentsXY = clamp(momentsXY, ivec2(0), ivec2(pc.momentsResolution - 1));
+            sMoments[dy][dx] = EncodeAt(momentsXY);
+        }
+    }
+    barrier();
+
+    // ---- Phase 2: horizontal blur (writes 24-row × 16-col block to sBlurH) ----
+    // Each thread does (kSharedDim / kTileSize) = 1.5 rows on average; loop
+    // covers the rounded-up row count.
+    for (int y = localID.y; y < kSharedDim; y += kTileSize)
+    {
+        int srcCenter = localID.x + kHalo;
+        vec4 sum = vec4(0.0);
+        if (pc.blurMode == 1)
+        {
+            // 9-tap point-sampled Gaussian (sigma ~= 2)
+            const float w0 = 0.2042;
+            const float w1 = 0.1802;
+            const float w2 = 0.1239;
+            const float w3 = 0.0663;
+            const float w4 = 0.0276;
+            sum += w4 * sMoments[y][srcCenter - 4];
+            sum += w3 * sMoments[y][srcCenter - 3];
+            sum += w2 * sMoments[y][srcCenter - 2];
+            sum += w1 * sMoments[y][srcCenter - 1];
+            sum += w0 * sMoments[y][srcCenter];
+            sum += w1 * sMoments[y][srcCenter + 1];
+            sum += w2 * sMoments[y][srcCenter + 2];
+            sum += w3 * sMoments[y][srcCenter + 3];
+            sum += w4 * sMoments[y][srcCenter + 4];
+        }
+        else
+        {
+            // 5-tap linear-sampled Gaussian. Bilinear sampling isn't
+            // available on shared memory, but the same kernel can be
+            // reproduced with a manual mix() between the two integer
+            // texels straddling the linear-sample offset.
+            //   oInner = 1.4076 -> mix(s[1], s[2], 0.4076), wInner = 0.3041
+            //   oOuter = 3.2940 -> mix(s[3], s[4], 0.2940), wOuter = 0.0939
+            const float w0     = 0.2042;
+            const float wInner = 0.3041;
+            const float wOuter = 0.0939;
+            sum += w0     *  sMoments[y][srcCenter];
+            sum += wInner *  mix(sMoments[y][srcCenter - 1], sMoments[y][srcCenter - 2], 0.4076);
+            sum += wInner *  mix(sMoments[y][srcCenter + 1], sMoments[y][srcCenter + 2], 0.4076);
+            sum += wOuter *  mix(sMoments[y][srcCenter - 3], sMoments[y][srcCenter - 4], 0.2940);
+            sum += wOuter *  mix(sMoments[y][srcCenter + 3], sMoments[y][srcCenter + 4], 0.2940);
+        }
+        sBlurH[y][localID.x] = sum;
+    }
+    barrier();
+
+    // ---- Phase 3: vertical blur + imageStore ----
+    {
+        int srcCenter = localID.y + kHalo;
+        vec4 sum = vec4(0.0);
+        if (pc.blurMode == 1)
+        {
+            const float w0 = 0.2042;
+            const float w1 = 0.1802;
+            const float w2 = 0.1239;
+            const float w3 = 0.0663;
+            const float w4 = 0.0276;
+            sum += w4 * sBlurH[srcCenter - 4][localID.x];
+            sum += w3 * sBlurH[srcCenter - 3][localID.x];
+            sum += w2 * sBlurH[srcCenter - 2][localID.x];
+            sum += w1 * sBlurH[srcCenter - 1][localID.x];
+            sum += w0 * sBlurH[srcCenter    ][localID.x];
+            sum += w1 * sBlurH[srcCenter + 1][localID.x];
+            sum += w2 * sBlurH[srcCenter + 2][localID.x];
+            sum += w3 * sBlurH[srcCenter + 3][localID.x];
+            sum += w4 * sBlurH[srcCenter + 4][localID.x];
+        }
+        else
+        {
+            const float w0     = 0.2042;
+            const float wInner = 0.3041;
+            const float wOuter = 0.0939;
+            sum += w0     *  sBlurH[srcCenter    ][localID.x];
+            sum += wInner *  mix(sBlurH[srcCenter - 1][localID.x], sBlurH[srcCenter - 2][localID.x], 0.4076);
+            sum += wInner *  mix(sBlurH[srcCenter + 1][localID.x], sBlurH[srcCenter + 2][localID.x], 0.4076);
+            sum += wOuter *  mix(sBlurH[srcCenter - 3][localID.x], sBlurH[srcCenter - 4][localID.x], 0.2940);
+            sum += wOuter *  mix(sBlurH[srcCenter + 3][localID.x], sBlurH[srcCenter + 4][localID.x], 0.2940);
+        }
+
+        ivec2 outXY = tileBase + localID;
+        if (outXY.x < pc.momentsResolution && outXY.y < pc.momentsResolution)
+        {
+            imageStore(uMoments, ivec3(outXY, pc.cascadeIdx), sum);
+        }
+    }
+}

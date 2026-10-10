@@ -1,0 +1,11 @@
+<UIElement class="web-panel">
+  <UIElement id="WebContainer" class="web-container">
+    <UIElement id="WebTabBar" class="web-tab-bar hidden" />
+    <UIElement class="web-controls">
+      <TextField id="WebURLField" class="web-url-field" value="" placeholder="Enter URL (YouTube or any webpage) and press Enter..." />
+      <Button id="WebNewTabButton" class="small secondary icon-button plus-icon" />
+    </UIElement>
+    <Label id="WebErrorLabel" class="web-error" text="" />
+    <UIElement id="WebViewContainer" class="web-view-container" />
+  </UIElement>
+</UIElement>

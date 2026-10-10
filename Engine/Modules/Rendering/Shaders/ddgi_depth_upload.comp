@@ -1,0 +1,58 @@
+#version 450
+
+// DDGI depth-atlas upload for DDGIDepthResolution::Fine: copies the
+// GE_DDGI_DEPTH_TILE_FINE-tiled depth-moment STATE SSBO (ddgi_depth_blend.comp)
+// into the RGBA16F atlas the Chebyshev readers sample, both moment pairs.
+// Same SSBO-state + texture-upload split as ddgi_upload.comp, for the same
+// WebGPU reason; under Shared that kernel copies the depth moments itself and
+// this one is never dispatched. No filter: the moments are consumed raw.
+//
+// One workgroup per probe, one thread per depth atlas texel.
+
+#include "Includes/ddgi_common.glsl"
+
+layout(local_size_x = GE_DDGI_DEPTH_TILE_FINE, local_size_y = GE_DDGI_DEPTH_TILE_FINE, local_size_z = 1) in;
+
+layout(std140, set = 0, binding = 0) uniform DDGIDepthUploadParams
+{
+    vec4 uGridMinWS;     // xyz; the cell record compare needs the grid's placement
+    vec4 uGridSizeWS;    // xyz
+    ivec4 uProbeCount;   // xyz = res; w = probeTotal
+    uvec4 uDispatch0;    // x = probeBase, y = probesThisTick
+} DDGIParams;
+
+// See ddgi_upload.comp: a scrolled, not-yet-visited slot uploads as zero.
+layout(std430, set = 0, binding = 3) readonly buffer DDGIProbeCellRO
+{
+    vec4 ge_ddgiProbeCell[];
+};
+
+layout(std430, set = 0, binding = 1) readonly buffer DDGIDepthStateRO
+{
+    vec4 ge_ddgiDepthState[];
+};
+
+layout(set = 0, binding = 2, rgba16f) uniform writeonly image2D uDepthAtlas;
+
+void main()
+{
+    uint probeLocal = gl_WorkGroupID.x;
+    int probeIdx = int(DDGIParams.uDispatch0.x) + int(probeLocal);
+    if (probeLocal >= DDGIParams.uDispatch0.y || probeIdx >= DDGIParams.uProbeCount.w)
+        return;
+
+    GE_DDGIGridInfo grid;
+    grid.gridMinWS = DDGIParams.uGridMinWS.xyz;
+    grid.gridSizeWS = DDGIParams.uGridSizeWS.xyz;
+    grid.probeCount = DDGIParams.uProbeCount.xyz;
+    grid.probeTotal = DDGIParams.uProbeCount.w;
+
+    uvec2 texel = gl_LocalInvocationID.xy;
+    uint tileTexels = uint(GE_DDGI_DEPTH_TILE_FINE * GE_DDGI_DEPTH_TILE_FINE);
+    uint stateIdx = uint(probeIdx) * tileTexels + texel.y * uint(GE_DDGI_DEPTH_TILE_FINE) + texel.x;
+    ivec2 tileOrigin = GE_DDGIProbeTileOriginRes(grid, probeIdx, GE_DDGI_DEPTH_TILE_FINE);
+    vec4 moments = GE_DDGIProbeCellChanged(ge_ddgiProbeCell[probeIdx], grid, probeIdx)
+                       ? vec4(0.0)
+                       : ge_ddgiDepthState[stateIdx];
+    imageStore(uDepthAtlas, tileOrigin + ivec2(texel), moments);
+}

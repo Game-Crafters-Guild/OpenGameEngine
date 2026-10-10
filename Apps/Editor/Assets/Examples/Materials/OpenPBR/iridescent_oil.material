@@ -1,0 +1,18 @@
+{
+  "schemaVersion": 3,
+  "materialName": "OpenPBR - Iridescent Oil Film",
+  "lightingModel": "StandardPBR",
+  "alphaMode": "Opaque",
+  "doubleSided": false,
+  "surfaceShader": "Surfaces/standard_pbr.glsl",
+  "properties": {
+    "baseColor": [0.02, 0.02, 0.03, 1.0],
+    "metallic": 0.0,
+    "roughness": 0.08,
+    "enableIridescence": true,
+    "thinFilmThickness": 400.0,
+    "thinFilmIor": 1.3,
+    "thinFilmWeight": 1.0
+  },
+  "textures": {}
+}

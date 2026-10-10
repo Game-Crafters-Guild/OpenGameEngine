@@ -1,0 +1,109 @@
+GameEngine overlay patch for lexbor 3.0.1.
+
+css/selectors: preserve unknown and known-but-unsupported pseudo-classes
+instead of failing the whole selector.
+
+lxb_css_selectors_state_pseudo_class() in source/lexbor/css/selectors/state.c
+looks the pseudo-class name up in lexbor's data table. Two paths used to abort
+the selector, and aborting a selector makes lexbor discard the entire style
+rule (every comma-separated selector in it, not just the offending one), so no
+AST node is ever emitted:
+
+  1. Unknown names (e.g. :loading, :my-state): lxb_css_selector_pseudo_class_by_name
+     returns NULL and the function returned lxb_css_parser_unexpected_status.
+  2. Known-but-"not supported" names (:visited, :valid, :scope, :target, ...):
+     these resolve to a real id but were routed into an explicit switch that
+     logged lxb_css_log_not_supported and returned lxb_css_parser_unexpected_status.
+     (0001 already trimmed :focus-within / :focus-visible out of this switch.)
+
+The "not supported" branch exists because lexbor's own DOM selector-matching
+engine does not implement those pseudo-classes. GameEngine never uses that
+engine: it uses lexbor only to build the selector AST, then matches with its
+own cascade engine (Engine/Modules/UI). So both rejections only served to
+silently drop rules the engine is perfectly able to match.
+
+This patch:
+
+  - Replaces the NULL bail with: stamp the node's pseudo type as
+    LXB_CSS_SELECTOR_PSEUDO_CLASS__UNDEF (0x0000, a valid data-table entry),
+    clear its data, consume the token, and return LXB_STATUS_OK — mirroring the
+    known-pseudo success path immediately below. The dup'd name text on
+    selector->name is preserved, so the engine's converter recovers the state
+    name from it. CSSStylesheetParser.cpp::ConvertPseudoSimple maps any
+    unmapped pseudo id (including __UNDEF) through its `default:` branch to
+    PseudoClass::Kind::Custom with CustomName = lowercased selector name — so
+    :loading / :my-state parse as ordinary custom-state pseudo-classes. The
+    engine computes its own specificity from the converted chain and never
+    serializes selectors back through lexbor, so an __UNDEF node never re-enters
+    lexbor logic.
+
+  - Deletes the known-but-"not supported" switch entirely, so :visited /
+    :valid / :scope / :target / etc. fall through to the same success path as
+    :hover / :focus and reach the engine as Kind::Custom rather than killing
+    their rules. The now-unused `msg` local is removed with it.
+
+Unknown FUNCTIONAL pseudo-classes — :foo(...) — are deliberately left
+unsupported: lxb_css_selectors_state_pseudo_class_function still rejects them,
+because accepting a functional pseudo requires an argument-consuming state
+machine to balance its parentheses. That is out of scope here; only the
+argument-less simple pseudo-class path is relaxed.
+
+When upstream vcpkg bumps the lexbor version, resync this portfile, vcpkg.json,
+and re-cut both patches against the new source (this hunk targets
+lxb_css_selectors_state_pseudo_class in source/lexbor/css/selectors/state.c;
+cut 0002 against the 0001-patched tree since vcpkg applies patches in order).
+
+diff --git a/source/lexbor/css/selectors/state.c b/source/lexbor/css/selectors/state.c
+--- a/source/lexbor/css/selectors/state.c
++++ b/source/lexbor/css/selectors/state.c
+@@ -1443,7 +1443,6 @@ lxb_css_selectors_state_pseudo_class(lxb_css_parser_t *parser,
+                                      const lxb_css_syntax_token_t *token)
+ {
+     lxb_status_t status;
+-    lxb_css_log_message_t *msg;
+     lxb_css_selector_t *selector;
+     lxb_css_selectors_t *selectors;
+     const lxb_css_selectors_pseudo_data_t *pseudo;
+@@ -1458,38 +1457,12 @@ lxb_css_selectors_state_pseudo_class(lxb_css_parser_t *parser,
+     pseudo = lxb_css_selector_pseudo_class_by_name(selector->name.data,
+                                                    selector->name.length);
+     if (pseudo == NULL) {
+-        return lxb_css_parser_unexpected_status(parser);
+-    }
++        selector->u.pseudo.type = LXB_CSS_SELECTOR_PSEUDO_CLASS__UNDEF;
++        selector->u.pseudo.data = NULL;
+ 
+-    switch (pseudo->id) {
+-        case LXB_CSS_SELECTOR_PSEUDO_CLASS_CURRENT:
+-        case LXB_CSS_SELECTOR_PSEUDO_CLASS_DEFAULT:
+-        case LXB_CSS_SELECTOR_PSEUDO_CLASS_FULLSCREEN:
+-        case LXB_CSS_SELECTOR_PSEUDO_CLASS_FUTURE:
+-        case LXB_CSS_SELECTOR_PSEUDO_CLASS_IN_RANGE:
+-        case LXB_CSS_SELECTOR_PSEUDO_CLASS_INDETERMINATE:
+-        case LXB_CSS_SELECTOR_PSEUDO_CLASS_INVALID:
+-        case LXB_CSS_SELECTOR_PSEUDO_CLASS_LOCAL_LINK:
+-        case LXB_CSS_SELECTOR_PSEUDO_CLASS_OUT_OF_RANGE:
+-        case LXB_CSS_SELECTOR_PSEUDO_CLASS_PAST:
+-        case LXB_CSS_SELECTOR_PSEUDO_CLASS_SCOPE:
+-        case LXB_CSS_SELECTOR_PSEUDO_CLASS_TARGET:
+-        case LXB_CSS_SELECTOR_PSEUDO_CLASS_TARGET_WITHIN:
+-        case LXB_CSS_SELECTOR_PSEUDO_CLASS_USER_INVALID:
+-        case LXB_CSS_SELECTOR_PSEUDO_CLASS_VALID:
+-        case LXB_CSS_SELECTOR_PSEUDO_CLASS_VISITED:
+-        case LXB_CSS_SELECTOR_PSEUDO_CLASS_WARNING:
+-            msg = lxb_css_log_not_supported(parser->log,
+-                                            lxb_css_selectors_module_name,
+-                                            (const char *) selector->name.data);
+-            if (msg == NULL) {
+-                return lxb_css_parser_memory_fail(parser);
+-            }
+-
+-            return lxb_css_parser_unexpected_status(parser);
++        lxb_css_syntax_parser_consume(parser);
+ 
+-        default:
+-            break;
++        return LXB_STATUS_OK;
+     }
+ 
+     selector->u.pseudo.type = pseudo->id;

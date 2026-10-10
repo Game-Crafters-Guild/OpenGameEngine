@@ -1,0 +1,81 @@
+#version 450
+
+// Per-tile depth min/max reduction.
+//
+// Phase D step 2 of the clustered-light-cull rewrite. Reads the depth pre-pass
+// output and produces one (Zmin, Zmax) pair per 32x32 screen tile, packed as
+// uvec2 via asuint(float) reinterpret. The cluster cull pass (rewritten in
+// step 3) consumes this to skip empty Z slices per tile (Drobot SIGGRAPH 2017
+// pattern; HDRP-FPTL equivalent).
+//
+// In step 2 this pass runs but its output has no real consumer yet — the old
+// placeholder clustered_light_cull.comp declares the buffer for rendergraph
+// ordering but does not read from it. Step 3+ will consume it.
+//
+// Conventions:
+//   - Reverse-Z, D32_SFLOAT. Depth on the camera near plane = 1.0, far = 0.0.
+//   - Empty/sky pixels are depth == 0.0 (clear value).
+//   - asuint(positive float) preserves IEEE-754 sort order, so atomicMin/Max
+//     on the bit pattern gives correct min/max of the floats.
+//   - Sky pixels (depth == 0.0) are filtered out so they don't drag Zmin to 0;
+//     a tile entirely covered by sky reports (UINT_MAX, 0u) which downstream
+//     readers must treat as "no opaque geometry in this tile".
+
+// 32x32 threads per workgroup, one workgroup per 32x32 screen tile.
+// Each thread reads one depth sample; atomic min/max reduces into shared.
+layout(local_size_x = 32, local_size_y = 32, local_size_z = 1) in;
+
+// Scene depth resolved to single-sample R32F by DepthResolveNode.
+layout(set = 0, binding = 0) uniform sampler2D DepthTex;
+
+// Output: uvec2 per tile = (asuint(Zmin), asuint(Zmax)). Tile order is row-major:
+//   idx = tileY * tilesX + tileX
+// where tilesX = ceil(renderWidth / 32), tilesY = ceil(renderHeight / 32).
+// Reverse-Z: "Zmin" is the float-closest-to-zero (the FAR plane / deep pixel),
+// "Zmax" is the float-closest-to-one (the NEAR plane / shallow pixel).
+layout(set = 0, binding = 1, std430) buffer DepthMinMaxBufferBlock
+{
+    uvec2 tileMinMax[];
+} DepthMinMaxBuffer;
+
+// LDS reduction targets. asuint(0.0) is 0 (which is a valid sentinel for "no
+// opaque pixel seen yet" on the min side because Zmin can never actually go to
+// zero through a real opaque pixel — opaque depth in reverse-Z is in (0, 1]).
+shared uint sZminBits;  // initialised to UINT_MAX (no opaque pixel yet)
+shared uint sZmaxBits;  // initialised to 0          (no opaque pixel yet)
+
+void main()
+{
+    // Init LDS via a single thread to avoid 1024 writes to the same locations.
+    if (gl_LocalInvocationIndex == 0u)
+    {
+        sZminBits = 0xFFFFFFFFu;
+        sZmaxBits = 0u;
+    }
+    barrier();
+
+    const ivec2 texSize = textureSize(DepthTex, 0);
+    const ivec2 pix = ivec2(gl_GlobalInvocationID.xy);
+
+    // Skip threads that map outside the depth texture (the right/bottom edge
+    // tiles may extend past the render target by up to 31 px).
+    if (pix.x < texSize.x && pix.y < texSize.y)
+    {
+        const float depth = texelFetch(DepthTex, pix, 0).r;  // lod 0
+        // Filter sky / cleared pixels (reverse-Z far == 0). Opaque depth is in (0, 1].
+        if (depth > 0.0)
+        {
+            const uint bits = floatBitsToUint(depth);
+            atomicMin(sZminBits, bits);
+            atomicMax(sZmaxBits, bits);
+        }
+    }
+    barrier();
+
+    // One thread writes the tile result.
+    if (gl_LocalInvocationIndex == 0u)
+    {
+        const uint tileIdx = gl_WorkGroupID.y * gl_NumWorkGroups.x + gl_WorkGroupID.x;
+        DepthMinMaxBuffer.tileMinMax[tileIdx] = uvec2(sZminBits, sZmaxBits);
+    }
+}

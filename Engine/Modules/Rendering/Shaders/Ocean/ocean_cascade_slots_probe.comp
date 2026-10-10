@@ -1,0 +1,24 @@
+#version 450
+#extension GL_GOOGLE_include_directive : require
+
+#include "Ocean/ocean_common.glsl"
+
+layout(local_size_x = 1) in;
+layout(std430, set = 0, binding = 0) buffer CascadeSlotsProbe
+{
+    vec4 pointsXZ[GE_OCEAN_SAMPLED_CASCADES]; // xy = the world point sampled by that cascade's helper
+    vec4 results[2];                          // one helper result per cascade, in cascade order
+};
+
+void main()
+{
+    // Every shipped helper that reads the OceanCascadeLayout block, each at its
+    // own point, so a helper that reads another cascade's layout misses its texel.
+    results[0] = vec4(OceanSampleFoamData(pointsXZ[GE_OCEAN_CASCADE_FOAM].xy).r,
+                      OceanSampleSeabedDepth(pointsXZ[GE_OCEAN_CASCADE_SEABED_DEPTH].xy),
+                      OceanSampleFlow(pointsXZ[GE_OCEAN_CASCADE_FLOW].xy).x,
+                      OceanSampleDynWaveHeight(pointsXZ[GE_OCEAN_CASCADE_DYN_WAVES].xy));
+    results[1] = vec4(OceanSampleWaveMask(pointsXZ[GE_OCEAN_CASCADE_WAVE_MASK].xy).x,
+                      OceanSampleClip(pointsXZ[GE_OCEAN_CASCADE_CLIP].xy),
+                      OceanSampleAlbedo(pointsXZ[GE_OCEAN_CASCADE_ALBEDO].xy).r, 0.0);
+}

@@ -1,0 +1,633 @@
+/* The Mark-ups panel (MarkupsPanel.uxml, rows from Markups/MarkupsPanelRows.cpp) and the
+   Markup inspector section. */
+
+.markups-root {
+	flex-direction: column;
+	flex-grow: 1;
+	min-height: 0;
+}
+
+/* Keeps its height when the list below overflows the panel. */
+.markups-header {
+	flex-direction: row;
+	flex-wrap: wrap;
+	flex-shrink: 0;
+	align-items: center;
+	gap: 4px;
+	padding: 6px;
+	border-bottom-width: 1px;
+	border-color: var(--ui_color_border);
+}
+
+/* Every Button carries .button, so the tab rules name it to outrank the shared .button
+   and .button.active rules (0,2,0). */
+.button.markups-tab {
+	padding-left: 8px;
+	padding-right: 8px;
+	opacity: 0.7;
+}
+
+.button.markups-tab.active {
+	background-color: var(--ui_color_accent_blue);
+	border-color: var(--ui_color_accent_blue);
+	color: var(--ui_color_text_bright);
+	opacity: 1.0;
+}
+
+/* The header slot the search bar is built into. */
+.markups-search-host {
+	flex-direction: row;
+	align-self: center;
+	flex-grow: 1;
+	min-width: 140px;
+	max-width: 420px;
+}
+
+/* The shared .panel-search-bar is pinned absolutely in side panes; here it fills its
+   header slot like the other controls. */
+.panel-search-bar.markups-search {
+	display: flex;
+	flex-direction: row;
+	position: relative;
+	top: unset;
+	right: unset;
+	bottom: unset;
+	left: unset;
+	flex-grow: 1;
+}
+
+.markups-status-filter {
+	flex-shrink: 0;
+	min-width: 116px;
+}
+
+.markups-scroll {
+	flex-grow: 1;
+	min-height: 0;
+}
+
+.markups-list {
+	flex-direction: column;
+}
+
+.markups-row {
+	flex-direction: row;
+	align-items: center;
+	gap: 6px;
+	min-height: 24px;
+	padding-left: 6px;
+	padding-right: 6px;
+}
+
+.markups-row:hover {
+	background-color: var(--ui_color_bg_item_hover);
+}
+
+/* The row of a mark-up in the editor's selection (what the Inspector shows), styled as the
+   Hierarchy's selected row (theme/views.css .tree .tree-item.selected): its plate, its corners and
+   its bright title. After :hover so it keeps its plate under the pointer. */
+.markups-row.selected {
+	background-color: var(--ui_color_bg_selected);
+	border-radius: 4px;
+}
+
+.markups-row.selected .markups-title {
+	color: var(--ui_color_text_bright);
+}
+
+.markups-row-hidden {
+	opacity: 0.5;
+}
+
+/* Activity rows: a hairline between rows and every other row on a darker plate, so a row that
+   wraps over several lines keeps its edges. */
+.markups-activity-row {
+	align-items: flex-start;
+	padding-top: 4px;
+	padding-bottom: 4px;
+	border-bottom-width: 1px;
+	border-color: var(--ui_color_border_subtle);
+}
+
+.markups-activity-row.markups-activity-row-alt {
+	background-color: var(--ui_color_bg_plate);
+}
+
+.markups-activity-row:hover {
+	background-color: var(--ui_color_bg_item_hover);
+}
+
+.markups-unread {
+	background-color: var(--ui_color_markup_unread_background);
+}
+
+/* The color the mark-up's volume and Scene View label draw in, set per row. */
+.markups-color-dot {
+	width: 8px;
+	height: 8px;
+	border-radius: 4px;
+	flex-shrink: 0;
+}
+
+/* Filled with the status color; light text, or dark text where it reads better
+   (MarkupTagReadsDarkText). */
+.markups-status-pill {
+	min-width: 80px;
+	padding-left: 6px;
+	padding-right: 6px;
+	border-radius: 8px;
+	font-size: 12px;
+	font-weight: 600;
+	text-align: center;
+	color: var(--ui_color_text_bright);
+	flex-shrink: 0;
+}
+
+.markups-status-pill.markups-status-pill-dark-text {
+	color: var(--ui_color_text_on_light);
+}
+
+/* A status outside the project's vocabulary. */
+.markups-status-pill.markups-status-pill-unknown {
+	background-color: var(--ui_color_markup_unknown_status);
+	color: var(--ui_color_text_on_light);
+}
+
+/* The row's columns: the title, then who, then the message (Activity) or a spacer
+   (Mark-ups), then the time in a fixed right column. */
+.markups-title {
+	width: 200px;
+	min-width: 48px;
+	flex-grow: 0;
+	flex-shrink: 1;
+	white-space: nowrap;
+	overflow: hidden;
+	text-overflow: ellipsis;
+}
+
+.markups-author {
+	width: 44px;
+	flex-shrink: 0;
+	color: var(--ui_color_text_dim);
+	font-size: 12px;
+}
+
+/* An Activity row's title keeps its column whatever the text beside it wraps to, so the author
+   and text columns start at one x on every row. */
+.markups-activity-row .markups-title {
+	flex-shrink: 0;
+}
+
+/* Who wrote an Activity row, in a fixed column read from its left edge so "You" and "Agent"
+   start at one x. */
+.markups-activity-author {
+	width: 52px;
+	flex-shrink: 0;
+	color: var(--ui_color_text_dim);
+	font-size: 12px;
+	text-align: left;
+}
+
+/* An entry's kind at a glance, in the Activity tab and the Thread alike: a speech bubble for a
+   comment, a plus for created, a pencil for an edit, a square in the status's color (set per
+   entry) for a status change; every marker takes one 14 px slot, so the text column lines up. */
+.markup-entry-marker {
+	width: 14px;
+	height: 14px;
+	min-width: 14px;
+	flex-shrink: 0;
+	align-self: center;
+	background-size: 12px 12px;
+	background-repeat: no-repeat;
+	background-position: center;
+}
+
+.markup-entry-marker.markup-entry-comment {
+	background-image: url("editor:Icons/comment.svg");
+}
+
+.markup-entry-marker.markup-entry-created {
+	background-image: url("editor:Icons/plus.png");
+}
+
+.markup-entry-marker.markup-entry-edit {
+	background-image: url("editor:Icons/draw_curve.png");
+}
+
+.markup-entry-marker.markup-entry-status {
+	width: 10px;
+	height: 10px;
+	min-width: 10px;
+	margin: 2px;
+	border-radius: 3px;
+}
+
+/* An action's marker and its line in the Thread. */
+.markup-inspector-entry-action-row {
+	flex-direction: row;
+	align-items: center;
+	gap: 6px;
+}
+
+/* The way back to the status color, beside the color row's swatch: a bare glyph. */
+/* The reset glyph on the theme's icon button (.icon-button sizes and plates it). */
+.markup-inspector-color-reset {
+	background-image: url("editor:Icons/ResetReload.png");
+	background-size: 14px 14px;
+	background-repeat: no-repeat;
+	background-position: center;
+}
+
+/* What was said: a comment in the body style. */
+.markups-entry-text {
+	flex-grow: 1;
+	flex-shrink: 1;
+	min-width: 96px;
+	color: var(--ui_color_text);
+	white-space: normal;
+}
+
+/* What was done (created, a status change, an edit): one muted line in the small style, in the
+   Activity tab and the inspector's Thread alike. */
+.markup-entry-action .markups-entry-text,
+.markup-entry-action .markup-inspector-entry-action-text {
+	color: var(--ui_color_text_dim);
+	font-size: 12px;
+	font-style: italic;
+}
+
+.markups-spacer {
+	flex-grow: 1;
+}
+
+.markups-time {
+	width: 72px;
+	flex-shrink: 0;
+	color: var(--ui_color_text_dim);
+	font-size: 12px;
+	text-align: right;
+}
+
+.markups-update-dot {
+	width: 8px;
+	height: 8px;
+	border-radius: 4px;
+	flex-shrink: 0;
+	background-color: var(--ui_color_accent_blue);
+}
+
+.markups-update-dot.markups-update-dot-seen {
+	background-color: transparent;
+}
+
+/* The shared transparent .icon-button, sized to the row: named with .button.icon-button
+   to outrank its 24 px rule (0,2,0). */
+.button.icon-button.markups-eye {
+	width: 20px;
+	height: 20px;
+	min-width: 20px;
+	min-height: 20px;
+	padding: 0;
+	flex-shrink: 0;
+	background-image: url("editor:Icons/eye.png");
+	background-size: 14px 14px;
+	background-repeat: no-repeat;
+	background-position: center;
+}
+
+.markups-eye-off {
+	opacity: 0.35;
+}
+
+.markups-empty {
+	padding: 12px;
+	color: var(--ui_color_text_dim);
+	white-space: normal;
+}
+
+/* The description: the single-line fields' fill (inspector.css .inspector-field TextInput,
+   #202020) and corners, so it does not read as disabled; the accent while focused. */
+.markup-inspector-description {
+	min-height: 60px;
+	margin-bottom: 6px;
+	padding: 4px 8px;
+	border-width: 1px;
+	border-radius: 6px;
+	border-color: transparent;
+	background-color: #202020;
+}
+
+/* The Description label's cell stands at the top of its row, not centered against the
+   several-line box, and steps down by the box's border so the label's text sits level with the
+   box's first line (the label keeps its 4 px padding; the box's text starts 1 + 4 px down). */
+.markup-inspector-description-label-cell {
+	align-self: flex-start;
+	padding-top: 1px;
+}
+
+/* The comment field under the Thread: full width, a few lines tall, the description's fill,
+   the accent while it is typed in. */
+.markup-inspector-comment {
+	min-height: 56px;
+	margin-bottom: 4px;
+	padding: 4px 8px;
+	border-width: 1px;
+	border-radius: 6px;
+	border-color: transparent;
+	background-color: #202020;
+	white-space: pre-wrap;
+}
+
+/* The description and the comment take the accent border while they hold the focus, like other
+   editable text. */
+.markup-inspector-description:focus {
+	border-color: var(--ui_color_accent);
+}
+
+.markup-inspector-comment:focus {
+	border-color: var(--ui_color_accent);
+}
+
+/* A comment holding links: its words wrap as one paragraph, a line break as a full row. */
+.markup-comment-text {
+	flex-direction: row;
+	flex-wrap: wrap;
+	align-items: baseline;
+	flex-grow: 1;
+	flex-shrink: 1;
+	min-width: 96px;
+}
+
+/* An action line followed by the color it names: the words keep their width, the square follows. */
+.markup-entry-line {
+	flex-direction: row;
+	align-items: center;
+	gap: 6px;
+}
+
+/* The words of such a line: their own width, so the square follows them. */
+.markup-entry-line-text {
+	flex-grow: 0;
+	min-width: 0;
+}
+
+/* A word of a comment holding links: its trailing space kept, so the words read spaced as typed. */
+.markup-comment-word {
+	color: var(--ui_color_text);
+	white-space: pre;
+}
+
+.markup-comment-break {
+	width: 100%;
+	height: 0;
+}
+
+/* A web link: the accent's light step, which reads on the dark plates where the accent itself
+   does not, underlined; a click opens the browser. */
+.markup-link {
+	color: var(--ui_color_accent_blue_hover);
+	text-decoration: underline;
+	cursor: pointer;
+}
+
+/* The comment entry as one block: the field, its hint over the field's first line, and the send
+   button under it, flush with its right edge. */
+.markup-inspector-comment-host {
+	position: relative;
+	flex-direction: column;
+}
+
+/* The hint in an empty comment field: the search fields' placeholder look (theme/widgets.css
+   .search-field-with-filter-placeholder), dim and italic. */
+.markup-inspector-comment-placeholder {
+	position: absolute;
+	left: 7px;
+	top: 5px;
+	color: var(--ui_color_text_dim);
+	font-style: italic;
+	pointer-events: none;
+}
+
+.markup-inspector-comment-placeholder.hidden {
+	display: none;
+}
+
+.markup-inspector-comment-actions {
+	flex-direction: row;
+	justify-content: flex-end;
+	margin-bottom: 6px;
+}
+
+/* The Thread: its title and its entries in one inset box. */
+.markup-inspector-thread-group {
+	flex-direction: column;
+	margin-top: 4px;
+	margin-bottom: 6px;
+	border-width: 1px;
+	border-radius: 4px;
+	border-color: var(--ui_color_border_subtle);
+	background-color: var(--ui_color_bg_hover_alt);
+}
+
+.markup-inspector-thread-title {
+	padding: 4px 8px;
+	font-weight: 600;
+	border-bottom-width: 1px;
+	border-color: var(--ui_color_border_subtle);
+}
+
+.markup-inspector-thread {
+	flex-direction: column;
+}
+
+/* One entry, a hairline under each but the last. */
+.markup-inspector-entry {
+	flex-direction: column;
+	padding: 6px 8px;
+	border-bottom-width: 1px;
+	border-color: var(--ui_color_border_subtle);
+}
+
+.markup-inspector-entry:last-child {
+	border-bottom-width: 0;
+}
+
+/* A comment's header: who and when, small and muted, above its text. */
+.markup-inspector-entry-header {
+	color: var(--ui_color_text_dim);
+	font-size: 12px;
+	margin-bottom: 2px;
+}
+
+/* A comment's text starts under its header's text, past the marker column (14 px and the 6 px
+   gap). */
+.markup-inspector-entry-body {
+	padding-left: 20px;
+	color: var(--ui_color_text);
+	white-space: normal;
+}
+
+.markup-inspector-entry-action-text {
+	white-space: normal;
+}
+
+/* "Created ... · changed ..." under the Tags row. */
+.markup-inspector-history {
+	margin-top: 4px;
+	margin-bottom: 6px;
+	color: var(--ui_color_text_dim);
+	font-size: 12px;
+	white-space: normal;
+}
+
+/* A mark-up's kind (MarkupKind): a box, a sphere or a region, on its panel row and in a region's
+   member list. */
+.markup-kind-glyph {
+	width: 14px;
+	height: 14px;
+	min-width: 14px;
+	flex-shrink: 0;
+	align-self: center;
+	background-size: 12px 12px;
+	background-repeat: no-repeat;
+	background-position: center;
+	opacity: 0.8;
+}
+
+.markup-kind-glyph.markup-kind-box {
+	background-image: url("editor:Icons/cube.svg");
+}
+
+.markup-kind-glyph.markup-kind-sphere {
+	background-image: url("editor:Icons/markup-sphere.svg");
+}
+
+.markup-kind-glyph.markup-kind-region {
+	background-image: url("editor:Icons/markup-region.svg");
+}
+
+.markup-kind-glyph.markup-kind-path {
+	background-image: url("editor:Icons/markup-path.svg");
+}
+
+/* A region whose outline cannot enclose its area ("outline needs three points", "crosses
+   itself"); its tooltip names the fix. */
+.markups-outline-badge {
+	padding: 0px 6px;
+	border-radius: 8px;
+	flex-shrink: 0;
+	font-size: 12px;
+	color: var(--ui_color_warning_text);
+	background-color: var(--ui_color_warning_background);
+	white-space: nowrap;
+}
+
+/* The inspector's Region block, inside the Mark-up section above the thread. */
+.markup-region-title {
+	margin-top: 8px;
+	padding: 2px 0;
+	font-weight: 600;
+}
+
+.markup-region-value {
+	color: var(--ui_color_text_secondary);
+}
+
+.markup-member-group {
+	flex-direction: column;
+	margin-top: 4px;
+	margin-bottom: 6px;
+	border-width: 1px;
+	border-radius: 4px;
+	border-color: var(--ui_color_border_subtle);
+	background-color: var(--ui_color_bg_hover_alt);
+}
+
+.markup-member-heading {
+	padding: 4px 8px;
+	font-weight: 600;
+	border-bottom-width: 1px;
+	border-color: var(--ui_color_border_subtle);
+}
+
+.markup-member-list {
+	flex-direction: column;
+}
+
+/* One mark-up the region may hold: its member checkbox, kind, title, note and Include | Exclude. */
+.markup-member-row {
+	flex-direction: row;
+	align-items: center;
+	gap: 6px;
+	padding: 3px 8px;
+	min-height: 24px;
+}
+
+/* A candidate that is not a member, and a member that was deleted: their titles, by one class. */
+.markup-member-title-out {
+	color: var(--ui_color_text_dim);
+}
+
+.markup-member-title-deleted {
+	color: var(--ui_color_text_disabled);
+}
+
+.markup-member-title {
+	flex-shrink: 1;
+	white-space: nowrap;
+	overflow: hidden;
+	text-overflow: ellipsis;
+}
+
+.markup-member-note {
+	flex-grow: 1;
+	flex-shrink: 1;
+	color: var(--ui_color_text_dim);
+	font-size: 12px;
+	white-space: nowrap;
+	overflow: hidden;
+	text-overflow: ellipsis;
+}
+
+/* The member's mode, two segments; the filled one is the mode, Exclude in amber. */
+.markup-member-mode {
+	flex-direction: row;
+	flex-shrink: 0;
+	margin-left: auto;
+	padding: 2px;
+	gap: 2px;
+	border-radius: 4px;
+	background-color: rgba(0, 0, 0, 0.28);
+}
+
+.markup-member-mode .button {
+	min-width: 52px;
+	margin: 0;
+	border-width: 0;
+	border-style: none;
+	background-color: transparent;
+	background-image: none;
+	color: var(--ui_color_text_dim);
+}
+
+.markup-member-mode .button.active {
+	background-color: rgba(255, 255, 255, 0.16);
+	color: var(--ui_color_text);
+}
+
+.markup-member-mode .button.markup-member-mode-exclude.active {
+	color: var(--ui_color_warning_text);
+}
+
+.markup-member-empty {
+	padding: 4px 8px;
+	color: var(--ui_color_text_dim);
+	font-size: 12px;
+}
+
+/* The Mark-up section's Path block, under its title. */
+.markup-path-heading {
+	margin-top: 6px;
+	padding: 4px 0px;
+	font-weight: 600;
+}

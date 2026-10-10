@@ -1,0 +1,1037 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Rendering Architecture Guide</title>
+<script src="https://cdn.jsdelivr.net/npm/mermaid@10/dist/mermaid.min.js"></script>
+<style>
+  :root {
+    --bg: #1a1d23;
+    --panel: #232831;
+    --panel-light: #2c323d;
+    --border: #3a414d;
+    --text: #d8dde6;
+    --muted: #8a93a3;
+    --accent: #6db4ff;
+    --danger: #ff8a6e;
+    --ok: #7bd88f;
+    --warn: #f6c177;
+  }
+  * { box-sizing: border-box; }
+  html, body {
+    background: var(--bg);
+    color: var(--text);
+    font-family: -apple-system, "Segoe UI", system-ui, sans-serif;
+    line-height: 1.55;
+    margin: 0;
+    padding: 0;
+  }
+  .container { max-width: 1280px; margin: 0 auto; padding: 48px 32px 96px; }
+  h1 { font-size: 28px; margin: 0 0 8px; letter-spacing: -0.01em; }
+  h2 { font-size: 20px; margin: 48px 0 16px; padding-top: 12px; border-top: 1px solid var(--border); }
+  h3 { font-size: 16px; margin: 24px 0 8px; color: var(--accent); }
+  h4 { font-size: 14px; margin: 16px 0 6px; color: var(--accent); }
+  p { margin: 8px 0 14px; }
+  a { color: var(--accent); text-decoration: none; }
+  a:hover { text-decoration: underline; }
+  code, .mono { font-family: "JetBrains Mono", Consolas, monospace; font-size: 0.85em; background: var(--panel-light); padding: 1px 6px; border-radius: 3px; }
+  pre {
+    background: var(--panel);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 14px 16px;
+    overflow-x: auto;
+    font-family: "JetBrains Mono", Consolas, monospace;
+    font-size: 13px;
+    line-height: 1.5;
+  }
+  pre code { background: none; padding: 0; font-size: 1em; }
+  .lede { color: var(--muted); margin-bottom: 4px; font-size: 14px; }
+  .lede + h1 { margin-top: 0; }
+
+  .panel {
+    background: var(--panel);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 20px 24px;
+    margin: 16px 0;
+  }
+  .panel.danger { border-color: var(--danger); }
+  .panel.ok { border-color: var(--ok); }
+  .panel.warn { border-color: var(--warn); }
+  .panel.before { border-color: #5a3a3a; }
+  .panel.after  { border-color: #3a5a3f; }
+  .panel-title {
+    font-weight: 600;
+    font-size: 14px;
+    margin: 0 0 8px;
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+    color: var(--muted);
+  }
+  .panel.danger .panel-title { color: var(--danger); }
+  .panel.ok .panel-title { color: var(--ok); }
+  .panel.warn .panel-title { color: var(--warn); }
+
+  table { border-collapse: collapse; width: 100%; margin: 12px 0 20px; font-size: 13.5px; }
+  th, td { text-align: left; padding: 10px 12px; border-bottom: 1px solid var(--border); vertical-align: top; }
+  th { color: var(--muted); font-weight: 600; font-size: 12px; text-transform: uppercase; letter-spacing: 0.05em; }
+  tbody tr:hover { background: var(--panel); }
+  td code { font-size: 0.95em; }
+
+  .diagram-wrap {
+    background: var(--panel);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 24px;
+    margin: 16px 0;
+    overflow-x: auto;
+  }
+  .diagram-label {
+    font-size: 12px;
+    color: var(--muted);
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    margin-bottom: 8px;
+  }
+
+  .two-col { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+  @media (max-width: 900px) { .two-col { grid-template-columns: 1fr; } }
+
+  ul, ol { margin: 8px 0 16px; padding-left: 24px; }
+  li { margin: 4px 0; }
+  li code { font-size: 0.92em; }
+
+  .pill { display: inline-block; padding: 2px 8px; border-radius: 10px; font-size: 11px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.04em; }
+  .pill.new { background: rgba(123, 216, 143, 0.15); color: var(--ok); border: 1px solid rgba(123, 216, 143, 0.4); }
+  .pill.del { background: rgba(255, 138, 110, 0.15); color: var(--danger); border: 1px solid rgba(255, 138, 110, 0.4); }
+  .pill.mod { background: rgba(246, 193, 119, 0.15); color: var(--warn); border: 1px solid rgba(246, 193, 119, 0.4); }
+  .pill.keep { background: rgba(109, 180, 255, 0.13); color: var(--accent); border: 1px solid rgba(109, 180, 255, 0.4); }
+
+  hr { border: none; border-top: 1px solid var(--border); margin: 32px 0; }
+  .footer { text-align: center; color: var(--muted); font-size: 12px; margin-top: 64px; }
+
+  .toc { background: var(--panel); border: 1px solid var(--border); border-radius: 8px; padding: 16px 20px; margin: 16px 0 32px; }
+  .toc-title { font-size: 12px; text-transform: uppercase; letter-spacing: 0.06em; color: var(--muted); margin-bottom: 8px; }
+  .toc ol { margin: 0; padding-left: 20px; columns: 2; column-gap: 32px; }
+</style>
+</head>
+<body>
+<div class="container">
+
+<p class="lede">REFERENCE &middot; GRAPHICS &middot; two-tier rendering</p>
+<h1>Rendering Architecture Guide</h1>
+<p>A comprehensive reference for the engine's graphics subsystems. Covers both the <strong>Rendering module</strong> (the low-level GPU/render-graph library) and the <strong>Engine Rendering</strong> layer (the orchestration that wires it to ECS, scenes, and assets). Intended as the primary reference for adding render passes, lighting models, screen-space effects, and raytracing.</p>
+
+<p>Companion docs:</p>
+<ul>
+  <li><a href="RenderGraph.md">RenderGraph.md</a> &mdash; the immediate-mode render graph: API quick reference and doc pointers</li>
+  <li><a href="RenderPipelineAuthoring.html">RenderPipelineAuthoring.html</a> &mdash; authoring a <code>.rendergraph</code> pipeline</li>
+  <li><a href="SurfaceShaderAuthoring.html">SurfaceShaderAuthoring.html</a> &mdash; writing a custom lit surface from a project directory</li>
+</ul>
+
+<div class="toc">
+<div class="toc-title">Contents</div>
+<ol>
+  <li><a href="#two-tier-architecture">Two-Tier Architecture</a></li>
+  <li><a href="#rendering-module">Rendering Module (low-level library)</a></li>
+  <li><a href="#engine-rendering-layer">Engine Rendering Layer (orchestration)</a></li>
+  <li><a href="#the-render-graph">The Render Graph</a></li>
+  <li><a href="#the-data-driven-pipeline">The Data-Driven Pipeline</a></li>
+  <li><a href="#materials-and-shader-composition">Materials and Shader Composition</a></li>
+  <li><a href="#vulkan-conventions">Vulkan Conventions</a></li>
+  <li><a href="#writing-a-render-pass-recipes">Writing a Render Pass (recipes)</a></li>
+  <li><a href="#resource-lifecycle-and-bindless">Resource Lifecycle and Bindless</a></li>
+  <li><a href="#debugging">Debugging</a></li>
+  <li><a href="#quick-reference">Quick Reference</a></li>
+</ol>
+</div>
+
+<h2 id="two-tier-architecture">Two-Tier Architecture</h2>
+
+<p>The rendering code is split into two layers. <strong>Where you add code depends on what you're adding.</strong></p>
+
+<div class="diagram-wrap">
+<div class="diagram-label">Two-tier architecture &mdash; what flows between layers</div>
+<pre class="mermaid">
+flowchart LR
+    subgraph RM["Rendering Module &mdash; Engine/Modules/Rendering"]
+        RG[RenderGraph<br/>Compile / Execute]
+        IDEV[IDevice<br/>Vulkan / DX12]
+        CL[CommandList]
+        PASSES[Generic Pass classes<br/>PBRForward, Shadow, Tonemap]
+        SHADERS[Shaders + ShaderComposer<br/>MaterialBuildService]
+        RG --> CL
+        CL --> IDEV
+        PASSES --> RG
+        SHADERS --> IDEV
+    end
+    subgraph EL["Engine Rendering Layer &mdash; Engine/{Include,Source}/Engine/Rendering"]
+        RS[RenderServices<br/>central hub]
+        RLOOP[RenderingLoop<br/>per-frame]
+        FEAT[IRenderFeature<br/>CascadedShadow, Sky, Retarget]
+        NODES[Pipeline Nodes<br/>WorldRender, DepthPrepass, ...]
+        REG[Material / Mesh / Model<br/>Registries]
+        ECS[ECS Render Systems<br/>Extraction, Culling, ...]
+        RS --> NODES
+        RS --> FEAT
+        RS --> REG
+        ECS --> RS
+        RLOOP --> RS
+    end
+    NODES -->|builds passes via| RG
+    FEAT -->|GPU resources via| IDEV
+    REG -->|uploads via| IDEV
+    classDef src fill:#1a2944,stroke:#62a8ff,color:#d6dde8;
+    classDef gpu fill:#16241a,stroke:#7ee787,color:#cff0d6;
+    class RG,IDEV,CL,PASSES,SHADERS gpu;
+    class RS,RLOOP,FEAT,NODES,REG,ECS src;
+</pre>
+</div>
+
+<table>
+<thead><tr><th>Layer</th><th>Location</th><th>What lives here</th><th>What does NOT live here</th></tr></thead>
+<tbody>
+<tr><td><strong>Rendering Module</strong></td><td><code>Engine/Modules/Rendering/</code></td><td>RenderGraph, IDevice (Vulkan/DX12 backends), generic Pass classes, ShaderComposer, MaterialBuildService, all GLSL shaders</td><td>Anything that knows about ECS, scenes, world state, or features</td></tr>
+<tr><td><strong>Engine Rendering</strong></td><td><code>Engine/Include/Engine/Rendering/</code><br><code>Engine/Source/Engine/Rendering/</code></td><td>RenderServices, RenderingLoop, IRenderFeature, MeshGPURegistry, MaterialRegistry, DrawBatchCompactor, PerFrameWritePool, Pipeline Nodes, ECS render systems</td><td>Vulkan/DX12 backend code, generic GPU primitives, raw shader bytecode</td></tr>
+</tbody>
+</table>
+
+<div class="panel ok">
+<div class="panel-title">Rule of thumb</div>
+<ul>
+  <li>New GPU/RG primitive (e.g. a new render graph helper, a new generic Pass class)? &rarr; Rendering module.</li>
+  <li>New per-frame orchestration (e.g. a new feature like volumetric fog, or a new pipeline node type)? &rarr; Engine layer.</li>
+  <li>New shader? &rarr; Always in <code>Engine/Modules/Rendering/Shaders/</code> regardless of which layer references it.</li>
+</ul>
+</div>
+
+<h2 id="rendering-module">Rendering Module</h2>
+
+<p><code>Engine/Modules/Rendering/</code> &mdash; pure GPU library. CMake target <code>GameEngineRendering</code>. Includes are namespaced as <code>Rendering/...</code>.</p>
+
+<h3>Directory layout</h3>
+
+<pre><code>Engine/Modules/Rendering/
+├── Include/Rendering/         # Public headers
+│   ├── CameraTypes.h          # CameraData, ViewDesc, ViewId
+│   ├── Common/                # Math, Frustum, MatrixUtils, Utils
+│   ├── Core/                  # RenderGraph, Device, CommandList, pipeline cache, descriptors
+│   ├── Geometry/              # VertexAttributeFlags, VertexLayoutBuilder
+│   ├── Materials/             # MaterialBuilder, ShaderComposer, ShaderMeta, ShaderVariantKey
+│   ├── Passes/                # Generic pass classes (PBRForward, Shadow, Tonemap, BRDFLut, etc.)
+│   ├── ShaderCache/           # ShaderPackageIO (.shaderpkg format)
+│   ├── ShaderGraph/           # Shader-graph compiler, node reflection, graph file IO
+│   ├── Sky/                   # SkyRenderer, SkySettings, SkySystem
+│   ├── Tests/                 # Test helpers
+│   └── Utils/                 # BufferHelpers, IBLSet, RingBufferHelpers, TextureUploadHelpers
+├── Source/                    # Implementations
+│   ├── Common/, Core/, Materials/, Passes/, ShaderCache/, ShaderGraph/, Sky/
+│   ├── Vulkan/                # Vulkan backend (primary)
+│   └── DirectX12/, Metal/, WebGPU/   # Secondary backends
+├── Shaders/                   # All GLSL — compiled to SPIR-V at build time
+│   ├── Adapters/              # Composable adapter scaffolding (forward, vertex)
+│   ├── Includes/              # Shared GLSL (clustered_lighting, shadow_sampling, standard_pbr)
+│   ├── Sources/               # Common bases (fullscreen_noinput.vert, solidcolor.frag)
+│   ├── Surfaces/              # Surface shader implementations (standard_pbr, unlit_solid)
+│   ├── AmbientOcclusion/, Graph/, Ocean/, ScreenSpaceReflections/, ScreenSpaceShadows/, UI/   # Subsystem-specific shaders
+│   ├── Slang/                 # Slang sources (types, HZB build)
+│   └── (root)                 # Pass-specific shaders (bloom_*, shadow_depth, tonemap, etc.)
+├── Tests/                     # gtest unit tests
+├── TestSupport/               # Shared fixtures and harness helpers for those tests
+├── Tools/                     # Developer tools
+└── docs/                      # Architecture docs (this file's home)
+</code></pre>
+
+<h3>Core &mdash; <code>Include/Rendering/Core/</code></h3>
+
+<p>The render graph and GPU abstraction. <strong>This is where 80% of low-level work happens.</strong></p>
+
+<table>
+<thead><tr><th>File</th><th>Purpose</th></tr></thead>
+<tbody>
+<tr><td><code>RenderGraph/RGFrame.h</code></td><td>Public RG API: <code>RGFrame</code>, <code>RGPassBuilder</code>, <code>RGContext</code>, typed <code>RGTexture</code>/<code>RGBuffer</code>, attachment ops, imports (<code>ImportPersistent*</code>/<code>ImportExternal*</code>), <code>AllocUpload&lt;T&gt;</code>; core IR in <code>RenderGraph/RGGraph.h</code>, pools in <code>RenderGraph/RGResourcePool.h</code>/<code>RGTransientPool.h</code></td></tr>
+<tr><td><code>Device.h</code></td><td><code>IDevice</code> interface &mdash; abstract GPU: device creation, swapchain, pipelines, descriptors, samplers, command lists. <strong>All Vulkan/DX12 is hidden behind this</strong></td></tr>
+<tr><td><code>CommandList.h</code></td><td><code>CommandList</code> &mdash; bind pipelines, descriptor sets, draw, dispatch, copy, push constants</td></tr>
+<tr><td><code>Handle.h</code></td><td>Generational handle types (PipelineHandle, SamplerHandle, BufferHandle, TextureHandle, etc.)</td></tr>
+<tr><td><code>BindlessResourceManager.h</code></td><td>Bindless descriptor indexing &mdash; register textures into a global descriptor array for shader access by index</td></tr>
+<tr><td><code>BufferManager.h</code></td><td>Buffer creation/destruction/upload helpers</td></tr>
+<tr><td><code>BufferRing.h</code></td><td>Frame-in-flight rotating buffer (one per frame)</td></tr>
+<tr><td><code>DescriptorWriter.h</code></td><td>Build descriptor set updates</td></tr>
+<tr><td><code>NamedDescriptorWriter.h</code></td><td>Bind descriptors by name from <code>.shaderdesc</code> metadata (no index hardcoding)</td></tr>
+<tr><td><code>NamedPushConstantWriter.h</code></td><td>Set push constants by member name from metadata</td></tr>
+<tr><td><code>FrameBufferAllocator.h</code></td><td>Dynamic framebuffer allocation per pass</td></tr>
+<tr><td><code>GPUCulling.h</code></td><td>GPU-driven frustum culling pipeline</td></tr>
+<tr><td><code>GPUScene.h</code></td><td>GPU scene SSBO &mdash; instance transforms, materials, mesh metadata</td></tr>
+<tr><td><code>HotReloadIntegration.h</code></td><td>Shader hot-reload plumbing</td></tr>
+<tr><td><code>LayoutCache.h</code></td><td>Descriptor set layout dedup</td></tr>
+<tr><td><code>PipelineBuilder.h</code></td><td>Fluent builder for <code>PipelineDesc</code> (apply shaderdesc, set shaders, fill formats, build)</td></tr>
+<tr><td><code>PipelineCache.h</code> / <code>IPipelineCache.h</code></td><td>Pipeline state object (PSO) cache</td></tr>
+<tr><td><code>PipelineManager.h</code></td><td>Manages live pipelines</td></tr>
+<tr><td><code>PipelineVariantCache.h</code></td><td>Variant-keyed pipeline cache (per (shader, format, blend) combination)</td></tr>
+<tr><td><code>QueryPool.h</code></td><td>GPU timestamp + occlusion queries</td></tr>
+<tr><td><code>RGDebugFlags.h</code></td><td>Centralized env-var flags (one-time init) &mdash; <code>traceRendering</code>, <code>headless</code>, <code>srgbDiag</code>, etc.</td></tr>
+<tr><td><code>RGHelpers.h</code></td><td>Builder helpers (<code>CreateOverlayPass</code>, <code>CreatePresentPass</code>, format inference)</td></tr>
+<tr><td><code>RenderGraphDebugger.h</code></td><td>Graphviz export and dump utilities</td></tr>
+<tr><td><code>ResourceContainer.h</code> / <code>ResourceManager.h</code></td><td>Resource lifetime tracking</td></tr>
+<tr><td><code>SamplerManager.h</code></td><td>Sampler dedup (linear/point clamp/wrap, shadow compare, etc.)</td></tr>
+<tr><td><code>SpecializationConstants.h</code></td><td>SPIR-V specialization constant helpers</td></tr>
+<tr><td><code>TextureManager.h</code></td><td>Texture lifecycle</td></tr>
+<tr><td><code>ThreadingUtils.h</code></td><td>Switch that forces single-threaded rendering for debugging</td></tr>
+<tr><td><code>TransientPools.h</code></td><td>Transient resource pool &mdash; buffers/textures aliased across passes within a frame</td></tr>
+</tbody>
+</table>
+
+<h3>Core &mdash; <code>Source/Core/</code></h3>
+
+<p>Implementation. Most files here have a 1:1 header match. The render graph itself splits across several files:</p>
+
+<table>
+<thead><tr><th>File</th><th>Purpose</th></tr></thead>
+<tbody>
+<tr><td><code>RenderGraph/RGFrame.cpp</code></td><td>Public frame layer: declaration, imports, realize, Execute, pool write-back</td></tr>
+<tr><td><code>RenderGraph/RGGraph.cpp</code> + <code>RGSchedule.cpp</code></td><td>Core IR: ref-count cull, structural working-set scheduler (components/clusters)</td></tr>
+<tr><td><code>RenderGraph/RGBarriers.cpp</code></td><td>Whole-frame barrier derivation over per-(mip,layer) subresource cells</td></tr>
+<tr><td><code>RenderGraph/RGRecord.cpp</code></td><td>Command recording: per-pass batches, first-touch hoist, physical-queue submits</td></tr>
+<tr><td><code>RenderGraph/RGResourcePool.cpp</code> + <code>RGTransientPool.cpp</code> + <code>RGUploadRing.cpp</code></td><td>Cross-frame pool (layout carry, age eviction), transient reuse, the per-frame upload ring</td></tr>
+</tbody>
+</table>
+
+<h3>Vulkan and DirectX12 backends</h3>
+
+<p><code>Source/Vulkan/</code> and <code>Source/DirectX12/</code> implement <code>IDevice</code>, <code>CommandList</code>, swapchain, memory, resources, descriptors, etc. <strong>You almost never touch these directly</strong> &mdash; extend through the abstract interfaces unless adding new GPU features (e.g. RT extensions).</p>
+
+<p>Vulkan is the primary backend; DX12 is secondary and may lag in feature coverage.</p>
+
+<h3>Materials &mdash; <code>Include/Rendering/Materials/</code></h3>
+
+<p>The composer-based shader system. Materials are JSON documents that select a surface shader, lighting model, and properties. The composer glues a <em>surface</em> shader (artist-authored), an <em>adapter</em> (engine-authored scaffolding), and a <em>lighting model</em> into a compilable shader source per variant.</p>
+
+<table>
+<thead><tr><th>File</th><th>Purpose</th></tr></thead>
+<tbody>
+<tr><td><code>MaterialDocument.h</code></td><td>In-memory material representation (parsed from <code>.material</code> JSON)</td></tr>
+<tr><td><code>MaterialBuilder.h</code></td><td>Builder for constructing <code>MaterialDocument</code></td></tr>
+<tr><td><code>MaterialBuildService.h</code></td><td><strong>Compiles materials into SPIR-V variants.</strong> Owns the pipeline of compose &rarr; glslc &rarr; reflect &rarr; emit</td></tr>
+<tr><td><code>MaterialHelper.h</code></td><td>Utility functions for material binding</td></tr>
+<tr><td><code>MaterialPropertyBinding.h</code></td><td>Property-to-uniform binding</td></tr>
+<tr><td><code>MaterialValidation.h</code></td><td>Validation rules</td></tr>
+<tr><td><code>MaterialAlphaMode.h</code></td><td><code>enum class MaterialAlphaMode { Opaque, Masked, Blended }</code></td></tr>
+<tr><td><code>ReflectionCache.h</code></td><td>SPIR-V reflection results cache</td></tr>
+<tr><td><code>ShaderCapabilityDetector.h</code></td><td>Detects what features a shader uses (skinning, shadows, etc.)</td></tr>
+<tr><td><code>ShaderCompileService.h</code></td><td>glslc/shaderc invocation, error handling</td></tr>
+<tr><td><code>ShaderComposer.h</code></td><td>Composes adapter + surface + lighting model into final source. <strong>Stateless string utility</strong></td></tr>
+<tr><td><code>ShaderMeta.h</code> / <code>ShaderMetaJson.h</code> / <code>ShaderMetaValidation.h</code></td><td><code>.shaderdesc</code> sidecar: descriptor set layouts, push constants, entry points</td></tr>
+<tr><td><code>ShaderReflection.h</code></td><td>SPIR-V reflection (descriptor sets, push constants)</td></tr>
+<tr><td><code>ShaderVariantKey.h</code></td><td>Bitmask key identifying a shader variant (e.g. <code>HAS_SHADOWS | HAS_NORMAL_MAP | SKINNED</code>)</td></tr>
+</tbody>
+</table>
+
+<h3>Passes &mdash; <code>Include/Rendering/Passes/</code></h3>
+
+<p>Generic, reusable pass <em>classes</em> (implement <code>IRenderGraphPass</code>). These are the low-level building blocks. The engine layer wraps them or calls them from pipeline nodes.</p>
+
+<table>
+<thead><tr><th>File</th><th>What it does</th></tr></thead>
+<tbody>
+<tr><td><code>PBRForwardPass.h</code></td><td>Forward+ rendering of opaque meshes with HDR output</td></tr>
+<tr><td><code>ShadowPasses.h</code></td><td><code>ShadowPass</code>, <code>EvsmWritePass</code>, <code>EvsmBlurPass</code> &mdash; depth and EVSM moment shadow rendering</td></tr>
+<tr><td><code>BloomPipeline.h</code></td><td>Multi-pass bloom (threshold &rarr; blur H/V &rarr; combine)</td></tr>
+<tr><td><code>BRDFLutPass.h</code></td><td>One-shot generates the 2D BRDF integration LUT</td></tr>
+<tr><td><code>TonemapPass.h</code></td><td>HDR &rarr; LDR tone mapping (ACES, Reinhard, etc.)</td></tr>
+<tr><td><code>SRGBEncodePass.h</code></td><td>Manual sRGB encode (when swapchain is UNORM)</td></tr>
+</tbody>
+</table>
+
+<h3>Geometry &mdash; <code>Include/Rendering/Geometry/</code></h3>
+
+<table>
+<thead><tr><th>File</th><th>Purpose</th></tr></thead>
+<tbody>
+<tr><td><code>VertexAttributeFlags.h</code></td><td>Bitmask of vertex attributes (Position, Normal, Tangent, UV0, Color, BlendIndices, BlendWeights, etc.)</td></tr>
+<tr><td><code>VertexLayoutBuilder.h</code></td><td>Builds Vulkan vertex input bindings from <code>VertexAttributeFlags</code></td></tr>
+<tr><td><code>ShapeBuilder.h</code></td><td>Primitive generation (box, sphere, etc.) &mdash; low-level</td></tr>
+</tbody>
+</table>
+
+<h3>Sky &mdash; <code>Include/Rendering/Sky/</code></h3>
+
+<p>Atmospheric sky rendering &mdash; tier1 (analytic) and tier2 (LUT-driven physically-based). Used by <code>SkyRenderFeature</code> in the engine layer.</p>
+
+<h3>Utils &mdash; <code>Include/Rendering/Utils/</code></h3>
+
+<table>
+<thead><tr><th>File</th><th>Purpose</th></tr></thead>
+<tbody>
+<tr><td><code>BufferHelpers.h</code></td><td>Buffer creation/upload boilerplate</td></tr>
+<tr><td><code>IBLSet.h</code></td><td>Image-based lighting cubemap pair (diffuse + specular + BRDF LUT)</td></tr>
+<tr><td><code>RingBufferHelpers.h</code></td><td>Frame-in-flight ring buffer operations</td></tr>
+<tr><td><code>TextureUploadHelpers.h</code></td><td>Texture data upload</td></tr>
+<tr><td><code>VertexLayoutPresets.h</code></td><td>Common vertex layout presets</td></tr>
+</tbody>
+</table>
+
+<h3>Shaders &mdash; <code>Engine/Modules/Rendering/Shaders/</code></h3>
+
+<p>All GLSL. Compiled at build time to <code>.spv</code> via <code>shaderc</code> (vcpkg dep). The build emits shader package archives (<code>.shaderpkg</code>) that bundle SPIR-V + reflection + metadata.</p>
+
+<p><strong>Naming convention:</strong> <code>&lt;name&gt;.vert</code>, <code>&lt;name&gt;.frag</code>, <code>&lt;name&gt;.comp</code> for raw shaders. <code>&lt;name&gt;.glsl</code> for surfaces, adapters, and includes (no entry point &mdash; meant to be composed).</p>
+
+<table>
+<thead><tr><th>Subdirectory</th><th>Contents</th></tr></thead>
+<tbody>
+<tr><td><code>Adapters/</code></td><td><code>adapter_forward.glsl</code> (forward fragment scaffolding), <code>adapter_vertex.glsl</code> (vertex scaffolding with skinning/instancing variants). Surface shaders are spliced into these.</td></tr>
+<tr><td><code>Includes/</code></td><td>Shared GLSL inclusions:<br>&bull; <code>clustered_lighting.glsl</code> &mdash; Forward+ cluster traversal (<code>GE_AccumulateClusteredLighting</code>)<br>&bull; <code>shadow_sampling.glsl</code> &mdash; PCF/PCSS shadow filtering (<code>GE_SampleShadow</code>)<br>&bull; <code>standard_pbr.glsl</code> &mdash; PBR BRDF (<code>GE_EvaluateStandardPBR</code>)<br>&bull; <code>surface_io.glsl</code>, <code>vertex_output.glsl</code>, <code>instance_io.glsl</code>, <code>bone_palette.glsl</code></td></tr>
+<tr><td><code>Surfaces/</code></td><td>Surface shaders (artist or engine-level): <code>standard_pbr.glsl</code>, <code>standard_pbr_extended.glsl</code>, <code>unlit_solid.glsl</code>, <code>volumetric_six_axis.glsl</code></td></tr>
+<tr><td><code>Terrain/</code></td><td>Terrain-specific vertex/surface shaders</td></tr>
+<tr><td><code>UI/</code></td><td>UI-specific (SDF, glyph) shaders</td></tr>
+<tr><td><code>Sources/</code></td><td>Common bases: <code>fullscreen_noinput.vert</code> (3-vertex fullscreen triangle), <code>solidcolor.frag</code></td></tr>
+<tr><td>(root)</td><td>Pass-specific shaders. Notable ones: <code>clustered_light_cull.comp</code>, <code>shadow_depth_shared.vert</code> / <code>shadow_depth_shared_skinned.vert</code> (depth-only cascade VS, reads BonePaletteAtlas), <code>pbr_forward.vert</code>/<code>.frag</code>, <code>forwardplus_lighting.frag</code>, <code>bloom_*</code>, <code>tonemap.frag</code>, <code>evsm_*</code>, <code>cas.frag</code>, <code>crt.frag</code>, <code>frustum_culling.comp</code>, <code>draw_command_gen.comp</code>, <code>visibility_compaction.comp</code>, <code>depth_reduce.comp</code>, <code>sky_*</code></td></tr>
+</tbody>
+</table>
+
+<h2 id="engine-rendering-layer">Engine Rendering Layer</h2>
+
+<p><code>Engine/Include/Engine/Rendering/</code> (headers) and <code>Engine/Source/Engine/Rendering/</code> (implementations). CMake target is part of <code>Engine</code> (the static library).</p>
+
+<h3>Top-level orchestration</h3>
+
+<table>
+<thead><tr><th>File</th><th>Purpose</th></tr></thead>
+<tbody>
+<tr><td><code>RenderServices.h/.cpp</code></td><td><strong>The central hub.</strong> Owns <code>RenderGraph</code>, <code>GPUScene</code>, <code>BindlessResourceManager</code>, view registries, mesh/material registries, animation/skinning state. Passed to every feature and node.</td></tr>
+<tr><td><code>RenderingLoop.cpp</code></td><td>The per-frame loop: extract ECS &rarr; build RG &rarr; compile &rarr; execute &rarr; present</td></tr>
+<tr><td><code>RenderDeviceContext.h/.cpp</code></td><td>Bridges <code>IDevice</code> setup with the engine's lifecycle</td></tr>
+</tbody>
+</table>
+
+<h3>Features &mdash; <code>IRenderFeature</code> pattern</h3>
+
+<p><code>IRenderFeature</code> is a marker interface (<a href="../../Include/Engine/Rendering/IRenderFeature.h">Engine/Include/Engine/Rendering/IRenderFeature.h</a>). A <em>feature</em> owns persistent rendering state (GPU resources, settings, cached data) that survives across frames. Features are registered with <code>RenderServices</code>. The pipeline nodes consult features when building passes.</p>
+
+<p><strong>Existing features:</strong></p>
+
+<table>
+<thead><tr><th>File</th><th>Purpose</th></tr></thead>
+<tbody>
+<tr><td><code>CascadedShadowRenderFeature.h/.cpp</code></td><td>Cascaded shadow maps: splits, light VP matrices, PCF/PCSS/SDSM state, per-view shadow textures, bindless registration</td></tr>
+<tr><td><code>SkyRenderFeature.h/.cpp</code></td><td>Sky LUTs (transmittance, view, multiscatter), star fields, environment cubemaps</td></tr>
+<tr><td><code>RetargetRenderFeature.h/.cpp</code></td><td>Animation retargeting (humanoid skeleton remap) state and dispatch</td></tr>
+</tbody>
+</table>
+
+<h3>Material and mesh registries</h3>
+
+<table>
+<thead><tr><th>File</th><th>Purpose</th></tr></thead>
+<tbody>
+<tr><td><code>Material.h/.cpp</code></td><td>Engine-level material instance (binds to a <code>MaterialDocument</code> + per-instance overrides)</td></tr>
+<tr><td><code>MaterialRegistry.h/.cpp</code></td><td>GUID-keyed registry of compiled materials. Owns <code>MaterialCompiler</code></td></tr>
+<tr><td><code>MaterialCompiler.h/.cpp</code></td><td>Drives <code>MaterialBuildService</code> from the engine side; manages variant compilation</td></tr>
+<tr><td><code>MaterialCompileSpec.h</code></td><td>The spec submitted to the compiler</td></tr>
+<tr><td><code>MeshGPURegistry.h/.cpp</code></td><td>GUID-keyed registry of GPU mesh buffers (vertex/index VBO/IBO). Dedup by GUID</td></tr>
+<tr><td><code>ModelEntityFactory.h/.cpp</code></td><td>Creates ECS entities from ModelAssets</td></tr>
+<tr><td><code>ModelMaterialBridge.h/.cpp</code></td><td>Connects model material slots to MaterialRegistry instances</td></tr>
+<tr><td><code>ModelRenderSetup.h/.cpp</code></td><td>Per-model GPU setup</td></tr>
+</tbody>
+</table>
+
+<h3>Draw batching and submission</h3>
+
+<table>
+<thead><tr><th>File</th><th>Purpose</th></tr></thead>
+<tbody>
+<tr><td><code>DrawBatchCompactor.h/.cpp</code></td><td>Merges compatible per-mesh draws into instanced batches</td></tr>
+<tr><td><code>WorldDrawTypes.h</code></td><td><code>WorldDrawItem</code>, <code>WorldSubmissionRecord</code> &mdash; the unit of work submitted per frame</td></tr>
+<tr><td><code>PerFrameWritePool.h</code></td><td>Double-buffered shared SSBOs for per-frame data (instance transforms, material params, bone palettes)</td></tr>
+<tr><td><code>RenderOrigin.h</code></td><td>Camera-relative rendering (Earth-scale precision): derives the per-view render origin (integer sector + fp32 local) from the camera, packs each instance's sector into <code>GPUInstance</code>, and provides the rebased view/view-proj the vertex stage projects render-origin-relative positions through. Inactive (sector 0) inside the activation radius &rArr; byte-identical to the full-world path</td></tr>
+<tr><td><code>IDepthContributor.h</code> / <code>IForwardContributor.h</code></td><td>Interfaces for things that contribute draws to depth and forward passes</td></tr>
+</tbody>
+</table>
+
+<h3>Animation / skinning (GPU)</h3>
+
+<table>
+<thead><tr><th>File</th><th>Purpose</th></tr></thead>
+<tbody>
+<tr><td><code>AnimationComputePass.h/.cpp</code></td><td>The GPU skinning compute pass</td></tr>
+<tr><td><code>AnimationSampling.h/.cpp</code></td><td>CPU clip sampling</td></tr>
+<tr><td><code>BonePaletteLayout.h</code></td><td>GPU bone palette layout</td></tr>
+<tr><td><code>ClipStore.cpp</code></td><td>Animation clip storage</td></tr>
+<tr><td><code>GPUAnimationDataStore.h/.cpp</code></td><td>GPU-side animation data</td></tr>
+<tr><td><code>SkeletonStore.cpp</code></td><td>Skeleton hierarchies</td></tr>
+<tr><td><code>SkinPaletteAtlas.h</code></td><td>Atlased per-instance bone palettes</td></tr>
+<tr><td><code>RetargetFullPass.h/.cpp</code></td><td>Full-skeleton retargeting compute</td></tr>
+<tr><td><code>RetargetGPUDataStore.h/.cpp</code></td><td>Retarget GPU data</td></tr>
+<tr><td><code>RetargetSubmission.h/.cpp</code></td><td>Retargeting submission record</td></tr>
+</tbody>
+</table>
+
+<h3>View and camera</h3>
+
+<table>
+<thead><tr><th>File</th><th>Purpose</th></tr></thead>
+<tbody>
+<tr><td><code>Camera.h/.cpp</code></td><td>Camera object (matrices, frustum)</td></tr>
+<tr><td><code>CameraUtils.h</code></td><td>Helpers (lookAt, perspective, etc.)</td></tr>
+<tr><td><code>ViewReadbackUtils.h/.cpp</code></td><td>Readback helpers (e.g. depth &rarr; CPU for picking)</td></tr>
+</tbody>
+</table>
+
+<h3>Other utilities</h3>
+
+<table>
+<thead><tr><th>File</th><th>Purpose</th></tr></thead>
+<tbody>
+<tr><td><code>EmbeddedImageDecoder.h/.cpp</code></td><td>Decodes embedded image data (from glTF, etc.)</td></tr>
+<tr><td><code>PostProcessSettings.h/.cpp</code></td><td>Post-process volume settings (bloom intensity, tonemap mode, color grading)</td></tr>
+<tr><td><code>PrimitiveGenerator.h/.cpp</code></td><td>Procedural primitives (sphere, box) at the engine level</td></tr>
+<tr><td><code>ShaderCompilationCache.h/.cpp</code></td><td>Cache for compiled shader variants</td></tr>
+<tr><td><code>SkinDiag.h</code></td><td>Diagnostics for skinning</td></tr>
+</tbody>
+</table>
+
+<h3>Pipeline (data-driven render graph) &mdash; <code>Engine/{Include,Source}/Engine/Rendering/Pipeline/</code></h3>
+
+<p>The system that loads <code>.rendergraph</code> JSON and turns it into RG passes.</p>
+
+<table>
+<thead><tr><th>File</th><th>Purpose</th></tr></thead>
+<tbody>
+<tr><td><code>RenderPipeline.h/.cpp</code></td><td><code>RenderPipelineCompiler</code>, <code>RenderPipelineInstance</code>, <code>RenderPipelineBlueprint</code>, <code>RenderPipelineNodeRegistry</code> &mdash; the loader/dispatcher</td></tr>
+<tr><td><code>RenderPipelineNodes.h</code></td><td><code>IRenderPipelineNode</code> interface, <code>ViewPassBuilder</code> helper, registry types</td></tr>
+<tr><td><code>ExpressionEvaluator.h/.cpp</code></td><td>Evaluates expressions in JSON (e.g. <code>"ceil(renderWidth / 16)"</code>)</td></tr>
+<tr><td><code>Nodes/DepthPrepassNode.h/.cpp</code></td><td>"DepthPrepass" type &mdash; clears + renders world depth</td></tr>
+<tr><td><code>Nodes/ViewParamsUploadNode.h/.cpp</code></td><td>"ViewParamsUpload" &mdash; uploads per-view UBO (matrices, camera pos)</td></tr>
+<tr><td><code>Nodes/LightUploadNode.h/.cpp</code></td><td>"LightUpload" &mdash; uploads the light SSBO</td></tr>
+<tr><td><code>Nodes/ShadowMapNode.h/.cpp</code></td><td>"ShadowMap" (legacy alias "CascadedShadowMap", deprecated) &mdash; renders all shadow families (cascades + area/spot/point)</td></tr>
+<tr><td><code>Nodes/SkyRenderNode.h/.cpp</code></td><td>"SkyRender" &mdash; sky atmosphere render</td></tr>
+<tr><td><code>Nodes/WorldRenderNode.h/.cpp</code></td><td>"WorldRender" &mdash; main forward-pass world geometry</td></tr>
+<tr><td><code>Nodes/ComputeShaderNode.h/.cpp</code></td><td>"ComputeShader" &mdash; JSON-configured generic compute dispatch (used for cluster cull, etc.)</td></tr>
+<tr><td><code>Nodes/FullscreenShaderNode.h/.cpp</code></td><td>"FullscreenShader" &mdash; JSON-configured generic fullscreen pass (used for all post-process effects)</td></tr>
+<tr><td><code>Nodes/PipelineNodeUtils.h</code></td><td>Helper utilities (sampler resolution, attachment ops, etc.)</td></tr>
+</tbody>
+</table>
+
+<h3>ECS systems &mdash; <code>Engine/Source/Engine/Rendering/Systems/</code></h3>
+
+<p>Render-related ECS systems. These run during the world update; their outputs feed <code>RenderServices</code>.</p>
+
+<table>
+<thead><tr><th>File</th><th>Purpose</th></tr></thead>
+<tbody>
+<tr><td><code>RegisterRenderingSystems.cpp</code></td><td>Registers all rendering ECS systems with the world</td></tr>
+<tr><td><code>TransformHierarchySystem.cpp</code></td><td>Propagates parent&rarr;child transforms</td></tr>
+<tr><td><code>CameraSystem.cpp</code></td><td>Updates camera matrices from Transform</td></tr>
+<tr><td><code>VisibilityAndLODSystem.cpp</code></td><td>LOD selection</td></tr>
+<tr><td><code>RenderExtractionSystem.cpp</code></td><td><strong>Extracts ECS state into RenderServices each frame</strong> (lights, draws, view targets)</td></tr>
+<tr><td><code>RenderGraphBuildSystem.cpp</code></td><td><strong>Builds the render graph from the pipeline blueprint</strong> each frame</td></tr>
+<tr><td><code>AnimationSystem.cpp</code></td><td>Animation playback</td></tr>
+<tr><td><code>RigidAnimationSystem.cpp</code></td><td>Non-skinned animation</td></tr>
+<tr><td><code>HumanoidRetargetSystem.cpp</code></td><td>Humanoid retargeting</td></tr>
+<tr><td><code>SkinningUploadSystem.cpp</code></td><td>Uploads bone palettes to GPU</td></tr>
+<tr><td><code>SkyEnvironmentSystem.cpp</code></td><td>Sky environment updates (sun angle, time of day)</td></tr>
+</tbody>
+</table>
+
+<h2 id="the-render-graph">The Render Graph</h2>
+<p>The render graph is <b>immediate-mode</b>: the whole frame graph is declared fresh each frame
+into a bump arena (<code>RGArena</code>), compiled in one sweep, executed, and reset. There is no
+retained pass state, no enable/disable/invalidate, no incremental compile — a pass that should not
+run this frame is not declared. Core: <code>Engine/Modules/Rendering/{Include/Rendering/Core,Source/Core}/RenderGraph/</code>.</p>
+<ul>
+  <li><b>Declaration</b> — <code>RGFrame</code> + <code>RGPassBuilder</code> (typed
+  <code>RGTexture</code>/<code>RGBuffer</code> handles, dense per-frame ids; no hash maps or string
+  keys in the hot path).</li>
+  <li><b>Cull</b> — ref-count backward reachability from sinks; every culled pass records an
+  <code>RGCullReason</code> surfaced over MCP.</li>
+  <li><b>Schedule</b> — structural working-set scheduler: weakly-connected hazard components emit
+  contiguously (the TBDR interleave fix, by construction), identical-attachment clusters group
+  within a component, contraction stalls split-and-retry. Deterministic integer tiebreaks.</li>
+  <li><b>Barriers</b> — whole-frame derivation over per-(mip,layer) subresource cells with
+  per-physical-queue reader coverage; <b>per-pass batched</b> calls plus a submission-front hoist
+  of first-touch (init/import-sync) barriers. Imports enter at their pool-tracked layout and final
+  layouts write back to the pool.</li>
+  <li><b>Submission</b> — passes partition by <b>physical</b> queue (the production default map
+  collapses all logical queues onto one graphics submission; async compute is an explicit opt-in
+  map) with monotonic timeline-semaphore sync.</li>
+</ul>
+<p>Design rationale, comparison with other engines' render graphs, and measured claims live in the
+support repository as &ldquo;Render Graph Redesign &mdash; Immediate-Mode, Arena-Backed, Queue-Aware&rdquo;.
+Quick reference: <a href="RenderGraph.md">RenderGraph.md</a>.</p>
+
+<h2 id="the-data-driven-pipeline">The Data-Driven Pipeline</h2>
+
+<p>The canonical pipeline is JSON: <a href="../../../../Assets/RenderPipelines/ForwardPlus.rendergraph">Assets/RenderPipelines/ForwardPlus.rendergraph</a>. The Editor loads it at startup (default editor scene) or whenever a project specifies one. Each entry in <code>passes[]</code> has a <code>type</code> string that maps to a pipeline node class.</p>
+
+<div class="diagram-wrap">
+<div class="diagram-label">Data-driven pipeline load flow</div>
+<pre class="mermaid">
+flowchart TD
+    JSON[".rendergraph JSON<br/>e.g. ForwardPlus.rendergraph"]
+    ASSET["RenderPipelineAsset<br/>parsed in-memory"]
+    COMP["RenderPipelineCompiler.Compile<br/>resolve types, validate"]
+    BP["RenderPipelineBlueprint<br/>ordered node list + resources"]
+    INST["RenderPipelineInstance<br/>SetBlueprint"]
+    EB["EnsureBuilt<br/>per-node Initialize"]
+    BV["BuildForView<br/>per-node, per-camera"]
+    RG["RG passes<br/>added to RenderGraph"]
+    JSON --> ASSET --> COMP --> BP --> INST --> EB --> BV --> RG
+    classDef cfg fill:#3a2a4a,stroke:#b07bff,color:#e8d6f0;
+    classDef src fill:#1a2944,stroke:#62a8ff,color:#d6dde8;
+    classDef gpu fill:#16241a,stroke:#7ee787,color:#cff0d6;
+    class JSON,ASSET cfg;
+    class COMP,BP,INST,EB,BV src;
+    class RG gpu;
+</pre>
+</div>
+
+<h3>Schema overview</h3>
+
+<pre><code>{
+  "schemaVersion": 2,
+  "pipelineName": "ForwardPlus",
+  "outputs": {
+    "FinalColor": "View.Resolve"
+  },
+  "resources": {
+    "BloomA": {
+      "kind": "Texture",
+      "format": "R16G16B16A16_FLOAT",
+      "scope": "PerView",
+      "extent": { "scale": [0.5, 0.5] },
+      "usage": ["RenderTarget", "ShaderResource"]
+    },
+    "ClusterBuffer": {
+      "kind": "Buffer",
+      "memoryUsage": "DeviceLocal",
+      "scope": "PerView",
+      "size": {
+        "expression": "clustersX * clustersY * depthSlices * clusterDataBytes",
+        "variables": {
+          "clusterDataBytes": 16,
+          "clustersX": "ceil(renderWidth / tileSizeX)",
+          "clustersY": "ceil(renderHeight / tileSizeY)",
+          "depthSlices": 24,
+          "tileSizeX": 16,
+          "tileSizeY": 16
+        }
+      },
+      "usage": ["Storage", "ShaderResource", "CopyDestination"]
+    }
+  },
+  "passes": [
+    {
+      "id": "DepthPrepass",
+      "type": "DepthPrepass",
+      "enabled": true
+    },
+    {
+      "id": "BloomBlurH",
+      "type": "FullscreenShader",
+      "shaderPkg": "Shaders/bloom_blur_h.shaderpkg",
+      "inputs":  { "uSrc": "BloomA" },
+      "output":  "BloomB",
+      "samplers": { "uSrc": "LinearClamp" }
+    },
+    {
+      "id": "ClusteredLightCull",
+      "type": "ComputeShader",
+      "shaderPkg": "Shaders/clustered_light_cull.shaderpkg",
+      "buffers": {
+        "ClusterBuffer": "ClusterBuffer",
+        "LightBuffer":   "LightBuffer",
+        "ViewParams":    "ViewParams"
+      },
+      "bufferUsages": {
+        "ClusterBuffer": "StorageWrite",
+        "LightBuffer":   "StorageRead",
+        "ViewParams":    "ConstantBuffer"
+      },
+      "dispatch": { "x": "ceil(renderWidth / 16)", "y": "ceil(renderHeight / 16)", "z": 1 }
+    }
+  ]
+}
+</code></pre>
+
+<h3>Resource scope</h3>
+
+<table>
+<thead><tr><th>Scope</th><th>Meaning</th></tr></thead>
+<tbody>
+<tr><td><code>PerView</code></td><td>One instance per camera/view. Necessary for view-dependent buffers (ClusterBuffer, ViewParams).</td></tr>
+<tr><td><code>Frame</code></td><td>One instance per frame (shared by all views)</td></tr>
+<tr><td><code>Persistent</code></td><td>Survives across frames (e.g. accumulation buffers)</td></tr>
+</tbody>
+</table>
+
+<h3>Pass ordering in JSON</h3>
+
+<p>Optional fields per pass entry:</p>
+<ul>
+  <li><code>"phase": "PostProcess"</code> (string name or integer) &mdash; overrides default phase</li>
+  <li><code>"tags": ["bloom", "post"]</code> &mdash; adds tags</li>
+  <li><code>"after": ["DepthPrepass"]</code> &mdash; adds explicit ordering</li>
+</ul>
+
+<h3>Built-in node types</h3>
+
+<table>
+<thead><tr><th>Type</th><th>Node class</th><th>What it does</th></tr></thead>
+<tbody>
+<tr><td><code>DepthPrepass</code></td><td><code>DepthPrepassNode</code></td><td>Renders world depth</td></tr>
+<tr><td><code>ViewParamsUpload</code></td><td><code>ViewParamsUploadNode</code></td><td>Uploads per-view UBO</td></tr>
+<tr><td><code>LightUpload</code></td><td><code>LightUploadNode</code></td><td>Uploads light SSBO from extracted lights</td></tr>
+<tr><td><code>ShadowMap</code> <span style="opacity:.6">(legacy alias <code>CascadedShadowMap</code>)</span></td><td><code>ShadowMapNode</code></td><td>Renders all shadow families (cascades + area/spot/point) + uploads shadow UBO</td></tr>
+<tr><td><code>SkyRender</code></td><td><code>SkyRenderNode</code></td><td>Renders sky atmosphere</td></tr>
+<tr><td><code>WorldRender</code></td><td><code>WorldRenderNode</code></td><td>Forward-pass world geometry with material binding</td></tr>
+<tr><td><code>TerrainRender</code></td><td>(in WorldRender or separate)</td><td>Renders terrain CDLOD</td></tr>
+<tr><td><code>ComputeShader</code></td><td><code>ComputeShaderNode</code></td><td>Generic compute dispatch &mdash; bind buffers/textures, dispatch with expression-evaluated sizes</td></tr>
+<tr><td><code>FullscreenShader</code></td><td><code>FullscreenShaderNode</code></td><td>Generic fullscreen pass &mdash; bind inputs/samplers/push constants, draw 3-vertex triangle</td></tr>
+</tbody>
+</table>
+
+<p><strong>To add a new pass type:</strong> implement an <code>IRenderPipelineNode</code> subclass and register it. Drop a JSON entry referring to that type. See the <a href="#writing-a-render-pass-recipes">Recipes</a> section below.</p>
+
+<h2 id="materials-and-shader-composition">Materials and Shader Composition</h2>
+
+<h3>The composition model</h3>
+
+<p>A material doesn't <em>contain</em> shader source &mdash; it <em>references</em>:</p>
+<ol>
+  <li>A <strong>surface shader</strong> (e.g. <code>Surfaces/standard_pbr.glsl</code>)</li>
+  <li>A <strong>lighting model</strong> (currently <code>StandardPBR</code>)</li>
+  <li>Properties (textures, scalars, vectors)</li>
+</ol>
+
+<p>At compile time, <code>ShaderComposer</code> (<a href="../Include/Rendering/Materials/ShaderComposer.h">ShaderComposer.h</a>) emits two GLSL strings (vertex + fragment) by:</p>
+<ol>
+  <li>Selecting an <strong>adapter</strong> (<code>Adapters/adapter_forward.glsl</code>, <code>Adapters/adapter_vertex.glsl</code>) based on the <code>ShaderVariantKey</code></li>
+  <li>Generating a <code>#define</code> preamble for the variant key (e.g. <code>#define HAS_SHADOWS 1</code>, <code>#define SKINNED 1</code>)</li>
+  <li><code>#include</code>-ing the surface shader and the lighting model GLSL</li>
+  <li>Returning the two strings</li>
+</ol>
+
+<p><code>MaterialBuildService</code> (<a href="../Include/Rendering/Materials/MaterialBuildService.h">MaterialBuildService.h</a>) then drives glslc to compile each variant into SPIR-V, with reflection sidecars.</p>
+
+<div class="diagram-wrap">
+<div class="diagram-label">Shader composition pipeline</div>
+<pre class="mermaid">
+flowchart LR
+    SURF["Surface shader<br/>e.g. standard_pbr.glsl"]
+    ADAP["Adapter<br/>adapter_forward.glsl /<br/>adapter_vertex.glsl"]
+    LM["Lighting model<br/>StandardPBR"]
+    KEY["ShaderVariantKey<br/>SKINNED, HAS_SHADOWS,<br/>HAS_NORMAL_MAP, ..."]
+    COMP["ShaderComposer<br/>splice + #define preamble"]
+    SRC["GLSL source<br/>vertex + fragment"]
+    SVC["ShaderCompileService<br/>glslc / shaderc"]
+    SPV["SPIR-V variant + .shaderdesc<br/>sidecar (reflection)"]
+    SURF --> COMP
+    ADAP --> COMP
+    LM --> COMP
+    KEY --> COMP
+    COMP --> SRC --> SVC --> SPV
+    classDef inp fill:#3a2a4a,stroke:#b07bff,color:#e8d6f0;
+    classDef step fill:#1a2944,stroke:#62a8ff,color:#d6dde8;
+    classDef out fill:#16241a,stroke:#7ee787,color:#cff0d6;
+    class SURF,ADAP,LM,KEY inp;
+    class COMP,SRC,SVC step;
+    class SPV out;
+</pre>
+</div>
+
+<h3>Adding a new path (e.g. GBuffer adapter)</h3>
+
+<p>To make every surface shader gain a deferred path, <strong>add a new adapter</strong>:</p>
+<ol>
+  <li>Create <code>Engine/Modules/Rendering/Shaders/Adapters/adapter_gbuffer.glsl</code></li>
+  <li>In the adapter, declare MRT outputs (<code>layout(location=0..3) out vec4 ge_outGBuffer0..3;</code>) and call the surface shader's interface functions to fill them</li>
+  <li>Modify <code>ShaderComposer::Compose</code> to select this adapter when a new variant flag (e.g. <code>RENDER_PATH_DEFERRED</code>) is set</li>
+  <li>Materials referencing the same surface shader will now compile both forward and deferred variants automatically when both variant keys are requested</li>
+</ol>
+
+<h3><code>.shaderdesc</code> sidecars</h3>
+
+<p>Built shaders emit a <code>.shaderdesc</code> file alongside the SPIR-V. It contains:</p>
+<ul>
+  <li>Descriptor set layouts (set, binding, type, name)</li>
+  <li>Push constant ranges and member names</li>
+  <li>Entry point info</li>
+</ul>
+
+<div class="panel ok">
+<div class="panel-title">Recommendation</div>
+<p>This metadata enables binding by name via <code>NamedDescriptorWriter</code> and <code>NamedPushConstantWriter</code>, eliminating fragile hardcoded indices. Use it for any custom pipeline.</p>
+</div>
+
+<h3>Variant keys</h3>
+
+<p><code>ShaderVariantKey</code> is a bitmask defined in <a href="../Include/Rendering/Materials/ShaderVariantKey.h">ShaderVariantKey.h</a>. Examples of common bits:</p>
+<ul>
+  <li><code>SKINNED</code> &mdash; vertex shader receives bone indices/weights</li>
+  <li><code>HAS_SHADOWS</code> &mdash; fragment samples shadow map</li>
+  <li><code>HAS_NORMAL_MAP</code> &mdash; fragment uses normal map</li>
+  <li><code>INSTANCED</code> &mdash; vertex shader reads instance data from SSBO</li>
+  <li><code>ALPHA_TEST</code> &mdash; fragment discards on alpha threshold</li>
+</ul>
+
+<p>A material can request multiple variants (e.g. one with shadows, one without) &mdash; they're compiled lazily as needed.</p>
+
+<h2 id="vulkan-conventions">Vulkan Conventions</h2>
+
+<div class="panel danger">
+<div class="panel-title">Memorize these</div>
+<p>The engine uses non-default Vulkan conventions for performance and correctness. They will bite you on day one if you forget.</p>
+</div>
+
+<h3>Coordinate system</h3>
+<ul>
+  <li><strong>Left-handed</strong>, Z+ forward, Y+ up</li>
+  <li>Use <code>MakeLookAtLH</code> / <code>MakePerspectiveLH_ZO_ReverseZ</code> / <code>MakeOrthographicLH_ZO_ReverseZ</code> from <code>Mathematics</code></li>
+</ul>
+
+<h3>Reverse-Z</h3>
+<ul>
+  <li>NDC depth still <code>[0, 1]</code> but inverted: <strong>near &rarr; 1.0, far &rarr; 0.0</strong></li>
+  <li>Depth buffer is <strong>D32_SFLOAT</strong> (D24_UNORM is a precision regression under reverse-Z)</li>
+  <li>Default depth clear: <code>0.0</code> (= far)</li>
+  <li>Default <code>depthCompareOp</code>: <code>GreaterOrEqual</code></li>
+  <li>Shadow comparison sampler: <code>GreaterOrEqual</code></li>
+</ul>
+
+<h3>Shadow bias</h3>
+<ul>
+  <li>Depth bias constants are <strong>negative</strong> (push fragments toward 0.0)</li>
+  <li>Receiver bias is <strong>added</strong> to NDC depth (not subtracted as in forward-Z)</li>
+</ul>
+
+<h3>Negative viewport height</h3>
+<ul>
+  <li>The Vulkan viewport uses negative height (via <code>VK_KHR_maintenance1</code>) so Y is up at the framebuffer level</li>
+  <li>This means shadow UV sampling needs <code>shadowUV.y = 1.0 - shadowUV.y</code> to compensate when sampling into a shadow map that wasn't rendered with the flip</li>
+</ul>
+
+<h3>Camera-relative rendering (Earth-scale precision)</h3>
+<ul>
+  <li>The render origin is expressed as an <strong>integer sector + fp32 local</strong> derived from the camera each frame (<code>RenderOrigin.h</code>). It is <em>not</em> a global re-shift: each instance stores its own sector (packed into the two reserved <code>GPUInstance</code> words) and the vertex stage differences it against the camera's sector, so a moving camera re-uploads only the CameraUBO &mdash; the persistent, change-tracked instance buffer is untouched (quiescence preserved)</li>
+  <li>The <code>CameraUBO</code> carries rebased view / view-proj (built from the camera's sector-local position) plus the origin sector; the vertex stage projects a render-origin-relative position through them for a fp32-precise clip position, while <code>vPosWS</code> stays full world for the fragment stage (lighting / shadows / fog are world-space this slice)</li>
+  <li>Inactive (sector 0) inside the activation radius &rArr; the shader takes the full-world path, byte-identical to the pre-feature build. Kills far-from-origin vertex jitter / z-fighting for meshes out to planetary radius. Terrain (CBT), shadow-map precision, and clustered-light precision are the documented follow-up slices</li>
+</ul>
+
+<h2 id="writing-a-render-pass-recipes">Writing a Render Pass (recipes)</h2>
+<p>Passes are declared fresh every frame against <code>RGFrame</code> (immediate mode — a pass that
+should not run is simply not declared). The declaration lambda states every access; barriers,
+ordering, and culling are derived from those declarations. Execute lambdas capture <b>by value</b>
+and record through <code>RGContext</code>.</p>
+<pre><code>// Raster pass: attachments + declared reads. LoadOp::Load derives a READ edge
+// (depth test and blending read prior contents — this keeps the producer alive).
+frame.AddPass("DepthPrepass", PassPhase::kEarlySetup,
+    [&amp;](RenderGraph::RGPassBuilder&amp; p) {
+        p.AttachDepth(depth, {.Load = LoadOp::Clear, .ClearDepth = 0.0f /* reverse-Z far */});
+        p.Read(cameraUbo, RenderGraph::RGBufferRead::Uniform);
+    },
+    [=](RenderGraph::RGContext&amp; ctx) { /* record draws via ctx.Cmd */ });
+
+// Compute pass: declared storage accesses drive the barriers; no manual sync.
+frame.AddPass("LightCull", PassPhase::kEarlySetup,
+    [&amp;](RenderGraph::RGPassBuilder&amp; p) {
+        p.Read(depthPyramid, RenderGraph::RGTextureRead::SampledCompute);
+        p.Write(lightList,   RenderGraph::RGBufferWrite::Storage);
+    },
+    [=](RenderGraph::RGContext&amp; ctx) { ctx.Dispatch(gx, gy, 1); });</code></pre>
+<p>Cross-frame resources are imported per frame: <code>ImportPersistentTexture/Buffer</code>
+(pool-owned, layout carried across frames), <code>ImportExternalTexture/Buffer</code> (engine-owned,
+no write-back), <code>RGRotatingTexture/Buffer</code> (the only N-buffer rotation — history and
+CPU readbacks). Per-frame CPU constants come from <code>AllocUpload&lt;T&gt;()</code> (one upload
+ring; there is no <code>perFrame</code> flag). A consume-only pass (queries, readback) uses
+<code>PreventCulling()</code>; everything else survives by feeding a sink
+(<code>MarkOutput</code>/present/export).</p>
+<p>Living examples: <code>Engine/Tests/RenderServicesRG2PassTests.cpp</code> and the pipeline nodes
+under <code>Engine/Source/Engine/Rendering/Pipeline/Nodes/</code> (post-FX stages share
+<code>FullscreenShaderNode::DeclareForView</code>).</p>
+
+<h2 id="resource-lifecycle-and-bindless">Resource Lifecycle and Bindless</h2>
+
+<h3>Transient vs Persistent</h3>
+
+<table>
+<thead><tr><th></th><th>Transient</th><th>Persistent</th></tr></thead>
+<tbody>
+<tr><td>Frame lifetime</td><td>Single frame, reset every frame</td><td>Lives across frames</td></tr>
+<tr><td>Memory</td><td>Aliased with other transients (interval-graph coloring in compile)</td><td>Dedicated</td></tr>
+<tr><td>Use cases</td><td>Intermediate render targets, scratch buffers</td><td>Accumulation buffers, IBL LUTs, BRDF LUTs, shadow maps</td></tr>
+<tr><td>Setup flag</td><td>Default</td><td><code>desc.persistent = true</code></td></tr>
+</tbody>
+</table>
+
+<p>The render graph automatically aliases transient resources when their lifetimes don't overlap, recovering significant memory on complex pipelines.</p>
+
+<h3>PerFrameWritePool</h3>
+
+<p><code>PerFrameWritePool</code> (<a href="../../../../Engine/Include/Engine/Rendering/PerFrameWritePool.h">PerFrameWritePool.h</a>) is the engine's shared SSBO ring for per-frame data:</p>
+<ul>
+  <li>N <code>BufferRing</code> instances (one per frame-in-flight)</li>
+  <li>Stable binding ranges allocated each frame and read by shaders</li>
+  <li>Used for instance transforms, per-material params, bone palettes, light data</li>
+</ul>
+
+<p>When you need to upload data the GPU will consume this frame and discard, this is the path.</p>
+
+<h3>Bindless</h3>
+
+<p><code>BindlessResourceManager</code> (<a href="../Include/Rendering/Core/BindlessResourceManager.h">BindlessResourceManager.h</a>) maintains a large descriptor array (1000s of slots) indexed by <code>uint32_t</code>. Use it for:</p>
+<ul>
+  <li>Texture atlases where shaders need arbitrary lookup by index</li>
+  <li>PCSS raw-depth registration (shadows already use this)</li>
+  <li>Future GBuffer texture pools, virtualized shadow maps, ray-traced texture sampling</li>
+</ul>
+
+<p>Each registered resource gets a stable index. Indices are <em>not</em> sequential &mdash; the allocator may recycle parked-free slots.</p>
+
+<h3>Frame-in-flight isolation</h3>
+
+<ul>
+  <li>Command buffers per frame</li>
+  <li>Transient resource pools rotate by <code>GetActiveWindowTargetFrameIndex() % framesInFlight</code></li>
+  <li>Per-frame fences + timeline semaphores guard cross-queue ordering</li>
+  <li>Resources are kept alive (deferred destroy) until the GPU finishes them</li>
+</ul>
+
+<h2 id="debugging">Debugging</h2>
+
+<h3>Environment variable flags (one-time init)</h3>
+
+<table>
+<thead><tr><th>Variable</th><th>Effect</th></tr></thead>
+<tbody>
+<tr><td><code>GE_DEBUG_TRACE_RENDERING=1</code></td><td>Full render graph compile/execute trace</td></tr>
+<tr><td><code>GE_DEBUG_TRACE_VERBOSE=1</code></td><td>Extra verbose compile/execute logging</td></tr>
+<tr><td><code>GE_HEADLESS_TEST=1</code></td><td>Headless mode (skip swapchain, backbuffer fallbacks)</td></tr>
+<tr><td><code>GE_DEBUG_SRGB_ENCODE=1</code></td><td>sRGB encode diagnostic logging</td></tr>
+<tr><td><code>GE_RG_DUMP_RESOURCE_VERSIONS=1</code></td><td>Dump resource version state on each compile</td></tr>
+<tr><td><code>GE_RG_DUMP_RESOURCE_VERSIONS_FULL=1</code></td><td>Verbose version dump</td></tr>
+<tr><td><code>GE_RG_DISABLE_BARRIER_BATCHING=1</code></td><td>Disable barrier merging (debug only)</td></tr>
+<tr><td><code>GE_RG_AUTO_COMPILE=0</code></td><td>Disable auto-compile-on-topology-change</td></tr>
+<tr><td><code>GE_DISABLE_SHADERDESC=1</code></td><td>Skip <code>.shaderdesc</code>; use SPIR-V reflection only (slower)</td></tr>
+</tbody>
+</table>
+
+<p>Source: <a href="../Include/Rendering/Core/RGDebugFlags.h">RGDebugFlags.h</a>.</p>
+
+<h3>Editor panels</h3>
+
+<p>When the Editor is running:</p>
+<ul>
+  <li><strong>RenderGraph panel</strong> &mdash; live pass list, resource list, barrier list, per-frame stats</li>
+  <li><strong>VRAM panel</strong> &mdash; GPU memory usage by resource</li>
+  <li><strong>CPU Profiler panel</strong> &mdash; per-frame CPU timings</li>
+  <li><strong>Visual Profiler panel</strong> &mdash; per-pass GPU timings (from QueryPool)</li>
+  <li><strong>Monitors panel</strong> &mdash; runtime counters</li>
+</ul>
+
+<h3>Graphviz DAG export</h3>
+
+<p><a href="../Source/Core/RenderGraphDebug.cpp">RenderGraphDebug.cpp</a> emits a <code>.dot</code> file for the compiled DAG. Render with:</p>
+
+<pre><code>dot -Tpng rendergraph.dot -o rendergraph.png
+</code></pre>
+
+<h3>The golden rule for debugging GPU bugs</h3>
+
+<div class="panel warn">
+<div class="panel-title">Start with data, not math</div>
+<p>When shadows/lighting/anything visual is wrong, the most common cause is a data pipeline issue (wrong buffer bound, stale descriptor, aliased memory), not a math error. Write a known test value to the suspect buffer and check whether the output changes. Once you know whether the GPU is reading what you think, <em>then</em> debate the math.</p>
+</div>
+
+<p>Render graph transient buffers can alias &mdash; if a GPU-only buffer produces stale results, check for aliasing in the trace output. Upload (host-visible) buffers are excluded from aliasing by the <code>IsAliasCompatible</code> guard in <code>RenderGraphCompiler.cpp</code>.</p>
+
+<p>See <a href="../../../../docs/Rendering/gpu-debugging-guide.md">docs/Rendering/gpu-debugging-guide.md</a> for the full playbook.</p>
+
+<h3>Common pitfalls</h3>
+
+<div class="panel danger">
+<div class="panel-title">Easy-to-miss bugs</div>
+<ul>
+  <li><strong>Forgetting <code>p.PreventCulling()</code> on a consume-only pass</strong> &mdash; ref-count cull removes passes whose outputs reach no sink (readback/query/diagnostic passes need it)</li>
+  <li><strong>Capturing frame-local ids across frames</strong> &mdash; <code>RGTexture</code>/<code>RGBuffer</code> ids are valid only for the <code>RGFrame</code> that created them; re-import/re-declare each frame and guard cached ids with frame identity</li>
+  <li><strong>Stale <code>.shaderdesc</code></strong> &mdash; after editing a shader's descriptor layout, rebuild to regenerate the sidecar (otherwise <code>NamedDescriptorWriter</code> resolves stale bindings)</li>
+  <li><strong>Wrong asset mount</strong> &mdash; editor reads from <code>build/&lt;preset&gt;/bin/&lt;config&gt;/Apps/Editor/Assets/</code>, NOT from <code>Apps/Editor/Assets/</code> in the repo. Edit the staged copy for hot-reload.</li>
+</ul>
+</div>
+
+<h2 id="quick-reference">Quick Reference</h2>
+
+<h3>Where to put a new...</h3>
+
+<table>
+<thead><tr><th>Adding...</th><th>Goes in</th></tr></thead>
+<tbody>
+<tr><td>New shader (any kind)</td><td><code>Engine/Modules/Rendering/Shaders/</code> (root, or appropriate subdir)</td></tr>
+<tr><td>Generic reusable pass class</td><td><code>Engine/Modules/Rendering/Include+Source/Rendering/Passes/</code></td></tr>
+<tr><td>Pass type for <code>.rendergraph</code> JSON</td><td><code>Engine/{Include,Source}/Engine/Rendering/Pipeline/Nodes/</code></td></tr>
+<tr><td>Stateful engine subsystem (LUTs, settings, caches)</td><td><code>Engine/{Include,Source}/Engine/Rendering/</code> (<code>IRenderFeature</code>)</td></tr>
+<tr><td>ECS system that contributes to rendering</td><td><code>Engine/Source/Engine/Rendering/Systems/</code></td></tr>
+<tr><td>New surface shader</td><td><code>Engine/Modules/Rendering/Shaders/Surfaces/</code></td></tr>
+<tr><td>New GLSL include (shared utility)</td><td><code>Engine/Modules/Rendering/Shaders/Includes/</code></td></tr>
+<tr><td>New adapter (e.g. GBuffer path)</td><td><code>Engine/Modules/Rendering/Shaders/Adapters/</code></td></tr>
+<tr><td>Vulkan/DX12 backend feature</td><td><code>Engine/Modules/Rendering/Source/Vulkan/</code> or <code>Source/DirectX12/</code></td></tr>
+</tbody>
+</table>
+
+<h3>Common file paths</h3>
+
+<table>
+<thead><tr><th>Need to...</th><th>Open</th></tr></thead>
+<tbody>
+<tr><td>Understand the main pipeline</td><td><a href="../../../../Assets/RenderPipelines/ForwardPlus.rendergraph">Assets/RenderPipelines/ForwardPlus.rendergraph</a></td></tr>
+<tr><td>Modify cluster cull</td><td><a href="../Shaders/clustered_light_cull.comp">Shaders/clustered_light_cull.comp</a></td></tr>
+<tr><td>Modify cluster light traversal in fragment shaders</td><td><a href="../Shaders/Includes/clustered_lighting.glsl">Shaders/Includes/clustered_lighting.glsl</a></td></tr>
+<tr><td>Modify shadow filtering</td><td><a href="../Shaders/Includes/shadow_sampling.glsl">Shaders/Includes/shadow_sampling.glsl</a></td></tr>
+<tr><td>Tune shadow CPU side (cascade splits, PCSS, SDSM)</td><td><a href="../../../../Engine/Include/Engine/Rendering/CascadedShadowRenderFeature.h">Engine/Include/Engine/Rendering/CascadedShadowRenderFeature.h</a></td></tr>
+<tr><td>Modify PBR BRDF</td><td><a href="../Shaders/Includes/standard_pbr.glsl">Shaders/Includes/standard_pbr.glsl</a></td></tr>
+<tr><td>Modify post chain</td><td><a href="../../../../Assets/RenderPipelines/ForwardPlus.rendergraph">Assets/RenderPipelines/ForwardPlus.rendergraph</a> (JSON) &mdash; or edit <code>bloom_*.frag</code>, <code>tonemap.frag</code></td></tr>
+<tr><td>See how world geometry submits draws</td><td><a href="../../../../Engine/Source/Engine/Rendering/Pipeline/Nodes/WorldRenderNode.cpp">WorldRenderNode.cpp</a></td></tr>
+<tr><td>See how shadow maps are rendered</td><td><a href="../../../../Engine/Source/Engine/Rendering/Pipeline/Nodes/ShadowMapNode.cpp">ShadowMapNode.cpp</a></td></tr>
+<tr><td>Add a fullscreen post effect (pure JSON)</td><td>Edit ForwardPlus.rendergraph; type=<code>FullscreenShader</code></td></tr>
+</tbody>
+</table>
+
+<h3>Recipe selection cheatsheet for your task list</h3>
+
+<table>
+<thead><tr><th>Task</th><th>Approach</th></tr></thead>
+<tbody>
+<tr><td><strong>Modify shadows</strong> (PCF kernel, bias, PCSS params, cascade lambda)</td><td>Edit <code>shadow_sampling.glsl</code> (staged copy) for filter; edit <code>CascadedShadowRenderFeature.cpp</code> for cascade math; runtime knobs already exist as setters on the feature class</td></tr>
+<tr><td><strong>Add GBuffer pass (deferred)</strong></td><td>New <code>GBufferNode</code> (pipeline node) with multi-RT outputs; new <code>adapter_gbuffer.glsl</code> so any surface gains deferred path; new resources in JSON; replace <code>WorldRender</code> entry with <code>GBuffer + DeferredLighting</code></td></tr>
+<tr><td><strong>Deferred lighting pass</strong></td><td>New <code>FullscreenShader</code> JSON entry referencing a new <code>deferred_lighting.frag</code> that samples GBuffer + reuses cluster + shadow bindings (read <code>forwardplus_lighting.frag</code> as template)</td></tr>
+<tr><td><strong>SSAO</strong></td><td>Recipe 2 (Pipeline Node) reading <code>View.Depth</code> + GBuffer normal, writing a half-res AO target &mdash; or even pure JSON via <code>FullscreenShader</code> type if no special logic needed</td></tr>
+<tr><td><strong>Raytracing</strong></td><td>Recipe 3 (Render Feature) + pipeline node. Verify <code>IDevice</code> exposes RT extension (<code>kRayTracing</code>). There is no GPU TLAS yet: <code>SceneTlas</code> in <code>Engine/Modules/Scene</code> is a CPU BVH for editor picking, not an acceleration structure, so the feature builds its own. RT shaders may need a new compile path (current pipeline is Vulkan-GLSL via shaderc &mdash; verify if <code>.rgen/.rchit/.rmiss</code> GLSL is supported or if HLSL is required)</td></tr>
+</tbody>
+</table>
+
+<hr>
+
+<p><em>This guide is meant to be living. When you add a major subsystem, add a row to the file catalogs and a recipe section if appropriate.</em></p>
+
+<div class="footer">Rendering Architecture &middot; v1 &middot; graphics subsystem reference</div>
+
+</div>
+<script>
+mermaid.initialize({
+  startOnLoad: true,
+  theme: 'dark',
+  themeVariables: {
+    darkMode: true,
+    background: '#232831',
+    primaryColor: '#2c323d',
+    primaryTextColor: '#d8dde6',
+    primaryBorderColor: '#3a414d',
+    lineColor: '#8a93a3',
+    secondaryColor: '#2a3a4a',
+    tertiaryColor: '#3a2a4a'
+  },
+  flowchart: { curve: 'basis', padding: 16 }
+});
+</script>
+</body>
+</html>

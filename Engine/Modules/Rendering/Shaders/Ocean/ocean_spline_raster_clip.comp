@@ -1,0 +1,4 @@
+#version 450
+// Spline ribbons into the clip cascade.
+#define OCEAN_RIBBON_FIELD 2
+#include "Ocean/ocean_spline_raster.glsl"

@@ -1,0 +1,1294 @@
+/* Settings Panel Styles */
+.settings-panel {
+    --settings-row-gap: 4px;
+    display: flex;
+    flex-direction: column;
+    width: 100%;
+    height: 100%;
+    /* Background + value-box fill (--settings-value-box-bg) are defined in the global
+       theme/settings.css. */
+    position: relative;
+}
+
+/* Tree Pane (top section) - sized to fit content */
+.settings-tree-pane {
+    flex-grow: 0;
+    flex-shrink: 0;
+    flex-basis: auto;
+    height: 180px;
+    min-height: 180px;
+    max-height: 180px;
+    overflow: hidden;
+}
+
+.settings-tree-pane .tree {
+    width: 100%;
+    height: 100%;
+}
+
+/* Draggable horizontal divider between tree and content in vertical layout. */
+.settings-vertical-splitter {
+    flex-grow: 0;
+    flex-shrink: 0;
+    flex-basis: 6px;
+    height: 6px;
+    min-height: 6px;
+    max-height: 6px;
+    width: 100%;
+    background-color: var(--ui_color_bg_tabbar);
+    cursor: row-resize;
+    z-index: 100;
+    pointer-events: auto;
+}
+
+/* Prevent long setting names from wrapping across lines. */
+.settings-tree-pane .tree .tree-item .tree-title {
+    word-break: normal;
+}
+
+/* Custom icons for settings tree */
+.settings-tree-pane .project-settings-row .tree-title {
+    background-image: url("editor:Icons/computer.png");
+    font-weight: bold;
+    color: #FFFFFF;
+}
+
+.settings-tree-pane .user-settings-row .tree-title {
+    background-image: url("editor:Icons/person.png");
+    font-weight: bold;
+    color: #FFFFFF;
+}
+
+/* Project Settings children icons */
+.settings-tree-pane .audio-settings-row .tree-title {
+    background-image: url("editor:Icons/music-note-icon@32px.png");
+}
+
+.settings-tree-pane .camera-row .tree-title {
+    background-image: url("editor:Icons/camera.png");
+}
+
+.settings-tree-pane .animation-row .tree-title {
+    background-image: url("editor:Icons/film.png");
+}
+
+.settings-tree-pane .input-row .tree-title {
+    background-image: url("editor:Icons/game-controller.png");
+}
+
+.settings-tree-pane .asset-import-row .tree-title {
+    background-image: url("editor:Icons/SettingsAssetImport.png");
+}
+
+.settings-tree-pane .rendering-row .tree-title {
+    background-image: url("editor:Icons/SettingsRendering.png");
+}
+
+.settings-tree-pane .hdr-row .tree-title {
+    background-image: url("editor:Icons/color-filter.svg");
+}
+
+.settings-tree-pane .recording-row .tree-title {
+    background-image: url("editor:Icons/record.png");
+}
+
+.settings-tree-pane .level-of-detail-row .tree-title {
+    background-image: url("editor:Icons/sorting.png");
+}
+
+.settings-tree-pane .game-ui-scaling-row .tree-title {
+    background-image: url("editor:Icons/SettingsGameUIScaling.png");
+}
+
+.settings-tree-pane .scene-row .tree-title {
+    background-image: url("editor:Icons/SettingsScene.png");
+}
+
+.settings-tree-pane .tags-row .tree-title {
+    background-image: url("editor:Icons/SettingsTags.png");
+}
+
+.settings-tree-pane .build-row .tree-title,
+.settings-tree-pane .platform-row .tree-title {
+    background-image: url("editor:Icons/game-controller.png");
+}
+
+.settings-tree-pane .platform-linux-row .tree-title {
+    background-image: url("editor:Icons/SettingsLinux.png");
+}
+
+.settings-tree-pane .version-control-row .tree-title {
+    background-image: url("editor:Icons/SettingsVersionControl.png");
+}
+
+/* Provider rows (.git-row, .svn-row, …) are styled by each VCS package's
+   chrome stylesheet — the editor ships no provider icons. */
+
+/* User Settings children icons */
+.settings-tree-pane .script-row .tree-title {
+    background-image: url("editor:Icons/SettingsScript.png");
+}
+
+.settings-tree-pane .ui-row .tree-title {
+    background-image: url("editor:Icons/SettingsUI.png");
+}
+
+.settings-tree-pane .ui-appearance-row .tree-title {
+    background-image: url("editor:Icons/SettingsAppearance.png");
+}
+
+.settings-tree-pane .ui-font-rendering-row .tree-title {
+    background-image: url("editor:Icons/SettingsFontRendering.png");
+}
+
+.settings-tree-pane .ui-trees-row .tree-title {
+    background-image: url("editor:Icons/SettingsTrees.png");
+}
+
+.settings-tree-pane .ui-assets-row .tree-title {
+    background-image: url("editor:Icons/SettingsAssets.png");
+}
+
+.settings-tree-pane .ui-inspector-row .tree-title {
+    background-image: url("editor:Icons/SettingsInspector.png");
+}
+
+.settings-tree-pane .ui-hidpi-row .tree-title {
+    background-image: url("editor:Icons/SettingsHiDPI.png");
+}
+
+.settings-tree-pane .ui-node-graph-row .tree-title {
+    background-image: url("editor:Icons/node.png");
+}
+
+.settings-tree-pane .ui-asset-preview-row .tree-title {
+    background-image: url("editor:Icons/SettingsAssetPreview.png");
+}
+
+.settings-tree-pane .shortcuts-row .tree-title {
+    background-image: url("editor:Icons/SettingsShortcuts.png");
+}
+
+.settings-tree-pane .gizmo-row .tree-title {
+    background-image: url("editor:Icons/gizmo.png");
+}
+
+.settings-tree-pane .physics-row .tree-title {
+    background-image: url("editor:Icons/PhysicsSettings.png");
+}
+
+.settings-tree-pane .grid-snapping-row .tree-title {
+    background-image: url("editor:Icons/grid-icon.png");
+}
+
+.settings-tree-pane .tooltips-row .tree-title {
+    background-image: url("editor:Icons/SettingsTooltips.png");
+}
+
+.settings-tree-pane .online-assets-row .tree-title {
+    background-image: url("editor:Icons/SettingsOnlineAssets.png");
+}
+
+.settings-tree-pane .universal-search-row .tree-title {
+    background-image: url("editor:Icons/usearch.png");
+}
+
+.settings-tree-pane .performance-row .tree-title {
+    background-image: url("editor:Icons/SettingsPerformance.png");
+}
+
+.settings-tree-pane .experimental-row .tree-title {
+    background-image: url("editor:Icons/SettingsExperimental.png");
+}
+
+/* Tags settings: fixed-size name field and icon-only delete button (toolbar style) */
+.settings-tag-row {
+    min-height: 32px;
+}
+
+.settings-tag-name-field,
+.settings-row > .settings-tag-name-field {
+    flex-grow: 0;
+    flex-shrink: 0;
+    flex-basis: 200px;
+    width: 200px;
+    min-width: 200px;
+    max-width: 200px;
+}
+
+/* Same opacity and hover as other toolbar icon buttons (save-icon, box-icon, etc.) */
+.trash-icon,
+button.trash-icon,
+.button.trash-icon {
+    background-image: url("editor:Icons/trash.png");
+    background-size: 16px 16px;
+    background-repeat: no-repeat;
+    background-position: center;
+    background-color: transparent;
+    border-width: 0;
+    border-style: none;
+    opacity: 0.35;
+}
+
+.trash-icon:hover,
+button.trash-icon:hover,
+.button.trash-icon:hover,
+.trash-icon:active,
+button.trash-icon:active,
+.button.trash-icon:active,
+.trash-icon.pressed,
+button.trash-icon.pressed,
+.button.trash-icon.pressed {
+    opacity: 1.0;
+    background-color: transparent;
+}
+
+/* Content Pane (middle section - extends to bottom) */
+.settings-content-pane {
+    flex-grow: 1;
+    flex-shrink: 1;
+    flex-basis: 0;
+    min-height: 0;
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+    margin-bottom: 38px; /* Make room for search bar */
+}
+
+.settings-content-header {
+    flex-grow: 0;
+    flex-shrink: 0;
+    flex-basis: auto;
+    font-size: var(--ui_font_size_base);
+    font-family: var(--ui_font_family);
+    font-weight: normal;
+    color: var(--ui_color_text);
+    padding: var(--ui_spacing_sm) var(--ui_spacing_lg);
+    background-color: #191919;
+}
+
+.settings-content-body {
+    flex-grow: 1;
+    flex-shrink: 1;
+    flex-basis: auto;
+    --ui_scrollview_measure_horizontal: 0;
+    overflow-x: hidden;
+    overflow-y: auto;
+    padding: var(--ui_spacing_md);
+}
+
+/* Settings pages only scroll vertically. Constrain every page root to the
+   viewport and let controls shrink or wrap instead of expanding scroll width. */
+.settings-content-body .scroll-content {
+    display: flex;
+    flex-direction: column;
+    width: 100%;
+    min-height: 100%;
+    min-width: 0;
+    max-width: 100%;
+    overflow-x: hidden;
+    box-sizing: border-box;
+}
+
+.settings-content-body .scroll-content > * {
+    min-width: 0;
+    max-width: 100%;
+    box-sizing: border-box;
+}
+
+/* Give Settings-only explanatory cards extra breathing room and depth. The
+   larger right margin also reserves the vertical scrollbar's 6px overlay, so
+   both visible side insets remain equal. */
+.settings-content-body .editor-info-card {
+    width: auto;
+    margin-left: 6px;
+    margin-right: 12px;
+    padding: 10px 12px;
+}
+
+.settings-row.info-card-preview-row {
+    min-height: 40px;
+    padding-top: 8px;
+    padding-bottom: 10px;
+    overflow: visible;
+}
+
+.settings-content-body .settings-row.info-card-preview-row > .info-card-preview {
+    flex-grow: 1;
+    flex-shrink: 1;
+    width: auto;
+    max-width: 260px;
+    margin: 2px 0;
+    padding: 6px 10px;
+}
+
+.settings-content-body .scroll-content > .settings-build-fill {
+    display: flex;
+    flex-direction: column;
+    width: 100%;
+    min-width: 0;
+    max-width: 100%;
+    box-sizing: border-box;
+}
+
+/* All direct children can shrink so wrapping text doesn't force horizontal scroll */
+.settings-build-fill > * {
+    min-width: 0;
+}
+
+.settings-build-fill .settings-build-global-fill {
+    display: flex;
+    flex-direction: column;
+}
+
+/* Let wrapping text stay within viewport: allow shrink and wrap in Build section */
+.settings-build-fill > .settings-section-header,
+.settings-build-fill > .settings-description,
+.settings-build-fill .settings-subsection-header,
+.settings-build-fill .settings-description {
+    min-width: 0;
+    overflow-wrap: break-word;
+    word-break: break-word;
+}
+
+/* Section block wrapper (e.g. Gizmo Thickness / Gizmo Scale sections) */
+.settings-section-block {
+    display: flex;
+    flex-direction: column;
+    width: 100%;
+    box-sizing: border-box;
+}
+
+/* Settings Rows */
+.settings-row {
+    display: flex;
+    flex-direction: row;
+    align-items: center;
+    /* Keep the Inspector-aligned horizontal inset and minimum height. The
+       margin supplies a consistent rhythm between sibling property rows;
+       row-gap remains zero because an individual row does not need internal
+       cross-axis spacing. */
+    padding: 0px var(--ui_spacing_md);
+    row-gap: 0px;
+    column-gap: var(--ui_spacing_md);
+    min-height: 27px;
+    margin-bottom: var(--settings-row-gap);
+    width: 100%;
+    box-sizing: border-box;
+}
+
+.settings-row-label {
+    /* Same left/right split as the Inspector label column (37%). */
+    flex-grow: 0;
+    flex-shrink: 0;
+    flex-basis: 37%;
+    width: 37%;
+    min-width: 0;
+    overflow: visible;
+    max-width: 37%;
+    margin: 0;
+    padding: 4px 0;
+    color: var(--ui_color_text_dim);
+    font-size: 13px; /* matches .inspector-label */
+    line-height: 16px;
+    white-space: normal;
+    overflow-wrap: break-word;
+    word-break: normal;
+}
+
+.settings-row-label.inspector-label-draggable {
+    cursor: ew-resize;
+}
+
+.settings-row-label.dragging {
+    color: #FFFFFF;
+}
+
+/* Value white while dragging the label */
+.settings-row-label.dragging ~ .settings-row-value .float-field-input {
+    color: #FFFFFF;
+}
+
+.settings-row-label.dragging ~ .settings-row-field .float-field-input,
+.settings-row-label.dragging ~ .settings-row-field .int-field-input {
+    color: #FFFFFF;
+}
+
+/* HiDPI: label on its own row, preset buttons in a horizontal row below. */
+.settings-hidpi-scale-row {
+    flex-direction: column;
+    align-items: flex-start;
+    align-content: flex-start;
+}
+
+.settings-hidpi-scale-row > .settings-row-label {
+    flex-grow: 0;
+    flex-shrink: 0;
+    flex-basis: auto;
+    width: auto;
+    min-width: 0;
+    align-self: flex-start;
+}
+
+.settings-hidpi-scale-row > .settings-scale-preset-group {
+    flex-grow: 0;
+    flex-shrink: 0;
+    flex-basis: auto;
+    align-self: flex-start;
+}
+
+/* Multi-value property rows keep the standard label split and stack their
+   controls inside the right-hand value column. */
+.settings-column-toggle-list {
+    display: flex;
+    flex: 1 1 0%;
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 4px;
+    min-width: 0;
+}
+
+.settings-row-field {
+    flex-grow: 0;
+    flex-shrink: 0;
+    flex-basis: auto;
+    min-width: 150px;
+    height: var(--value_box_height, 26px);
+    display: flex;
+    align-items: center;
+    padding-left: 0;
+    background-color: var(--settings-value-box-bg, #171717);
+    border: 1px solid transparent;
+    border-radius: 6px;
+    box-sizing: border-box;
+}
+
+/* Match the Inspector value column only in property rows. Some read-only
+   status labels reuse .settings-row-field in vertical containers. */
+.settings-row > .settings-row-field {
+    flex: 1 1 0%;
+    width: auto;
+    min-width: 0;
+    max-width: none;
+}
+
+.settings-row-field:focus-within,
+.settings-row-field.active {
+    border: 1px solid #666;
+}
+
+/* Hover: accent outline + brighter text, matching the inspector value boxes
+   (theme/widgets.css .float-field-input:hover). Covers text/path inputs and the
+   build/scene fields (all carry .settings-row-field); the box-less row dropdown is
+   excluded by its higher-specificity border:none rule. The slider value boxes are
+   already covered by .settings-row-value:hover in theme/widgets.css. */
+.settings-row-field:hover,
+.settings-path-field:hover {
+    border: 1px solid var(--ui_color_accent);
+}
+
+.settings-row-field:hover TextInput,
+.settings-path-field:hover TextInput {
+    color: #FFFFFF;
+}
+
+.settings-row-field TextInput {
+    display: flex;
+    align-items: center;
+    background-color: transparent;
+    border: none;
+    color: var(--ui_color_text);
+    font-family: var(--ui_font_family);
+    font-size: var(--ui_font_size_base);
+    padding: 6px 12px;
+    height: 100%;
+    width: 100%;
+    box-sizing: border-box;
+}
+
+.settings-row-field TextInput:focus {
+    outline: none;
+    border: none;
+    background-color: transparent;
+}
+
+/* Match Inspector property dropdowns, including older Settings rows that use
+   .settings-dropdown instead of .settings-row-field. */
+.settings-row .dropdown.settings-row-field,
+.settings-row > .dropdown.settings-dropdown {
+    display: flex;
+    flex-direction: column;
+    flex: 1 1 0%;
+    align-items: stretch;
+    align-self: center;
+    width: auto;
+    min-width: 0;
+    max-width: none;
+    background-color: transparent;
+    border: none;
+    padding-left: 0;
+    height: auto;
+    min-height: 27px;
+    font-family: var(--ui_font_family);
+}
+
+.settings-row .dropdown.settings-row-field:focus-within,
+.settings-row .dropdown.settings-row-field.active,
+.settings-row > .dropdown.settings-dropdown:focus-within,
+.settings-row > .dropdown.settings-dropdown.active {
+    border: none;
+}
+
+.settings-row .dropdown.settings-row-field > .dropdown-header,
+.settings-row > .dropdown.settings-dropdown > .dropdown-header {
+    min-height: 27px;
+    box-sizing: border-box;
+    width: 100%;
+    padding: 4px 6px 4px 10px;
+    text-align: left;
+    justify-content: flex-start;
+    align-self: stretch;
+    min-width: 0;
+}
+
+.settings-row .dropdown.settings-row-field > .dropdown-header > .dropdown-chevron,
+.settings-row > .dropdown.settings-dropdown > .dropdown-header > .dropdown-chevron {
+    margin-right: 4px;
+}
+
+.settings-row .dropdown.settings-row-field.open,
+.settings-row > .dropdown.settings-dropdown.open {
+    z-index: 4000;
+}
+
+.settings-row .dropdown.settings-row-field .dropdown-items,
+.settings-row > .dropdown.settings-dropdown .dropdown-items {
+    z-index: 4000;
+    pointer-events: auto;
+}
+
+.settings-hdr-row {
+    align-items: flex-start;
+    width: 100%;
+    max-width: 100%;
+}
+
+.settings-hdr-row .settings-hdr-monitor-label {
+    white-space: normal;
+    overflow-wrap: break-word;
+    word-break: normal;
+}
+
+.settings-hdr-row .settings-hdr-value {
+    flex-grow: 1;
+    flex-shrink: 1;
+    min-width: 0;
+    max-width: 100%;
+    height: auto;
+    min-height: 22px;
+    padding-right: 12px;
+    white-space: normal;
+    overflow-wrap: break-word;
+    word-break: break-word;
+}
+
+/* HDR compound values follow the Inspector value column while leaving room
+   for the optional override toggle and the fixed-width unit suffix. */
+.settings-row > .settings-row-value.settings-hdr-number-field,
+.settings-row > .settings-hdr-readonly-value {
+    flex: 1 1 0%;
+    width: auto;
+    min-width: 0;
+    max-width: none;
+}
+
+.settings-row > .settings-hdr-readonly-value {
+    display: flex;
+    align-items: center;
+    min-height: var(--value_box_height, 26px);
+    padding: 6px 8px;
+    box-sizing: border-box;
+    border: 1px solid transparent;
+    border-radius: 6px;
+    background-color: var(--settings-value-box-bg, #171717);
+    color: var(--ui_color_text_dim);
+    font-family: var(--ui_font_family);
+    font-size: var(--ui_font_size_base);
+}
+
+.settings-row > .settings-hdr-units {
+    flex: 0 0 40px;
+    width: 40px;
+    min-width: 40px;
+    max-width: 40px;
+    padding-right: 0;
+}
+
+.settings-row > .settings-row-field.settings-hdr-note {
+    height: 44px;
+    min-height: 44px;
+    padding: 6px 10px;
+    color: var(--ui_color_text_dim);
+    font-size: 13px;
+    line-height: 16px;
+    white-space: normal;
+    overflow-wrap: break-word;
+    word-break: break-word;
+}
+
+/* Label text does not currently contribute its wrapped visual height to flex
+   layout, so reserve two text lines and keep the following HDR row clear. */
+.settings-hdr-note-row {
+    align-items: flex-start;
+    min-height: 44px;
+}
+
+/* Build section: value fields same as inspector (padding + vertical center) */
+.settings-build-fill .settings-row-field {
+    height: var(--value_box_height, 26px);
+    min-height: var(--value_box_height, 26px);
+    display: flex;
+    align-items: center;
+    border-radius: 6px;
+    background-color: var(--settings-value-box-bg, #171717);
+}
+
+.settings-build-fill .settings-row-field TextInput {
+    padding: 6px 12px;
+    display: flex;
+    align-items: center;
+    box-sizing: border-box;
+}
+
+#settings-open-build-row > .settings-build-open-panel-button,
+#settings-open-build-row > button.settings-build-open-panel-button {
+    display: flex;
+    flex-direction: row;
+    align-items: center;
+    /* Left padding reserves space for the controller icon; keep it when the
+       .small button padding applies. */
+    padding: 4px 8px 4px 32px;
+    min-height: 24px;
+    background-color: #262727;
+    background-image: url("editor:Icons/game-controller.png");
+    background-size: 16px 16px;
+    background-repeat: no-repeat;
+    background-position: 10px 50%;
+    border: 1px solid #444;
+    border-radius: 4px;
+    color: var(--ui_color_text_bright);
+    font-size: var(--ui_font_size_base);
+    cursor: pointer;
+    opacity: 0.85;
+    transition: opacity 0.2s ease;
+}
+
+#settings-open-build-row > .settings-build-open-panel-button:hover,
+#settings-open-build-row > button.settings-build-open-panel-button:hover {
+    background-color: #333;
+    opacity: 1;
+}
+
+.settings-path-field {
+    flex-grow: 0;
+    flex-shrink: 0;
+    flex-basis: auto;
+    min-width: 150px;
+    height: var(--value_box_height, 26px);
+    background-color: var(--settings-value-box-bg, #171717);
+    border: 1px solid transparent;
+    border-radius: 6px;
+}
+
+.settings-path-field:focus-within,
+.settings-path-field.active {
+    border: 1px solid #666;
+}
+
+.settings-path-field TextInput {
+    background-color: transparent;
+    border: none;
+    color: var(--ui_color_text);
+    font-family: var(--ui_font_family);
+    font-size: var(--ui_font_size_base);
+    padding: 6px 12px;
+    height: 100%;
+    width: 100%;
+}
+
+.settings-path-field TextInput:focus {
+    outline: none;
+    border: none;
+    background-color: transparent;
+}
+
+.settings-row-slider {
+    flex-grow: 1;
+    flex-shrink: 1;
+    flex-basis: auto;
+    width: 100%;
+    min-width: 80px;
+    height: 24px;
+}
+
+/* Value box: FloatField, same font size as inspector values. */
+.settings-row-value {
+    flex-grow: 0;
+    flex-shrink: 0;
+	flex-basis: 50px;
+	width: 50px;
+	min-width: 50px;
+	max-width: 50px;
+    display: flex;
+    align-items: center;
+	text-align: left;
+    color: var(--ui_color_text_dim);
+    font-family: var(--ui_font_family);
+    font-size: var(--ui_font_size_base);
+    box-sizing: border-box;
+}
+
+/* A standalone numeric property fills the Inspector-style value column.
+   Slider rows retain the compact 50px value box because their slider appears
+   between the label and value field. */
+.settings-row > .settings-row-label + .settings-row-value {
+    flex: 1 1 0%;
+    width: auto;
+    min-width: 0;
+    max-width: none;
+}
+
+/* Canonical settings value-box chrome — shared by every settings input
+   (.settings-row-field / .settings-path-field / build fields). Fill is --settings-value-box-bg
+   (#171717 by default, #202020 in the inspector-style swap). Height comes from
+   --value_box_height; radius 6px, using the shared editor value font. */
+.settings-row-value .float-field-input,
+.settings-row-value.float-field .float-field-input,
+.settings-row-value .int-field-input,
+.settings-row-value.int-field .int-field-input {
+    display: flex;
+    align-items: center;
+    height: var(--value_box_height, 26px);
+    min-height: var(--value_box_height, 26px);
+    max-height: var(--value_box_height, 26px);
+    padding: 6px 8px;
+    box-sizing: border-box;
+    border-width: 1px;
+    border-radius: 6px;
+    border-color: transparent;
+    background-color: var(--settings-value-box-bg, #171717);
+}
+/* Focus/hover (accent border, white text) from theme/widgets.css value-box styles */
+
+.settings-toggle-row {
+    gap: 8px;
+}
+
+.settings-toggle {
+    flex-grow: 0;
+    flex-shrink: 0;
+    flex-basis: auto;
+}
+
+.settings-toggle-label {
+    flex-grow: 1;
+    flex-shrink: 1;
+    flex-basis: auto;
+    color: var(--ui_color_text_dim);
+    font-size: 14px;
+}
+
+.settings-description {
+    white-space: normal;
+}
+
+.settings-description.settings-tags-description {
+    font-size: 13px;
+}
+
+.settings-placeholder {
+    color: var(--ui_color_text_dim);
+    font-style: italic;
+    font-size: var(--ui_font_size_base);
+    padding: var(--ui_spacing_xl);
+}
+
+.settings-overview-text {
+    color: var(--ui_color_text_dim);
+    font-size: var(--ui_font_size_list);
+    font-style: normal;
+}
+
+/* Section Headers */
+.settings-section-header {
+    font-size: var(--ui_font_size_header);
+    font-weight: 600;
+    color: var(--ui_color_text);
+    padding: var(--ui_spacing_lg) var(--ui_spacing_md) var(--ui_spacing_sm) var(--ui_spacing_md);
+    margin-top: var(--ui_spacing_md);
+    margin-left: 0;
+    width: 100%;
+    align-self: stretch;
+    text-align: left;
+    box-sizing: border-box;
+}
+
+.settings-vcs-status-header {
+    display: flex;
+    flex-direction: row;
+    align-items: center;
+    justify-content: space-between;
+    gap: var(--ui_spacing_sm);
+}
+
+.settings-vcs-status-title {
+    flex-grow: 1;
+    min-width: 0;
+    font-size: var(--ui_font_size_header);
+    font-weight: 600;
+    color: var(--ui_color_text);
+}
+
+.settings-vcs-refresh-button,
+button.settings-vcs-refresh-button,
+.button.settings-vcs-refresh-button {
+    min-width: 56px;
+    height: 22px;
+    min-height: 22px;
+    max-height: 22px;
+    padding: 2px 8px;
+    font-size: var(--ui_font_size_small);
+    flex-grow: 0;
+    flex-shrink: 0;
+}
+
+/* Subsection headers (e.g. Build â†’ platform names) */
+.settings-subsection-header {
+    font-size: var(--ui_font_size_base);
+    font-weight: 600;
+    color: var(--ui_color_text);
+    padding: 0px var(--ui_spacing_md);
+    margin-top: 0px;
+    margin-left: 0;
+    width: 100%;
+    align-self: stretch;
+    text-align: left;
+    box-sizing: border-box;
+}
+
+/* Color field styling */
+.settings-color-field,
+.settings-row > .settings-color-field {
+    flex-grow: 0;
+    flex-shrink: 0;
+    flex-basis: 80px;
+    width: 80px;
+    /* Note: Don't use font-family: monospace - causes font corruption if font not loaded */
+}
+
+/* Search Bar (bottom by default; the user preference can anchor it at the top) */
+.settings-search-bar {
+    position: absolute;
+    bottom: 8px;
+    left: 8px;
+    right: 8px;
+    height: 22px;
+    background-color: var(--settings-value-box-bg, #171717);
+    border: 1px solid transparent;
+    border-radius: 4px;
+}
+
+.settings-search-bar.search-bar-at-top {
+    top: 8px;
+    bottom: unset;
+}
+
+.settings-search-bar.hidden {
+    /* Override generic .hidden { display: none } - we still want the search bar visible */
+    display: flex;
+    background-color: transparent;
+    border-color: transparent;
+}
+
+.settings-search-bar.hidden.settings-search-bar-active {
+    background-color: var(--settings-value-box-bg, #171717) !important;
+    border: 1px solid var(--ui_color_accent_pressed) !important;
+}
+
+.settings-search-bar-active {
+    background-color: var(--settings-value-box-bg, #171717) !important;
+    border: 1px solid var(--ui_color_accent_pressed) !important;
+}
+
+.settings-search-bar:focus-within {
+    border: 1px solid #666;
+}
+
+.settings-search-bar.active {
+    border: 1px solid var(--ui_color_accent_pressed);
+}
+
+.settings-search-bar.search-accent-focus:focus-within {
+    border-color: var(--ui_color_accent);
+}
+
+.settings-search-field {
+    width: 100%;
+    height: 100%;
+    padding-right: 32px;
+    position: relative;
+    z-index: 10;
+}
+
+.settings-search-field TextInput {
+    background-color: transparent;
+    border: none;
+    color: var(--ui_color_text);
+    font-size: 12px;
+    padding: 4px 24px 4px 8px;
+    height: 100%;
+    width: 100%;
+}
+
+.settings-search-field TextInput:focus {
+    outline: none;
+    border: none;
+    background-color: transparent;
+}
+
+.settings-search-icon {
+    position: absolute;
+    right: 6px;
+    top: 50%;
+    margin-top: -6px;
+    width: 12px;
+    height: 12px;
+    background-image: url("editor:Icons/search.png");
+    background-size: 12px 12px;
+    background-repeat: no-repeat;
+    background-position: center;
+    opacity: 0.5;
+    pointer-events: none !important;
+    z-index: 1;
+}
+
+.settings-search-icon.icon-active {
+    opacity: 1 !important;
+}
+
+.settings-search-clear,
+button.settings-search-clear,
+.button.settings-search-clear,
+.button.icon-button.settings-search-clear {
+    position: absolute;
+    right: 4px;
+    top: 50%;
+    margin-top: -8px;
+    width: 16px;
+    height: 16px;
+    min-width: 16px;
+    min-height: 16px;
+    padding: 0;
+    background-color: transparent;
+    border-width: 0;
+    border-style: none;
+    background-size: 12px 12px;
+    background-position: center;
+    opacity: 0.7;
+    z-index: 20;
+}
+
+.settings-search-clear:hover,
+button.settings-search-clear:hover,
+.button.settings-search-clear:hover,
+.button.icon-button.settings-search-clear:hover {
+    background-color: transparent;
+    opacity: 1.0;
+}
+
+.settings-search-bar.has-query .settings-search-icon {
+    display: none;
+}
+
+.settings-search-bar:hover .settings-search-icon {
+    opacity: 1 !important;
+}
+
+.settings-search-bar:focus-within .settings-search-icon,
+.settings-search-bar.active .settings-search-icon {
+    opacity: 1 !important;
+}
+
+/* Horizontal Layout Styles */
+.settings-tree-pane.settings-tree-pane-horizontal {
+    flex-grow: 1;
+    flex-shrink: 1;
+    flex-basis: 0;
+    height: 100%;
+    min-height: 0;
+    max-height: none;
+    min-width: 160px;
+    /* Background handled by the global theme/settings.css (.settings-tree-pane). */
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+}
+
+/* Wide side-by-side Settings pages keep the Inspector-style 37% split until
+   the label column reaches 225px; values receive all additional width. */
+.settings-content-pane-horizontal .settings-row > .settings-row-label,
+.settings-content-pane-horizontal .shortcut-row > .settings-row-label {
+    max-width: 225px;
+}
+
+/* Target the TreeView root (direct child) only, NOT the inner `.tree-content.tree`
+   element inside the ScrollView — forcing height:100% on that inner element
+   pins the scroll-content to the viewport size and kills vertical scrolling. */
+.settings-tree-pane.settings-tree-pane-horizontal > .tree {
+    flex-grow: 1;
+    flex-shrink: 1;
+    flex-basis: 0;
+    min-height: 0;
+}
+
+.settings-content-pane-horizontal {
+    margin-bottom: 38px; /* Make room for search bar */
+}
+
+.settings-panel.search-bars-at-top,
+.settings-right-container.search-bars-at-top {
+    padding-top: 38px;
+}
+
+/* In the stacked layout the top search sits directly above the Settings tree;
+   extend the tree's background through that reserved strip. */
+.settings-panel.search-bars-at-top {
+    background-color: #222222;
+}
+
+.settings-panel.search-bars-at-top > .settings-content-pane,
+.settings-right-container.search-bars-at-top > .settings-content-pane {
+    margin-bottom: 0;
+}
+
+.settings-right-container {
+    display: flex;
+    flex-direction: column;
+    width: 100%;
+    height: 100%;
+    position: relative;
+}
+
+/* Build settings: drop zone for dragging .scene assets from Asset panel */
+.settings-build-drop-zone {
+    border: none;
+    border-radius: 6px;
+    background-color: rgba(0, 0, 0, 0.13);
+    cursor: default;
+    padding: 14px 18px;
+    width: 100%;
+    box-sizing: border-box;
+    margin-bottom: 0px;
+}
+
+/* Square application icon preview uses a stable asset-preview size. */
+.settings-build-icon-slot {
+    flex: 0 0 96px;
+    width: 96px;
+    height: 96px;
+    min-width: 96px;
+    min-height: 96px;
+    max-width: 96px;
+    max-height: 96px;
+    border-radius: 8px;
+    border-width: 1px;
+    border-color: rgba(255, 255, 255, 0.34);
+    background-color: rgba(0, 0, 0, 0.16);
+    background-size: contain;
+    background-repeat: no-repeat;
+    background-position: center;
+    box-sizing: border-box;
+}
+
+.settings-build-icon-slot.settings-build-icon-slot-empty {
+    border-style: dashed;
+    border-color: rgba(255, 255, 255, 0.45);
+    background-image: none;
+}
+
+.settings-build-icon-slot.drop-valid {
+    border-color: #50C878;
+    background-color: rgba(80, 200, 120, 0.12);
+}
+
+.settings-build-icon-slot.drop-invalid {
+    border-color: #DC5050;
+    background-color: rgba(220, 80, 80, 0.12);
+}
+
+/* Scene rows: space above each row (including first "actual scene"), same value-box styling as Build fields */
+.settings-build-scene-row {
+    margin-top: 0px;
+    width: 100%;
+    margin-left: 0;
+    box-sizing: border-box;
+}
+.settings-build-scene-row > .settings-row-field {
+    flex: 1 1 0%;
+    width: auto;
+    min-width: 0;
+    max-width: none;
+}
+.settings-build-scene-row .settings-row-field {
+    height: var(--value_box_height, 26px);
+    min-height: var(--value_box_height, 26px);
+    display: flex;
+    align-items: center;
+    border-radius: 6px;
+    background-color: var(--settings-value-box-bg, #171717);
+}
+/* Same Inspector text inset as the other Settings value fields. */
+.settings-build-fill .settings-build-scene-row .settings-row-field TextInput,
+.settings-build-scene-row .settings-row-field TextInput {
+    padding: 6px 12px !important;
+    display: flex;
+    align-items: center;
+    box-sizing: border-box;
+}
+
+/* Search match highlighting (same as Inspector) */
+.settings-panel .search-match {
+    background-color: var(--ui_color_accent_highlight);
+    border-radius: 2px;
+}
+
+.settings-search-results-summary {
+    color: var(--ui_color_text_dim);
+    font-size: var(--ui_font_size_small);
+    padding: var(--ui_spacing_sm) var(--ui_spacing_md) var(--ui_spacing_md) var(--ui_spacing_md);
+}
+
+.settings-search-results-section-header {
+    margin-top: var(--ui_spacing_sm);
+}
+
+.settings-search-result {
+    border-radius: 5px;
+    cursor: pointer;
+    padding-left: var(--ui_spacing_lg);
+    padding-right: var(--ui_spacing_lg);
+}
+
+.settings-search-result:hover {
+    background-color: var(--ui_color_bg_item_hover);
+}
+
+.settings-search-result-label {
+    flex-grow: 1;
+    min-width: 0;
+    color: var(--ui_color_text);
+}
+
+.settings-search-result-context {
+    flex-shrink: 0;
+    color: var(--ui_color_text_dim);
+    font-size: var(--ui_font_size_small);
+}
+
+.settings-search-result:hover .settings-search-result-context {
+    color: var(--ui_color_accent);
+}
+
+/* Inline word highlight container (before + match + after segments) */
+.settings-panel .settings-search-word-highlight {
+    display: flex;
+    flex-direction: row;
+    align-items: center;
+    flex-wrap: wrap;
+}
+
+
+/* Shortcut capture button: default text color; turns accent when modified from defaults. */
+.shortcut-group-rows {
+    display: flex;
+    flex-direction: column;
+    width: 100%;
+}
+
+.shortcut-row {
+    display: flex;
+    flex-direction: row;
+    align-items: center;
+    justify-content: flex-start;
+    gap: 8px;
+    min-height: 27px;
+    margin-bottom: var(--settings-row-gap);
+    width: 100%;
+    box-sizing: border-box;
+}
+
+/* Same property split as non-Transform Inspector rows: 37% label and a
+   shrinkable value column consuming the remaining width. */
+.shortcut-row > .settings-row-label {
+    flex: 0 0 37%;
+    width: 37%;
+    min-width: 0;
+    max-width: 37%;
+}
+
+.shortcut-row > .shortcut-controls {
+    display: flex;
+    flex: 1 1 0%;
+    min-width: 0;
+    align-items: center;
+    justify-content: flex-start;
+}
+
+.shortcut-capture-button {
+    min-width: 96px;
+    height: 24px;
+    min-height: 24px;
+    padding: 3px 10px;
+    border-radius: 5px;
+}
+
+.shortcut-capture-button.listening {
+    color: var(--ui_color_accent);
+    font-style: italic;
+}
+
+.shortcut-capture-button.modified {
+    color: var(--ui_color_accent);
+}
+
+.shortcut-capture-button.readonly {
+    color: var(--ui_color_text_disabled);
+    font-style: italic;
+}
+
+.shortcut-reset-button {
+    background-image: url("editor:Icons/ResetReload.png");
+    background-image-tint: rgba(200, 200, 200, 1.0);
+    width: 22px;
+    height: 22px;
+    min-width: 22px;
+    min-height: 22px;
+}
+
+.shortcut-reset-button:hover {
+    background-image-tint: var(--ui_color_accent);
+}
+
+.shortcut-remove-button {
+    color: rgba(200, 200, 200, 1.0);
+    width: 22px;
+    height: 22px;
+    min-width: 22px;
+    min-height: 22px;
+    font-size: 14px;
+    font-weight: 600;
+}
+
+.shortcut-remove-button:hover {
+    color: var(--ui_color_accent);
+}

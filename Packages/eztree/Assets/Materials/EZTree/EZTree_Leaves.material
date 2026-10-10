@@ -1,0 +1,25 @@
+{
+  "schemaVersion": 3,
+  "materialName": "Tree Generator Leaves",
+  "lightingModel": "StandardPBR",
+  "alphaMode": "Mask",
+  "doubleSided": true,
+  "textureFilter": "Trilinear",
+  "surfaceShader": "Surfaces/ez_tree_leaves.glsl",
+  "vertexModifier": "VertexModifiers/ez_tree_wind.glsl",
+  "properties": {
+    "baseColor": [0.23, 0.48, 0.16, 1.0],
+    "roughness": 0.9,
+    "metallic": 0.0,
+    "emissive": [0.0, 0.0, 0.0],
+    "emissionLuminance": 203.0,
+    "ao": 1.0,
+    "opacity": 1.0
+  },
+    "textures": {
+    "albedoMap": "",
+    "normalMap": "",
+    "metallicRoughnessMap": "",
+    "aoMap": ""
+  }
+}

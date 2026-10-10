@@ -1,0 +1,22 @@
+{
+  "schemaVersion": 3,
+  "materialName": "OpenPBR - Thick Absorbing Glass, short path (Beer-Lambert)",
+  "lightingModel": "StandardPBR",
+  "alphaMode": "Opaque",
+  "doubleSided": false,
+  "surfaceShader": "Surfaces/standard_pbr.glsl",
+  "properties": {
+    "baseColor": [1.0, 1.0, 1.0, 1.0],
+    "metallic": 0.0,
+    "roughness": 0.03,
+    "enableTransmission": true,
+    "enableTransmissionThick": true,
+    "transmissionColor": [1.0, 1.0, 1.0],
+    "transmissionWeight": 1.0,
+    "specularIor": 1.52,
+    "refractionDistance": 0.48,
+    "attenuationColor": [0.28, 0.72, 0.55],
+    "attenuationDistance": 0.9
+  },
+  "textures": {}
+}

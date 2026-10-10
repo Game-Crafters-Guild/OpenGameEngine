@@ -1,0 +1,156 @@
+/* Toggle (switch) control.
+   The compact 29×17 track is the editor-wide default: every property surface
+   (Inspector rows, Settings, compact popovers) uses this size, and the few
+   standalone toggles adopt it for consistency. A toggle is a fixed-size
+   control, so it never flexes with its row.
+
+   Selector form: Toggle's constructor always adds the "toggle" class, so
+   `.toggle` matches every instance (no `toggle` type selector needed), and
+   ToggleBase keeps the :checked pseudo state authoritative, so state rules
+   use the pseudo form only. */
+
+.toggle {
+	display: flex;
+	flex-direction: row;
+	align-items: center;
+	justify-content: flex-start;
+	width: 29px;
+	/* 17, not 16: the 13px knob leaves an even 4px of free space (2px above and
+	   below once the 1px border is counted), so the knob lands centred on the
+	   pixel grid. A 16px track leaves 3px, which cannot split evenly. */
+	height: 17px;
+	border-radius: 8.5px;
+	border-width: 1px;
+	border-color: #555555;
+	background-color: var(--ui_color_bg_selected);
+	cursor: pointer;
+	flex-grow: 0;
+	flex-shrink: 0;
+	flex-basis: auto;
+}
+
+/* Opt-in via Settings > Appearance > Toggle Inner Shadow. The class is
+   stamped on the UI root from ToggleAppearanceSettings. */
+.toggle-inner-shadow .toggle {
+	box-shadow: inset 1px 1px 3px rgba(0, 0, 0, 0.55);
+}
+
+/* Circular knob inside the switch track */
+.toggle-knob {
+	width: 13px;
+	height: 13px;
+	border-radius: 7px;
+	margin: 1.5px;
+	background-color: #DDDDDD;
+	box-shadow: 0 0 0 1px var(--ui_color_bg_grid);
+	pointer-events: none;
+}
+
+/* Hover state for toggle track (unchecked) */
+.toggle:hover {
+	border-color: #888888;
+	background-color: var(--ui_color_border_subtle);
+}
+
+.toggle:checked {
+	background-color: var(--ui_color_accent_blue);
+	border-color: var(--ui_color_accent_blue);
+	justify-content: flex-end;
+}
+
+/* Hover state while checked: nudge the color a bit brighter so the
+ * switch still reacts visually when active. */
+.toggle:checked:hover {
+	background-color: var(--ui_color_accent_blue_hover);
+	border-color: var(--ui_color_accent_blue_hover);
+}
+
+.toggle.pressed {
+	background-color: var(--ui_color_accent_blue_pressed);
+}
+
+/* On, but not in effect: something above what the toggle switches is off (an
+   entity whose parent is switched off). The track keeps its on position at the
+   accent's inactive strength; hover still brightens it to show it is live. */
+.toggle-inactive:checked {
+	background-color: var(--ui_color_accent_blue_inactive);
+	border-color: var(--ui_color_accent_blue_inactive);
+}
+
+/* Indeterminate ("mixed") state: multi-selection where the selected objects
+ * disagree on this boolean. Neutral track + a centered, muted, narrow knob reads
+ * as "neither on nor off"; clicking resolves all selected entities to one value. */
+.toggle.mixed {
+	background-color: var(--ui_color_bg_grid);
+	border-color: #888888;
+	justify-content: center;
+}
+
+.toggle.mixed .toggle-knob {
+	width: 8px;
+	background-color: #888888;
+}
+
+/* Optional square-checkmark presentation. Toggle remains the underlying
+   control, preserving bindings, keyboard interaction, mixed values, and undo. */
+.toggle.toggle-checkmark,
+.toggle.toggle-checkmark.node-graph-variable-value-toggle {
+	width: 18px;
+	height: 18px;
+	border-width: 2px;
+	border-radius: var(--ui_radius_sm);
+	border-color: #777777;
+	background-color: #202020;
+	justify-content: center;
+	box-shadow: none;
+}
+
+.toggle.toggle-checkmark .toggle-knob {
+	width: 14px;
+	height: 14px;
+	margin: 0;
+	border-radius: 0;
+	background-color: transparent;
+	background-image: none;
+	box-shadow: none;
+	background-size: contain;
+	background-repeat: no-repeat;
+	background-position: center;
+}
+
+.toggle.toggle-checkmark:hover {
+	border-color: #A0A0A0;
+	background-color: var(--ui_color_bg_panel);
+}
+
+.toggle.toggle-checkmark:checked {
+	border-color: var(--ui_color_accent_blue);
+	background-color: var(--ui_color_accent_blue);
+	justify-content: center;
+}
+
+.toggle.toggle-checkmark:checked .toggle-knob {
+	background-image: url("editor:Icons/checkbox-checkmark.svg");
+}
+
+.toggle.toggle-checkmark:checked:hover {
+	border-color: var(--ui_color_accent_blue_hover);
+	background-color: var(--ui_color_accent_blue_hover);
+}
+
+.toggle.toggle-checkmark.pressed {
+	background-color: var(--ui_color_accent_blue_pressed);
+}
+
+.toggle.toggle-checkmark.mixed {
+	border-color: #888888;
+	background-color: var(--ui_color_bg_grid);
+	justify-content: center;
+}
+
+.toggle.toggle-checkmark.mixed .toggle-knob {
+	width: 10px;
+	height: 2px;
+	background-color: var(--ui_color_mixed_indicator);
+	background-image: none;
+}

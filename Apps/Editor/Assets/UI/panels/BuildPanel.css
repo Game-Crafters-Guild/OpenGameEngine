@@ -1,0 +1,460 @@
+/* Build panel - same background as list view, header/splitter colors from list view and core */
+
+.Build,
+.build-panel {
+    display: flex;
+    flex-direction: column;
+    flex-grow: 1;
+    min-width: 0;
+    min-height: 0;
+    background-color: var(--ui_color_bg_grid);
+    color: var(--ui_color_text_bright);
+}
+
+/* Header: same as list view (.assets-list-header) */
+.build-panel-header {
+    display: flex;
+    flex-direction: row;
+    align-items: center;
+    padding: 0 8px;
+    height: 24px;
+    min-height: 24px;
+    max-height: 24px;
+    gap: 8px;
+    background-color: var(--ui_color_bg_toolbar);
+    border-bottom-width: 1px;
+    border-bottom-color: var(--ui_color_bg_grid);
+    font-size: var(--ui_font_size_list);
+    color: var(--ui_color_text);
+    width: 100%;
+    box-sizing: border-box;
+}
+
+.build-panel-header-cell {
+    display: flex;
+    flex-direction: row;
+    align-items: center;
+    gap: 4px;
+    height: 24px;
+    min-height: 24px;
+    flex-shrink: 0;
+    min-width: 0;
+    position: relative;
+    overflow: visible;
+}
+
+.build-panel-header-draggable {
+    cursor: grab;
+}
+
+.build-panel-header-draggable:active {
+    cursor: grabbing;
+}
+
+/* Column resize handle (like list view .assets-list-header-divider) */
+.build-panel-header-divider {
+    position: absolute;
+    right: 0;
+    top: 0;
+    width: 2px;
+    height: 100%;
+    min-height: 24px;
+    cursor: col-resize;
+    background-color: var(--ui_color_bg_tabbar);
+    z-index: 10;
+    pointer-events: auto;
+}
+
+.build-panel-header-cell .header-label {
+    flex-grow: 1;
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    line-height: 24px;
+    padding-right: 8px;
+}
+
+.build-panel-header-enabled .header-label,
+.build-panel-header-completed .header-label {
+    text-align: center;
+    padding-right: 0;
+}
+
+/* Sort icon (same as list view) */
+.build-panel-header-cell.sorted .header-label {
+    color: #FFFFFF;
+}
+
+.build-panel-header-cell.sorted .header-sort-icon {
+    display: flex;
+}
+
+.build-panel-header-cell .header-sort-icon {
+    width: 8px;
+    height: 8px;
+    min-width: 8px;
+    min-height: 8px;
+    flex-shrink: 0;
+    padding: 4px;
+    margin-right: 4px;
+    background-image: url("editor:Icons/dropdownsmall.png");
+    background-size: contain;
+    background-repeat: no-repeat;
+    background-position: center;
+    opacity: 0.7;
+    z-index: 11;
+    position: relative;
+}
+
+.build-panel-header-cell .header-sort-icon.ascending {
+    background-image: url("editor:Icons/dropdownsmallup.png");
+}
+
+.build-panel-header-cell .header-sort-icon.descending {
+    background-image: url("editor:Icons/dropdownsmall.png");
+}
+
+/* Column widths: fixed (same for header and row cells) */
+.build-panel-header-platform,
+.build-panel-col-platform { width: 120px; min-width: 120px; max-width: 120px; flex: 0 0 120px; overflow: hidden; }
+.build-panel-header-version,
+.build-panel-col-version { width: 60px; min-width: 60px; max-width: 60px; flex: 0 0 60px; overflow: hidden; }
+.build-panel-header-enabled { width: 64px; min-width: 64px; max-width: 64px; flex: 0 0 64px; justify-content: center; align-items: center; overflow: hidden; }
+.build-panel-col-enabled { width: 64px; min-width: 64px; max-width: 64px; flex: 0 0 64px; justify-content: center; align-items: center; overflow: hidden; cursor: pointer; }
+.build-panel-header-progress,
+.build-panel-col-progress { width: 100px; min-width: 100px; max-width: 100px; flex: 0 0 100px; overflow: hidden; }
+.build-panel-header-time,
+.build-panel-col-time { width: 76px; min-width: 76px; max-width: 76px; flex: 0 0 76px; justify-content: flex-end; align-items: center; overflow: hidden; }
+.build-panel-header-completed { width: 88px; min-width: 88px; max-width: 88px; flex: 0 0 88px; justify-content: center; align-items: center; overflow: hidden; }
+.build-panel-col-completed { width: 88px; min-width: 88px; max-width: 88px; flex: 0 0 88px; justify-content: center; align-items: center; overflow: hidden; cursor: default; pointer-events: none; }
+
+.build-panel-row-cell {
+    display: flex;
+    flex-direction: row;
+    align-items: center;
+    min-width: 0;
+    flex-shrink: 0;
+    overflow: hidden;
+}
+.build-panel-col-progress {
+    min-height: 0;
+    min-width: 0;
+    display: flex;
+    flex-direction: row;
+    align-items: center;
+    overflow: hidden;
+}
+
+.build-panel-scroll {
+    flex-grow: 1;
+    min-height: 0;
+}
+
+/* Content: header + rows in same flow; min-width so columns never squeeze and header/rows stay in sync */
+.build-panel-scroll-content {
+    display: flex;
+    flex-direction: column;
+    width: 100%;
+    min-width: 480px; /* padding 16 + 120+60+64+100+88 + 4*8 gap */
+}
+
+/* Output folder row: keep label + field on one line; same height + font as inner TextInput so baselines match */
+.build-panel-output-row {
+    display: flex;
+    flex-direction: row;
+    flex-wrap: nowrap;
+    align-items: center;
+    width: 100%;
+    min-width: 0;
+    box-sizing: border-box;
+}
+
+.build-panel-output-label {
+    flex-shrink: 0;
+    white-space: nowrap;
+    font-size: var(--ui_font_size_base);
+    color: var(--ui_color_text);
+    height: 24px;
+    min-height: 24px;
+    max-height: 24px;
+    line-height: 24px;
+}
+
+/* Match settings row fields: flex shell + inner TextInput with no vertical padding (avoids text sitting high vs label) */
+.build-panel-output-field {
+    flex: 1 1 auto;
+    min-width: 0;
+    white-space: nowrap;
+    display: flex;
+    flex-direction: row;
+    align-items: center;
+    box-sizing: border-box;
+    font-size: var(--ui_font_size_base);
+    background-color: #1a1a1a;
+    border: 1px solid transparent;
+    border-radius: 4px;
+    height: 24px;
+    min-height: 24px;
+    max-height: 24px;
+    padding: 0;
+    overflow: hidden;
+}
+
+.build-panel-output-field TextInput {
+    display: flex;
+    align-items: center;
+    background-color: transparent;
+    border: none;
+    color: var(--ui_color_text_bright);
+    font-size: var(--ui_font_size_base);
+    padding: 0 12px 0 8px;
+    height: 100%;
+    width: 100%;
+    box-sizing: border-box;
+    overflow: hidden;
+    text-align: right;
+}
+
+.build-panel-output-field TextInput:focus {
+    outline: none;
+    border: none;
+    background-color: transparent;
+}
+
+.build-panel-output-browse-button,
+button.build-panel-output-browse-button {
+    flex: 0 0 68px;
+    width: 68px;
+    min-width: 68px;
+    max-width: 68px;
+    height: 24px;
+    min-height: 24px;
+    max-height: 24px;
+    padding: 0 10px;
+    box-sizing: border-box;
+    justify-content: center;
+    align-items: center;
+    overflow: hidden;
+}
+
+.build-panel-output-browse-button .button-text,
+button.build-panel-output-browse-button .button-text {
+    width: 100%;
+    text-align: center;
+    white-space: nowrap;
+    overflow: hidden;
+}
+
+/* Sticky header so it stays visible when scrolling; same width as rows */
+.build-panel-header {
+    position: sticky;
+    top: 0;
+    z-index: 2;
+    flex-shrink: 0;
+}
+
+.build-panel-rows {
+    display: flex;
+    flex-direction: column;
+    width: 100%;
+    min-width: 0;
+}
+
+/* Rows: same height as header so Enabled/Completed icons align vertically with header */
+.build-panel-row {
+    display: flex;
+    flex-direction: row;
+    align-items: center;
+    padding: 0 8px;
+    gap: 8px;
+    height: 24px;
+    min-height: 24px;
+    max-height: 24px;
+    background-color: transparent;
+    border-width: 0;
+    cursor: default;
+    width: 100%;
+    box-sizing: border-box;
+    color: rgba(255, 255, 255, 0.7);
+}
+
+.build-panel-row.build-panel-row-enabled {
+    color: var(--ui_color_text_bright);
+}
+
+.build-panel-row-selected .build-panel-col-platform {
+    font-weight: bold;
+}
+.build-panel-col-platform > *,
+.build-panel-col-version > *,
+.build-panel-col-time > * {
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.build-panel-enabled-dot {
+    width: 10px;
+    height: 10px;
+    min-width: 10px;
+    min-height: 10px;
+    border-radius: 50%;
+    background-color: #666;
+    flex-shrink: 0;
+}
+
+.build-panel button.build-panel-enabled-dot {
+    padding: 0;
+    border: none;
+    outline: none;
+    box-shadow: none;
+    background-color: #666;
+}
+
+.build-panel button.build-panel-enabled-dot:hover,
+.build-panel button.build-panel-enabled-dot:focus,
+.build-panel button.build-panel-enabled-dot:active {
+    border: none;
+    outline: none;
+    box-shadow: none;
+    background-color: #666;
+}
+
+.build-panel-enabled-dot.enabled,
+.build-panel button.build-panel-enabled-dot.enabled {
+    background-color: #4CAF50;
+}
+
+.build-panel button.build-panel-enabled-dot.enabled:hover,
+.build-panel button.build-panel-enabled-dot.enabled:focus,
+.build-panel button.build-panel-enabled-dot.enabled:active {
+    background-color: #4CAF50;
+}
+
+/* Track fills the full progress column; blue fill is width:X% of track (set in C++) */
+.build-panel-progress-track {
+    display: flex;
+    flex-direction: row;
+    width: 100%;
+    min-width: 0;
+    max-width: 100%;
+    height: 8px;
+    min-height: 8px;
+    background-color: #444;
+    border-radius: 4px;
+    overflow: hidden;
+    box-sizing: border-box;
+}
+
+.build-panel-progress-fill {
+    height: 100%;
+    min-width: 0;
+    max-width: 100%;
+    flex-shrink: 0;
+    flex-grow: 0;
+    background-color: #2196F3;
+    border-radius: 4px;
+    box-sizing: border-box;
+}
+
+/* Completed column: same icons as todo panel */
+/* Completed column: icon only, transparent background, no button styling */
+.build-panel .build-panel-completed-checkbox,
+.build-panel button.build-panel-completed-checkbox {
+    width: 20px;
+    height: 20px;
+    min-width: 20px;
+    min-height: 20px;
+    max-width: 20px;
+    max-height: 20px;
+    padding: 0;
+    margin: 0;
+    cursor: pointer;
+    background: transparent;
+    background-color: transparent;
+    background-image: url("editor:Icons/checkmark-circle_un.png");
+    background-size: contain;
+    background-repeat: no-repeat;
+    background-position: center;
+    border: none;
+    border-width: 0;
+    border-radius: 0;
+    outline: none;
+    box-shadow: none;
+    flex-shrink: 0;
+    transition: opacity 0.2s ease;
+    opacity: 0.7;
+}
+
+.build-panel .build-panel-completed-checkbox.todo-checkbox-checked,
+.build-panel button.build-panel-completed-checkbox.todo-checkbox-checked {
+    background-image: url("editor:Icons/checkmark-circle.png");
+    opacity: 1.0;
+}
+
+.build-panel-footer {
+    display: flex;
+    flex-direction: row;
+    justify-content: space-between;
+    align-items: center;
+    padding: 8px;
+    border-top-width: 1px;
+    border-top-color: var(--ui_color_bg_grid);
+    flex-shrink: 0;
+}
+
+.build-panel-settings-button,
+button.build-panel-settings-button {
+    display: flex;
+    flex-direction: row;
+    align-items: center;
+    padding: 8px 12px 8px 44px;
+    min-height: 32px;
+    background-color: #262727;
+    background-image: url("editor:Icons/settings.png");
+    background-size: 20px 20px;
+    background-repeat: no-repeat;
+    background-position: 12px 50%;
+    border: 1px solid #444;
+    border-radius: 4px;
+    color: var(--ui_color_text_bright);
+    font-size: var(--ui_font_size_base);
+    cursor: pointer;
+    opacity: 0.35;
+    transition: opacity 0.2s ease;
+}
+
+.build-panel-settings-button:hover,
+button.build-panel-settings-button:hover {
+    background-color: #333;
+    opacity: 1;
+}
+
+.build-panel-action-button,
+button.build-panel-action-button {
+    display: flex;
+    flex-direction: row;
+    align-items: center;
+    padding: 8px 12px 8px 44px;
+    min-height: 32px;
+    background-color: #262727;
+    background-image: url("editor:Icons/game-controller.png");
+    background-size: 20px 20px;
+    background-repeat: no-repeat;
+    background-position: 12px 50%;
+    border: 1px solid #444;
+    border-radius: 4px;
+    color: var(--ui_color_text_bright);
+    font-size: var(--ui_font_size_base);
+    cursor: pointer;
+    opacity: 0.35;
+    transition: opacity 0.2s ease;
+}
+
+.build-panel-action-button:hover,
+button.build-panel-action-button:hover {
+    background-color: #333;
+    opacity: 1;
+}

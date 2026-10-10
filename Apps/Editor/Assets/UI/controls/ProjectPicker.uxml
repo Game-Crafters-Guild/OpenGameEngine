@@ -1,0 +1,61 @@
+<!-- Static skeleton of the project picker: the backdrop, the library window with
+     its hero band / content / footer, and the stacked create-import window.
+     Everything below is fixed chrome that lives for as long as the modal does.
+     Dynamic content (project and template cards, the community list, the search
+     bar composite and both ScrollView content wrappers) is built in
+     ProjectFolderPickerModal.cpp and parented into the containers named here;
+     code-added children are appended after these, so declaration order is the
+     modal's layout order. Every id below is looked up by name from C++ - a
+     rename here without one there is logged as an error at build time. -->
+<UIElement class="project-picker-modal">
+  <UIElement id="modal-backdrop" class="modal-backdrop">
+    <UIElement id="modal-window" class="modal-window">
+      <UIElement id="modal-header" class="modal-header project-picker-band">
+        <UIElement id="header-engine-region">
+          <Label id="engine-label" text="Engine" />
+        </UIElement>
+        <UIElement id="header-version-region">
+          <Label id="version-label" text="version 1.0" />
+        </UIElement>
+        <UIElement id="cube-container">
+          <UIElement id="cube-icon" />
+        </UIElement>
+      </UIElement>
+
+      <UIElement id="modal-content" class="modal-content">
+        <UIElement id="projects-header">
+          <UIElement id="projects-title-row">
+            <Label id="modal-title" class="modal-title" text="Projects" />
+          </UIElement>
+          <UIElement id="projects-header-spacer" />
+        </UIElement>
+        <ScrollView id="recent-projects-scroll" />
+        <UIElement id="bottom-panel">
+          <UIElement id="path-container" class="path-container">
+            <Button id="browse-button" class="browse-button" text="Browse" />
+            <Label id="path-input" class="path-input" />
+            <UIElement id="project-logo" />
+          </UIElement>
+          <UIElement id="button-container" class="button-container">
+            <Button id="open-button" class="open-button" text="Open" />
+          </UIElement>
+        </UIElement>
+        <Label id="loading-label" text="Loading..." />
+      </UIElement>
+
+      <UIElement id="modal-footer" class="modal-footer project-picker-band">
+        <!-- No "cancel-button" class: Button.css styles that class for the
+             editor's generic dialogs and would tie-break over the picker role
+             classes applied in code. -->
+        <Button id="cancel-button" text="Cancel" />
+      </UIElement>
+    </UIElement>
+
+    <UIElement id="project-picker-stacked-scrim" class="project-picker-stacked-scrim">
+      <UIElement id="project-picker-stacked-window" class="modal-window project-picker-stacked-window">
+        <UIElement id="project-picker-stacked-content" />
+        <UIElement id="project-picker-stacked-footer" class="project-picker-band" />
+      </UIElement>
+    </UIElement>
+  </UIElement>
+</UIElement>

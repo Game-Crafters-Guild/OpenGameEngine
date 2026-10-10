@@ -1,0 +1,44 @@
+{
+  "schemaVersion": 3,
+  "materialName": "CobbledGround",
+  "lightingModel": "StandardPBR",
+  "alphaMode": "Opaque",
+  "doubleSided": false,
+  "surfaceShader": "Surfaces/standard_pbr.glsl",
+  "properties": {
+    "baseColor": [
+      1.0,
+      1.0,
+      1.0,
+      1.0
+    ],
+    "metallic": 0.0,
+    "roughness": 0.9
+  },
+  "textures": {
+    "albedoMap": {
+      "guid": "6b83d6d8-8fcb-41b2-afc0-25771ff06ea5",
+      "path": "Textures/cobbles_albedo.png",
+      "tiling": [
+        30.0,
+        30.0
+      ]
+    },
+    "normalMap": {
+      "guid": "6df7a06d-b640-45b9-87b2-ec692b87882b",
+      "path": "Textures/cobbles_normal.png",
+      "tiling": [
+        30.0,
+        30.0
+      ]
+    },
+    "heightMap": {
+      "guid": "45c4205f-4646-4ff7-952b-987c8d19761b",
+      "path": "Textures/cobbles_height.png",
+      "tiling": [
+        30.0,
+        30.0
+      ]
+    }
+  }
+}

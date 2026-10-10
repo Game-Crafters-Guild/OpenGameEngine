@@ -1,0 +1,19 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32">
+  <defs>
+    <mask id="cutouts">
+      <rect width="32" height="32" fill="#fff"/>
+      <ellipse cx="12.2" cy="14.6" rx="3.2" ry="3.8" transform="rotate(-24 12.2 14.6)" fill="#000"/>
+      <ellipse cx="19.8" cy="14.6" rx="3.2" ry="3.8" transform="rotate(24 19.8 14.6)" fill="#000"/>
+      <circle cx="13.1" cy="14.6" r="1.1" fill="#fff"/>
+      <circle cx="18.9" cy="14.6" r="1.1" fill="#fff"/>
+      <path d="M14.2 18.4h3.6L16 20.5Z" fill="#000"/>
+      <path d="M12.4 22.5c1 1 2.2 1.5 3.6 1.5s2.6-.5 3.6-1.5" fill="none" stroke="#000" stroke-width="2" stroke-linecap="round"/>
+    </mask>
+  </defs>
+  <g fill="#fff" mask="url(#cutouts)">
+    <circle cx="9" cy="9" r="3"/>
+    <circle cx="23" cy="9" r="3"/>
+    <path d="M16 5.2c6.1 0 10.8 4.3 10.8 10.4 0 7.3-4.8 12.2-10.8 12.2S5.2 22.9 5.2 15.6C5.2 9.5 9.9 5.2 16 5.2Z"/>
+    <path d="M9 8.5c1.1-2.6 3.6-4.5 7-4.5s5.9 1.9 7 4.5c-1.9-.9-4.2-1.4-7-1.4s-5.1.5-7 1.4Z"/>
+  </g>
+</svg>

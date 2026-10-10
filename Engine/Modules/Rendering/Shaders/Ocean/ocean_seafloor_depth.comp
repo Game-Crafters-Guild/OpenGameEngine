@@ -1,0 +1,176 @@
+#version 450
+// Sea-floor depth bake. Writes, per texel of each camera-snapped depth LOD layer,
+// the distance from the calm sea level DOWN to the seabed (meters). This is a
+// top-down orthographic depth of the seabed from sampled cache/capture textures
+// plus closed-form analytic sources: each texel maps to a fixed world XZ (via
+// the shared cascade layout), and we take the smallest positive depth
+// (shallowest floor) across all overlapping sources.
+//
+// The depth cascade has the foam cascade's resolution, LOD count and base scale,
+// so the foam sim reads it texel-for-texel on the frames both snap to the same
+// camera; the surface samples it with this layout.
+
+#include "Ocean/ocean_cascade_common.glsl"
+
+layout(local_size_x = 8, local_size_y = 8, local_size_z = 1) in;
+
+// Must match kMaxOceanSeabeds / kMaxOceanDepthContributors in Ocean/OceanTypes.h.
+const int GE_OCEAN_MAX_SEABEDS = 8;
+const int GE_OCEAN_MAX_DEPTH_CONTRIBUTORS = 16;
+const int GE_OCEAN_MAX_SAVED_DEPTH_CACHE_PAGES = 8;
+
+struct OceanSeabedGPU
+{
+    vec4 OriginExtent; // xy = center XZ, zw = half-extent (X, Z)
+    vec4 HeightSlope;  // x = base height, yz = slope per meter (X, Z), w = pad
+};
+
+struct OceanDepthContributorGPU
+{
+    vec4 OriginExtent; // xy = center XZ, zw = half-extent (X, Z)
+    vec4 DepthShape;   // x = depth, y = feather, z = roundness (0 rect, 1 ellipse), w = pad
+};
+
+struct OceanSavedDepthCachePageGPU
+{
+    vec4 OriginSize;   // xy = world origin, zw = world size
+    vec4 InvSizeDeep;  // xy = inverse world size, z = deep-water sentinel
+    vec4 AtlasRect;    // xy = normalized atlas offset, zw = normalized atlas size
+};
+
+// std140 — must match OceanSeabedDepthParamsGPU in Ocean/OceanTypes.h.
+layout(std140, set = 0, binding = 0) uniform OceanSeabedDepthParams
+{
+    uint  uResolution;
+    uint  uLodCount;
+    uint  uSeabedCount;
+    float uSeaLevel;
+
+    uint  uDepthContributorCount;
+    float uDepthBandSaturation;
+    uint  uDepthPad1;
+    uint  uDepthPad2;
+
+    uint  uSavedDepthCacheAvailable;
+    uint  uSavedDepthCachePageCount;
+    uint  uSavedDepthPad1;
+    uint  uSavedDepthPad2;
+
+    // xy = world origin (min XZ), zw = world size (X, Z)
+    vec4  uSavedDepthCacheOriginSize;
+    // xy = inverse world size, z = deep-water sentinel, w = pad
+    vec4  uSavedDepthCacheInvSizeDeep;
+
+    uint  uRasterDepthCaptureAvailable;
+    uint  uRasterDepthPad0;
+    uint  uRasterDepthPad1;
+    uint  uRasterDepthPad2;
+
+    // xy = world origin (min XZ), zw = world size (X, Z)
+    vec4  uRasterDepthCaptureOriginSize;
+    // xy = inverse world size, z = deep-water sentinel, w = pad
+    vec4  uRasterDepthCaptureInvSizeDeep;
+
+    // Embedded OceanCascadeLayoutGPU: per-LOD vec4 (xy=origin, z=texel, w=scale)
+    // then a padded uint lane (LodCount + 3 pad).
+    vec4  uCascadeOriginScale[GE_OCEAN_LOD_CASCADES];
+    uvec4 uCascadeMeta; // x = LodCount
+
+    OceanSavedDepthCachePageGPU uSavedDepthCachePages[GE_OCEAN_MAX_SAVED_DEPTH_CACHE_PAGES];
+    OceanSeabedGPU uSeabeds[GE_OCEAN_MAX_SEABEDS];
+    OceanDepthContributorGPU uDepthContributors[GE_OCEAN_MAX_DEPTH_CONTRIBUTORS];
+};
+
+layout(set = 0, binding = 1, r16f) uniform writeonly image2DArray uDepthOut;
+layout(set = 0, binding = 2) uniform sampler2D uSavedDepthCache;
+layout(set = 0, binding = 3) uniform sampler2D uRasterDepthCapture;
+
+// Deep-water sentinel: when no seabed covers a texel it reads as very deep so the
+// shallow/shoreline terms stay off. Kept finite to fit R16F comfortably.
+const float GE_OCEAN_DEEP = 60000.0;
+
+void main()
+{
+    const ivec3 id = ivec3(gl_GlobalInvocationID);
+    if (uint(id.x) >= uResolution || uint(id.y) >= uResolution || uint(id.z) >= uLodCount)
+        return;
+
+    const vec4 layer = uCascadeOriginScale[id.z];
+    const vec2 worldXZ = OceanCascadeTexelToWorld(id.xy, layer.xy, layer.z);
+
+    // Take the shallowest floor (smallest positive depth) across overlapping sources.
+    float depth = GE_OCEAN_DEEP;
+    if (uSavedDepthCacheAvailable != 0u && uSavedDepthCachePageCount > 0u)
+    {
+        uint pageCount = min(uSavedDepthCachePageCount, uint(GE_OCEAN_MAX_SAVED_DEPTH_CACHE_PAGES));
+        for (uint p = 0u; p < pageCount; ++p)
+        {
+            OceanSavedDepthCachePageGPU page = uSavedDepthCachePages[p];
+            vec2 rel = worldXZ - page.OriginSize.xy;
+            vec2 uv = rel * page.InvSizeDeep.xy;
+            if (!all(greaterThanEqual(uv, vec2(0.0))) || !all(lessThanEqual(uv, vec2(1.0))))
+                continue;
+
+            vec2 atlasSize = max(page.AtlasRect.zw, vec2(1e-6));
+            vec2 atlasUv = page.AtlasRect.xy + clamp(uv, vec2(0.0), vec2(1.0)) * atlasSize;
+            vec2 halfTexel = 0.5 / vec2(textureSize(uSavedDepthCache, 0));
+            atlasUv = clamp(atlasUv, page.AtlasRect.xy + halfTexel,
+                            page.AtlasRect.xy + atlasSize - halfTexel);
+            float cachedDepth = textureLod(uSavedDepthCache, atlasUv, 0.0).r;
+            depth = min(depth, clamp(cachedDepth, 0.0, page.InvSizeDeep.z));
+        }
+    }
+    else if (uSavedDepthCacheAvailable != 0u)
+    {
+        vec2 rel = worldXZ - uSavedDepthCacheOriginSize.xy;
+        vec2 uv = rel * uSavedDepthCacheInvSizeDeep.xy;
+        if (all(greaterThanEqual(uv, vec2(0.0))) && all(lessThanEqual(uv, vec2(1.0))))
+        {
+            float cachedDepth = textureLod(uSavedDepthCache, uv, 0.0).r;
+            depth = min(depth, clamp(cachedDepth, 0.0, uSavedDepthCacheInvSizeDeep.z));
+        }
+    }
+
+    if (uRasterDepthCaptureAvailable != 0u)
+    {
+        vec2 rel = worldXZ - uRasterDepthCaptureOriginSize.xy;
+        vec2 uv = rel * uRasterDepthCaptureInvSizeDeep.xy;
+        if (all(greaterThanEqual(uv, vec2(0.0))) && all(lessThanEqual(uv, vec2(1.0))))
+        {
+            vec2 halfTexel = 0.5 / max(vec2(textureSize(uRasterDepthCapture, 0)), vec2(1.0));
+            vec2 sampleUv = clamp(uv, halfTexel, vec2(1.0) - halfTexel);
+            float rasterDepth = textureLod(uRasterDepthCapture, sampleUv, 0.0).r;
+            depth = min(depth, clamp(rasterDepth, 0.0, uRasterDepthCaptureInvSizeDeep.z));
+        }
+    }
+
+    uint count = min(uSeabedCount, uint(GE_OCEAN_MAX_SEABEDS));
+    for (uint s = 0u; s < count; ++s)
+    {
+        OceanSeabedGPU sb = uSeabeds[s];
+        vec2 d = abs(worldXZ - sb.OriginExtent.xy);
+        if (d.x > sb.OriginExtent.z || d.y > sb.OriginExtent.w)
+            continue; // outside this seabed's footprint
+        vec2 rel = worldXZ - sb.OriginExtent.xy;
+        float floorY = sb.HeightSlope.x + rel.x * sb.HeightSlope.y + rel.y * sb.HeightSlope.z;
+        float thisDepth = uSeaLevel - floorY; // positive when the floor is below sea level
+        depth = min(depth, max(thisDepth, 0.0));
+    }
+
+    uint contributorCount = min(uDepthContributorCount, uint(GE_OCEAN_MAX_DEPTH_CONTRIBUTORS));
+    for (uint c = 0u; c < contributorCount; ++c)
+    {
+        OceanDepthContributorGPU dc = uDepthContributors[c];
+        vec2 extent = max(dc.OriginExtent.zw, vec2(1e-3));
+        vec2 rel = worldXZ - dc.OriginExtent.xy;
+        vec2 absRel = abs(rel);
+
+        float rectEdge = min(extent.x - absRel.x, extent.y - absRel.y);
+        float ellipseEdge = (1.0 - length(rel / extent)) * min(extent.x, extent.y);
+        float edge = mix(rectEdge, ellipseEdge, clamp(dc.DepthShape.z, 0.0, 1.0));
+        float feather = OceanCascadeFeather(max(dc.DepthShape.y, 0.0), layer.z);
+        depth = min(depth, OceanDepthBandDepth(max(dc.DepthShape.x, 0.0), uDepthBandSaturation, edge, feather));
+    }
+
+    imageStore(uDepthOut, id, vec4(depth, 0.0, 0.0, 0.0));
+}

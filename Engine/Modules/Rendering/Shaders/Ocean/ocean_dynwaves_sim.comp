@@ -1,0 +1,196 @@
+#version 450
+// Dynamic (interactive) wave simulation. Solves the 2D wave equation on a
+// camera-snapped ping-pong cascade storing (height, velocity) per texel, and
+// injects this frame's impulses (a buoyant body striking the water, a splash).
+// Layered on top of the FFT spectrum: the spectrum gives the ambient
+// sea, this adds spreading, decaying ripples from interactions.
+//
+// Wave equation (clean-room): with height f and velocity v on a uniform grid of
+// spacing dx, the discrete update over a timestep dt is
+//   v' = v + dt * c^2 * laplacian(f)        (laplacian = (sum of 4 neighbours - 4f)/dx^2)
+//   v' *= (1 - min(1, damping*dt))          (energy loss so ripples decay)
+//   f' = f + dt * v'                          (integrate velocity onto height)
+// which is the standard leapfrog form of  h_next = 2h - h_prev + c^2 dt^2 * lap(h)
+// rewritten with an explicit velocity channel (more stable under damping). The
+// wave speed c is clamped to the CFL limit  c <= courant * dx / dt  per LOD so the
+// coarser (larger-dx) layers stay stable at the same dt. Edges feather to zero to
+// suppress reflections off the cascade boundary as the camera moves.
+//
+// The cascade has the foam cascade's resolution, LOD count and base scale; the
+// surface samples it (height) with this layout in the vertex + fragment stages.
+
+#include "Ocean/ocean_cascade_common.glsl"
+
+layout(local_size_x = 8, local_size_y = 8, local_size_z = 1) in;
+
+// Must match kMaxOceanWaveImpulses in Ocean/OceanTypes.h.
+const int GE_OCEAN_MAX_IMPULSES = 16;
+
+struct OceanWaveImpulseGPU
+{
+    vec4 CenterRadiusAmp; // xy = center XZ, z = radius (m), w = amplitude (m)
+};
+
+// std140 — must match OceanDynWavesParamsGPU in Ocean/OceanTypes.h.
+layout(std140, set = 0, binding = 0) uniform OceanDynWavesParams
+{
+    uint  uResolution;
+    uint  uLodCount;
+    uint  uImpulseCount;
+    float uDeltaTime;
+
+    float uWaveSpeed;
+    float uDamping;
+    float uCourantNumber;
+    float uGravity;
+
+    float uShallowAttenuation;
+    float uHorizontalDisplacement;
+    float uDisplacementClamp;
+    uint  uSeabedDepthAvailable;
+
+    uint  uMinimumCascade;
+    uint  uMaximumCascade;
+    float uShallowDepthScale;
+    uint  uResetHistory;
+
+    // Embedded OceanCascadeLayoutGPU: per-LOD vec4 (xy=origin, z=texel, w=scale)
+    // then a padded uint lane (LodCount + 3 pad). Cascade is the current write
+    // layout; PrevCascade is the layout the previous ping-pong texture was written
+    // with.
+    vec4  uCascadeOriginScale[GE_OCEAN_LOD_CASCADES];
+    uvec4 uCascadeMeta; // x = LodCount
+
+    vec4  uPrevCascadeOriginScale[GE_OCEAN_LOD_CASCADES];
+    uvec4 uPrevCascadeMeta;
+
+    OceanWaveImpulseGPU uImpulses[GE_OCEAN_MAX_IMPULSES];
+};
+
+layout(set = 0, binding = 1) uniform sampler2DArray uPrevDynWaves; // previous (height, velocity)
+layout(set = 0, binding = 2, rg16f) uniform writeonly image2DArray uDynWavesOut;
+layout(set = 0, binding = 3) uniform sampler2DArray uSeabedDepth;
+
+const float GE_TWO_PI = 6.2831853;
+
+// Deep-water phase speed for the shortest wave a layer can represent (~2 texels):
+// c = sqrt(g * wavelength / 2pi). Used as the base propagation speed, scaled by
+// the authored uWaveSpeed knob, then CFL-clamped.
+float DynWaveSpeed(float gridSize)
+{
+    float wavelength = 2.0 * gridSize;
+    return sqrt(uGravity * wavelength / GE_TWO_PI);
+}
+
+vec2 DynSamplePrevious(vec2 worldXZ, uint lod)
+{
+    if (uResetHistory != 0u)
+        return vec2(0.0);
+    uint lodCount = min(uPrevCascadeMeta.x, uint(GE_OCEAN_LOD_CASCADES));
+    if (lod >= lodCount)
+        return vec2(0.0);
+
+    vec4 prevLayer = uPrevCascadeOriginScale[lod];
+    vec2 uv = OceanCascadeUV(worldXZ, prevLayer.xy, prevLayer.z, float(uResolution));
+    if (any(lessThan(uv, vec2(0.0))) || any(greaterThan(uv, vec2(1.0))))
+        return vec2(0.0);
+    return textureLod(uPrevDynWaves, vec3(uv, float(lod)), 0.0).rg;
+}
+
+void main()
+{
+    const ivec3 id = ivec3(gl_GlobalInvocationID);
+    if (uint(id.x) >= uResolution || uint(id.y) >= uResolution || uint(id.z) >= uLodCount)
+        return;
+
+    const vec4 layer = uCascadeOriginScale[id.z];
+    const float texel = layer.z; // world meters per texel == grid spacing dx
+    const vec2 worldXZ = OceanCascadeTexelToWorld(id.xy, layer.xy, texel);
+    const uint lod = uint(id.z);
+
+    if (lod < uMinimumCascade || lod > uMaximumCascade)
+    {
+        imageStore(uDynWavesOut, id, vec4(0.0));
+        return;
+    }
+
+    const float res = float(uResolution);
+    const vec2 uv = (vec2(id.xy) + 0.5) / res;
+
+    // Current state (f = height, v = velocity).
+    vec2 fv = DynSamplePrevious(worldXZ, lod);
+    float f = fv.x;
+    float v = fv.y;
+
+    // 4-tap Laplacian in world space. Previous-state samples are reprojected
+    // through the layout they were written with, so camera movement does not slide
+    // the ripple history.
+    float fxm = DynSamplePrevious(worldXZ - vec2(texel, 0.0), lod).r;
+    float fxp = DynSamplePrevious(worldXZ + vec2(texel, 0.0), lod).r;
+    float fym = DynSamplePrevious(worldXZ - vec2(0.0, texel), lod).r;
+    float fyp = DynSamplePrevious(worldXZ + vec2(0.0, texel), lod).r;
+
+    float dt = max(uDeltaTime, 0.0);
+
+    // Wave speed: base dispersion speed * the authored knob, CFL-clamped so
+    // c*dt/dx < courant (< 1) on every LOD — coarser layers (larger dx) are
+    // automatically stable at the same dt.
+    float c = DynWaveSpeed(texel) * max(uWaveSpeed, 0.0);
+    float shallow = 1.0;
+    if (uSeabedDepthAvailable != 0u)
+    {
+        float depth = max(textureLod(uSeabedDepth,
+                                     vec3(uv, float(id.z)), 0.0).r, 0.0);
+        // Shallow-water phase speed approaches sqrt(g*h). Blend it with the
+        // deep-water dispersion speed and attenuate the state smoothly as the
+        // available water column approaches zero.
+        float shallowSpeed = sqrt(max(uGravity * depth, 0.0));
+        c = mix(c, min(c, shallowSpeed), clamp(uShallowAttenuation, 0.0, 1.0));
+        shallow = mix(1.0,
+                      smoothstep(0.0, max(texel * uShallowDepthScale, 1e-3), depth),
+                      clamp(uShallowAttenuation, 0.0, 1.0));
+    }
+    if (dt > 1e-5)
+        c = min(c, uCourantNumber * texel / dt);
+
+    // v' = v + dt * c^2 * laplacian(f); laplacian = (neighbours - 4f) / dx^2.
+    float coeff = dt * c * c / max(texel * texel, 1e-6);
+    float vNext = v + coeff * (fxm + fxp + fym + fyp - 4.0 * f);
+
+    // Damping (energy loss). Clamped so it never over-damps at large dt.
+    vNext *= 1.0 - min(1.0, uDamping * dt);
+
+    // Edge feather: ramp the state to zero near the cascade border so ripples
+    // don't reflect off the moving boundary back into the sim.
+    vec2 distToEdge = min(uv, vec2(1.0) - uv);
+    float edge = clamp(min(distToEdge.x, distToEdge.y) / 0.08, 0.0, 1.0);
+    vNext *= edge;
+
+    float fNext = f + dt * vNext;
+    fNext *= edge * shallow;
+    vNext *= shallow;
+
+    // Inject this frame's impulses as additive height (a radial bump/dent). The
+    // smoothstep footprint falls from full at the center to zero at the radius.
+    uint count = min(uImpulseCount, uint(GE_OCEAN_MAX_IMPULSES));
+    for (uint i = 0u; i < count; ++i)
+    {
+        OceanWaveImpulseGPU imp = uImpulses[i];
+        float radius = max(imp.CenterRadiusAmp.z, 1e-3);
+        float dist = length(worldXZ - imp.CenterRadiusAmp.xy);
+        float falloff = 1.0 - smoothstep(0.0, radius, dist);
+        fNext += imp.CenterRadiusAmp.w * falloff;
+    }
+
+    fNext = clamp(fNext, -uDisplacementClamp, uDisplacementClamp);
+
+    // Guard against NaN/Inf propagating through the whole sim (a single bad value
+    // would otherwise spread every frame). Reset to calm water on detection.
+    if (!(abs(fNext) < 1.0e6) || !(abs(vNext) < 1.0e6))
+    {
+        fNext = 0.0;
+        vNext = 0.0;
+    }
+
+    imageStore(uDynWavesOut, id, vec4(fNext, vNext, 0.0, 0.0));
+}

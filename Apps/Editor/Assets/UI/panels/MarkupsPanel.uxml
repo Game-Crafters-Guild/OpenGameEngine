@@ -1,0 +1,12 @@
+<UIElement class="markups-root">
+  <UIElement class="markups-header">
+    <Button id="MarkupsTabMarkups" class="markups-tab" text="Mark-ups" />
+    <Button id="MarkupsTabActivity" class="markups-tab" text="Activity" />
+    <UIElement id="MarkupsSearchHost" class="markups-search-host" />
+    <Dropdown id="MarkupsStatusFilter" class="small secondary markups-status-filter" />
+    <Button id="MarkupsShowAll" class="small secondary" text="Show all" />
+    <Button id="MarkupsHideAll" class="small secondary" text="Hide all" />
+  </UIElement>
+  <Label id="MarkupsEmpty" class="markups-empty hidden" />
+  <ScrollView id="MarkupsScroll" class="markups-scroll" />
+</UIElement>

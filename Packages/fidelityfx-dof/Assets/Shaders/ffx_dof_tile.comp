@@ -1,0 +1,40 @@
+#version 450
+
+// Per-8x8-half-resolution tile near/far CoC extrema.
+layout(local_size_x = 8, local_size_y = 8, local_size_z = 1) in;
+layout(set = 0, binding = 0) uniform sampler2D uHalfColorCoc;
+// Two channels of CoC extrema. Core WebGPU has no storage-capable rg16float, so
+// the compatibility cook uses four. FidelityFXDofNode reads the storage format
+// from this package's reflection, including under runtime profile overrides.
+#if defined(GE_COMPAT_PROFILE)
+layout(set = 0, binding = 1, rgba16f) uniform writeonly image2D uTileCoc;
+#else
+layout(set = 0, binding = 1, rg16f) uniform writeonly image2D uTileCoc;
+#endif
+
+shared uint sNearBits;
+shared uint sFarBits;
+
+void main()
+{
+    if (gl_LocalInvocationIndex == 0u)
+    {
+        sNearBits = 0u;
+        sFarBits = 0u;
+    }
+    barrier();
+
+    ivec2 size = textureSize(uHalfColorCoc, 0);
+    ivec2 p = ivec2(gl_GlobalInvocationID.xy);
+    if (all(lessThan(p, size)))
+    {
+        float coc = texelFetch(uHalfColorCoc, p, 0).a;
+        atomicMax(sNearBits, floatBitsToUint(max(coc, 0.0)));
+        atomicMax(sFarBits, floatBitsToUint(max(-coc, 0.0)));
+    }
+    barrier();
+
+    if (gl_LocalInvocationIndex == 0u)
+        imageStore(uTileCoc, ivec2(gl_WorkGroupID.xy),
+                   vec4(uintBitsToFloat(sNearBits), uintBitsToFloat(sFarBits), 0.0, 0.0));
+}

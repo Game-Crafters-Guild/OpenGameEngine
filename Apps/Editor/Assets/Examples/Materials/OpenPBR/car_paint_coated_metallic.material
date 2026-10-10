@@ -1,0 +1,29 @@
+{
+  "schemaVersion": 3,
+  "materialName": "OpenPBR - Car Paint (Metallic Base + Clear Coat)",
+  "lightingModel": "StandardPBR",
+  "alphaMode": "Opaque",
+  "doubleSided": false,
+  "surfaceShader": "Surfaces/standard_pbr.glsl",
+  "properties": {
+    "baseColor": [
+      0.055,
+      0.155,
+      0.48,
+      1.0
+    ],
+    "metallic": 0.9,
+    "roughness": 0.3,
+    "specularColor": [
+      0.42,
+      0.62,
+      1.0
+    ],
+    "enableClearCoat": true,
+    "clearCoat": 1.0,
+    "clearCoatRoughness": 0.035,
+    "clearCoatIor": 1.5,
+    "coatDarkening": 1.0
+  },
+  "textures": {}
+}

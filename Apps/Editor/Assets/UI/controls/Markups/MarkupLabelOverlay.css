@@ -1,0 +1,93 @@
+/* MarkupLabelOverlay (Apps/Editor/Include/Markups/MarkupLabelOverlay.h).
+ *
+ * The mark-ups' title pills in the Scene View. The container sits at the viewport's top-left
+ * corner (the overlay places it there), so each anchor's left and top are view pixels. Nothing
+ * here takes pointer input: the viewport under the labels keeps every click.
+ */
+.markup-labels {
+	position: absolute;
+	width: 0px;
+	height: 0px;
+	pointer-events: none;
+}
+
+/* A fixed-width row centering its pill, so a label is centered on its point before its text is
+   measured: the width is MarkupLabelOverlay.cpp's kAnchorWidth. */
+.markup-label-anchor {
+	position: absolute;
+	width: 240px;
+	display: flex;
+	flex-direction: row;
+	justify-content: center;
+	pointer-events: none;
+}
+
+/* The pill: MarkupLabelOverlay::kPillHeight tall, border included; a long title ends in an
+   ellipsis. The light rim keeps the plate's shape on a dark sky or a dark fill. */
+.markup-label {
+	position: relative;
+	height: 22px;
+	max-width: 240px;
+	display: flex;
+	flex-direction: row;
+	align-items: center;
+	padding-left: 8px;
+	padding-right: 10px;
+	border-radius: 11px;
+	border-width: 1px;
+	border-style: solid;
+	border-color: var(--ui_color_view_banner_border);
+	background-color: var(--ui_color_view_banner_background);
+	pointer-events: none;
+}
+
+/* The pill of the mark-up whose panel or Hierarchy row is hovered: a lighter plate; its rim takes
+   the status color, which MarkupLabelOverlay sets. A selected and hovered pill keeps the plate
+   and takes the selection's border. */
+.markup-label.markup-label-hovered {
+	background-color: var(--ui_color_view_banner_background_hover);
+}
+
+/* The selected mark-up's pill: an accent border in place of the rim. MarkupLabelOverlay places
+   it over the others. */
+.markup-label.markup-label-selected {
+	border-width: 2px;
+	border-style: solid;
+	border-color: var(--ui_color_accent);
+}
+
+/* The status color, set per label from the project's vocabulary. */
+.markup-label-dot {
+	width: 8px;
+	height: 8px;
+	border-radius: 4px;
+	margin-right: 6px;
+	flex-shrink: 0;
+}
+
+.markup-label-title {
+	color: var(--ui_color_view_banner_text);
+	font-size: 12px;
+	font-family: var(--ui_font_family);
+	font-weight: 500;
+	white-space: nowrap;
+	overflow: hidden;
+	text-overflow: ellipsis;
+	pointer-events: none;
+}
+
+/* An update from the agent the viewer has not seen: the Mark-ups panel's unseen dot, filled in
+   its accent, on the pill's top-right corner, with a dark rim so it holds on a bright sky. */
+.markup-label-unread {
+	position: absolute;
+	top: -4px;
+	right: -4px;
+	width: 10px;
+	height: 10px;
+	border-width: 1px;
+	border-style: solid;
+	border-color: var(--ui_color_view_banner_background);
+	border-radius: 5px;
+	background-color: var(--ui_color_accent_blue);
+	pointer-events: none;
+}

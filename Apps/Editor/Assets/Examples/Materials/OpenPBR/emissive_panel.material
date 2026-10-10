@@ -1,0 +1,16 @@
+{
+  "schemaVersion": 3,
+  "materialName": "OpenPBR - Emissive Panel (nits)",
+  "lightingModel": "StandardPBR",
+  "alphaMode": "Opaque",
+  "doubleSided": false,
+  "surfaceShader": "Surfaces/standard_pbr.glsl",
+  "properties": {
+    "baseColor": [0.02, 0.02, 0.02, 1.0],
+    "metallic": 0.0,
+    "roughness": 0.5,
+    "emissive": [0.1, 0.85, 1.0],
+    "emissionLuminance": 400.0
+  },
+  "textures": {}
+}

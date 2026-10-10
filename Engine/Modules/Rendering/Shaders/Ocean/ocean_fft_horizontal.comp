@@ -1,0 +1,53 @@
+#version 450
+// Ocean FFT: horizontal (per-row) butterfly pass. the reference ComputeFFT !FINAL.
+// One workgroup per row; GE_FFT_SIZE threads transform that row across columns.
+// Conjugates the spectral input (the IFFT-via-FFT convention), writes the
+// half-transformed complex H/X/Z into the temp arrays for the vertical pass.
+
+#include "Ocean/ocean_fft_butterfly.glsl"
+
+layout(local_size_x = 256, local_size_y = 1, local_size_z = 1) in;
+
+layout(set = 0, binding = 1, rgba32f) uniform readonly  image2DArray uInH;
+layout(set = 0, binding = 2, rgba32f) uniform readonly  image2DArray uInX;
+layout(set = 0, binding = 3, rgba32f) uniform readonly  image2DArray uInZ;
+layout(set = 0, binding = 5, rgba32f) uniform writeonly image2DArray uOutH;
+layout(set = 0, binding = 6, rgba32f) uniform writeonly image2DArray uOutX;
+layout(set = 0, binding = 7, rgba32f) uniform writeonly image2DArray uOutZ;
+
+vec2 OceanConj(vec2 v) { return vec2(v.x, -v.y); }
+
+void main()
+{
+    const ivec3 id = ivec3(gl_GlobalInvocationID); // x=column, y=row, z=cascade
+#if defined(GE_COMPAT_PROFILE)
+    // Cascade bound as a flag, not a return: the butterfly loop's barriers
+    // must be reached in uniform control flow (WGSL enforces it), so
+    // out-of-range cascades run the loop with stores masked off.
+    const bool cascadeActive = id.z < int(uCascadeCount);
+#else
+    if (id.z >= int(uCascadeCount))
+        return;
+#endif
+
+    const uint coord = uint(id.x);
+
+    sIntH[coord] = OceanConj(imageLoad(uInH, id).xy);
+    sIntX[coord] = OceanConj(imageLoad(uInX, id).xy);
+    sIntZ[coord] = OceanConj(imageLoad(uInZ, id).xy);
+
+    OceanRunFFT(coord);
+
+#if defined(GE_COMPAT_PROFILE)
+    if (cascadeActive)
+    {
+        imageStore(uOutH, id, vec4(OceanFFTResultH(coord), 0.0, 0.0));
+        imageStore(uOutX, id, vec4(OceanFFTResultX(coord), 0.0, 0.0));
+        imageStore(uOutZ, id, vec4(OceanFFTResultZ(coord), 0.0, 0.0));
+    }
+#else
+    imageStore(uOutH, id, vec4(OceanFFTResultH(coord), 0.0, 0.0));
+    imageStore(uOutX, id, vec4(OceanFFTResultX(coord), 0.0, 0.0));
+    imageStore(uOutZ, id, vec4(OceanFFTResultZ(coord), 0.0, 0.0));
+#endif
+}

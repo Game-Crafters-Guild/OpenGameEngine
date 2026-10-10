@@ -1,0 +1,19 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="#A8D8EC" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round">
+  <defs>
+    <radialGradient id="vfMass" cx="46%" cy="52%" r="52%">
+      <stop offset="0" stop-color="#A8D8EC" stop-opacity=".6"/>
+      <stop offset=".45" stop-color="#A8D8EC" stop-opacity=".32"/>
+      <stop offset="1" stop-color="#A8D8EC" stop-opacity="0"/>
+    </radialGradient>
+    <radialGradient id="vfPuff" cx="50%" cy="50%" r="50%">
+      <stop offset="0" stop-color="#A8D8EC" stop-opacity=".4"/>
+      <stop offset="1" stop-color="#A8D8EC" stop-opacity="0"/>
+    </radialGradient>
+  </defs>
+  <circle cx="11.2" cy="12.4" r="11.6" fill="url(#vfMass)" stroke="none"/>
+  <circle cx="17.6" cy="8" r="6.4" fill="url(#vfPuff)" stroke="none"/>
+  <path d="M6.8 6.6h7.4" opacity=".9"/>
+  <path d="M2.6 10.6h8.2M14.2 10.6h7.2" opacity=".75"/>
+  <path d="M5.2 14.6h11.4" opacity=".6"/>
+  <path d="M9.8 18.4h6.8" opacity=".4"/>
+</svg>

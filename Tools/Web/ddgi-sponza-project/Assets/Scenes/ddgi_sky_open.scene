@@ -1,0 +1,159 @@
+[scene name="DdgiSkyOpen" version=1]
+; DDGI sky + classify instrument. The Cornell box with
+; its CEILING REMOVED and the sky turned back on: interior spans x:[-3,3] y:[0,4]
+; z:[-3,3], all-white walls, no sun and no point light, so the ONLY light source
+; in the scene is the gradient sky arriving through the open top. Every lit pixel
+; on the floor is therefore sky radiance that a probe miss-ray carried in, which
+; is exactly what DDGIVolume.SkyIntensity scales.
+;
+; ddgi_cornell_red.scene cannot serve this gate: it deliberately suppresses the
+; sky (IblIntensity 0.02) so that its colour-bleed metric measures DDGI alone, so
+; a sky knob has nothing to move there.
+;
+; It doubles as the ClassifyStrength instrument, which needs probes genuinely
+; buried in solid geometry:
+;   * ProbePlacement is Adaptive (ddgi_cornell_red.scene is Grid, where the knob
+;     is correctly inert).
+;   * The volume is OVERSIZED relative to the room (7.2 x 5.2 x 7.2 against a
+;     6 x 4 x 6 interior), so the outermost probe shells land inside the 0.2-thick
+;     wall slabs and outside the room entirely.
+;   * A solid pillar stands in the middle of the floor, burying the probes that
+;     land inside it, and a THIN shelf (see its own note) buries a probe plane
+;     just under a lit surface, which is the case that actually moves pixels.
+; At ClassifyStrength 0 none of those probes relocate or deactivate and they pour
+; the light they cannot see into the trilinear gather; at 1 they are pushed out
+; and dropped.
+;
+; All walls are thin (0.2) Cube slabs oversized by 0.2 in their in-plane axes so
+; adjoining walls overlap at the seam rather than leaving a light-leaking gap.
+; The pillar is a Sphere-free distinct primitive for the same reason the red wall
+; in ddgi_cornell_red.scene is a Plane: the software lane bakes ONE uber-material
+; per GPU MESH, so an entity that must stay visually distinct needs its own
+; primitive type. Here every surface shares one white material, so that hazard is
+; moot and the pillar is a Cube like the walls.
+
+[entity id="e_cam"]
+Camera.enabled = true
+Camera.fovY = 60
+Camera.nearZ = 0.05
+Camera.farZ = 100
+; Fixed, never metered: auto-exposure silently equalizes the A/B this scene
+; exists to show (see ddgi_cornell_red.scene's note).
+Camera.exposureControl = 0
+Camera.exposure = 1
+Name.value = "Main Camera"
+Transform.position = (0, 2, -2.6)
+Transform.rotation = (0, 0, 0, 1)
+Transform.scale = (1, 1, 1)
+
+[entity id="e_sky"]
+; Gradient mode with the sun/moon driver off: a fixed, time-independent dome, so
+; two captures minutes apart see identical incoming radiance.
+SkyEnvironment.Mode = 1
+SkyEnvironment.GradientSkyIntensity = 2000
+SkyEnvironment.IblIntensity = 1
+SkyEnvironment.AutoSunMoon = false
+Name.value = "Sky"
+Transform.position = (0, 0, 0)
+Transform.rotation = (0, 0, 0, 1)
+Transform.scale = (1, 1, 1)
+
+[entity id="e_wall_left"]
+MeshRenderer.meshPrimitive = Cube
+MeshRenderer.material = [path="Materials/CornellWhite.material"]
+MeshRenderer.renderLayerMask = 1
+MeshRenderer.receiveShadows = true
+Name.value = "WallLeft"
+Transform.position = (-3.1, 2, 0)
+Transform.rotation = (0, 0, 0, 1)
+Transform.scale = (0.2, 4.4, 6.4)
+
+[entity id="e_wall_right"]
+MeshRenderer.meshPrimitive = Cube
+MeshRenderer.material = [path="Materials/CornellWhite.material"]
+MeshRenderer.renderLayerMask = 1
+MeshRenderer.receiveShadows = true
+Name.value = "WallRight"
+Transform.position = (3.1, 2, 0)
+Transform.rotation = (0, 0, 0, 1)
+Transform.scale = (0.2, 4.4, 6.4)
+
+[entity id="e_wall_floor"]
+MeshRenderer.meshPrimitive = Cube
+MeshRenderer.material = [path="Materials/CornellWhite.material"]
+MeshRenderer.renderLayerMask = 1
+MeshRenderer.receiveShadows = true
+Name.value = "WallFloor"
+Transform.position = (0, -0.1, 0)
+Transform.rotation = (0, 0, 0, 1)
+Transform.scale = (6.4, 0.2, 6.4)
+
+[entity id="e_wall_back"]
+MeshRenderer.meshPrimitive = Cube
+MeshRenderer.material = [path="Materials/CornellWhite.material"]
+MeshRenderer.renderLayerMask = 1
+MeshRenderer.receiveShadows = true
+Name.value = "WallBack"
+Transform.position = (0, 2, 3.1)
+Transform.rotation = (0, 0, 0, 1)
+Transform.scale = (6.4, 4.4, 0.2)
+
+[entity id="e_wall_front"]
+MeshRenderer.meshPrimitive = Cube
+MeshRenderer.material = [path="Materials/CornellWhite.material"]
+MeshRenderer.renderLayerMask = 1
+MeshRenderer.receiveShadows = true
+Name.value = "WallFront"
+Transform.position = (0, 2, -3.1)
+Transform.rotation = (0, 0, 0, 1)
+Transform.scale = (6.4, 4.4, 0.2)
+
+[entity id="e_pillar"]
+; Solid block in the middle of the probe grid: the burial the classify pass
+; exists to find, and the occluder whose shadow boundary DepthSharpness sharpens.
+MeshRenderer.meshPrimitive = Cube
+MeshRenderer.material = [path="Materials/CornellWhite.material"]
+MeshRenderer.renderLayerMask = 1
+MeshRenderer.receiveShadows = true
+Name.value = "Pillar"
+Transform.position = (0, 1.2, 0.6)
+Transform.rotation = (0, 0, 0, 1)
+Transform.scale = (1.6, 2.4, 1.6)
+
+[entity id="e_shelf"]
+; The THIN slab is what makes ClassifyStrength measurable, and the pillar alone
+; is not enough: probes buried deep inside a solid block are invisible from every
+; lit surface anyway, so deactivating them changes the image by ~0.2%. A 0.3-thick
+; shelf is thinner than the 0.65 probe spacing, so the probe plane at y = 0.7 lands
+; INSIDE it, within 0.15 of surfaces the camera can see — close enough that those
+; probes carry most of the trilinear weight for the shelf's own faces and the floor
+; under it. It is also inside the relocation cap (0.45 of a cell = 0.295), so these
+; probes both deactivate AND relocate, exercising both of the classify pass's
+; outputs rather than only the flag.
+MeshRenderer.meshPrimitive = Cube
+MeshRenderer.material = [path="Materials/CornellWhite.material"]
+MeshRenderer.renderLayerMask = 1
+MeshRenderer.receiveShadows = true
+Name.value = "Shelf"
+Transform.position = (-1.6, 0.7, -1.2)
+Transform.rotation = (0, 0, 0, 1)
+Transform.scale = (2.6, 0.3, 2.6)
+
+[entity id="e_ddgi"]
+DDGIVolume.Enabled = true
+; Adaptive, unlike ddgi_cornell_red.scene's Grid — ClassifyStrength only has
+; anything to do while the classify pass exists.
+DDGIVolume.ProbePlacement = 1
+DDGIVolume.ProbesLongAxis = 12
+DDGIVolume.RaysPerProbe = 128
+DDGIVolume.Intensity = 1.0
+DDGIVolume.BounceIntensity = 1.0
+DDGIVolume.RadianceClamp = 8.0
+DDGIVolume.Hysteresis = 0.6
+DDGIVolume.SkyIntensity = 1.0
+DDGIVolume.ClassifyStrength = 1.0
+DDGIVolume.DepthSharpness = 1.0
+Name.value = "DDGIVolume"
+Transform.position = (0, 2, 0)
+Transform.rotation = (0, 0, 0, 1)
+Transform.scale = (7.2, 5.2, 7.2)

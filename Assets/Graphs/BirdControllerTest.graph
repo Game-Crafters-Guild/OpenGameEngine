@@ -1,0 +1,530 @@
+{
+  "kind": "game_logic",
+  "viewport": {
+    "panX": -120.0,
+    "panY": -80.0,
+    "zoom": 0.85
+  },
+  "nodes": [
+    {
+      "id": "entry",
+      "typeId": "Entry",
+      "positionX": 80.0,
+      "positionY": 140.0,
+      "pins": [
+        { "id": "out", "direction": "out", "dataType": "flow", "displayName": "Out" }
+      ]
+    },
+    {
+      "id": "start_sequence",
+      "typeId": "Sequence",
+      "positionX": 300.0,
+      "positionY": 140.0,
+      "pins": [
+        { "id": "in", "direction": "in", "dataType": "flow", "displayName": "In" },
+        { "id": "out0", "direction": "out", "dataType": "flow", "displayName": "Out 1" },
+        { "id": "out1", "direction": "out", "dataType": "flow", "displayName": "Out 2" },
+        { "id": "out2", "direction": "out", "dataType": "flow", "displayName": "Out 3" }
+      ]
+    },
+    {
+      "id": "flap_pressed",
+      "typeId": "GetInputAction",
+      "positionX": 500.0,
+      "positionY": 20.0,
+      "pins": [
+        { "id": "action", "direction": "in", "dataType": "string", "displayName": "Action" },
+        { "id": "pressed", "direction": "out", "dataType": "bool", "displayName": "Pressed" }
+      ],
+      "parameters": { "action": "Bird.Flap" }
+    },
+    {
+      "id": "flap_branch",
+      "typeId": "Branch",
+      "positionX": 500.0,
+      "positionY": 140.0,
+      "pins": [
+        { "id": "in", "direction": "in", "dataType": "flow", "displayName": "In" },
+        { "id": "condition", "direction": "in", "dataType": "bool", "displayName": "Condition" },
+        { "id": "true", "direction": "out", "dataType": "flow", "displayName": "True" },
+        { "id": "false", "direction": "out", "dataType": "flow", "displayName": "False" }
+      ],
+      "parameters": { "condition": "false" }
+    },
+    {
+      "id": "flap_sequence",
+      "typeId": "Sequence",
+      "positionX": 720.0,
+      "positionY": 80.0,
+      "pins": [
+        { "id": "in", "direction": "in", "dataType": "flow", "displayName": "In" },
+        { "id": "out0", "direction": "out", "dataType": "flow", "displayName": "Out 1" },
+        { "id": "out1", "direction": "out", "dataType": "flow", "displayName": "Out 2" },
+        { "id": "out2", "direction": "out", "dataType": "flow", "displayName": "Out 3" }
+      ]
+    },
+    {
+      "id": "flap_sound",
+      "typeId": "PlaySound",
+      "positionX": 940.0,
+      "positionY": -20.0,
+      "pins": [
+        { "id": "in", "direction": "in", "dataType": "flow", "displayName": "In" },
+        { "id": "clipGuid", "direction": "in", "dataType": "string", "displayName": "Clip" },
+        { "id": "volume", "direction": "in", "dataType": "float", "displayName": "Volume" },
+        { "id": "pitch", "direction": "in", "dataType": "float", "displayName": "Pitch" },
+        { "id": "loop", "direction": "in", "dataType": "bool", "displayName": "Loop" },
+        { "id": "spatialized", "direction": "in", "dataType": "bool", "displayName": "3D" },
+        { "id": "position", "direction": "in", "dataType": "float3", "displayName": "Position" },
+        { "id": "out", "direction": "out", "dataType": "flow", "displayName": "Out" }
+      ],
+      "parameters": {
+        "clipGuid": "Assets/Audio/Bird/WingFlap.wav",
+        "volume": "0.65",
+        "pitch": "1.05",
+        "loop": "false",
+        "spatialized": "true",
+        "position": "0, 0.8, 0",
+        "worldId": "0",
+        "bus": "2"
+      }
+    },
+    {
+      "id": "flap_force_vector",
+      "typeId": "MakeVector3",
+      "positionX": 940.0,
+      "positionY": 170.0,
+      "pins": [
+        { "id": "x", "direction": "in", "dataType": "float", "displayName": "X" },
+        { "id": "y", "direction": "in", "dataType": "float", "displayName": "Y" },
+        { "id": "z", "direction": "in", "dataType": "float", "displayName": "Z" },
+        { "id": "vector", "direction": "out", "dataType": "float3", "displayName": "Vector" }
+      ],
+      "parameters": { "x": "0", "y": "8", "z": "1.5" }
+    },
+    {
+      "id": "flap_force",
+      "typeId": "AddForce",
+      "positionX": 1180.0,
+      "positionY": 120.0,
+      "pins": [
+        { "id": "in", "direction": "in", "dataType": "flow", "displayName": "In" },
+        { "id": "entity", "direction": "in", "dataType": "entity", "displayName": "Entity" },
+        { "id": "force", "direction": "in", "dataType": "float3", "displayName": "Force" },
+        { "id": "out", "direction": "out", "dataType": "flow", "displayName": "Out" }
+      ],
+      "parameters": { "entity": "self", "force": "0, 8, 1.5" }
+    },
+    {
+      "id": "flap_anim",
+      "typeId": "SetAnimatorTrigger",
+      "positionX": 940.0,
+      "positionY": 310.0,
+      "pins": [
+        { "id": "in", "direction": "in", "dataType": "flow", "displayName": "In" },
+        { "id": "entity", "direction": "in", "dataType": "entity", "displayName": "Entity" },
+        { "id": "name", "direction": "in", "dataType": "string", "displayName": "Name" },
+        { "id": "out", "direction": "out", "dataType": "flow", "displayName": "Out" }
+      ],
+      "parameters": { "entity": "self", "name": "Flap" }
+    },
+    {
+      "id": "glide_pressed",
+      "typeId": "GetInputAction",
+      "positionX": 720.0,
+      "positionY": 430.0,
+      "pins": [
+        { "id": "action", "direction": "in", "dataType": "string", "displayName": "Action" },
+        { "id": "pressed", "direction": "out", "dataType": "bool", "displayName": "Pressed" }
+      ],
+      "parameters": { "action": "Bird.Glide" }
+    },
+    {
+      "id": "glide_branch",
+      "typeId": "Branch",
+      "positionX": 720.0,
+      "positionY": 560.0,
+      "pins": [
+        { "id": "in", "direction": "in", "dataType": "flow", "displayName": "In" },
+        { "id": "condition", "direction": "in", "dataType": "bool", "displayName": "Condition" },
+        { "id": "true", "direction": "out", "dataType": "flow", "displayName": "True" },
+        { "id": "false", "direction": "out", "dataType": "flow", "displayName": "False" }
+      ],
+      "parameters": { "condition": "false" }
+    },
+    {
+      "id": "glide_sound",
+      "typeId": "PlaySound",
+      "positionX": 940.0,
+      "positionY": 500.0,
+      "pins": [
+        { "id": "in", "direction": "in", "dataType": "flow", "displayName": "In" },
+        { "id": "clipGuid", "direction": "in", "dataType": "string", "displayName": "Clip" },
+        { "id": "volume", "direction": "in", "dataType": "float", "displayName": "Volume" },
+        { "id": "pitch", "direction": "in", "dataType": "float", "displayName": "Pitch" },
+        { "id": "loop", "direction": "in", "dataType": "bool", "displayName": "Loop" },
+        { "id": "spatialized", "direction": "in", "dataType": "bool", "displayName": "3D" },
+        { "id": "position", "direction": "in", "dataType": "float3", "displayName": "Position" },
+        { "id": "out", "direction": "out", "dataType": "flow", "displayName": "Out" }
+      ],
+      "parameters": {
+        "clipGuid": "Assets/Audio/Bird/Glide.wav",
+        "volume": "0.35",
+        "pitch": "0.95",
+        "loop": "false",
+        "spatialized": "true",
+        "position": "0, 0.7, 0",
+        "worldId": "0",
+        "bus": "2"
+      }
+    },
+    {
+      "id": "glide_anim",
+      "typeId": "SetAnimatorBool",
+      "positionX": 1180.0,
+      "positionY": 500.0,
+      "pins": [
+        { "id": "in", "direction": "in", "dataType": "flow", "displayName": "In" },
+        { "id": "entity", "direction": "in", "dataType": "entity", "displayName": "Entity" },
+        { "id": "name", "direction": "in", "dataType": "string", "displayName": "Name" },
+        { "id": "value", "direction": "in", "dataType": "bool", "displayName": "Value" },
+        { "id": "out", "direction": "out", "dataType": "flow", "displayName": "Out" }
+      ],
+      "parameters": { "entity": "self", "name": "IsGliding", "value": "true" }
+    },
+    {
+      "id": "dive_pressed",
+      "typeId": "GetInputAction",
+      "positionX": 940.0,
+      "positionY": 690.0,
+      "pins": [
+        { "id": "action", "direction": "in", "dataType": "string", "displayName": "Action" },
+        { "id": "pressed", "direction": "out", "dataType": "bool", "displayName": "Pressed" }
+      ],
+      "parameters": { "action": "Bird.Dive" }
+    },
+    {
+      "id": "dive_branch",
+      "typeId": "Branch",
+      "positionX": 940.0,
+      "positionY": 820.0,
+      "pins": [
+        { "id": "in", "direction": "in", "dataType": "flow", "displayName": "In" },
+        { "id": "condition", "direction": "in", "dataType": "bool", "displayName": "Condition" },
+        { "id": "true", "direction": "out", "dataType": "flow", "displayName": "True" },
+        { "id": "false", "direction": "out", "dataType": "flow", "displayName": "False" }
+      ],
+      "parameters": { "condition": "false" }
+    },
+    {
+      "id": "dive_velocity_vector",
+      "typeId": "MakeVector3",
+      "positionX": 1160.0,
+      "positionY": 700.0,
+      "pins": [
+        { "id": "x", "direction": "in", "dataType": "float", "displayName": "X" },
+        { "id": "y", "direction": "in", "dataType": "float", "displayName": "Y" },
+        { "id": "z", "direction": "in", "dataType": "float", "displayName": "Z" },
+        { "id": "vector", "direction": "out", "dataType": "float3", "displayName": "Vector" }
+      ],
+      "parameters": { "x": "0", "y": "-12", "z": "4" }
+    },
+    {
+      "id": "dive_velocity",
+      "typeId": "SetVelocity",
+      "positionX": 1400.0,
+      "positionY": 760.0,
+      "pins": [
+        { "id": "in", "direction": "in", "dataType": "flow", "displayName": "In" },
+        { "id": "entity", "direction": "in", "dataType": "entity", "displayName": "Entity" },
+        { "id": "velocity", "direction": "in", "dataType": "float3", "displayName": "Velocity" },
+        { "id": "out", "direction": "out", "dataType": "flow", "displayName": "Out" }
+      ],
+      "parameters": { "entity": "self", "velocity": "0, -12, 4" }
+    },
+    {
+      "id": "dive_anim",
+      "typeId": "PlayAnimation",
+      "positionX": 1640.0,
+      "positionY": 760.0,
+      "pins": [
+        { "id": "in", "direction": "in", "dataType": "flow", "displayName": "In" },
+        { "id": "entity", "direction": "in", "dataType": "entity", "displayName": "Entity" },
+        { "id": "clipGuid", "direction": "in", "dataType": "string", "displayName": "Clip" },
+        { "id": "out", "direction": "out", "dataType": "flow", "displayName": "Out" }
+      ],
+      "parameters": { "entity": "self", "clipGuid": "Assets/Animations/Bird_Dive.anim", "loop": "false" }
+    },
+    {
+      "id": "move_axis",
+      "typeId": "GetInputAxis",
+      "positionX": 1160.0,
+      "positionY": 1010.0,
+      "pins": [
+        { "id": "axis", "direction": "in", "dataType": "string", "displayName": "Axis" },
+        { "id": "value", "direction": "out", "dataType": "float", "displayName": "Value" }
+      ],
+      "parameters": { "axis": "Bird.MoveX" }
+    },
+    {
+      "id": "move_axis_abs",
+      "typeId": "FloatAbs",
+      "positionX": 1380.0,
+      "positionY": 1010.0,
+      "pins": [
+        { "id": "value", "direction": "in", "dataType": "float", "displayName": "Value" },
+        { "id": "result", "direction": "out", "dataType": "float", "displayName": "Result" }
+      ],
+      "parameters": { "value": "0" }
+    },
+    {
+      "id": "move_compare",
+      "typeId": "CompareFloat",
+      "positionX": 1160.0,
+      "positionY": 1120.0,
+      "pins": [
+        { "id": "in", "direction": "in", "dataType": "flow", "displayName": "In" },
+        { "id": "a", "direction": "in", "dataType": "float", "displayName": "A" },
+        { "id": "b", "direction": "in", "dataType": "float", "displayName": "B" },
+        { "id": "true", "direction": "out", "dataType": "flow", "displayName": "True" },
+        { "id": "false", "direction": "out", "dataType": "flow", "displayName": "False" }
+      ],
+      "parameters": { "a": "0", "b": "0.1", "comparison": "greater" }
+    },
+    {
+      "id": "fly_anim",
+      "typeId": "PlayAnimation",
+      "positionX": 1400.0,
+      "positionY": 1080.0,
+      "pins": [
+        { "id": "in", "direction": "in", "dataType": "flow", "displayName": "In" },
+        { "id": "entity", "direction": "in", "dataType": "entity", "displayName": "Entity" },
+        { "id": "clipGuid", "direction": "in", "dataType": "string", "displayName": "Clip" },
+        { "id": "out", "direction": "out", "dataType": "flow", "displayName": "Out" }
+      ],
+      "parameters": { "entity": "self", "clipGuid": "Assets/Animations/Bird_Fly.anim", "loop": "true" }
+    },
+    {
+      "id": "idle_anim",
+      "typeId": "PlayAnimation",
+      "positionX": 1400.0,
+      "positionY": 1220.0,
+      "pins": [
+        { "id": "in", "direction": "in", "dataType": "flow", "displayName": "In" },
+        { "id": "entity", "direction": "in", "dataType": "entity", "displayName": "Entity" },
+        { "id": "clipGuid", "direction": "in", "dataType": "string", "displayName": "Clip" },
+        { "id": "out", "direction": "out", "dataType": "flow", "displayName": "Out" }
+      ],
+      "parameters": { "entity": "self", "clipGuid": "Assets/Animations/Bird_Idle.anim", "loop": "true" }
+    },
+    {
+      "id": "collision_event",
+      "typeId": "CollisionEvent",
+      "positionX": 500.0,
+      "positionY": 1320.0,
+      "pins": [
+        { "id": "in", "direction": "in", "dataType": "flow", "displayName": "In" },
+        { "id": "entity", "direction": "in", "dataType": "entity", "displayName": "Entity" },
+        { "id": "tag", "direction": "in", "dataType": "string", "displayName": "Tag" },
+        { "id": "hit", "direction": "out", "dataType": "flow", "displayName": "Hit" },
+        { "id": "miss", "direction": "out", "dataType": "flow", "displayName": "Miss" }
+      ],
+      "parameters": { "entity": "self", "phase": "enter", "tag": "Hazard" }
+    },
+    {
+      "id": "impact_sequence",
+      "typeId": "Sequence",
+      "positionX": 720.0,
+      "positionY": 1320.0,
+      "pins": [
+        { "id": "in", "direction": "in", "dataType": "flow", "displayName": "In" },
+        { "id": "out0", "direction": "out", "dataType": "flow", "displayName": "Out 1" },
+        { "id": "out1", "direction": "out", "dataType": "flow", "displayName": "Out 2" },
+        { "id": "out2", "direction": "out", "dataType": "flow", "displayName": "Out 3" }
+      ]
+    },
+    {
+      "id": "impact_sound",
+      "typeId": "PlaySound",
+      "positionX": 940.0,
+      "positionY": 1260.0,
+      "pins": [
+        { "id": "in", "direction": "in", "dataType": "flow", "displayName": "In" },
+        { "id": "clipGuid", "direction": "in", "dataType": "string", "displayName": "Clip" },
+        { "id": "volume", "direction": "in", "dataType": "float", "displayName": "Volume" },
+        { "id": "pitch", "direction": "in", "dataType": "float", "displayName": "Pitch" },
+        { "id": "loop", "direction": "in", "dataType": "bool", "displayName": "Loop" },
+        { "id": "spatialized", "direction": "in", "dataType": "bool", "displayName": "3D" },
+        { "id": "position", "direction": "in", "dataType": "float3", "displayName": "Position" },
+        { "id": "out", "direction": "out", "dataType": "flow", "displayName": "Out" }
+      ],
+      "parameters": {
+        "clipGuid": "Assets/Audio/Bird/Impact.wav",
+        "volume": "0.9",
+        "pitch": "0.8",
+        "loop": "false",
+        "spatialized": "true",
+        "position": "0, 0.5, 0",
+        "worldId": "0",
+        "bus": "2"
+      }
+    },
+    {
+      "id": "impact_anim",
+      "typeId": "SetAnimatorTrigger",
+      "positionX": 940.0,
+      "positionY": 1410.0,
+      "pins": [
+        { "id": "in", "direction": "in", "dataType": "flow", "displayName": "In" },
+        { "id": "entity", "direction": "in", "dataType": "entity", "displayName": "Entity" },
+        { "id": "name", "direction": "in", "dataType": "string", "displayName": "Name" },
+        { "id": "out", "direction": "out", "dataType": "flow", "displayName": "Out" }
+      ],
+      "parameters": { "entity": "self", "name": "Hit" }
+    },
+    {
+      "id": "bounce_force_vector",
+      "typeId": "MakeVector3",
+      "positionX": 940.0,
+      "positionY": 1570.0,
+      "pins": [
+        { "id": "x", "direction": "in", "dataType": "float", "displayName": "X" },
+        { "id": "y", "direction": "in", "dataType": "float", "displayName": "Y" },
+        { "id": "z", "direction": "in", "dataType": "float", "displayName": "Z" },
+        { "id": "vector", "direction": "out", "dataType": "float3", "displayName": "Vector" }
+      ],
+      "parameters": { "x": "0", "y": "4", "z": "-3" }
+    },
+    {
+      "id": "bounce_force",
+      "typeId": "AddForce",
+      "positionX": 1180.0,
+      "positionY": 1530.0,
+      "pins": [
+        { "id": "in", "direction": "in", "dataType": "flow", "displayName": "In" },
+        { "id": "entity", "direction": "in", "dataType": "entity", "displayName": "Entity" },
+        { "id": "force", "direction": "in", "dataType": "float3", "displayName": "Force" },
+        { "id": "out", "direction": "out", "dataType": "flow", "displayName": "Out" }
+      ],
+      "parameters": { "entity": "self", "force": "0, 4, -3" }
+    },
+    {
+      "id": "perch_trigger",
+      "typeId": "TriggerEvent",
+      "positionX": 500.0,
+      "positionY": 1780.0,
+      "pins": [
+        { "id": "in", "direction": "in", "dataType": "flow", "displayName": "In" },
+        { "id": "entity", "direction": "in", "dataType": "entity", "displayName": "Entity" },
+        { "id": "tag", "direction": "in", "dataType": "string", "displayName": "Tag" },
+        { "id": "entered", "direction": "out", "dataType": "flow", "displayName": "Entered" },
+        { "id": "miss", "direction": "out", "dataType": "flow", "displayName": "Miss" }
+      ],
+      "parameters": { "entity": "self", "phase": "enter", "tag": "Perch" }
+    },
+    {
+      "id": "land_sequence",
+      "typeId": "Sequence",
+      "positionX": 720.0,
+      "positionY": 1780.0,
+      "pins": [
+        { "id": "in", "direction": "in", "dataType": "flow", "displayName": "In" },
+        { "id": "out0", "direction": "out", "dataType": "flow", "displayName": "Out 1" },
+        { "id": "out1", "direction": "out", "dataType": "flow", "displayName": "Out 2" },
+        { "id": "out2", "direction": "out", "dataType": "flow", "displayName": "Out 3" }
+      ]
+    },
+    {
+      "id": "land_sound",
+      "typeId": "PlaySound",
+      "positionX": 940.0,
+      "positionY": 1720.0,
+      "pins": [
+        { "id": "in", "direction": "in", "dataType": "flow", "displayName": "In" },
+        { "id": "clipGuid", "direction": "in", "dataType": "string", "displayName": "Clip" },
+        { "id": "volume", "direction": "in", "dataType": "float", "displayName": "Volume" },
+        { "id": "pitch", "direction": "in", "dataType": "float", "displayName": "Pitch" },
+        { "id": "loop", "direction": "in", "dataType": "bool", "displayName": "Loop" },
+        { "id": "spatialized", "direction": "in", "dataType": "bool", "displayName": "3D" },
+        { "id": "position", "direction": "in", "dataType": "float3", "displayName": "Position" },
+        { "id": "out", "direction": "out", "dataType": "flow", "displayName": "Out" }
+      ],
+      "parameters": {
+        "clipGuid": "Assets/Audio/Bird/Land.wav",
+        "volume": "0.55",
+        "pitch": "1.0",
+        "loop": "false",
+        "spatialized": "true",
+        "position": "0, 0.4, 0",
+        "worldId": "0",
+        "bus": "2"
+      }
+    },
+    {
+      "id": "land_anim",
+      "typeId": "PlayAnimation",
+      "positionX": 940.0,
+      "positionY": 1870.0,
+      "pins": [
+        { "id": "in", "direction": "in", "dataType": "flow", "displayName": "In" },
+        { "id": "entity", "direction": "in", "dataType": "entity", "displayName": "Entity" },
+        { "id": "clipGuid", "direction": "in", "dataType": "string", "displayName": "Clip" },
+        { "id": "out", "direction": "out", "dataType": "flow", "displayName": "Out" }
+      ],
+      "parameters": { "entity": "self", "clipGuid": "Assets/Animations/Bird_Land.anim", "loop": "false" }
+    },
+    {
+      "id": "land_event",
+      "typeId": "SendEvent",
+      "positionX": 940.0,
+      "positionY": 2020.0,
+      "pins": [
+        { "id": "in", "direction": "in", "dataType": "flow", "displayName": "In" },
+        { "id": "eventName", "direction": "in", "dataType": "string", "displayName": "Event" },
+        { "id": "out", "direction": "out", "dataType": "flow", "displayName": "Out" }
+      ],
+      "parameters": { "eventName": "BirdReachedPerch" }
+    }
+  ],
+  "variables": [
+    { "name": "BirdState", "type": "string", "value": "Idle", "public": true, "global": false, "createdOrder": 0 },
+    { "name": "FlapForce", "type": "float", "value": "8", "public": true, "global": false, "createdOrder": 1, "rangeMin": "0", "rangeMax": "20" },
+    { "name": "LastCollisionTag", "type": "string", "value": "", "public": false, "global": false, "createdOrder": 2 }
+  ],
+  "textures": [],
+  "links": [
+    { "id": "link_0", "sourceNodeId": "entry", "sourcePinId": "out", "targetNodeId": "start_sequence", "targetPinId": "in" },
+    { "id": "link_1", "sourceNodeId": "start_sequence", "sourcePinId": "out0", "targetNodeId": "flap_branch", "targetPinId": "in" },
+    { "id": "link_2", "sourceNodeId": "start_sequence", "sourcePinId": "out1", "targetNodeId": "collision_event", "targetPinId": "in" },
+    { "id": "link_3", "sourceNodeId": "start_sequence", "sourcePinId": "out2", "targetNodeId": "perch_trigger", "targetPinId": "in" },
+    { "id": "link_4", "sourceNodeId": "flap_pressed", "sourcePinId": "pressed", "targetNodeId": "flap_branch", "targetPinId": "condition" },
+    { "id": "link_5", "sourceNodeId": "flap_branch", "sourcePinId": "true", "targetNodeId": "flap_sequence", "targetPinId": "in" },
+    { "id": "link_6", "sourceNodeId": "flap_branch", "sourcePinId": "false", "targetNodeId": "glide_branch", "targetPinId": "in" },
+    { "id": "link_7", "sourceNodeId": "flap_sequence", "sourcePinId": "out0", "targetNodeId": "flap_sound", "targetPinId": "in" },
+    { "id": "link_8", "sourceNodeId": "flap_sequence", "sourcePinId": "out1", "targetNodeId": "flap_force", "targetPinId": "in" },
+    { "id": "link_9", "sourceNodeId": "flap_sequence", "sourcePinId": "out2", "targetNodeId": "flap_anim", "targetPinId": "in" },
+    { "id": "link_10", "sourceNodeId": "flap_force_vector", "sourcePinId": "vector", "targetNodeId": "flap_force", "targetPinId": "force" },
+    { "id": "link_11", "sourceNodeId": "glide_pressed", "sourcePinId": "pressed", "targetNodeId": "glide_branch", "targetPinId": "condition" },
+    { "id": "link_12", "sourceNodeId": "glide_branch", "sourcePinId": "true", "targetNodeId": "glide_sound", "targetPinId": "in" },
+    { "id": "link_13", "sourceNodeId": "glide_sound", "sourcePinId": "out", "targetNodeId": "glide_anim", "targetPinId": "in" },
+    { "id": "link_14", "sourceNodeId": "glide_branch", "sourcePinId": "false", "targetNodeId": "dive_branch", "targetPinId": "in" },
+    { "id": "link_15", "sourceNodeId": "dive_pressed", "sourcePinId": "pressed", "targetNodeId": "dive_branch", "targetPinId": "condition" },
+    { "id": "link_16", "sourceNodeId": "dive_branch", "sourcePinId": "true", "targetNodeId": "dive_velocity", "targetPinId": "in" },
+    { "id": "link_17", "sourceNodeId": "dive_velocity", "sourcePinId": "out", "targetNodeId": "dive_anim", "targetPinId": "in" },
+    { "id": "link_18", "sourceNodeId": "dive_velocity_vector", "sourcePinId": "vector", "targetNodeId": "dive_velocity", "targetPinId": "velocity" },
+    { "id": "link_19", "sourceNodeId": "dive_branch", "sourcePinId": "false", "targetNodeId": "move_compare", "targetPinId": "in" },
+    { "id": "link_20", "sourceNodeId": "move_axis", "sourcePinId": "value", "targetNodeId": "move_axis_abs", "targetPinId": "value" },
+    { "id": "link_21", "sourceNodeId": "move_axis_abs", "sourcePinId": "result", "targetNodeId": "move_compare", "targetPinId": "a" },
+    { "id": "link_22", "sourceNodeId": "move_compare", "sourcePinId": "true", "targetNodeId": "fly_anim", "targetPinId": "in" },
+    { "id": "link_23", "sourceNodeId": "move_compare", "sourcePinId": "false", "targetNodeId": "idle_anim", "targetPinId": "in" },
+    { "id": "link_24", "sourceNodeId": "collision_event", "sourcePinId": "hit", "targetNodeId": "impact_sequence", "targetPinId": "in" },
+    { "id": "link_25", "sourceNodeId": "impact_sequence", "sourcePinId": "out0", "targetNodeId": "impact_sound", "targetPinId": "in" },
+    { "id": "link_26", "sourceNodeId": "impact_sequence", "sourcePinId": "out1", "targetNodeId": "impact_anim", "targetPinId": "in" },
+    { "id": "link_27", "sourceNodeId": "impact_sequence", "sourcePinId": "out2", "targetNodeId": "bounce_force", "targetPinId": "in" },
+    { "id": "link_28", "sourceNodeId": "bounce_force_vector", "sourcePinId": "vector", "targetNodeId": "bounce_force", "targetPinId": "force" },
+    { "id": "link_29", "sourceNodeId": "perch_trigger", "sourcePinId": "entered", "targetNodeId": "land_sequence", "targetPinId": "in" },
+    { "id": "link_30", "sourceNodeId": "land_sequence", "sourcePinId": "out0", "targetNodeId": "land_sound", "targetPinId": "in" },
+    { "id": "link_31", "sourceNodeId": "land_sequence", "sourcePinId": "out1", "targetNodeId": "land_anim", "targetPinId": "in" },
+    { "id": "link_32", "sourceNodeId": "land_sequence", "sourcePinId": "out2", "targetNodeId": "land_event", "targetPinId": "in" }
+  ]
+}

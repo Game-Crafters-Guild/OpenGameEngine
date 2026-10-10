@@ -1,0 +1,15 @@
+# Per-run artifacts written by harness.mjs.
+# Backups are restored automatically on exit; results are regenerated each run.
+# Both are useful locally but shouldn't be checked in.
+backups/
+results/
+
+# Editor/runtime-generated derived caches for the test projects. The .assetdb is
+# a delete-safe cache (never authoritative) and .Cache holds compiled shaders;
+# both are rebuilt on open, so they must not be checked in.
+*/AssetDatabase.assetdb
+*/.Cache/
+
+# Override the root .gitignore's `lib/` rule — our harness lib is source.
+!lib/
+!lib/**

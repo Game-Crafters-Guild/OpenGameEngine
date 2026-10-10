@@ -1,0 +1,32 @@
+#version 450
+
+// Test-only probe for the particle sheet coverage (ParticleCoverageTests).
+//
+// Each invocation takes one sheet texel's alpha, evaluates GE_ParticleCoverage on the device,
+// and reports what that texel adds over black when the particle carries an HDR colour (the
+// straight-alpha blend's colour times coverage) and whether GE_ParticleDrawsNothing discards a
+// fragment of that coverage. Evaluated here rather than re-implemented on the CPU, so the test
+// measures the shipped GLSL.
+
+#include "Includes/particle_coverage.glsl"
+
+layout(local_size_x = 64) in;
+
+// x = the texel's alpha (in), y = its coverage (out), z = the colour it adds over black (out),
+// w = 1 when a fragment of that coverage is discarded, else 0 (out).
+layout(set = 0, binding = 0) buffer ProbeTexels { vec4 texels[]; } uTexels;
+
+layout(push_constant) uniform ProbePC
+{
+    // x = texel count, y = the particle's HDR colour; zw unused.
+    vec4 params;
+} pc;
+
+void main()
+{
+    uint i = gl_GlobalInvocationID.x;
+    if (i >= uint(pc.params.x))
+        return;
+    float coverage = GE_ParticleCoverage(uTexels.texels[i].x);
+    uTexels.texels[i].yzw = vec3(coverage, pc.params.y * coverage, GE_ParticleDrawsNothing(coverage) ? 1.0 : 0.0);
+}

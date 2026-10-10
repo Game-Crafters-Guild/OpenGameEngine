@@ -1,0 +1,17 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <TargetFramework>net10.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <AssemblyName>ComponentScanner</AssemblyName>
+    <RootNamespace>GameEngine.ComponentScanner</RootNamespace>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <!-- Expose internal parser/scanner classes to the unit-test assembly. -->
+    <InternalsVisibleTo Include="ComponentScanner.Tests" />
+  </ItemGroup>
+
+</Project>

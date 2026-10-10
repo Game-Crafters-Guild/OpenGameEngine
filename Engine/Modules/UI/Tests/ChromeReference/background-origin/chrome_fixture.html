@@ -1,0 +1,69 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<title>background-origin ground truth (padding box) — mirror of BackgroundOriginPaddingBoxTests</title>
+<style>
+  /* Chrome mirror for the background-image POSITIONING AREA.
+     CSS: background-origin's initial value is padding-box, so background-size
+     and background-position resolve against the border box MINUS the border
+     widths. background-clip stays border-box (its own initial value), so the
+     image is CLIPPED at the outer contour and the border paints OVER it.
+
+     Every probe uses a TRANSLUCENT border, because an opaque border cannot
+     tell the models apart. Discriminating bytes for the top band of #pad:
+       border over FILL   (128,128,  0)  <- CSS / padding-box origin
+       border over IMAGE  (255,  0,128)  <- border-box origin, border over image
+       IMAGE, no border   (255,  0,255)  <- border-box origin, image over border
+
+     Run: chrome.exe --headless=new --force-device-scale-factor=1
+                     --window-size=800,600 --screenshot=chrome.png <this file>
+     Sample: sample_pixels.ps1 */
+  html, body { margin: 0; padding: 0; }
+  #root { width: 800px; height: 600px; background-color: #272727; display: flex; flex-direction: column; }
+  .row { display: flex; flex-direction: row; }
+  .probe {
+    margin: 20px;
+    background-color: #00ff00;
+    /* 16x16 solid magenta PNG — same intrinsic size as the engine arm's
+       16x16 external texture, so `contain` scales identically. */
+    background-image: url("data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAABAAAAAQCAYAAAAf8/9hAAAAJUlEQVR4nGP8z/D/PwMFgIkSzaMGQAATA4WAadQAhtEwYKA8DABhnAMdzE79kQAAAABJRU5ErkJggg==");
+    background-repeat: no-repeat;
+    background-position: center;
+    /* border-box, because that is what the engine's CSS resolves to: a
+       `width` there is the BORDER box, so the mirror must size the same way or
+       every probe point drifts. */
+    box-sizing: border-box;
+  }
+  /* contain in a NON-square box: the image fits the padding box's height and
+     touches its top/bottom edge, so the top band is the discriminator. */
+  #pad { width: 200px; height: 120px; border: 10px solid rgba(255,0,0,0.5); background-size: contain; }
+  /* Square + rounded — the shipped thumbnail shape (.texture-preview,
+     .asset-field-preview, .grid-cell .thumb): contain fills the padding box
+     exactly, so the image's square corners reach into the corner band. */
+  #sq  { width: 100px; height: 100px; border: 10px solid rgba(255,0,0,0.5); border-radius: 20px; background-size: contain; }
+  /* cover: the image overflows the padding box and IS under the border, so the
+     band reads border-over-image. This probe stays a paint-ORDER question after
+     the positioning area is fixed. */
+  #cov { width: 200px; height: 120px; border: 10px solid rgba(255,0,0,0.5); background-size: cover; }
+  /* Opaque border: model-invariant by construction. */
+  #opq { width: 200px; height: 120px; border: 10px solid #ff0000; background-size: contain; }
+  /* Tiling: the tile GRID is anchored to the padding box (positioning area) but
+     PAINTS across the border box (clip area), so tiles continue under the
+     border with the padding-box phase. The tile image is 16x16 with a yellow
+     8x8 top-left quadrant, so the phase is directly readable: the first tile's
+     yellow quadrant must start at the PADDING box origin (30,230), not at the
+     border box origin (20,220). 20px tiles => 10px yellow, 10px magenta. */
+  #tile { width: 200px; height: 120px; border: 10px solid rgba(255,0,0,0.5);
+          background-size: 20px 20px; background-repeat: repeat; background-position: 0 0;
+          background-image: url("data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAABAAAAAQCAYAAAAf8/9hAAAALElEQVR4nGP8/5/hPwM+wIhfmomBQsA0agDDwIcBC6F4prkLmEYNYBj4MAAAWQcFH4g2ko8AAAAASUVORK5CYII="); }
+</style>
+</head>
+<body>
+<div id="root">
+  <div class="row"><div class="probe" id="pad"></div><div class="probe" id="sq"></div></div>
+  <div class="row"><div class="probe" id="cov"></div><div class="probe" id="opq"></div></div>
+  <div class="row"><div class="probe" id="tile"></div></div>
+</div>
+</body>
+</html>

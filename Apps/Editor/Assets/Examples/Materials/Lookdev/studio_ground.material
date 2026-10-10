@@ -1,0 +1,19 @@
+{
+  "schemaVersion": 3,
+  "materialName": "Lookdev - Studio Ground",
+  "lightingModel": "StandardPBR",
+  "alphaMode": "Opaque",
+  "doubleSided": false,
+  "surfaceShader": "Surfaces/standard_pbr.glsl",
+  "properties": {
+    "baseColor": [
+      0.045,
+      0.045,
+      0.05,
+      1.0
+    ],
+    "metallic": 0.0,
+    "roughness": 0.3
+  },
+  "textures": {}
+}

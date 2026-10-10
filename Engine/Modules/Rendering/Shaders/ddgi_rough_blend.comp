@@ -1,0 +1,135 @@
+#version 450
+
+// DDGI ROUGH reflection lobe blend kernel. Reuses the SAME traced rays
+// ddgi_blend.comp's diffuse gather reads (the shared DDGIRayBuffer both trace
+// lanes fill — no separate reflection trace pass) but weights each texel's
+// gather with a power-8 Phong lobe, treating texelDir as a REFLECTION
+// direction rather than a surface normal, instead of the diffuse cosine
+// weight.
+//
+// This is the BROAD of the two lobes. Power 8 (~23.5deg half-max) is matched
+// to the 6x6 octahedral interior it is stored in, whose texel half-width is
+// ~19.2deg — see GE_DDGI_GLOSSY_OCT_RES's table in Includes/ddgi_common.glsl
+// for why a lobe narrower than its own storage buys nothing. The sharp end of
+// the roughness range is served by the separate 16x16 power-64 lobe
+// (ddgi_glossy_blend.comp); the consumer crossfades between the two by
+// roughness (Includes/ddgi_probes.glsl).
+//
+// The shared ray set is spherical-Fibonacci over the FULL sphere, not
+// importance-sampled toward the reflection lobe — a real, documented gap
+// (closing it needs a reflection-aware trace pass with its own ray
+// generation). The lobe powers are what a shared, non-resampled budget of
+// 32-256 rays/probe can actually resolve.
+//
+// C0 (coarse cascade) only — see DDGIProbeFeature::DeclareReflectionPasses's
+// doc for why the reflection lobes do not extend to C1. One workgroup per
+// probe, one thread per atlas texel (same shape as ddgi_blend.comp).
+
+#include "Includes/ddgi_common.glsl"
+
+layout(local_size_x = GE_DDGI_TILE, local_size_y = GE_DDGI_TILE, local_size_z = 1) in;
+
+layout(std140, set = 0, binding = 0) uniform DDGIRoughBlendParams
+{
+    vec4 uGridMinWS;
+    vec4 uGridSizeWS;
+    ivec4 uProbeCount;    // xyz = res; w = probeTotal
+    vec4 uParams0;        // x=minCellWS, y=normalBiasScale (unused here), z=hysteresis, w=unused
+    uvec4 uDispatch0;     // x=probeBase, y=raysPerProbe, z=probesThisTick, w=frameIndex
+    vec4 uTiming;         // x = update dt (ms) since this probe's last blend
+} DDGIParams;
+
+layout(std430, set = 0, binding = 1) readonly buffer DDGIRayBufferRO
+{
+    vec4 ge_ddgiRays[];  // xyz=radiance, w=hitT (>=0 local hit, -1 true miss)
+};
+
+layout(std430, set = 0, binding = 2) buffer DDGIRoughState
+{
+    vec4 ge_ddgiRoughState[];  // rgb = coverage-premultiplied radiance, a = coverage
+};
+
+// Cell record: w = 1 when ddgi_blend.comp reset this slot for a cell change
+// this tick (the followed grid scrolled it to a new world cell), so the lobe
+// history is another place's and must seed fresh too.
+layout(std430, set = 0, binding = 4) readonly buffer DDGIProbeCellRO
+{
+    vec4 ge_ddgiProbeCell[];
+};
+
+GE_DDGIGridInfo GE_DDGIBuildGridInfo()
+{
+    GE_DDGIGridInfo g;
+    g.gridMinWS = DDGIParams.uGridMinWS.xyz;
+    g.gridSizeWS = DDGIParams.uGridSizeWS.xyz;
+    g.probeCount = DDGIParams.uProbeCount.xyz;
+    g.probeTotal = DDGIParams.uProbeCount.w;
+    g.minCellWS = DDGIParams.uParams0.x;
+    g.normalBiasScale = DDGIParams.uParams0.y;
+    g.hysteresis = DDGIParams.uParams0.z;
+    g.intensity = 0.0;  // unused — ReflectionIntensity is consume-time only, see ddgi_blend.comp's fix
+    return g;
+}
+
+void main()
+{
+    uint probeLocal = gl_WorkGroupID.x;
+    int probeIdx = int(DDGIParams.uDispatch0.x) + int(probeLocal);
+    GE_DDGIGridInfo grid = GE_DDGIBuildGridInfo();
+    if (probeLocal >= DDGIParams.uDispatch0.z || probeIdx >= grid.probeTotal)
+        return;
+
+    uvec2 texel = gl_LocalInvocationID.xy;
+    // Gutter texels store the direction of the interior texel they
+    // octahedrally continue, so bilinear taps that straddle a tile edge read a
+    // consistent direction rather than a clamped (wrong) one.
+    ivec2 srcTexel = GE_DDGIOctMirrorTexel(ivec2(texel), GE_DDGI_TILE, GE_DDGI_OCT_RES);
+    vec2 octUV = (vec2(srcTexel) - float(GE_DDGI_BORDER) + 0.5) / float(GE_DDGI_OCT_RES);
+    vec3 reflectDir = GE_OctDecode(octUV);
+
+    uint raysPerProbe = DDGIParams.uDispatch0.y;
+    uint rayBase = uint(probeIdx) * raysPerProbe;
+    mat3 basis = GE_DDGIRayBasis(DDGIParams.uDispatch0.w);
+    vec3 radianceAcc = vec3(0.0);
+    float coverageAcc = 0.0;
+    float weightSum = 0.0;
+    for (uint r = 0u; r < raysPerProbe; ++r)
+    {
+        vec4 ray = GE_DDGIFiniteRay(ge_ddgiRays[rayBase + r]);
+        vec3 rayDir = GE_DDGIRayDirection(r, raysPerProbe, basis);
+        float w = GE_DDGIRoughLobeWeight(max(dot(reflectDir, rayDir), 0.0));
+        float coverage = GE_DDGIRayCoverage(ray.w);
+        radianceAcc += ray.rgb * w * coverage;
+        coverageAcc += w * coverage;
+        // Every ray in the lobe's support counts here, covered or not — see
+        // GE_DDGIRayCoverage's doc on why the uncovered ones must dilute.
+        weightSum += w;
+    }
+    // Lobe-weighted MEAN radiance, not a Monte-Carlo integral. The consumer
+    // feeds this into the split-sum product `pref * (F0*ab.x + ab.y)`
+    // (Includes/ibl.glsl), which expects incoming RADIANCE — the same units
+    // the prefiltered environment cube it composites against carries. The
+    // uniform-sphere integral estimator (4*pi/N)*sum would instead return
+    // L*2*pi/(p+1) for constant incoming radiance L: a lobe-width-dependent
+    // scale (0.7*L at power 8, 0.1*L at power 64) that is not radiance at all
+    // and would make the two lobes disagree with each other and with the cube.
+    // Dividing by the lobe's own weight sum is exact for constant L at any
+    // power. (This is deliberately NOT ddgi_blend.comp's 4/N constant: that
+    // kernel stores irradiance E/PI for a Lambert consumer, a different
+    // quantity with a different consumer contract.)
+    float invWeight = 1.0 / max(weightSum, 1.0e-4);
+    vec4 newRough = vec4(radianceAcc * invWeight, clamp(coverageAcc * invWeight, 0.0, 1.0));
+
+    uint stateBase = uint(probeIdx) * uint(GE_DDGI_TILE * GE_DDGI_TILE);
+    uint stateIdx = stateBase + texel.y * uint(GE_DDGI_TILE) + texel.x;
+    vec4 prevRough = ge_ddgiRoughState[stateIdx];
+    bool invalidHistory = !GE_DDGIFinite(prevRough);
+    if (invalidHistory)
+        prevRough = vec4(0.0);
+    float h = invalidHistory || ge_ddgiProbeCell[probeIdx].w > 0.5 ? 0.0
+                                                 : GE_DDGIHysteresisWeight(grid.hysteresis, DDGIParams.uTiming.x);
+    // Radiance and coverage share ONE coefficient. Blending them with
+    // different retention would drift the stored colour/coverage ratio, which
+    // is what the consumer's composite divides authority by.
+    ge_ddgiRoughState[stateIdx] = mix(newRough, prevRough, h);
+}

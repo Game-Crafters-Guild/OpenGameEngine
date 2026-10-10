@@ -1,0 +1,33 @@
+GameEngine overlay patch for lexbor 3.0.1.
+
+css/selectors: accept :focus-within and :focus-visible pseudo-classes.
+
+lxb_css_selectors_state_pseudo_class() in source/lexbor/css/selectors/state.c
+resolves :focus-within (id 0x0e) and :focus-visible (id 0x0d) by name, then
+routes them into an explicit "not supported" branch that logs
+lxb_css_log_not_supported and returns lxb_css_parser_unexpected_status. That
+fails the whole selector, so lexbor discards the entire style rule (no pseudo
+node is ever emitted). :focus (0x0c), :hover, :checked and :disabled are absent
+from that branch and fall through to `default: break;`, so they are accepted.
+
+The branch exists because lexbor's own DOM selector-matching engine does not
+implement these two pseudo-classes. GameEngine never uses that engine: it uses
+lexbor only to build the selector AST, then matches with its own cascade engine
+(Engine/Modules/UI). Removing the two case labels lets both pseudo-classes fall
+through to `default: break;`, parsing as ordinary simple pseudo-classes exactly
+like :focus. CSSStylesheetParser.cpp::ConvertPseudoSimple already maps
+LXB_CSS_SELECTOR_PSEUDO_CLASS_FOCUS_VISIBLE / _FOCUS_WITHIN to our PseudoClass
+kinds, so the AST node is consumed downstream with no further lexbor change.
+
+diff --git a/source/lexbor/css/selectors/state.c b/source/lexbor/css/selectors/state.c
+--- a/source/lexbor/css/selectors/state.c
++++ b/source/lexbor/css/selectors/state.c
+@@ -1464,8 +1464,6 @@
+     switch (pseudo->id) {
+         case LXB_CSS_SELECTOR_PSEUDO_CLASS_CURRENT:
+         case LXB_CSS_SELECTOR_PSEUDO_CLASS_DEFAULT:
+-        case LXB_CSS_SELECTOR_PSEUDO_CLASS_FOCUS_VISIBLE:
+-        case LXB_CSS_SELECTOR_PSEUDO_CLASS_FOCUS_WITHIN:
+         case LXB_CSS_SELECTOR_PSEUDO_CLASS_FULLSCREEN:
+         case LXB_CSS_SELECTOR_PSEUDO_CLASS_FUTURE:
+         case LXB_CSS_SELECTOR_PSEUDO_CLASS_IN_RANGE:

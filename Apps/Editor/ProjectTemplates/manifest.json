@@ -1,0 +1,26 @@
+{
+  "schemaVersion": 1,
+  "name": "Built-in Templates",
+  "projects": [
+    {
+      "id": "blank",
+      "name": "Blank",
+      "description": "An empty scene — just a grid and a camera.",
+      "accentColor": "#315B86"
+    },
+    {
+      "id": "basic3d",
+      "name": "Basic 3D",
+      "description": "A lit scene with primitives to build on.",
+      "accentColor": "#5A67A7",
+      "thumbnail": "Basic3D/thumbnail.png",
+      "source": { "type": "local", "path": "Basic3D" }
+    },
+    {
+      "id": "openworld",
+      "name": "Open World",
+      "description": "Terrain, sky, and streaming ready to go.",
+      "accentColor": "#3C765D"
+    }
+  ]
+}

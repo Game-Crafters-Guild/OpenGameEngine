@@ -1,0 +1,19 @@
+#version 450
+// Samples one authored footprint through the sampler under test and writes what
+// the sampler returned. Compute has no implicit derivatives, so the gradients the
+// test supplies are exactly the footprint the filter sees.
+layout(local_size_x = 1) in;
+layout(set = 0, binding = 0) uniform sampler2D probeTexture;
+layout(std430, set = 0, binding = 1) readonly buffer ProbeFootprint
+{
+    vec4 centre;     // .xy = sample position in UV
+    vec4 gradients;  // .xy = d(uv)/dx, .zw = d(uv)/dy
+};
+layout(std430, set = 0, binding = 2) writeonly buffer ProbeResult
+{
+    vec4 sampled;
+};
+void main()
+{
+    sampled = textureGrad(probeTexture, centre.xy, gradients.xy, gradients.zw);
+}

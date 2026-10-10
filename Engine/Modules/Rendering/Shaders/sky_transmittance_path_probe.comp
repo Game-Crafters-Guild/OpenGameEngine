@@ -1,0 +1,42 @@
+#version 450
+
+// Test-only probe for the transmittance LUT's path lengths (SkyTransmittanceLutParityTests).
+//
+// It exists because the property it checks cannot be reached from the CPU or from the LUT's own
+// output. The hazard is float32 cancellation in the ray-sphere solve at planet scale, plus the
+// compiler's licence to contract one of the two squares into an FMA -- and the compiler in question
+// is the DRIVER's (MoltenVK hands SPIR-V to Metal, which recompiles it). A CPU simulation of the
+// arithmetic is not the arithmetic that ships.
+//
+// The LUT's own texels cannot see it either: it stores exp(-tau) in rgba16f, and near the surface a
+// 5% error in the path length moves a transmittance of ~1 by less than one fp16 ULP. The path
+// length is the quantity that carries the defect, so the probe reports it directly.
+
+#include "Includes/sky_ray_sphere.glsl"
+
+layout(local_size_x = 64) in;
+
+layout(set = 0, binding = 0) buffer ProbeOut { vec4 result[]; } uOut;
+
+layout(push_constant) uniform ProbePC
+{
+    // x planet radius, y atmosphere radius, z sample radius (the LUT row), w sample count
+    vec4 radiiAndCount;
+} pc;
+
+void main()
+{
+    uint i = gl_GlobalInvocationID.x;
+    uint count = uint(pc.radiiAndCount.w);
+    if (i >= count)
+        return;
+
+    // Same mu sweep the LUT's pixel centres take: mu = mix(-1, 1, (i + 0.5) / count).
+    float mu = mix(-1.0, 1.0, (float(i) + 0.5) / float(count));
+    float r = pc.radiiAndCount.z;
+
+    float sAtmosphere = GE_DistanceToOuterSphere(r, mu, pc.radiiAndCount.y);
+    float sGround     = GE_DistanceToInnerSphere(r, mu, pc.radiiAndCount.x);
+
+    uOut.result[i] = vec4(sAtmosphere, sGround, mu, r);
+}

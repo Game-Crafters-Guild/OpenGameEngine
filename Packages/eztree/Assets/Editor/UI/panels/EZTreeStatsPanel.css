@@ -1,0 +1,43 @@
+/* Tree Stats panel (eztree package). Bound to the panel subtree only —
+   editor-chrome classes (tab icon, hierarchy rows) live in
+   Editor/UI/EZTreeEditorChrome.css instead. */
+
+.eztree-stats-root {
+	display: flex;
+	flex-direction: column;
+	gap: 8px;
+	padding: 12px;
+}
+
+.eztree-stats-summary {
+	color: #a0a8b0;
+	font-size: 12px;
+}
+
+.eztree-stats-rows {
+	display: flex;
+	flex-direction: column;
+	gap: 4px;
+}
+
+.eztree-stats-row {
+	display: flex;
+	flex-direction: column;
+	gap: 2px;
+	padding: 6px 8px;
+	border-top: 1px solid #333333;
+}
+
+.eztree-stats-row.disabled {
+	opacity: 0.45;
+}
+
+.eztree-stats-row-name {
+	color: #e0e0e0;
+	font-size: 13px;
+}
+
+.eztree-stats-row-detail {
+	color: #808080;
+	font-size: 11px;
+}

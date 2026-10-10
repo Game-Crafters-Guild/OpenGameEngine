@@ -1,0 +1,101 @@
+[scene name="PenumbraRig" version=1]
+; Penumbra-invariance measurement rig (T3).
+;
+; Purpose: give the directional penumbra an ANALYTIC expected width, so a
+; shadow-resolution A/B can be scored against a number rather than against
+; whichever edge a detector happened to latch onto. ShadowStress cannot do this
+; -- its overlapping sphere shadows produce edge widths spanning 1..136 px, and
+; at the default 0.53 deg sun its penumbras sit on the one-texel FLOOR, a regime
+; where resolution-invariance cannot hold by construction.
+;
+; Geometry (all exact, so the prediction is closed-form):
+;   light rotation   Rx(62 deg), quaternion (0.51504, 0, 0, 0.85717)
+;                    => direction (0, -0.88295, 0.46947), 62 deg below horizontal
+;   caster height    8.0 m above the ground plane
+;   depthDelta       = 8.0 / 0.88295 = 9.06 m   (distance along the light ray)
+;   shadow offset    = 9.06 * 0.46947 = +4.25 m in Z
+;   angular diameter 20 deg  =>  tan(half) = tan(10 deg) = 0.17633
+;   penumbra         = 9.06 * 0.17633 = 1.60 m   (physical, unclamped)
+;
+; Why 1.60 m: it must exceed the OLD texel-derived ceiling
+; (4*sqrt(taps)*worldPerTexel = 22.6*worldPerTexel) at BOTH 1024 and 2048, so
+; the old shader clamps to two DIFFERENT world widths and the A/B has something
+; to measure. This scene fits cascade 0 at half-extent 15 m, giving old ceilings
+; of 0.331 m at 2048 and 0.662 m at 1024 -- 1.60 m clears both with margin.
+;
+; Expected result, 1024 vs 2048:
+;   old ceiling (texel-derived)  ->  ratio 2.0   (the defect)
+;   new ceiling (0.5 m world)    ->  ratio 1.0   (both clamp to 0.5 m)
+;
+; The caster is a long thin slab so its shadow has two straight edges running
+; along X. The camera looks straight DOWN, so world-per-pixel on the ground is
+; uniform and a screen COLUMN crosses those edges perpendicular. Measure columns,
+; not rows.
+;
+; Use ShadowDebugMode 2 (shadow_factor) when measuring: it renders the raw
+; shadow term with lighting and tonemapping out of the path, which removes the
+; clipped-exposure trap that invalidated earlier readings.
+
+[entity id="e_cam"]
+Camera.enabled = true
+Camera.perspective = true
+Camera.fovY = 60
+Camera.nearZ = 0.1
+Camera.farZ = 500
+Camera.cullingMask = 4294967295
+Camera.postProcessMask = 4294967295
+Name.value = "Main Camera"
+; Straight down (-Y): Rx(+90 deg) takes the default +Z forward onto -Y.
+; Centred on the shadow strip, which lands at z = +4.25.
+Transform.position = (0, 30, 4.25)
+Transform.rotation = (0.70711, 0, 0, 0.70711)
+Transform.scale = (1, 1, 1)
+
+[entity id="e_sun"]
+Light.enabled = true
+Light.type = 0
+Light.color = (1, 1, 1)
+Light.intensity = 3
+Light.castsLight = true
+Light.castsShadows = true
+Light.cascadeCount = 4
+; Rx(62 deg) -> direction (0, -0.88295, 0.46947). Throws the shadow +4.25 m in
+; Z, clear of the caster's own screen footprint.
+Light.shadowAngularDiameter = 20
+Name.value = "Directional Light"
+Transform.position = (0, 20, 0)
+Transform.rotation = (0.51504, 0, 0, 0.85717)
+Transform.scale = (1, 1, 1)
+
+[entity id="e_amb"]
+Light.enabled = true
+Light.type = 3
+Light.color = (0.5, 0.55, 0.65)
+Light.intensity = 0.3
+Name.value = "Ambient"
+Transform.position = (0, 0, 0)
+Transform.rotation = (0, 0, 0, 1)
+Transform.scale = (1, 1, 1)
+
+[entity id="e_ground"]
+MeshRenderer.meshPrimitive = Cube
+MeshRenderer.renderLayerMask = 1
+MeshRenderer.castShadows = false
+MeshRenderer.receiveShadows = true
+Name.value = "Ground"
+; Top face sits exactly at y = 0, which is what makes depthDelta exactly 16 m.
+Transform.position = (0, -0.5, 0)
+Transform.rotation = (0, 0, 0, 1)
+Transform.scale = (200, 1, 200)
+
+[entity id="e_caster"]
+MeshRenderer.meshPrimitive = Cube
+MeshRenderer.renderLayerMask = 1
+MeshRenderer.castShadows = true
+MeshRenderer.receiveShadows = false
+Name.value = "CasterSlab"
+; Long in X, thin in Z: the shadow's two long edges run along X and are crossed
+; perpendicular by a screen column. Centre at y = 8.0 exactly.
+Transform.position = (0, 8, 0)
+Transform.rotation = (0, 0, 0, 1)
+Transform.scale = (60, 0.4, 4)

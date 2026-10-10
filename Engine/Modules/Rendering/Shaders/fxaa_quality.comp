@@ -1,0 +1,157 @@
+#version 450
+
+// Quality variant of the two-frame FXAA's spatial pass (FxaaQuality::Quality):
+// FXAA 3.11-style edge-walk. Where fxaa.comp estimates one blend direction from
+// the diagonal luma gradient, this classifies the edge as horizontal/vertical,
+// walks BOTH ways along it to find the edge ends, and blends by the pixel's
+// position within the full edge span — markedly better gradients on long,
+// shallow edges — plus a lowpass subpixel term for isolated shimmer. Extra
+// taps are paid on edge pixels only; the early-out gate matches fxaa.comp.
+// Same bindings as fxaa.comp; output feeds fxaa_resolve.comp unchanged.
+
+layout(local_size_x = 8, local_size_y = 8) in;
+
+layout(set = 0, binding = 0, rgba16f) uniform writeonly image2D uOutColor;
+layout(set = 0, binding = 1) uniform sampler2D uSceneColor;
+
+// Same edge gate as fxaa.comp (the FXAA 3.11 quality knobs).
+const float kEdgeThresholdMin = 0.0312;
+const float kEdgeThresholdMax = 0.125;
+// Subpixel aliasing removal strength (3.11 FXAA_QUALITY__SUBPIX).
+const float kSubpixQuality = 0.75;
+// Edge-walk schedule (3.11 preset ~39: fine steps first, then accelerating).
+const int kSearchSteps = 12;
+const float kSearchStep[kSearchSteps] =
+    float[](1.0, 1.0, 1.0, 1.0, 1.0, 1.5, 2.0, 2.0, 2.0, 2.0, 4.0, 8.0);
+
+#include "Includes/perceptual_luma.glsl"
+
+// Edge detection runs on perceptual luma, not the linear RGB this pass is
+// handed — see the include for the curve and why.
+float Luma(vec3 c) { return GE_PerceptualLuma(c); }
+
+float LumaAt(vec2 uv) { return Luma(texture(uSceneColor, uv).rgb); }
+
+void main()
+{
+    const ivec2 size = imageSize(uOutColor);
+    const ivec2 p = ivec2(gl_GlobalInvocationID.xy);
+    if (p.x >= size.x || p.y >= size.y)
+        return;
+
+    const vec2 texel = 1.0 / vec2(size);
+    const vec2 uv = (vec2(p) + 0.5) * texel;
+
+    const vec3 rgbM = texture(uSceneColor, uv).rgb;
+    const float lM = Luma(rgbM);
+    const float lN = LumaAt(uv + vec2(0.0, -1.0) * texel);
+    const float lS = LumaAt(uv + vec2(0.0, 1.0) * texel);
+    const float lW = LumaAt(uv + vec2(-1.0, 0.0) * texel);
+    const float lE = LumaAt(uv + vec2(1.0, 0.0) * texel);
+
+    const float lMin = min(lM, min(min(lN, lS), min(lW, lE)));
+    const float lMax = max(lM, max(max(lN, lS), max(lW, lE)));
+    const float range = lMax - lMin;
+    if (range < max(kEdgeThresholdMin, lMax * kEdgeThresholdMax))
+    {
+        imageStore(uOutColor, p, vec4(rgbM, 1.0));
+        return;
+    }
+
+    const float lNW = LumaAt(uv + vec2(-1.0, -1.0) * texel);
+    const float lNE = LumaAt(uv + vec2(1.0, -1.0) * texel);
+    const float lSW = LumaAt(uv + vec2(-1.0, 1.0) * texel);
+    const float lSE = LumaAt(uv + vec2(1.0, 1.0) * texel);
+
+    // Horizontal edge = luma varies vertically, and vice versa (3.11 metric).
+    const float edgeH = abs(-2.0 * lW + lNW + lSW) + 2.0 * abs(-2.0 * lM + lN + lS) +
+                        abs(-2.0 * lE + lNE + lSE);
+    const float edgeV = abs(-2.0 * lN + lNW + lNE) + 2.0 * abs(-2.0 * lM + lW + lE) +
+                        abs(-2.0 * lS + lSW + lSE);
+    const bool horizontal = edgeH >= edgeV;
+
+    // Steeper of the two gradients across the edge picks its side.
+    const float l1 = horizontal ? lN : lW;
+    const float l2 = horizontal ? lS : lE;
+    const float grad1 = l1 - lM;
+    const float grad2 = l2 - lM;
+    const bool is1Steepest = abs(grad1) >= abs(grad2);
+    const float gradScaled = 0.25 * max(abs(grad1), abs(grad2));
+
+    // Step half a texel across the edge onto it; walk along it from there.
+    const float stepLen = horizontal ? texel.y : texel.x;
+    float lumaLocalAvg;
+    vec2 edgeUv = uv;
+    if (is1Steepest)
+    {
+        lumaLocalAvg = 0.5 * (l1 + lM);
+        if (horizontal)
+            edgeUv.y -= 0.5 * stepLen;
+        else
+            edgeUv.x -= 0.5 * stepLen;
+    }
+    else
+    {
+        lumaLocalAvg = 0.5 * (l2 + lM);
+        if (horizontal)
+            edgeUv.y += 0.5 * stepLen;
+        else
+            edgeUv.x += 0.5 * stepLen;
+    }
+
+    const vec2 walk = horizontal ? vec2(texel.x, 0.0) : vec2(0.0, texel.y);
+    vec2 uv1 = edgeUv - walk * kSearchStep[0];
+    vec2 uv2 = edgeUv + walk * kSearchStep[0];
+    float lumaEnd1 = LumaAt(uv1) - lumaLocalAvg;
+    float lumaEnd2 = LumaAt(uv2) - lumaLocalAvg;
+    bool reached1 = abs(lumaEnd1) >= gradScaled;
+    bool reached2 = abs(lumaEnd2) >= gradScaled;
+
+    for (int i = 1; i < kSearchSteps && !(reached1 && reached2); ++i)
+    {
+        if (!reached1)
+        {
+            uv1 -= walk * kSearchStep[i];
+            lumaEnd1 = LumaAt(uv1) - lumaLocalAvg;
+            reached1 = abs(lumaEnd1) >= gradScaled;
+        }
+        if (!reached2)
+        {
+            uv2 += walk * kSearchStep[i];
+            lumaEnd2 = LumaAt(uv2) - lumaLocalAvg;
+            reached2 = abs(lumaEnd2) >= gradScaled;
+        }
+    }
+
+    // Blend by proximity to the nearer edge end over the full span.
+    const float dist1 = horizontal ? (uv.x - uv1.x) : (uv.y - uv1.y);
+    const float dist2 = horizontal ? (uv2.x - uv.x) : (uv2.y - uv.y);
+    const bool dir1Closer = dist1 < dist2;
+    const float distFinal = min(dist1, dist2);
+    const float edgeLength = dist1 + dist2;
+    float pixelOffset = -distFinal / edgeLength + 0.5;
+
+    // Only offset when the nearer end's luma steps the same way as the centre
+    // relative to the edge average — else the end belongs to another feature.
+    const bool isLumaCenterSmaller = lM < lumaLocalAvg;
+    const bool correctVariation =
+        ((dir1Closer ? lumaEnd1 : lumaEnd2) < 0.0) != isLumaCenterSmaller;
+    pixelOffset = correctVariation ? pixelOffset : 0.0;
+
+    // Subpixel term: lowpass (3x3 tent) contrast against the local range,
+    // squared-smooth, for isolated pixels no edge walk can catch.
+    const float lumaAvg =
+        (1.0 / 12.0) * (2.0 * (lN + lS + lW + lE) + lNW + lNE + lSW + lSE);
+    const float subpix1 = clamp(abs(lumaAvg - lM) / range, 0.0, 1.0);
+    const float subpix2 = (-2.0 * subpix1 + 3.0) * subpix1 * subpix1;
+    const float subpixOffset = subpix2 * subpix2 * kSubpixQuality;
+
+    const float finalOffset = max(pixelOffset, subpixOffset);
+    vec2 finalUv = uv;
+    if (horizontal)
+        finalUv.y += finalOffset * stepLen * (is1Steepest ? -1.0 : 1.0);
+    else
+        finalUv.x += finalOffset * stepLen * (is1Steepest ? -1.0 : 1.0);
+
+    imageStore(uOutColor, p, vec4(texture(uSceneColor, finalUv).rgb, 1.0));
+}

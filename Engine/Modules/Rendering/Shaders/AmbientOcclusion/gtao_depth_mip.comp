@@ -1,0 +1,39 @@
+#version 450
+
+// AO-specific prefilter: retain the nearest depth layer and average samples
+// close to it. Unlike a visibility-culling HZB this is a filtered surface,
+// with sky excluded so clear values cannot pull geometry toward the camera.
+layout(local_size_x = 8, local_size_y = 8) in;
+layout(set = 0, binding = 0, r32f) uniform readonly image2D uDepthIn;
+layout(set = 0, binding = 1, r32f) uniform writeonly image2D uDepthOut;
+
+void main()
+{
+    ivec2 pix = ivec2(gl_GlobalInvocationID.xy);
+    ivec2 size = imageSize(uDepthOut);
+    if (any(greaterThanEqual(pix, size))) return;
+    ivec2 srcSize = imageSize(uDepthIn);
+    // Include the last source row/column for odd extents (up to 3x3).
+    ivec2 begin = pix * srcSize / size;
+    ivec2 end = (pix + 1) * srcSize / size;
+    // Beyond any linear view depth and within f32 range (WGSL rejects FLT_MAX spelled out).
+    float nearest = 1e30;
+    for (int y = begin.y; y < end.y; ++y)
+    for (int x = begin.x; x < end.x; ++x)
+    {
+        float z = imageLoad(uDepthIn, ivec2(x, y)).r;
+        if (z > 0.0) nearest = min(nearest, z);
+    }
+    float sum = 0.0;
+    float total = 0.0;
+    for (int y = begin.y; y < end.y; ++y)
+    for (int x = begin.x; x < end.x; ++x)
+    {
+        float z = imageLoad(uDepthIn, ivec2(x, y)).r;
+        if (z <= 0.0) continue;
+        float w = 1.0 - smoothstep(0.0, max(0.05 * nearest, 1e-3), abs(z - nearest));
+        sum += z * w;
+        total += w;
+    }
+    imageStore(uDepthOut, pix, vec4(total > 0.0 ? sum / total : 0.0));
+}

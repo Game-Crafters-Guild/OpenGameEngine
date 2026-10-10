@@ -1,0 +1,78 @@
+/* CollapsibleInfoCard (Apps/Editor/Include/UI/Controls/CollapsibleInfoCard.h).
+ *
+ * The card look itself (background, outline, padding) is the shared
+ * `.editor-info-card` in theme/core.css, which plain non-folding cards use too;
+ * this sheet is only the folding chrome the control adds. The control requests
+ * it for its own subtree, so nothing loads it unless a foldable card exists.
+ */
+
+/* Foldable card: chevron and copy on one row, so a collapsed card is the card
+   clamped to one line rather than a header row above it. Cards that fit on one
+   row keep no chevron (CollapsibleInfoCard decides that from the laid-out
+   text). */
+.editor-info-card-foldable {
+	display: flex;
+	flex-direction: row;
+	align-items: flex-start;
+	gap: 8px;
+	cursor: pointer;
+}
+
+.editor-info-card-foldable:hover {
+	outline-color: rgba(255, 255, 255, 0.22);
+}
+
+.editor-info-card-chevron {
+	width: 12px;
+	height: 12px;
+	min-width: 12px;
+	min-height: 12px;
+	margin-top: 3px;
+	background-size: 12px 12px;
+	background-repeat: no-repeat;
+	background-position: center;
+	background-image: url("editor:Icons/arrow-down.png");
+	background-image-tint: rgba(200, 200, 200, 1.0);
+	opacity: 0.7;
+}
+
+.editor-info-card-chevron.collapsed {
+	background-image: url("editor:Icons/arrow-right.png");
+	opacity: 0.55;
+}
+
+.editor-info-card-line {
+	display: flex;
+	flex-direction: row;
+	align-items: flex-start;
+	gap: 2px;
+	flex: 1;
+	min-width: 0;
+}
+
+.editor-info-card-copy {
+	flex: 1;
+	min-width: 0;
+	white-space: normal;
+}
+
+/* Collapsed: one line, clipped rather than wrapped, so a card can never grow a
+   second row while folded. It keeps flex:1 so the action label that follows is
+   held against the line's right edge. */
+.editor-info-card-toggle {
+	flex: 0 0 auto;
+	/* Same box height as the clamped copy beside it: a taller box centres its
+	   text a half pixel lower and the two rows stop sharing a baseline. */
+	height: 17px;
+	/* Padding, not margin: a horizontal margin on a flex child inside a scroll
+	   body has recursed layout here before. */
+	padding-left: 8px;
+	font-weight: 600;
+}
+
+.editor-info-card-copy.clamped {
+	flex: 1;
+	height: 17px;
+	white-space: nowrap;
+	overflow: hidden;
+}

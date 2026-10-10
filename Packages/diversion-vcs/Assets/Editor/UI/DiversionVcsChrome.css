@@ -1,0 +1,7 @@
+/* Editor-chrome contributions from the diversion-vcs package: the Settings
+   tree row icon for the Diversion provider tab. Attached at the UI root via
+   the EditorPanelRegistry stylesheet contribution, after the editor theme. */
+
+.settings-tree-pane .diversion-row .tree-title {
+    background-image: url("diversion-vcs:Icons/SettingsDiversion.png");
+}

@@ -1,0 +1,236 @@
+[scene name="WebSmoke" version=1]
+; Web Player phase-6 smoke scene: primitive meshes only (generated at runtime
+; by PrimitiveGenerator — no cooked models or textures), one shadow-casting
+; PostFxAll: the WebSmoke scene with every post effect enabled (see the volume).
+; on a near-mirror pad set into the terrain.
+
+; ---- Lighting -------------------------------------------------------------
+
+[entity id="e_1"]
+Light.type = 0
+Light.color = (1, 0.96, 0.9)
+Light.intensity = 2.5
+Light.castsShadows = true
+Light.castsLight = true
+Light.cascadeCount = 4
+Name.value = "Sun"
+Transform.position = (0, 10, 0)
+Transform.rotation = (0.35, 0.27, -0.1, 0.89)
+Transform.scale = (1, 1, 1)
+
+
+[entity id="e_2"]
+Light.type = 3
+Light.color = (0.6, 0.65, 0.75)
+Light.intensity = 0.35
+Name.value = "Ambient"
+Transform.position = (0, 0, 0)
+Transform.rotation = (0, 0, 0, 1)
+Transform.scale = (1, 1, 1)
+
+
+; ---- Reflective pad -------------------------------------------------------
+; The SSSR receiver. Terrain covers the rest of the floor, but its layer
+; roughness (0.85 for the default role) spreads the reflection lobe far too
+; wide to read as an object: terrain proves rays are traced, this pad proves
+; they hit. Roughness 0.03 keeps the lobe near-specular so the sphere, cube and
+; capsule appear as recognisable silhouettes. Lifted clear of the terrain
+; surface at y=0 so the two floors don't z-fight.
+
+[entity id="e_10"]
+MeshRenderer.meshPrimitive = Plane
+MeshRenderer.material = [path="Materials/ReflectivePad.material"]
+MeshRenderer.renderLayerMask = 1
+MeshRenderer.castShadows = false
+MeshRenderer.receiveShadows = true
+Name.value = "Reflective Pad"
+Transform.position = (0, 0.25, 0)
+Transform.rotation = (0, 0, 0, 1)
+Transform.scale = (14, 1, 14)
+
+
+; ---- Primitive row --------------------------------------------------------
+
+[entity id="e_20"]
+MeshRenderer.meshPrimitive = Sphere
+MeshRenderer.renderLayerMask = 1
+MeshRenderer.castShadows = true
+MeshRenderer.receiveShadows = true
+Name.value = "Sphere"
+Transform.position = (0, 1.25, 0)
+Transform.rotation = (0, 0, 0, 1)
+Transform.scale = (1, 1, 1)
+
+
+[entity id="e_21"]
+MeshRenderer.meshPrimitive = Cube
+MeshRenderer.renderLayerMask = 1
+MeshRenderer.castShadows = true
+MeshRenderer.receiveShadows = true
+Name.value = "Cube Left"
+Transform.position = (-2.5, 0.75, 0)
+Transform.rotation = (0, 0.2588, 0, 0.9659)
+Transform.scale = (1, 1, 1)
+
+
+[entity id="e_22"]
+MeshRenderer.meshPrimitive = Capsule
+MeshRenderer.renderLayerMask = 1
+MeshRenderer.castShadows = true
+MeshRenderer.receiveShadows = true
+Name.value = "Capsule Right"
+Transform.position = (2.5, 1.25, 0)
+Transform.rotation = (0, 0, 0, 1)
+Transform.scale = (1, 1, 1)
+
+
+; ---- Camera ---------------------------------------------------------------
+
+[entity id="e_30"]
+Camera.enabled = true
+Camera.fovY = 60
+Camera.nearZ = 0.1
+Camera.farZ = 300
+; Fixed exposure: this pipeline has no AutoExposureNode, so Auto would leave the
+; metering buffer unwritten and fall back to a sunlit physical stop.
+Camera.exposureControl = 0
+Camera.exposure = 1.0
+Name.value = "Main Camera"
+; Eye height just above the primitives: the grazing view is what puts each
+; mirror image on the pad inside the frame rather than behind the objects.
+Transform.position = (0, 1.4, -6)
+Transform.rotation = (0.06, 0, 0, 0.9982)
+Transform.scale = (1, 1, 1)
+
+
+; ---- Terrain (web bring-up) ----------------------------------------------
+; A CBT terrain in the seed scene so a freshly planted project exercises the
+; terrain path on load, without driving the editor UI to add one. It is the
+; visible floor under and around the reflective pad, and — since terrain keys
+; the same SSSR variant as the world pass — its own (rough, wide-lobe)
+; reflections are what prove the terrain reaches the SSR G-buffer at all.
+
+[entity id="e_terrain"]
+Name.value = "Terrain"
+Terrain.enabled = true
+Terrain.sizeX = 512
+Terrain.sizeZ = 512
+Terrain.heightScale = 100
+Terrain.patchGridSize = 128
+Terrain.samplesPerMeter = 1
+Terrain.lodRangeScale = 1
+Terrain.renderLayerMask = 1
+Terrain.castShadows = true
+Terrain.receiveShadows = true
+TerrainGrass.enabled = true
+TerrainGrass.density = 0.5
+TerrainGrass.bladeHeight = 2.4
+TerrainGrass.bladeWidth = 0.06
+TerrainGrass.bladeSegments = 5
+TerrainGrass.scale = 1
+TerrainGrass.randomScale = 0.35
+TerrainGrass.curvature = 1
+TerrainGrass.layerIndex = 0
+TerrainGrass.maskThreshold = 0.45
+TerrainGrass.fadeStart = 350
+TerrainGrass.fadeEnd = 500
+TerrainGrass.distanceFadeEnabled = true
+Transform.position = (0, 0, 0)
+Transform.rotation = (0, 0, 0, 1)
+Transform.scale = (1, 1, 1)
+
+; ---- Screen-space reflections (web bring-up) ------------------------------
+; A global post-process volume carrying SSSR so a freshly planted project
+; exercises the reflection path on load. The editor's own "Add Post FX" entry
+; point is unusable on web today (the button deselects the entity instead of
+; opening its menu), so the effect is authored here rather than driven.
+
+[entity id="e_ppv_sssr"]
+Name.value = "Post Process Volume"
+PostProcessVolume.enabled = true
+PostProcessVolume.isGlobal = true
+PostProcessVolume.weight = 1
+PostProcessVolume.priority = 0
+; Cloud extraction visits post-process volumes. Keep the cloud effect on this
+; volume so the smoke actually executes its noise, march and composite passes.
+VolumetricClouds.enabled = true
+ScreenSpaceReflectionsEffect.enabled = true
+ScreenSpaceReflectionsEffect.intensity = 1
+ScreenSpaceReflectionsEffect.maxDistance = 250
+ScreenSpaceReflectionsEffect.thickness = 0.2
+ScreenSpaceReflectionsEffect.edgeFade = 0.08
+ScreenSpaceReflectionsEffect.maxSteps = 48
+ScreenSpaceReflectionsEffect.sampleQuality = 2
+ScreenSpaceReflectionsEffect.multiBounce = false
+; GTAO on the same volume, so the load also exercises the AO path (three
+; compute stages that filter R32F depth: the float32-filterable class SSSR
+; shares) and the GTAO material variant rows the cook emits.
+AmbientOcclusionEffect.enabled = true
+AmbientOcclusionEffect.intensity = 1
+AmbientOcclusionEffect.radius = 1.5
+AmbientOcclusionEffect.thickness = 1
+; Depth of field (FidelityFX, four compute stages the web cook rewrites for
+; naga) on the same volume; the camera's aperture and focus distance drive it.
+DepthOfFieldEffect.enabled = true
+DepthOfFieldEffect.maxRadius = 16
+; ---- Every remaining post effect, for the all-effects web gate ------------
+; This scene exists to be opened with ?scene=Scenes/PostFxAll.scene: one
+; global volume enabling every registered post effect at its defaults, so a
+; gate run proves each stage creates its pipelines and binds on WebGPU.
+BloomEffect.enabled = true
+CrtEffect.enabled = true
+VhsEffect.enabled = true
+ExposureAdjustmentEffect.enabled = true
+DebandEffect.enabled = true
+ContrastAdaptiveSharpenEffect.enabled = true
+FastBlurEffect.enabled = true
+HeatDistortionEffect.enabled = true
+VignetteEffect.enabled = true
+ColorFilterEffect.enabled = true
+ColorGradeEffect.enabled = true
+ChromaticAberrationEffect.enabled = true
+FilmSimulationEffect.enabled = true
+ShadowSettingsEffect.enabled = true
+CubeLutEffect.enabled = true
+VolumetricFogEffect.enabled = true
+HeightFogEffect.enabled = true
+AtmosphericCloudLayer.enabled = true
+Transform.position = (0, 0, 0)
+Transform.rotation = (0, 0, 0, 1)
+Transform.scale = (1, 1, 1)
+
+; ---- Smoke particles (web bring-up) ---------------------------------------
+; Interned at runtime from a synthetic Unlit Blend material. The late-forward
+; (Transmissive) pass draws them after opaque. Authored here so a planted
+; project exercises that path without driving the editor UI.
+
+[entity id="e_smoke"]
+Name.value = "Smoke (Particle Stack)"
+ParticleEmitter3D.enabled = true
+ParticleEmitter3D.Stack = [path="Particles/Smoke.particlestack"]
+ParticleEmitter3D.Amount = 500
+ParticleEmitter3D.TicksPerSecond = 60
+ParticleEmitter3D.Seed = 1337
+Transform.position = (0, 1.2, -2.2)
+Transform.rotation = (0, 0, 0, 1)
+Transform.scale = (1, 1, 1)
+
+; ---- Audio smoke ----------------------------------------------------------
+; A looping 2D emitter on the SFX bus. The audio ECS systems run only in play
+; mode, so entering play mode is the gesture that both unlocks the browser's
+; AudioContext and starts this voice: audible output proves the Web Audio
+; device end to end without driving the editor UI.
+
+[entity id="e_audio"]
+Name.value = "Audio Smoke"
+AudioEmitter.clipGuid = [path="Audio/TestAudio.wav"]
+AudioEmitter.enabled = true
+AudioEmitter.spatialized = false
+AudioEmitter.loop = true
+AudioEmitter.playOnStart = true
+AudioEmitter.bus = 2
+AudioEmitter.volume = 0.5
+AudioEmitter.pitch = 1
+Transform.position = (0, 1, 0)
+Transform.rotation = (0, 0, 0, 1)
+Transform.scale = (1, 1, 1)

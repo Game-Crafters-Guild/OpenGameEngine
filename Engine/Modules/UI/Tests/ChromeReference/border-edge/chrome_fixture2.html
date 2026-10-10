@@ -1,0 +1,19 @@
+<!DOCTYPE html>
+<html><head><meta charset="utf-8"><title>fw rows real-dsf</title>
+<style>
+  html, body { margin: 0; padding: 0; background: #000; }
+  .case { position: absolute; width: 160.5px; height: 40px; background: rgba(30,30,30,1);
+          border: 1px solid rgba(255,255,255,1); box-sizing: border-box; }
+  #fw025 { left: 20.25px; top: 20px; }
+  #fw050 { left: 20.5px;  top: 80px; }
+  #fw075 { left: 20.75px; top: 140px; }
+  /* 2px css border control at same fractional x: does width snap scale? */
+  .b2 { border-width: 2px; }
+  #b2c { left: 220.25px; top: 20px; width: 160px; }
+</style></head>
+<body>
+  <div class="case" id="fw025"></div>
+  <div class="case" id="fw050"></div>
+  <div class="case" id="fw075"></div>
+  <div class="case b2" id="b2c"></div>
+</body></html>

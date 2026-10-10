@@ -1,0 +1,38 @@
+#version 450
+
+// Scatter-as-gather tile dilation from FidelityFX DoF: retain any near/far
+// circle that can reach the central tile.
+layout(local_size_x = 8, local_size_y = 8, local_size_z = 1) in;
+layout(set = 0, binding = 0) uniform sampler2D uTileCoc;
+// Same format as the tile stage it dilates; see ffx_dof_tile.comp.
+#if defined(GE_COMPAT_PROFILE)
+layout(set = 0, binding = 1, rgba16f) uniform writeonly image2D uDilatedCoc;
+#else
+layout(set = 0, binding = 1, rg16f) uniform writeonly image2D uDilatedCoc;
+#endif
+layout(push_constant) uniform DilationPC
+{
+    float dofAnamorphicSqueeze;
+} pc;
+
+void main()
+{
+    ivec2 size = imageSize(uDilatedCoc);
+    ivec2 center = ivec2(gl_GlobalInvocationID.xy);
+    if (any(greaterThanEqual(center, size)))
+        return;
+
+    vec2 spread = vec2(0.0);
+    // Max authored radius is 32 full-res px = 16 half-res px = two tiles.
+    // A 4x anamorphic squeeze extends that reach to eight tiles vertically.
+    for (int y = -8; y <= 8; ++y)
+    for (int x = -2; x <= 2; ++x)
+    {
+        ivec2 q = clamp(center + ivec2(x, y), ivec2(0), size - ivec2(1));
+        vec2 radii = texelFetch(uTileCoc, q, 0).rg;
+        float squeeze = clamp(pc.dofAnamorphicSqueeze, 1.0, 4.0);
+        float distancePx = length(vec2(float(x), float(y) / squeeze)) * 8.0;
+        spread = max(spread, max(radii - vec2(distancePx), vec2(0.0)));
+    }
+    imageStore(uDilatedCoc, center, vec4(spread, 0.0, 0.0));
+}
