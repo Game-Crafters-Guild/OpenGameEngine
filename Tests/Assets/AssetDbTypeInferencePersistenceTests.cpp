@@ -130,7 +130,7 @@ TEST(AssetDatabase, TypeInferenceUpgradesUnknownTypesAndPersistsAcrossRuns)
     }
 
     {
-        AssetDatabase::AssetStore_TextJsonl store;
+        AssetDatabase::AssetStore_TextJsonl store(nullptr);
         std::string err;
         ASSERT_TRUE(store.LoadFromFile(dbPath, &err)) << err;
 
@@ -249,7 +249,7 @@ TEST(AssetDatabase, ScanChunkLandingAfterRegistrationKeepsTheRegisteredType)
     }
 
     {
-        AssetDatabase::AssetStore_TextJsonl store;
+        AssetDatabase::AssetStore_TextJsonl store(nullptr);
         std::string err;
         ASSERT_TRUE(store.LoadFromFile(dbPath, &err)) << err;
 
@@ -269,7 +269,7 @@ TEST(AssetDatabase, ScanChunkLandingAfterRegistrationKeepsTheRegisteredType)
 // merge and write outside it resolve last-writer-wins on stale snapshots.
 TEST(AssetDatabase, StoreMergeKeepsTheAnswerAnObservationDoesNotCarry)
 {
-    AssetDatabase::AssetStore_TextJsonl store;
+    AssetDatabase::AssetStore_TextJsonl store(nullptr);
     const GUID guid("aaaaaaaa-0000-4000-8000-00000000c001");
     ASSERT_FALSE(guid.IsNull());
 
@@ -407,7 +407,7 @@ TEST(AssetDatabase, RegistryPersistsEveryTypeTheEnumDeclares)
     // And the record it wrote: the type has to be on disk, or the next session
     // starts with an untyped asset.
     {
-        AssetDatabase::AssetStore_TextJsonl store;
+        AssetDatabase::AssetStore_TextJsonl store(nullptr);
         std::string err;
         ASSERT_TRUE(store.LoadFromFile(dbPath, &err)) << err;
 
@@ -458,7 +458,7 @@ TEST(AssetDatabase, EveryAssetTypeRoundTripsThroughTheStoreFile)
     guids.reserve(kTypeCount);
 
     {
-        AssetDatabase::AssetStore_TextJsonl store;
+        AssetDatabase::AssetStore_TextJsonl store(nullptr);
         for (size_t i = 0; i < kTypeCount; ++i)
         {
             char guidText[64] = {};
@@ -481,7 +481,7 @@ TEST(AssetDatabase, EveryAssetTypeRoundTripsThroughTheStoreFile)
         ASSERT_TRUE(store.SaveToFile(dbPath, &err)) << err;
     }
 
-    AssetDatabase::AssetStore_TextJsonl reloaded;
+    AssetDatabase::AssetStore_TextJsonl reloaded(nullptr);
     std::string loadErr;
     ASSERT_TRUE(reloaded.LoadFromFile(dbPath, &loadErr)) << loadErr;
     ASSERT_EQ(reloaded.CountAssets(), kTypeCount);

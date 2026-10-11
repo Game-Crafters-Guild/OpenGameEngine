@@ -728,7 +728,7 @@ bool AssetRegistry::SetupSourceStore(SourceEntry& entry)
 
     const bool dbExisted = std::filesystem::exists(entry.DbFile, ec);
 
-    auto store = GameEngine::MakeUnique<AssetDatabase::AssetStore_TextJsonl>();
+    auto store = GameEngine::MakeUnique<AssetDatabase::AssetStore_TextJsonl>(m_JobSystem);
     // A store file other processes can reach gets an advisory lock beside it
     // before anything can write through it (see AssetSourceDesc).
     if (entry.StoreIsSharedAcrossProcesses)
@@ -780,7 +780,7 @@ bool AssetRegistry::SetupSourceStore(SourceEntry& entry)
         std::error_code manifestEc;
         if (std::filesystem::exists(entry.IdentityManifestFile, manifestEc))
         {
-            AssetDatabase::AssetStore_TextJsonl manifest;
+            AssetDatabase::AssetStore_TextJsonl manifest(m_JobSystem);
             std::string err;
             if (!manifest.LoadFromFile(entry.IdentityManifestFile, &err))
             {
@@ -969,7 +969,7 @@ bool AssetRegistry::SetupSourceStore(SourceEntry& entry)
             std::vector<AssetDatabase::AssetSourceSnapshotRecord> records;
             std::vector<AssetDatabase::AssetSourceSnapshotDirectory> directories;
             std::string err;
-            if (AssetDatabase::AssetSourceSnapshot::Load(snapshotFile, snapshotMountRoot,
+            if (AssetDatabase::AssetSourceSnapshot::Load(snapshotFile, m_JobSystem, snapshotMountRoot,
                                                          snapshotIgnoreSig, records, directories, &err))
             {
                 // Belt-and-braces: the format already encodes a hash of the
@@ -7866,7 +7866,7 @@ bool AssetRegistry::LoadFromFile(const std::filesystem::path& path)
 {
     const std::filesystem::path filePath = path.empty() ? ProjectDbFile() : path;
 
-    auto newStore = GameEngine::MakeUnique<AssetDatabase::AssetStore_TextJsonl>();
+    auto newStore = GameEngine::MakeUnique<AssetDatabase::AssetStore_TextJsonl>(m_JobSystem);
     std::string err;
     if (!newStore->LoadFromFile(filePath, &err))
     {

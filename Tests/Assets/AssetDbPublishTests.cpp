@@ -63,7 +63,7 @@ TEST_F(AssetDbPublish, EmptyStorePublishesAfterReadHandleIsReleased)
     // The Windows C++ stream opens without delete sharing, as a scanner can.
     std::ifstream held(m_File, std::ios::binary);
     ASSERT_TRUE(held.is_open());
-    GameEngine::AssetDatabase::AssetStore_TextJsonl store;
+    GameEngine::AssetDatabase::AssetStore_TextJsonl store(nullptr);
     const auto record = MakeRecord();
     ASSERT_TRUE(store.UpsertAsset(record, nullptr));
 
@@ -85,7 +85,7 @@ TEST_F(AssetDbPublish, EmptyStorePublishesAfterReadHandleIsReleased)
     save.Wait();
     ASSERT_TRUE(saved) << error;
 
-    GameEngine::AssetDatabase::AssetStore_TextJsonl reloaded;
+    GameEngine::AssetDatabase::AssetStore_TextJsonl reloaded(nullptr);
     ASSERT_TRUE(reloaded.LoadFromFile(m_File, &error)) << error;
     GameEngine::AssetDatabase::AssetRecord persisted{};
     ASSERT_TRUE(reloaded.TryGetAsset(record.guid, persisted));
@@ -95,7 +95,7 @@ TEST_F(AssetDbPublish, EmptyStorePublishesAfterReadHandleIsReleased)
 
 TEST_F(AssetDbPublish, PersistentReadHandleKeepsPreviousStoreAndAllowsLaterSave)
 {
-    GameEngine::AssetDatabase::AssetStore_TextJsonl store;
+    GameEngine::AssetDatabase::AssetStore_TextJsonl store(nullptr);
     const auto record = MakeRecord();
     ASSERT_TRUE(store.UpsertAsset(record, nullptr));
     std::string error;
@@ -121,7 +121,7 @@ TEST_F(AssetDbPublish, PersistentReadHandleKeepsPreviousStoreAndAllowsLaterSave)
     held.close();
     ASSERT_TRUE(store.SaveToFile(m_File, &error)) << error;
     EXPECT_NE(ReadContents(), previous);
-    GameEngine::AssetDatabase::AssetStore_TextJsonl reloaded;
+    GameEngine::AssetDatabase::AssetStore_TextJsonl reloaded(nullptr);
     ASSERT_TRUE(reloaded.LoadFromFile(m_File, &error)) << error;
     GameEngine::AssetDatabase::AssetRecord persisted{};
     EXPECT_TRUE(reloaded.TryGetAsset(added.guid, persisted));
@@ -129,7 +129,7 @@ TEST_F(AssetDbPublish, PersistentReadHandleKeepsPreviousStoreAndAllowsLaterSave)
 
 TEST_F(AssetDbPublish, FailedAppendKeepsTheChangeForTheNextSave)
 {
-    GameEngine::AssetDatabase::AssetStore_TextJsonl store;
+    GameEngine::AssetDatabase::AssetStore_TextJsonl store(nullptr);
     ASSERT_TRUE(store.UpsertAsset(MakeRecord(), nullptr));
     std::string error;
     ASSERT_TRUE(store.SaveToFile(m_File, &error)) << error;
@@ -145,7 +145,7 @@ TEST_F(AssetDbPublish, FailedAppendKeepsTheChangeForTheNextSave)
     EXPECT_NE(error.find("for append"), std::string::npos) << error;
 
     ASSERT_TRUE(store.SaveToFile(m_File, &error)) << error;
-    GameEngine::AssetDatabase::AssetStore_TextJsonl reloaded;
+    GameEngine::AssetDatabase::AssetStore_TextJsonl reloaded(nullptr);
     ASSERT_TRUE(reloaded.LoadFromFile(m_File, &error)) << error;
     GameEngine::AssetDatabase::AssetRecord persisted{};
     EXPECT_TRUE(reloaded.TryGetAsset(added.guid, persisted));
@@ -153,7 +153,7 @@ TEST_F(AssetDbPublish, FailedAppendKeepsTheChangeForTheNextSave)
 
 TEST_F(AssetDbPublish, SaveThatThrowsKeepsTheBatchForTheNextSave)
 {
-    GameEngine::AssetDatabase::AssetStore_TextJsonl store;
+    GameEngine::AssetDatabase::AssetStore_TextJsonl store(nullptr);
     ASSERT_TRUE(store.UpsertAsset(MakeRecord(), nullptr));
     std::string error;
     ASSERT_TRUE(store.SaveToFile(m_File, &error)) << error;
@@ -168,7 +168,7 @@ TEST_F(AssetDbPublish, SaveThatThrowsKeepsTheBatchForTheNextSave)
     invalid.path = "fixed.scene";
     ASSERT_TRUE(store.UpsertAsset(invalid, nullptr));
     ASSERT_TRUE(store.SaveToFile(m_File, &error)) << error;
-    GameEngine::AssetDatabase::AssetStore_TextJsonl reloaded;
+    GameEngine::AssetDatabase::AssetStore_TextJsonl reloaded(nullptr);
     ASSERT_TRUE(reloaded.LoadFromFile(m_File, &error)) << error;
     GameEngine::AssetDatabase::AssetRecord persisted{};
     EXPECT_TRUE(reloaded.TryGetAsset(kept.guid, persisted));

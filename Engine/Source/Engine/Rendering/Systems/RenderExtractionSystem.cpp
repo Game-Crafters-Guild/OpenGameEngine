@@ -35,7 +35,6 @@
 #include "Components/Rendering/Ocean.h"
 #include "ECSModules/Rendering/SkeletonStore.h"
 #include "GPUFogParticles/GPUFogParticlesMaterial.h"
-#include "JobSystem/JobCounter.h"
 #include "JobSystem/WorkStealingThreadPool.h"
 #include "Logger/Logger.h"
 #include "Ocean/OceanRenderFeature.h"
@@ -779,7 +778,7 @@ void PrepareRecord(const WorldRenderableRecord& rec,
 }
 
 // A2.1 parallel PROCESS: fork the pure per-record prepare over m_Records index
-// ranges (Run + participating Wait — never ParallelFor, §1.1), then a serial
+// ranges (one ParallelFor unit per chunk, legal on a worker), then a serial
 // apply that performs every GPUScene mutation and merges the per-chunk
 // accumulators in record order (D6).
 // The fork-join chunk plan both extraction lanes use: about kChunksPerWorker
@@ -807,8 +806,7 @@ ChunkPlan PlanChunks(JobSystem::WorkStealingThreadPool* js, std::size_t count)
 }
 
 // Runs body(begin, end) over [0, count) as fork-join chunks on `js` when the
-// plan has more than one chunk, inline otherwise. The participating Wait is
-// the full lane's, so it is deadlock-free from a pool worker (CONC-F3).
+// plan has more than one chunk, inline otherwise; legal from a pool worker.
 void ForkJoinRanges(JobSystem::WorkStealingThreadPool* js, std::size_t count,
                     const std::function<void(std::size_t begin, std::size_t end)>& body)
 {
@@ -820,14 +818,14 @@ void ForkJoinRanges(JobSystem::WorkStealingThreadPool* js, std::size_t count,
         body(0, count);
         return;
     }
-    JobSystem::JobCounter counter;
-    for (std::size_t c = 0; c < plan.ChunkCount; ++c)
+    const auto runChunk = [&body, &plan, count](std::size_t c)
     {
         const std::size_t begin = c * plan.ChunkSize;
-        const std::size_t end = std::min(begin + plan.ChunkSize, count);
-        js->Run([&body, begin, end] { body(begin, end); }, counter);
-    }
-    js->Wait(counter);
+        body(begin, std::min(begin + plan.ChunkSize, count));
+    };
+    JobSystem::ParallelForOptions options;
+    options.Helpers = plan.Workers;
+    JobSystem::ParallelFor(js, plan.ChunkCount, runChunk, options);
 }
 
 // Resolves handles [begin, end) into their reads. GetComponentsBatch takes
@@ -913,9 +911,8 @@ void ProcessRecordsParallel(
     // the inline chunk below) — EngineCore is never consulted. The primary
     // world is wired at creation (EnsurePrimaryWorld) to the same engine pool
     // the SystemManager dispatched THIS extraction on (RenderingLoop::Initialize
-    // → EngineCore::GetJobSystem), and forking to that same pool is what makes
-    // the participating Wait deadlock-free (CONC-F3): an extraction worker
-    // joins by executing its own tagged chunks.
+    // → EngineCore::GetJobSystem); the fork claims chunks on that pool from
+    // whichever thread runs this extraction, a worker included.
     auto* js = world.GetJobSystem();
     const ChunkPlan plan = PlanChunks(js, recCount);
     const std::size_t workers = plan.Workers;
@@ -923,10 +920,10 @@ void ProcessRecordsParallel(
     const std::size_t numChunks = plan.ChunkCount;
 
     // §7 Q2 diagnostic (logged once per process): does extraction fork from a
-    // worker (participating Wait — contends with sibling wave systems, degrades
-    // toward serial) or the main thread (parks; all workers free to steal)? This
-    // is the single fact that attributes a failed prepare speedup, so it is worth
-    // one line at process start.
+    // worker (one worker fewer to help, contending with sibling wave systems) or
+    // the main thread (every worker free to help)? This is the single fact that
+    // attributes a failed prepare speedup, so it is worth one line at process
+    // start.
     {
         static std::atomic<bool> s_LoggedWorkerContext{false};
         // Latch on the first world that actually forks (numChunks > 1), so
@@ -974,21 +971,7 @@ void ProcessRecordsParallel(
     const std::size_t capBefore = scene.GetInstances().capacity();
 #endif
 
-    if (js && numChunks > 1)
-    {
-        JobSystem::JobCounter counter;
-        for (std::size_t c = 0; c < numChunks; ++c)
-            js->Run([&prepareChunk, c] { prepareChunk(c); }, counter);
-        // On a worker this participates (runs only same-counter chunks); on the
-        // main thread it parks while workers drain (§1.3). Deadlock-free either
-        // way (CONC-F3).
-        js->Wait(counter);
-    }
-    else
-    {
-        for (std::size_t c = 0; c < numChunks; ++c)
-            prepareChunk(c);
-    }
+    JobSystem::ParallelFor(js, numChunks, prepareChunk);
 
 #ifdef _DEBUG
     // R3: prepare defers every AddInstance to apply, so the instance buffer must

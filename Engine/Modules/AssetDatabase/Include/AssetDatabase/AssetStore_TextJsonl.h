@@ -8,6 +8,11 @@
 #include <unordered_map>
 #include <unordered_set>
 
+namespace JobSystem
+{
+class WorkStealingThreadPool;
+}
+
 namespace GameEngine::AssetDatabase
 {
 
@@ -47,7 +52,12 @@ namespace GameEngine::AssetDatabase
 class AssetStore_TextJsonl final : public IAssetStore
 {
   public:
-    AssetStore_TextJsonl() = default;
+    /// @param parsePool The pool a load parses a large file's lines on
+    ///        (ParallelFor; the replay into the maps stays on the calling
+    ///        thread): LoadFromFile and the re-read of a cross-process store
+    ///        under its write lock. Null parses on the calling thread; pass the
+    ///        engine's pool for any store that loads a file a project can grow.
+    explicit AssetStore_TextJsonl(JobSystem::WorkStealingThreadPool* parsePool);
     ~AssetStore_TextJsonl() override = default;
 
     bool LoadFromFile(const std::filesystem::path& filePath, std::string* outError) override;
@@ -217,6 +227,7 @@ class AssetStore_TextJsonl final : public IAssetStore
 
   private:
     // Empty when this store's file is this process's alone (the common case).
+    JobSystem::WorkStealingThreadPool* m_ParsePool = nullptr;
     std::filesystem::path m_CrossProcessWriteLockFile;
     // When set, overrides kCompactionThreshold for this store instance only.
     mutable std::optional<size_t> m_CompactionThresholdOverride;

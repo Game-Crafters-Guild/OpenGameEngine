@@ -76,7 +76,7 @@ TEST(InlineMode, ParallelForCoversWholeRange)
 {
     WorkStealingThreadPool pool(0);
     std::vector<std::atomic<int>> hits(4096);
-    JobSystem::ParallelFor(&pool, 0, hits.size(),
+    JobSystem::ParallelFor(&pool, hits.size(),
                                        [&](size_t begin, size_t end) {
                                            for (size_t i = begin; i < end; ++i)
                                                hits[i].fetch_add(1, std::memory_order_relaxed);

@@ -16,8 +16,8 @@
 #include "ECS/ECSTemplates.h"
 #include "ECS/World.h"
 #include "ECSModules/Rendering/Systems/RenderExtractionSystem.h"
-#include "JobSystem/JobCounter.h"
 #include "JobSystem/WorkStealingThreadPool.h"
+#include "Logger/Logger.h"
 
 #include "TlasInternal.h"
 
@@ -73,7 +73,7 @@ inline Mathematics::AABB DeriveWorldAabb(
 
 // Auto-serial threshold (review A2): below this many deduped candidates
 // SyncEntities never forks. Fork overhead is ~50-100 us (chunk submission,
-// worker wake, participating-Wait join); the post-S1b serial body costs
+// worker wake, join); the post-S1b serial body costs
 // ~0.5-0.7 us/candidate, so the paper break-even is ~200 candidates — the
 // clamp sits an order higher, where the serial cost first exceeds ~1 ms:
 // below that, forking buys under a millisecond per frame and wakes the
@@ -468,10 +468,9 @@ SceneTlas::SyncResult SceneTlas::RefitResolvedCandidates(JobSystem::WorkStealing
 
     if (numChunks > 1)
     {
-        // Fork-join strictly inside the TLAS unique_lock (I6): Run +
-        // participating Wait on a JobCounter — never ParallelFor (the
-        // extraction A2.1 precedent). Chunks are contiguous ranges of the
-        // deduped array.
+        // Fork-join strictly inside the TLAS unique_lock (I6), one unit per
+        // chunk; ParallelFor is legal on a worker and on the main thread alike.
+        // Chunks are contiguous ranges of the deduped array.
         ++m_Impl->ParallelForkCount;
         auto& chunks = m_Impl->ChunkScratch;
         if (chunks.size() < numChunks)
@@ -495,17 +494,21 @@ SceneTlas::SyncResult SceneTlas::RefitResolvedCandidates(JobSystem::WorkStealing
             }
         };
 
-        JobSystem::JobCounter counter;
-        for (std::size_t c = 0; c < numChunks; ++c)
-            pool->Run([&runChunk, c] { runChunk(c); }, counter);
-        // On a worker this participates (runs only same-counter chunks); on
-        // the main thread it parks while workers drain. Deadlock-free
-        // either way (extraction CONC-F3 argument).
-        pool->Wait(counter);
-        // A failed chunk (job-body exception) means a partial leaf pass where
-        // the serial loop would have propagated — force the reconcile path,
-        // whose full gather supersedes everything (impl review F8).
-        needsReconcile = needsReconcile || counter.HasAnyFailed();
+        try
+        {
+            JobSystem::ParallelFor(pool, numChunks, runChunk);
+        }
+        catch (...)
+        {
+            // A failed chunk means a partial leaf pass where the serial loop
+            // would have propagated: force the reconcile path, whose full
+            // gather supersedes everything (impl review F8). Chunks that never
+            // started still hold an earlier frame's scratch, so none is merged.
+            Logger::Log::Error("SceneTlas: a parallel refit chunk threw; reconciling");
+            needsReconcile = true;
+            for (std::size_t c = 0; c < numChunks; ++c)
+                chunks[c].Dirty.clear();
+        }
 
         // Merge in chunk-index order: the concatenation of contiguous
         // ranges reproduces the serial visit order exactly, so per-sector

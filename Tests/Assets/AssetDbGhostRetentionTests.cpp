@@ -66,7 +66,7 @@ struct RetentionHarness
 {
     std::filesystem::path Root;
     std::filesystem::path CachePath;
-    AssetStore_TextJsonl Store;
+    AssetStore_TextJsonl Store{nullptr};
     AssetDbCache_Sqlite Cache;
 
     explicit RetentionHarness(const std::string& tag)

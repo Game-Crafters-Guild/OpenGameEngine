@@ -7,7 +7,6 @@
 #include "Components/TransformDirtyFeed.h"
 #include "Components/Hierarchy.h"
 #include "Logger/Logger.h"
-#include "JobSystem/JobCounter.h"
 #include "JobSystem/WorkStealingThreadPool.h"
 
 #include <algorithm>
@@ -505,13 +504,11 @@ void TransformHierarchySystem::PropagateRoots(ECS::World& world, std::span<const
             m_ChunkChanged.resize(chunkCount);
             m_ChunkVisited.resize(chunkCount);
         }
-        JobSystem::JobCounter counter;
-        for (size_t c = 0; c < chunkCount; ++c) {
+        const auto propagateChunk = [this, roots, chunkSize](size_t c) {
             const size_t begin = c * chunkSize;
-            const size_t end = std::min(roots.size(), begin + chunkSize);
-            js->Run([this, roots, begin, end, c] { PropagateRootChunk(roots, begin, end, c); }, counter);
-        }
-        js->Wait(counter);
+            PropagateRootChunk(roots, begin, std::min(roots.size(), begin + chunkSize), c);
+        };
+        JobSystem::ParallelFor(js, chunkCount, propagateChunk);
         for (size_t c = 0; c < chunkCount; ++c) {
             visited += m_ChunkVisited[c];
             m_StampScratch.insert(m_StampScratch.end(), m_ChunkChanged[c].begin(),

@@ -114,13 +114,14 @@ void SnapshotMovedRenderables(ECS::World& world, ECS::ChangeGate& gate, float32 
         std::min((chunks.size() + kMinChunksPerTask - 1) / kMinChunksPerTask,
                  std::max<std::size_t>(1, pool->GetWorkerCount()) * 4u);
     const std::size_t perTask = (chunks.size() + tasks - 1) / tasks;
-    JobSystem::JobCounter counter;
-    for (std::size_t begin = 0; begin < chunks.size(); begin += perTask)
+    const std::size_t taskCount = (chunks.size() + perTask - 1) / perTask;
+    const auto snapshotTask = [&chunks, perTask, sectorSize, &snapshot](std::size_t task)
     {
-        const std::span<const MovedChunk> range(chunks.data() + begin, std::min(perTask, chunks.size() - begin));
-        pool->Run([range, sectorSize, &snapshot] { SnapshotMovedChunks(range, sectorSize, snapshot); }, counter);
-    }
-    pool->Wait(counter);
+        const std::size_t begin = task * perTask;
+        SnapshotMovedChunks(std::span<const MovedChunk>(chunks.data() + begin, std::min(perTask, chunks.size() - begin)),
+                            sectorSize, snapshot);
+    };
+    JobSystem::ParallelFor(pool, taskCount, snapshotTask);
 }
 
 // True when any renderable's LocalBounds column was written since `gate` (a

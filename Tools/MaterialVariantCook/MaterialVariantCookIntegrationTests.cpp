@@ -339,6 +339,11 @@ TEST(MaterialVariantCookIntegration, CookRefusesScanAliasesTheRuntimeCannotMount
         {{"--scan", scan.string(), "--scan-alias", "@scope/My Pkg"}, "is not a valid source alias"},
         {{"--scan", scan.string()}, "pass --scan-alias"},
         {{"--particle-row", "nope"}, "--particle-row nope: not a row of the particle request set"},
+        // strtoul would take these: "-1" wrapping to unbounded workers, the sign, the space.
+        {{"--jobs", "-1"}, "--jobs needs a positive whole number"},
+        {{"--jobs", "+4"}, "--jobs needs a positive whole number"},
+        {{"--jobs", " 3"}, "--jobs needs a positive whole number"},
+        {{"--jobs", "0"}, "--jobs needs a positive whole number"},
     };
     for (const auto& refusal : cases)
     {

@@ -211,7 +211,7 @@ TEST(AssetRootSeparation, EditorMountIsNonPersistentWhenRootsDiffer_NoProjectDbP
 
     // Project DB should not contain editor-mounted assets.
     {
-        AssetDatabase::AssetStore_TextJsonl store;
+        AssetDatabase::AssetStore_TextJsonl store(nullptr);
         std::string err;
         ASSERT_TRUE(store.LoadFromFile(projectDb, &err)) << err;
 
@@ -222,7 +222,7 @@ TEST(AssetRootSeparation, EditorMountIsNonPersistentWhenRootsDiffer_NoProjectDbP
 
     // Editor-local DB should contain the editor asset + kv.
     {
-        AssetDatabase::AssetStore_TextJsonl store;
+        AssetDatabase::AssetStore_TextJsonl store(nullptr);
         std::string err;
         ASSERT_TRUE(store.LoadFromFile(editorDb, &err)) << err;
 
@@ -277,7 +277,7 @@ TEST(AssetRootSeparation, WhenRootsAreSame_EditorMountRegistrationDoesNotCreateE
     ASSERT_TRUE(reg.SaveToFile({}));
     reg.Shutdown();
 
-    AssetDatabase::AssetStore_TextJsonl store;
+    AssetDatabase::AssetStore_TextJsonl store(nullptr);
     std::string err;
     ASSERT_TRUE(store.LoadFromFile(dbPath, &err)) << err;
     EXPECT_FALSE(store.LookupGuidByPath("editor/ui/theme.css").has_value());
@@ -1806,7 +1806,7 @@ TEST(AssetRootSeparation, RegisterAssetMetadata_RoutesNonProjectPathToOwningSour
     // The editor-mount record lands in the editor store, canonical-relative
     // to the editor root.
     {
-        AssetDatabase::AssetStore_TextJsonl store;
+        AssetDatabase::AssetStore_TextJsonl store(nullptr);
         std::string err;
         ASSERT_TRUE(store.LoadFromFile(editorDb, &err)) << err;
         AssetDatabase::AssetRecord rec{};
@@ -1817,7 +1817,7 @@ TEST(AssetRootSeparation, RegisterAssetMetadata_RoutesNonProjectPathToOwningSour
     // The project store contains neither record — and no absolute-path
     // record at all.
     {
-        AssetDatabase::AssetStore_TextJsonl store;
+        AssetDatabase::AssetStore_TextJsonl store(nullptr);
         std::string err;
         ASSERT_TRUE(store.LoadFromFile(projectDb, &err)) << err;
         AssetDatabase::AssetRecord rec{};
@@ -1944,7 +1944,7 @@ TEST(AssetRootSeparation, StoreLoadQuarantinesLeakedAbsolutePathRecords)
     // as historical lines, never live), healthy record intact, under-root
     // record live at its repaired canonical-relative path with kv preserved.
     {
-        AssetDatabase::AssetStore_TextJsonl store;
+        AssetDatabase::AssetStore_TextJsonl store(nullptr);
         std::string err;
         ASSERT_TRUE(store.LoadFromFile(projectDb, &err)) << err;
         EXPECT_EQ(store.GetLoadQuarantinedRecords().size(), 2u);
@@ -2056,7 +2056,7 @@ TEST(AssetRootSeparation, JsonlStoreRejectsAbsolutePathUpserts)
     fs::create_directories(root, ec);
     const fs::path dbFile = root / "store.assetdb";
 
-    AssetDatabase::AssetStore_TextJsonl store;
+    AssetDatabase::AssetStore_TextJsonl store(nullptr);
 
     AssetDatabase::AssetRecord winAbs{};
     winAbs.guid = GUID("aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa");
@@ -2517,7 +2517,7 @@ TEST(AssetRootSeparation, WarmStartReusesTheSnapshotHashForAMixedCasePath)
         std::vector<AssetDatabase::AssetSourceSnapshotDirectory> snapDirs;
         std::string err;
         ASSERT_TRUE(AssetDatabase::AssetSourceSnapshot::Load(
-            root / ".Cache" / "AssetDatabase" / "watcher.snapshot.bin",
+            root / ".Cache" / "AssetDatabase" / "watcher.snapshot.bin", nullptr,
             mountRoot, ignoreSig, snapRecs, snapDirs, &err)) << err;
         const bool covered = std::any_of(snapRecs.begin(), snapRecs.end(),
             [](const AssetDatabase::AssetSourceSnapshotRecord& r) {
@@ -2529,7 +2529,7 @@ TEST(AssetRootSeparation, WarmStartReusesTheSnapshotHashForAMixedCasePath)
 
     fs::remove(gate, ec);
     {
-        AssetDatabase::AssetStore_TextJsonl store;
+        AssetDatabase::AssetStore_TextJsonl store(nullptr);
         ASSERT_TRUE(store.LoadFromFile(dbFile, nullptr));
         for (const auto& r : store.EnumerateAssets())
         {

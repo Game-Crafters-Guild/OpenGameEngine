@@ -9,12 +9,10 @@
 // dominated EnqueueWork's publication cost (spec §1.3) — allocate = freelist
 // pop, free = freelist push, MPMC by construction.
 //
-// Closure-size audit (2026-07-10 — every envelope that flows through
-// EnqueueWork / EnqueueWorkBatch / Run / Submit(F&&) today):
-//   ParallelFor::Chunk          32B  (Fn* + 2×size_t + JobCounter*)
-//   ParallelForEach::Chunk     ≤48B  (Fn* + 2 iterators + JobCounter*)
-//   ParallelSort::Chunk         32B  (2 iterators + Compare* + JobCounter*)
-//   DispatchChunk               16B  (function* + JobCounter*)
+// Closure-size audit (every envelope that flows through EnqueueWork /
+// EnqueueWorkBatch / Run / Submit(F&&)):
+//   ParallelFor helper          16B  (RunBlock* + the lane's unstarted counter*)
+//   ParallelFor run block      ≤128B (one slab; static_assert in ParallelForCore.cpp)
 //   Run() pool stub              8B  (JobCounter::TaggedJobsRef)
 //   JobCounter::Job<F>          16B + sizeof(F); typical Run captures ≤64B
 //   Submit(F&&) lambdas         typical captures ≤64B (previously verified)
@@ -67,6 +65,13 @@ void AcquireTaskSlabsBulk(void** slabs, size_t count);
  * called from worker threads, including during static destruction.
  */
 void ReleaseTaskSlab(void* slab) noexcept;
+
+/**
+ * @brief Add `count` fresh heap slabs to the freelist, up to its retention
+ * cap. A pool provisions the slabs its ParallelFor helpers can hold at once,
+ * so its forks take no heap allocation once it exists.
+ */
+void ProvisionTaskSlabs(size_t count);
 
 /** Test hooks (PoolReuseChurn / microbench). Counters are process-global. */
 struct TaskSlabStatsSnapshot

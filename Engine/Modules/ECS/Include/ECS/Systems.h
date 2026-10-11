@@ -4,6 +4,7 @@
 #include "ECS/World.h"
 #include "ECS/Query.h"
 #include "ECS/Components.h"
+#include "ECS/SystemWaveTrace.h"
 #include "Logger/Logger.h"
 #include "JobSystem/JobCounter.h"
 #include "JobSystem/WorkStealingThreadPool.h"
@@ -78,6 +79,9 @@ private:
     std::vector<SystemPerformance> performanceData;
     bool trackPerformance = false;
 
+    // Off until a reader enables it (the editor's get_ecs_wave_trace).
+    SystemWaveTrace m_WaveTrace;
+
 public:
     explicit SystemManager(JobSystem::WorkStealingThreadPool* js = nullptr) : jobSystem(js) {}
 
@@ -120,6 +124,11 @@ public:
         }
     }
     const SystemExecutionPlan& GetExecutionPlan() const { return m_ExecutionPlan; }
+
+    /// The record of how the waves ran (see SystemWaveTrace). Frames name
+    /// systems by slot, so every change to the system set clears it. Only the
+    /// wave-based path is traced; without an execution plan nothing is recorded.
+    SystemWaveTrace& GetWaveTrace() { return m_WaveTrace; }
     size_t GetSequentialSystemCount() const { return systems.size(); }
     // Name of the sequential system a plan wave index refers to (null when out
     // of range) — lets tests assert wave placement without running the plan.
@@ -156,6 +165,7 @@ public:
             const char* name = system->GetName();
             systems[replaceIndex] = std::move(system);
             systems[replaceIndex]->SetEnabled(wasEnabled);
+            m_WaveTrace.Clear();
             if (replaceIndex < performanceData.size())
                 performanceData[replaceIndex].Name = name;
             Logger::Log::Info("[ECS] System '{}' replaced in place (slot {}) — new module code takes over",
@@ -165,6 +175,7 @@ public:
 
         ISystem* ptr = system.get();
         systems.push_back(std::move(system));
+        m_WaveTrace.Clear();
         // default: every frame
         seqEveryNFrames.push_back(1u);
         seqFrameCounters.push_back(0u);
@@ -204,6 +215,7 @@ public:
             return false;
         Logger::Log::Info("[ECS] System '{}' retired (slot {})", systems[index]->GetName(), (uint32)index);
         systems[index].reset();
+        m_WaveTrace.Clear();
         return true;
     }
 
@@ -292,7 +304,16 @@ public:
     }
 
 private:
-    void UpdateSequentialSystem(size_t idx, World& world, float32 deltaTime) {
+    // Runs one system on the calling thread. With a traced frame it stamps
+    // the body into `sample` (written only here, by this thread) and counts
+    // the jobs the body publishes.
+    void UpdateSequentialSystem(size_t idx, World& world, float32 deltaTime,
+                                SystemWaveTrace::Frame* frame = nullptr,
+                                uint16 sample = SystemWaveTrace::kNoSample) {
+        if (frame && sample != SystemWaveTrace::kNoSample) {
+            UpdateTracedSystem(idx, world, deltaTime, frame->Systems[sample]);
+            return;
+        }
         if (!trackPerformance || idx >= performanceData.size()) {
             systems[idx]->Update(world, deltaTime);
             return;
@@ -304,26 +325,86 @@ private:
         UpdatePerformanceData(idx, duration);
     }
 
-    void UpdateWaveRange(const std::vector<size_t>& enabled, size_t begin, size_t end,
-                         World& world, float32 deltaTime) {
-        if (begin == end) return;
-        if (end - begin == 1 || !jobSystem || !m_ParallelWaves) {
-            for (size_t i = begin; i < end; ++i)
-                UpdateSequentialSystem(enabled[i], world, deltaTime);
-        } else {
-            JobSystem::JobCounter waveCounter;
-            for (size_t i = begin; i < end; ++i) {
-                const size_t idx = enabled[i];
-                jobSystem->Run([this, idx, &world, deltaTime]() {
-                    UpdateSequentialSystem(idx, world, deltaTime);
-                }, waveCounter);
-            }
-            jobSystem->Wait(waveCounter);
+    void UpdateTracedSystem(size_t idx, World& world, float32 deltaTime,
+                            SystemWaveTrace::SystemSample& sample) {
+        const size_t worker = jobSystem ? jobSystem->GetCurrentWorkerId() : SIZE_MAX;
+        sample.Worker = worker < SystemWaveTrace::kCallerThread ? static_cast<uint16>(worker)
+                                                                : SystemWaveTrace::kCallerThread;
+        ISystem& system = *systems[idx];
+        SystemWaveTrace::BodyInterval interval(system.GetName());
+        JobSystem::WorkStealingThreadPool::PublishCountScope publishes(sample.Publishes);
+        sample.BeginNs = SystemWaveTrace::NowNs();
+        system.Update(world, deltaTime);
+        sample.EndNs = SystemWaveTrace::NowNs();
+        if (trackPerformance && idx < performanceData.size()) {
+            UpdatePerformanceData(idx, static_cast<float32>(sample.EndNs - sample.BeginNs) * 1.0e-6f);
         }
     }
 
+    // A traced system's sample in `frame`, or kNoSample when untraced.
+    uint16 AddTracedSystem(SystemWaveTrace::Frame* frame, SystemWaveTrace::WaveSample* wave, size_t idx) {
+        if (!frame || !wave)
+            return SystemWaveTrace::kNoSample;
+        return m_WaveTrace.AddSystem(*frame, *wave, static_cast<uint32>(idx));
+    }
+
+    void UpdateWaveRange(const std::vector<size_t>& enabled, size_t begin, size_t end,
+                         World& world, float32 deltaTime,
+                         SystemWaveTrace::Frame* frame, SystemWaveTrace::WaveSample* wave) {
+        if (begin == end) return;
+        if (end - begin == 1 || !jobSystem || !m_ParallelWaves) {
+            for (size_t i = begin; i < end; ++i)
+                UpdateSequentialSystem(enabled[i], world, deltaTime, frame,
+                                       AddTracedSystem(frame, wave, enabled[i]));
+            return;
+        }
+        if (frame && wave) {
+            UpdateTracedFork(enabled, begin, end, world, deltaTime, *frame, *wave);
+            return;
+        }
+        JobSystem::JobCounter waveCounter;
+        for (size_t i = begin; i < end; ++i) {
+            const size_t idx = enabled[i];
+            jobSystem->Run([this, idx, &world, deltaTime]() {
+                UpdateSequentialSystem(idx, world, deltaTime);
+            }, waveCounter);
+        }
+        jobSystem->Wait(waveCounter);
+    }
+
+    // The forked range of a traced wave: a publish stamp per system, the
+    // publish loop's jobs counted, the join timed.
+    void UpdateTracedFork(const std::vector<size_t>& enabled, size_t begin, size_t end,
+                          World& world, float32 deltaTime,
+                          SystemWaveTrace::Frame& frame, SystemWaveTrace::WaveSample& wave) {
+        JobSystem::JobCounter waveCounter;
+        {
+            JobSystem::WorkStealingThreadPool::PublishCountScope publishes(frame.WaveForkPublishes);
+            for (size_t i = begin; i < end; ++i) {
+                const size_t idx = enabled[i];
+                const uint16 sample = m_WaveTrace.AddSystem(frame, wave, static_cast<uint32>(idx));
+                if (sample != SystemWaveTrace::kNoSample)
+                    frame.Systems[sample].PublishNs = SystemWaveTrace::NowNs();
+                ++wave.Forks;
+                SystemWaveTrace::Frame* framePtr = &frame;
+                jobSystem->Run([this, idx, &world, deltaTime, framePtr, sample]() {
+                    UpdateSequentialSystem(idx, world, deltaTime, framePtr, sample);
+                }, waveCounter);
+            }
+        }
+        SystemWaveTrace::JoinInterval interval(wave.PlanWave, static_cast<uint32>(end - begin));
+        const uint64 joinBegin = SystemWaveTrace::NowNs();
+        jobSystem->Wait(waveCounter);
+        wave.JoinWaitNs += SystemWaveTrace::NowNs() - joinBegin;
+        ++wave.Joins;
+    }
+
     void UpdateWaveBased(World& world, float32 deltaTime) {
-        for (const auto& wave : m_ExecutionPlan.Waves) {
+        SystemWaveTrace::Frame* frame = nullptr;
+        if (m_WaveTrace.IsEnabled())
+            frame = &m_WaveTrace.BeginFrame(jobSystem ? jobSystem->GetPublishedJobCount() : 0);
+        for (size_t planWave = 0; planWave < m_ExecutionPlan.Waves.size(); ++planWave) {
+            const auto& wave = m_ExecutionPlan.Waves[planWave];
             // Collect enabled systems in this wave
             std::vector<size_t> enabled;
             for (size_t idx : wave.SystemIndices) {
@@ -342,18 +423,27 @@ private:
 
             if (enabled.empty()) continue;
 
+            SystemWaveTrace::WaveSample* waveSample =
+                frame ? m_WaveTrace.BeginWave(*frame, static_cast<uint32>(planWave)) : nullptr;
+
             // Each exclusive system splits this wave into joined ranges. It
             // never leaves the caller thread or overlaps a neighboring range.
             // No extra vector or task registry is needed for the split.
             size_t begin = 0;
             for (size_t i = 0; i < enabled.size(); ++i) {
                 if (!systems[enabled[i]]->RequiresExclusiveUpdate()) continue;
-                UpdateWaveRange(enabled, begin, i, world, deltaTime);
-                UpdateSequentialSystem(enabled[i], world, deltaTime);
+                UpdateWaveRange(enabled, begin, i, world, deltaTime, frame, waveSample);
+                UpdateSequentialSystem(enabled[i], world, deltaTime, frame,
+                                       AddTracedSystem(frame, waveSample, enabled[i]));
                 begin = i + 1;
             }
-            UpdateWaveRange(enabled, begin, enabled.size(), world, deltaTime);
+            UpdateWaveRange(enabled, begin, enabled.size(), world, deltaTime, frame, waveSample);
+
+            if (waveSample)
+                m_WaveTrace.EndWave(*frame, *waveSample);
         }
+        if (frame)
+            m_WaveTrace.EndFrame(*frame, jobSystem ? jobSystem->GetPublishedJobCount() : 0);
     }
 
 public:
@@ -484,6 +574,7 @@ public:
         performanceData.clear();
         m_ExecutionPlan = {};
         m_LateAddedSystems.clear();
+        m_WaveTrace.Clear();
         seqEveryNFrames.clear();
         seqFrameCounters.clear();
         parEveryNFrames.clear();

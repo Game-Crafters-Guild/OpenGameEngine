@@ -17,6 +17,12 @@
 //    lane or channel in the shutdown drain, and a participating Wait runs a
 //    tagged job as the waiter's own class. Completion callbacks run outside
 //    any body.
+//  - PublishCountScopeTest: a scope counts every job its thread publishes
+//    (a Run stub, EnqueueWork, each element of a batch on the bulk path,
+//    Submit, a Background job, a graph task a worker pushes to its own
+//    queue), the innermost of nested scopes counts, a body another thread
+//    runs is not counted while a body the thread's own Wait runs inline is,
+//    and GetPublishedJobCount advances by every publish.
 
 #include "JobSystem/JobChannel.h"
 #include "JobSystem/JobCounter.h"
@@ -718,6 +724,135 @@ TEST(CurrentJobContextTest, CompletionCallbacksRunOutsideTheBody) {
     }
     EXPECT_EQ(bodies.Jobs(), (std::vector<std::string>{"Normal", kChannelName}));
     EXPECT_EQ(callbacks.Jobs(), (std::vector<std::string>{"", ""}));
+}
+
+// ---------------------------------------------------------------------------
+// PublishCountScope and GetPublishedJobCount
+// ---------------------------------------------------------------------------
+
+// One of each publish kind inside a scope: one Run stub, one EnqueueWork, a
+// batch large enough for the bulk path, one Submit and one Background job
+// count four plus the batch, and the pool's published total advances by the
+// same.
+TEST(PublishCountScopeTest, CountsEveryJobTheThreadPublishes) {
+    constexpr size_t kBatch = WorkStealingThreadPool::kBulkPublishThreshold;
+    constexpr int kJobs = 4 + static_cast<int>(kBatch);
+    WorkStealingThreadPool pool(2);
+    const uint64 publishedBefore = pool.GetPublishedJobCount();
+    uint32 published = 0;
+    std::atomic<int> ran{0};
+    {
+        WorkStealingThreadPool::PublishCountScope scope(published);
+        JobCounter counter;
+        pool.Run([&ran] { ran.fetch_add(1); }, counter);
+        pool.Wait(counter);
+        pool.EnqueueWork([&ran] { ran.fetch_add(1); });
+        std::vector<std::function<void()>> batch(kBatch, [&ran] { ran.fetch_add(1); });
+        pool.EnqueueWorkBatch(std::span<std::function<void()>>(batch));
+        TaskHandle handle = pool.Submit([&ran] { ran.fetch_add(1); });
+        handle.Wait();
+        pool.EnqueueWork([&ran] { ran.fetch_add(1); }, JobPriority::Background);
+    }
+    ASSERT_TRUE(WaitUntil([&] { return ran.load() == kJobs; }));
+    EXPECT_EQ(published, static_cast<uint32>(kJobs));
+    EXPECT_EQ(pool.GetPublishedJobCount() - publishedBefore, static_cast<uint64>(kJobs));
+}
+
+// A graph task published from a worker body goes to that worker's own queue
+// and counts in the body's scope like any other publish.
+TEST(PublishCountScopeTest, AGraphTaskAWorkerPublishesCounts) {
+    WorkStealingThreadPool pool(2);
+    const uint64 publishedBefore = pool.GetPublishedJobCount();
+    std::atomic<uint32> counted{0};
+    std::atomic<int> ran{0};
+    JobCounter counter;
+    pool.Run([&pool, &counted, &ran] {
+        uint32 published = 0;
+        {
+            WorkStealingThreadPool::PublishCountScope scope(published);
+            pool.Submit([&ran] { ran.fetch_add(1); }, std::span<const TaskHandle>());
+        }
+        counted.store(published);
+    }, counter);
+    pool.Wait(counter);
+    ASSERT_TRUE(WaitUntil([&] { return ran.load() == 1; }));
+    EXPECT_EQ(counted.load(), 1u);
+    EXPECT_EQ(pool.GetPublishedJobCount() - publishedBefore, 2u);
+}
+
+// The inner scope takes the publishes made while it lives; the outer one
+// counts again once it ends; nothing is counted after both end.
+TEST(PublishCountScopeTest, TheInnermostScopeCounts) {
+    WorkStealingThreadPool pool(2);
+    uint32 outer = 0;
+    uint32 inner = 0;
+    std::atomic<int> ran{0};
+    {
+        WorkStealingThreadPool::PublishCountScope outerScope(outer);
+        pool.EnqueueWork([&ran] { ran.fetch_add(1); });
+        {
+            WorkStealingThreadPool::PublishCountScope innerScope(inner);
+            pool.EnqueueWork([&ran] { ran.fetch_add(1); });
+            pool.EnqueueWork([&ran] { ran.fetch_add(1); });
+        }
+        pool.EnqueueWork([&ran] { ran.fetch_add(1); });
+    }
+    pool.EnqueueWork([&ran] { ran.fetch_add(1); });
+    ASSERT_TRUE(WaitUntil([&] { return ran.load() == 5; }));
+    EXPECT_EQ(outer, 2u);
+    EXPECT_EQ(inner, 2u);
+}
+
+// The test thread parks in Wait, so the job's body runs on a worker and its
+// publishes happen there, outside the test thread's scope: the scope counts
+// the job and not the jobs it publishes; the pool's total counts both.
+TEST(PublishCountScopeTest, OtherThreadsPublishesAreNotCounted) {
+    WorkStealingThreadPool pool(2);
+    const uint64 publishedBefore = pool.GetPublishedJobCount();
+    uint32 published = 0;
+    std::atomic<int> ran{0};
+    {
+        WorkStealingThreadPool::PublishCountScope scope(published);
+        JobCounter counter;
+        pool.Run([&pool, &ran] {
+            JobCounter nested;
+            pool.Run([&ran] { ran.fetch_add(1); }, nested);
+            pool.Run([&ran] { ran.fetch_add(1); }, nested);
+            pool.Wait(nested);
+        }, counter);
+        pool.Wait(counter);
+    }
+    EXPECT_EQ(ran.load(), 2);
+    EXPECT_EQ(published, 1u);
+    EXPECT_EQ(pool.GetPublishedJobCount() - publishedBefore, 3u);
+}
+
+// A worker's Wait participates, so on a one-worker pool the body it waits for
+// runs inline on that worker, and so does the nested job that body waits for:
+// the body's publish happens on the scope's thread and counts with the
+// scope's own.
+TEST(PublishCountScopeTest, ABodyTheThreadsOwnWaitRunsInlineCountsItsPublishes) {
+    WorkStealingThreadPool pool(1);
+    std::atomic<uint32> counted{0};
+    std::atomic<int> ran{0};
+    JobCounter outer;
+    pool.Run([&pool, &counted, &ran] {
+        uint32 published = 0;
+        {
+            WorkStealingThreadPool::PublishCountScope scope(published);
+            JobCounter mine;
+            pool.Run([&pool, &ran] {
+                JobCounter nested;
+                pool.Run([&ran] { ran.fetch_add(1); }, nested);
+                pool.Wait(nested);
+            }, mine);
+            pool.Wait(mine);
+        }
+        counted.store(published);
+    }, outer);
+    pool.Wait(outer);
+    EXPECT_EQ(ran.load(), 1);
+    EXPECT_EQ(counted.load(), 2u);
 }
 
 } // namespace GameEngine::Tests

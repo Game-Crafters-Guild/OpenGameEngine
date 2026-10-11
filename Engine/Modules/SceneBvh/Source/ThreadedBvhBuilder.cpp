@@ -55,7 +55,7 @@ void ThreadedBvhBuilder::BuildMany(JobSystem::WorkStealingThreadPool* pool,
     }
 
     JobSystem::ParallelFor(
-        pool, 0u, soups.size(),
+        pool, soups.size(),
         [&](size_t begin, size_t end) {
             for (size_t i = begin; i < end; ++i)
                 outBvhs[i] = Build(soups[i]);

@@ -9,6 +9,7 @@
 #include <future>
 #include <memory>
 #include <stdexcept>
+#include <vector>
 
 namespace GameEngine
 {
@@ -105,6 +106,8 @@ class MetadataBatchProcessingTask : public JobSystem::Task
     bool IsCancelled() const override { return m_CancelRequested->load(); }
 
   private:
+    bool ProcessChunk(const Vector<ScannedFileInfo>& assetInfos, size_t chunk, Vector<AssetMetadata>& out) const;
+
     std::future<Vector<ScannedFileInfo>> m_AssetInfosFuture;
     AssetRegistry& m_Registry;
     std::promise<Vector<AssetMetadata>> m_ProcessedMetadataPromise;
@@ -142,6 +145,10 @@ class RegistryUpdateTask : public JobSystem::Task
     bool IsCancelled() const override { return m_CancelRequested->load(); }
 
   private:
+    bool RegisterChunk(Vector<AssetMetadata>& metadataList, size_t chunk,
+                       std::vector<AssetDatabase::ReconcileScanNewFile>& newFiles,
+                       std::atomic<size_t>& registeredCount);
+
     std::future<Vector<AssetMetadata>> m_MetadataFuture;
     AssetRegistry& m_Registry;
     std::promise<size_t> m_RegisteredCountPromise;

@@ -10,6 +10,8 @@
 // trivially destructible, so ReleaseTaskSlab is safe from any thread at any
 // point of process teardown.
 
+#include "HeldSlabFreelist.h"
+
 #include "JobSystem/TaskSlabPool.h"
 #include "JobSystem/WorkStealingThreadPool.h"
 #include "Logger/Logger.h"
@@ -40,6 +42,20 @@ bool WaitForCount(const std::atomic<size_t>& counter, size_t expected, int timeo
         std::this_thread::yield();
     }
     return true;
+}
+
+// Acquires kTaskSlabPoolCapacity slabs, then releases them all on this thread.
+void AcquireThenReleaseACapOfSlabs()
+{
+    std::vector<void*> slabs(JobSystem::kTaskSlabPoolCapacity);
+    for (void*& slab : slabs)
+    {
+        slab = JobSystem::Detail::AcquireTaskSlab();
+    }
+    for (void* slab : slabs)
+    {
+        JobSystem::Detail::ReleaseTaskSlab(slab);
+    }
 }
 
 } // namespace
@@ -213,6 +229,23 @@ TEST(TaskSlabPoolTest, OversizedBatchFallbackStillRuns)
 
     Logger::Log::SetLogLevel(Logger::LogLevel::Debug);
     pool.Shutdown();
+}
+
+// One thread releasing a full cap's worth of slabs keeps nearly all of them:
+// the freelist's per-thread sub-queue indexes the whole cap, so retention
+// does not depend on how many threads release. What it cannot reach are the
+// blocks other threads' sub-queues hold partly used (one block, 32 slabs,
+// each), so the bound leaves a quarter of the cap for them; a sub-queue
+// limited to the default index would send three quarters to the heap.
+TEST(TaskSlabPoolTest, OneReleasingThreadFillsTheFreelistToItsCap)
+{
+    const GameEngine::Tests::HeldSlabFreelist held;
+    const auto before = JobSystem::Detail::GetTaskSlabStatsForTests();
+    std::thread releaser(AcquireThenReleaseACapOfSlabs);
+    releaser.join();
+    const auto after = JobSystem::Detail::GetTaskSlabStatsForTests();
+    EXPECT_LE(after.HeapFrees - before.HeapFrees, JobSystem::kTaskSlabPoolCapacity / 4)
+        << "slabs released by one thread went back to the heap";
 }
 
 // Submit-path microbench (slice 6 gate: ~1 pooled alloc + ≤1 mutex on the

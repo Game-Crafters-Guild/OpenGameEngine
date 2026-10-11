@@ -8,6 +8,7 @@
 #include "Engine/Rendering/RenderServices.h"
 #include "Engine/Rendering/Material.h"
 #include "Engine/Rendering/WorldDrawTypes.h"
+#include "JobSystem/WorkStealingThreadPool.h"
 #include "Assets/ModelAsset.h"
 #include "AssetCore/GUID.h"
 #include "Rendering/Core/Device.h"
@@ -544,6 +545,94 @@ TEST(RenderServicesWorldDrawBuilderTests, CpuDrawStream_KeysPerMaterialAndClears
                                CpuDrawStreamBuilder::InstanceSet::Camera).Count, 0u);
     EXPECT_TRUE(cds.GetIndexList(viewId).empty());
     EXPECT_EQ(cds.GetStats().CameraBatches, 0u);
+    rs.Shutdown();
+    device->Shutdown();
+}
+
+// The cull fans out over a thread pool above 512 submissions, one range per
+// chunk. Every chunk must write exactly its own candidate slots, so a pooled
+// build lists the same instances, in the same order, as a serial one: a range
+// that indexed from its own start, or offset its slots twice, would leave or
+// clobber another chunk's candidates and only show with a pool.
+TEST(RenderServicesWorldDrawBuilderTests, CpuDrawStream_PooledCullMatchesSerial)
+{
+    auto device = CreateVulkanDeviceFast();
+    if (!device)
+        GTEST_SKIP() << "No Vulkan device available";
+
+    RenderServices rs;
+    ASSERT_TRUE(rs.Initialize(device.get()));
+    Rendering::GPUScene* scene = rs.GetGPUScene();
+    ASSERT_NE(scene, nullptr);
+
+    Rendering::MeshGPUHandle mesh = RegisterTestMesh(rs);
+    const auto* entry = rs.GetMeshGPURegistry().Find(mesh);
+    ASSERT_NE(entry, nullptr);
+
+    constexpr uint32_t kMaterialIndexA = 3u;
+    constexpr uint32_t kMaterialIndexB = 4u;
+    Material matA = Material::TestFactory::Create(GUID::Generate(), "MatA", 32u);
+    Material::TestFactory::SetGraphicsPipelineId(matA, Rendering::GraphicsPipelineId{1u});
+    Material::TestFactory::SetGpuSceneMaterialIndex(matA, kMaterialIndexA);
+    Material matB = Material::TestFactory::Create(GUID::Generate(), "MatB", 32u);
+    Material::TestFactory::SetGraphicsPipelineId(matB, Rendering::GraphicsPipelineId{1u});
+    Material::TestFactory::SetGpuSceneMaterialIndex(matB, kMaterialIndexB);
+    // No pipeline: every submission under it resolves to nothing.
+    Material unready = Material::TestFactory::Create(GUID::Generate(), "Unready", 32u);
+
+    const CameraId camId = rs.Views().AllocateCamera("cam");
+    rs.Views().SetCameraData(camId, MakeIdentityFrustumCamera());
+    const ViewId viewId = rs.Views().AllocateView("view", camId);
+
+    // Points spread across x in [-2, 2): about half inside the identity
+    // frustum, so every chunk holds both visible and culled instances.
+    constexpr uint32_t kSubmissions = 2000u;
+    std::vector<WorldSubmissionRecord> recs;
+    recs.reserve(kSubmissions);
+    for (uint32_t i = 0; i < kSubmissions; ++i)
+    {
+        const float x = -2.0f + 4.0f * static_cast<float>((i * 37u) % kSubmissions) / kSubmissions;
+        const uint32_t inst = AddPointInstance(*scene, x, 0.0f, 0.5f);
+        const Material& mat = (i % 11u == 0u) ? unready : ((i % 3u == 0u) ? matB : matA);
+        const uint32 flags = (i % 2u == 0u) ? kSubmissionFlagCastShadows : 0u;
+        recs.push_back(MakeRecord(viewId, mesh, mat, inst, flags));
+    }
+
+    WorldDrawBuilder wdb;
+    wdb.BeginFrame();
+    wdb.Submit(std::span<const WorldSubmissionRecord>(recs));
+    wdb.BuildBatchKeys(rs.GetMeshGPURegistry());
+
+    CpuDrawStreamBuilder serial;
+    serial.Build(wdb, rs.GetMeshGPURegistry(), *scene, rs.Views(), nullptr);
+    JobSystem::WorkStealingThreadPool pool(3);
+    CpuDrawStreamBuilder pooled;
+    pooled.Build(wdb, rs.GetMeshGPURegistry(), *scene, rs.Views(), &pool);
+
+    const std::span<const uint32_t> serialList = serial.GetIndexList(viewId);
+    const std::span<const uint32_t> pooledList = pooled.GetIndexList(viewId);
+    ASSERT_FALSE(serialList.empty());
+    EXPECT_TRUE(std::equal(serialList.begin(), serialList.end(), pooledList.begin(), pooledList.end()))
+        << "serial lists " << serialList.size() << " instances, pooled " << pooledList.size();
+
+    for (const uint32_t materialIndex : {kMaterialIndexA, kMaterialIndexB})
+    {
+        for (const auto set : {CpuDrawStreamBuilder::InstanceSet::Camera,
+                               CpuDrawStreamBuilder::InstanceSet::ShadowCasters})
+        {
+            const auto s = serial.GetInstances(viewId, materialIndex, entry->gpuMeshIndex, set);
+            const auto p = pooled.GetInstances(viewId, materialIndex, entry->gpuMeshIndex, set);
+            EXPECT_GT(s.Count, 0u) << "material " << materialIndex;
+            EXPECT_EQ(s.First, p.First) << "material " << materialIndex;
+            EXPECT_EQ(s.Count, p.Count) << "material " << materialIndex;
+        }
+    }
+    EXPECT_EQ(serial.GetStats().Candidates, pooled.GetStats().Candidates);
+    EXPECT_EQ(serial.GetStats().CameraVisible, pooled.GetStats().CameraVisible);
+    EXPECT_EQ(serial.GetStats().ShadowCasters, pooled.GetStats().ShadowCasters);
+    EXPECT_LT(serial.GetStats().CameraVisible, serial.GetStats().Candidates)
+        << "the cull must reject some instances for the comparison to cover it";
+
     rs.Shutdown();
     device->Shutdown();
 }

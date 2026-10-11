@@ -72,10 +72,10 @@ Tests and tools construct their own: <code>JobSystem::WorkStealingThreadPool poo
   <td>Happens-before on all task writes at Wait-return; worker-legal join; sticky <code>HasAnyFailed()</code></td>
 </tr>
 <tr>
-  <td>An index range or container to iterate</td>
-  <td><code>ParallelFor</code> / <code>ParallelForEach</code> / <code>ParallelSort</code></td>
-  <td>One batch publish + JobCounter barrier, chunking done for you</td>
-  <td>Blocks until done; sequential fallback below threshold / no pool / shutdown. <strong>Join from a non-worker thread only</strong></td>
+  <td>N units claimed one at a time, an index range to split into chunks, or a range to sort</td>
+  <td><code>ParallelFor</code> (units, or chunks with a <code>minBatchSize</code>) / <code>ParallelSort</code></td>
+  <td>One slab run block + at most one batch of helper envelopes (min(workers, units &minus; 1, 64)); 0 heap allocations per call</td>
+  <td>Blocks until done; legal on <strong>any thread</strong>, a worker included; the first exception a chunk threw is rethrown on the caller</td>
 </tr>
 <tr>
   <td>Per-task result, status, cancellation, or completion callbacks</td>
@@ -105,7 +105,7 @@ flowchart TD
     C -->|No| E["EnqueueWork(fn)"]
     B -->|Yes| F{"What do you need back?"}
     F -->|"Just a join:<br/>'these N are all done'"| G{"Iterating an index range<br/>or a container?"}
-    G -->|Yes| H["ParallelFor / ParallelForEach<br/>(join from non-worker thread)"]
+    G -->|Yes| H["ParallelFor<br/>(any thread)"]
     G -->|No| I["Run(fn, counter) + pool.Wait(counter)<br/>worker-legal join"]
     F -->|"Per-task result / cancel /<br/>callbacks / wait on ONE task"| J["Submit(lambda) &rarr; TaskHandle"]
     F -->|"Ordering between tasks<br/>(B after A)"| K["Submit(fn, deps)<br/>(or Task subclass + AddDependency)"]
@@ -205,7 +205,7 @@ if (counter.HasAnyFailed())                  // sticky flag; no per-task attribu
 <code>pool.Wait(counter)</code> participates on two kinds of thread: <strong>a worker of this pool</strong> and <strong>a thread that cannot block</strong> (the browser main thread). Such a waiter does not park while there is findable work: it executes tasks, but <strong>only tasks tagged to that same counter</strong> (they live in the counter's own queue, never drained from the pool's general queues). When no same-counter task is findable (the remainder is in flight on other threads, or the counter is a bare-chunk barrier with no tagged queue), it parks on the counter's condvar and wakes on the last decrement. <strong>Every other thread parks</strong> on the counter's condvar until the last decrement while the workers run the tasks: the native main thread, another pool's worker, a thread of your own. This filtered consumption is what makes fork-join from inside a job deadlock-free on a bounded pool, guarantees that waiting on counter A never picks up an unrelated 5ms task, and lets the browser main thread, which must not sleep, drain its own join.
 </div>
 
-<p><strong>Scope:</strong> participation covers only tasks submitted via <code>Run(fn, counter)</code>. A counter used purely as a barrier for externally-published work (bare <code>EnqueueWork</code> chunks with manual <code>Add</code>/<code>Decrement</code> — the ParallelFor shape, §3.3) <strong>must be joined from a non-worker thread</strong>: the waiter has nothing tagged to execute and a worker parked on it would deadlock a bounded pool. Also: all tasks counted into one counter must target the <strong>same pool</strong>.</p>
+<p><strong>Scope:</strong> participation covers only tasks submitted via <code>Run(fn, counter)</code>. A counter used purely as a barrier for externally-published work (bare <code>EnqueueWork</code> chunks with manual <code>Add</code>/<code>Decrement</code>, §3.3) <strong>must be joined from a non-worker thread</strong>: the waiter has nothing tagged to execute and a worker parked on it would deadlock a bounded pool. Also: all tasks counted into one counter must target the <strong>same pool</strong>.</p>
 
 <h3>3.2 · Lifetime and the destruction license</h3>
 <ul>
@@ -239,36 +239,74 @@ pool.Wait(m_PrewarmCounter);</code></pre>
 <strong>F16 ordering is binding:</strong> <code>Add()</code> on the submitting thread <em>before</em> the task is published; exactly one <code>Decrement()</code> per counted unit, after its <code>Add()</code>, on any thread: the task's completion path, or a driver's completion thread for work the pool does not run (use a scope guard so exceptions decrement). Decrement-then-publish or publish-then-Add both create windows where Wait can return early or hang.
 </div>
 
-<h3>3.4 · Don't hand-roll ranges: ParallelFor / ParallelForEach / ParallelSort / DispatchAndWait</h3>
-<p>The range primitives in <code>JobSystem/ParallelAlgorithms.h</code> are built on a JobCounter barrier and handle chunk math, batch publication, and fallbacks for you:</p>
+<h3>3.4 · Don't hand-roll ranges or claim loops: ParallelFor and ParallelSort</h3>
+<p><code>ParallelFor</code> is the one fork verb: N units, each claimed by one thread, with the caller claiming beside the pool's helpers. It handles helper publication, the join and the fallbacks for you. The unit form is declared in <code>JobSystem/WorkStealingThreadPool.h</code>; <code>JobSystem/ParallelAlgorithms.h</code> adds the chunked overload and <code>ParallelSort</code>. Every form takes the pool by pointer, and a null pool runs the work on the caller.</p>
 
-<pre><code>// ParallelAlgorithms.h — all take the pool by POINTER (null = sequential)
-template &lt;typename Func&gt;
-void ParallelFor(WorkStealingThreadPool* pool, size_t begin, size_t end,
-                 Func&amp;&amp; func, size_t minBatchSize = 1024);   // func(chunkBegin, chunkEnd)
+<pre><code>struct ParallelForOptions                              // JobSystem/ParallelForOptions.h
+{
+    static constexpr size_t kAllWorkers = SIZE_MAX;
+    size_t Helpers = kAllWorkers;                      // one per worker by default; clamped to min(units - 1, 64); 0 = every unit on the caller
+    JobPriority HelperPriority = JobPriority::Normal;  // a Background body's helpers are Background whatever is asked
+    const std::function&lt;bool()&gt;* Stop = nullptr;       // polled by the caller only, before each of its claims
+    struct UnitAdmission { std::function&lt;bool()&gt; TryAcquire; std::function&lt;void()&gt; Release; };
+    const UnitAdmission* Admission = nullptr;          // per helper unit: acquire before, release after
+};
 
-template &lt;typename Iter, typename Func&gt;
-void ParallelForEach(WorkStealingThreadPool* pool, Iter begin, Iter end,
-                     Func&amp;&amp; func, size_t minBatchSize = 1024); // func(element)
+// Units: body(size_t unit) returns void or bool (false stops the run).
+template &lt;typename Body&gt;
+bool ParallelFor(WorkStealingThreadPool* pool, size_t count, Body&amp;&amp; body,
+                 const ParallelForOptions&amp; options = {});
+
+// Chunks: body(chunkBegin, chunkEnd) over [0, count), at most min(workers + 1, ceil(count / minBatchSize), 64) equal chunks.
+template &lt;typename Body&gt; requires std::invocable&lt;Body&amp;, size_t, size_t&gt;
+void ParallelFor(WorkStealingThreadPool* pool, size_t count, Body&amp;&amp; body, size_t minBatchSize);
 
 template &lt;typename Iter, typename Compare, ...&gt;
 void ParallelSort(WorkStealingThreadPool* pool, Iter begin, Iter end,
-                  Compare comp, size_t threshold = 5000);      // + std::less overload
-
-void DispatchAndWait(WorkStealingThreadPool* pool,
-                     std::function&lt;void()&gt;* tasks, uint32_t count);</code></pre>
+                  Compare comp, size_t threshold = 5000);      // + std::less overload</code></pre>
 
 <pre><code>#include "JobSystem/ParallelAlgorithms.h"
 
-JobSystem::ParallelFor(&amp;pool, 0, particles.size(),
+// One unit per tile; every worker gets a helper.
+JobSystem::ParallelFor(&amp;pool, tiles.size(), [&amp;](size_t i) { BakeTile(tiles[i]); });
+
+// Work too fine to claim one element at a time: equal chunks of about 1024 or more.
+JobSystem::ParallelFor(&amp;pool, particles.size(),
     [&amp;](size_t begin, size_t end)
     {
         for (size_t i = begin; i &lt; end; ++i)
             Integrate(particles[i], dt);
     },
-    /*minBatchSize=*/1024);   // at or below this, the whole range runs on the caller</code></pre>
+    /*minBatchSize=*/1024);   // at or below this, the whole range runs on the caller
 
-<p>They block until done, run one chunk on the calling thread (a free extra lane), fall back to sequential execution when the pool is null / shutting down / the range is small — and <strong>must be called from a non-worker thread</strong> (their barrier is the bare shape of §3.3; Debug-asserted). Exceptions in chunks are logged and swallowed so the barrier always releases.</p>
+// A cancellable run on half the pool.
+const std::function&lt;bool()&gt; cancelled = [&amp;] { return m_CancelRequested.load(); };
+JobSystem::ParallelForOptions options;
+options.Helpers = std::max&lt;size_t&gt;(1, pool.GetWorkerCount() / 2) - 1;   // half the pool, the caller included
+options.Stop = &amp;cancelled;
+const bool finished = JobSystem::ParallelFor(&amp;pool, chunkCount,
+    [&amp;](size_t chunk) { return ProcessChunk(chunk); },   // false stops the run on every thread
+    options);</code></pre>
+
+<div class="panel ok">
+<strong>Legal on any thread.</strong> A pool worker, the main thread, a channel job (§12) or a thread of your own may call it. The calling thread claims units itself beside at most min(helpers, units &minus; 1, 64) helper tasks, then waits only for the units another thread has <em>started</em>: a helper still queued when nothing is left finds the run closed and ends. The call therefore never waits on work nobody has picked up, and a worker calling it cannot deadlock a bounded pool. On the browser main thread the wait services the thread's proxied calls instead of sleeping.
+</div>
+
+<ul>
+<li><strong>Units or chunks:</strong> the unit form runs <code>body(unit)</code> once per unit, each claimed with one atomic operation, so give it units worth that (a tile, a band, a chunk you planned yourself). The chunked overload splits [0, count) into min(workers + 1, ceil(count / minBatchSize), 64) equal chunks (a range at or under <code>minBatchSize</code> runs on the caller) and runs <code>body(chunkBegin, chunkEnd)</code> per chunk, for per-element work and for bodies that set up per-chunk state. <code>ParallelSort</code> sorts one chunk per worker in parallel and merges on the caller.</li>
+<li><strong>Result:</strong> the unit form returns <code>false</code> when a body returned <code>false</code> or <code>Stop</code> returned true, even when no unit was left to skip (a failed last unit fails the run); <code>true</code> otherwise, and always for a <code>void</code> body without a <code>Stop</code>. It is not "every unit ran".</li>
+<li><strong>Stopping:</strong> a body that returns <code>false</code> or throws, <code>Stop</code> returning true or throwing, or an admission hook throwing stops the run: no further unit starts on any thread; units in flight finish. <code>Stop</code> is read by the caller only, so a body that must stop helpers mid-unit returns <code>false</code> itself.</li>
+<li><strong>Exceptions:</strong> the first exception a unit, <code>Stop</code> or an admission hook threw, on any thread, is rethrown on the caller once the units in flight have finished. Nothing is logged and dropped.</li>
+<li><strong>Admission:</strong> each unit a helper runs takes <code>TryAcquire</code> first and <code>Release</code> after. A refused helper ends and leaves the units to the caller and the other helpers; an admitted helper runs one unit, then re-publishes itself at the end of its lane while units are left, so the lane's other jobs run between units. The caller's own units take no admission. <code>TextureCookWorkers::RunBands</code> uses it for the texture decode budget.</li>
+<li><strong>Helpers waiting:</strong> a pool keeps at most <code>kMaxUnstartedClaimHelpersPerWorker</code> (4) helpers per worker published and not yet started in each lane, across every caller; Background helpers queued behind a streaming flood never take a Normal fork's budget. A fork publishes only the helpers that fit and the caller claims the rest, so a thread forking back to back faster than the workers drain the helpers its closed runs left queued runs its units itself instead of growing the queue.</li>
+<li><strong>Class:</strong> helpers publish at the class of the pool body that calls (Background inside a Background body, Normal everywhere else, §11), so a Background job's fork never puts work in the frame's lane. <code>HelperPriority</code> asks for Background outside a Background body.</li>
+<li><strong>Fallbacks:</strong> a null pool, a single unit, or a chunked range at or under its batch size runs on the caller; an inline pool, or one whose <code>Shutdown()</code> has been requested, publishes no helper and runs every unit on the caller.</li>
+<li><strong>Lifetime:</strong> the body, <code>Stop</code> and <code>Admission</code> need to live only for the call: a helper that runs after <code>ParallelFor</code> returned touches none of them.</li>
+<li><strong>Bodies run on several threads at once:</strong> give each unit its own output (a slot per unit, merged in unit order after the call) rather than a shared container behind a lock.</li>
+<li><strong>Cost:</strong> one 128-byte slab for the run and one slab envelope per helper. The pool provisions the slabs its helpers can hold at once in both lanes when it is built (about 18 per worker), so a fork takes no heap allocation once the pool exists; each further thread forking at the same moment can add one slab, once.</li>
+</ul>
+
+<p class="muted"><code>Run(fn, counter)</code> + <code>Wait(counter)</code> (§3) remains the fork for work that needs a counter: a wave whose members are not an index range, or a join on tasks published from several places.</p>
 
 <h2>4 · Path 3 — future-style: Submit(lambda) → TaskHandle</h2>
 
@@ -428,7 +466,7 @@ auto compress = pool.Submit(std::make_unique&lt;CompressTask&gt;(&amp;pool, deco
 <ol>
 <li><strong>Gate:</strong> all submit paths are gated the moment shutdown is requested, <code>JobChannel::Submit</code> and <code>JobChannel::Enqueue</code> included; blocking threads take no further work.</li>
 <li><strong>Join compute workers:</strong> workers stop taking new work and are joined; <em>in-flight tasks complete normally</em> (shutdown never interrupts a running body).</li>
-<li><strong>Drain (two-phase, on the shutting-down thread):</strong> one pass over the pool queues, every channel's FIFO and the blocking threads' FIFO: queued <strong>handle/graph tasks are canceled first</strong>, then queued <strong>bare tasks are executed</strong>. Cancel-first matters: a bare task may Wait() on a handle task queued behind it — canceling first makes that Wait return. Bare tasks are executed rather than dropped because they release caller-side barriers (ParallelFor chunks reference the blocked caller's stack; dropping one is a hang, B7).</li>
+<li><strong>Drain (two-phase, on the shutting-down thread):</strong> one pass over the pool queues, every channel's FIFO and the blocking threads' FIFO: queued <strong>handle/graph tasks are canceled first</strong>, then queued <strong>bare tasks are executed</strong>. Cancel-first matters: a bare task may Wait() on a handle task queued behind it — canceling first makes that Wait return. Bare tasks are executed rather than dropped because they release caller-side barriers (a bare chunk counted into a <code>JobCounter</code> references the blocked caller's stack; dropping one is a hang, B7).</li>
 <li><strong>Graph-parked payloads</strong> are retired with cancellation events.</li>
 <li><strong>Registry sweep:</strong> every non-terminal TaskData is marked <code>Cancelled</code> and its waiters notified. Combined with the submitter-side re-checks below: <strong>no <code>TaskHandle::Wait()</code> can outlive the pool</strong>.</li>
 <li><strong>Join blocking threads, then release again:</strong> a channel job may be waiting on a compute handle or on another channel's handle, which only the steps above can make terminal, so the blocking threads are joined after them. Each finishes the job it holds; whatever that job published or released is drained by a second pass of steps 3 to 5.</li>
@@ -458,9 +496,9 @@ auto compress = pool.Submit(std::make_unique&lt;CompressTask&gt;(&amp;pool, deco
   <td><code>fn</code> runs synchronously on the calling thread; counter drains.</td>
 </tr>
 <tr>
-  <td><code>ParallelFor</code> / <code>ForEach</code> / <code>Sort</code> / <code>DispatchAndWait</code></td>
-  <td>F13b: a shutting-down pool is treated as no pool — <strong>sequential fallback on the caller</strong>. A shutdown landing mid-flight is covered by F13c (chunks always execute, the barrier always releases).</td>
-  <td>Sequential fallback on the caller.</td>
+  <td><code>ParallelFor</code> / <code>ParallelSort</code></td>
+  <td>No helper is published once shutdown is requested, and none re-publishes itself after it: the caller runs every unit left. A helper already queued runs in the drain or on a worker; it finds the run closed and ends, or claims a unit and finishes it, and the caller returns once no unit is in progress.</td>
+  <td>Every unit runs on the caller.</td>
 </tr>
 </table>
 
@@ -477,7 +515,6 @@ Practical upshot: teardown-adjacent code does not need its own "is the pool aliv
 <div class="panel danger">
 <strong>Waiting from a worker on work that isn't tagged to that counter.</strong> <code>pool.Wait(counter)</code> from a worker is legal <em>only because</em> it participates in that counter's own tasks (§3.1). Everything else that blocks a worker is a deadlock class on a bounded pool:
 <ul>
-<li><code>ParallelFor</code>/<code>ParallelForEach</code>/<code>ParallelSort</code>/<code>DispatchAndWait</code> from a worker — their barrier chunks are bare pool tasks, not counter-tagged; the join parks without participating. Debug-asserted (<code>Detail::AssertNotOnWorkerThread</code>). Fork-join that must run on a worker goes through <code>Run(fn, counter)</code> + <code>Wait(counter)</code>.</li>
 <li><code>TaskHandle::Wait()</code> from a worker — parks the worker until some <em>other</em> thread completes the task. Works until the day every worker is doing it. Debug builds assert on it when the worker belongs to the handle's pool, whether or not the task has finished, so the check never depends on timing. Register <code>OnComplete</code> or submit the continuation with <code>Submit(fn, deps)</code>.</li>
 <li>Waiting on a bare-barrier counter (§3.3) from a worker — nothing tagged to execute, pure park.</li>
 </ul>
@@ -554,9 +591,11 @@ Publish and join outside the lock, or make the body lock-free with respect to th
 <pre><code>pool.Submit(fn, JobSystem::JobPriority::Background);        // handle semantics identical to Normal
 pool.EnqueueWork(fn, JobSystem::JobPriority::Background);
 pool.EnqueueWorkBatch(funcs, count, JobSystem::JobPriority::Background);
-// Run(fn, counter) has NO priority parameter — fork-join is latency work,
-// its stubs are always Normal. Graph tasks (Submit with deps / UniquePtr&lt;Task&gt;)
-// are always Normal too.</code></pre>
+// Run(fn, counter) and the ParallelFor family have NO priority parameter: a fork
+// publishes at the class of the pool body that forks (Background inside a
+// Background body, Normal everywhere else). ParallelForOptions::HelperPriority
+// asks for a class, clamped the same way. Graph tasks (Submit with deps /
+// UniquePtr&lt;Task&gt;) are always Normal.</code></pre>
 
 <h3>11.1 · When Background is right</h3>
 <ul>
@@ -670,8 +709,35 @@ size_t count = pool.SnapshotOccupancy(threads);   // workers first, then blockin
 
 <p>Two consumers ship with it. The editor's <code>get_job_system</code> debug method (MCP tool and <code>node mcp/ge.mjs get_job_system</code>) returns the statistics as JSON, the instrument for any live check of the pool: which thread holds a long job, which lane or channel is backed up, how many blocking threads exist. The editor's main-thread hang watchdog adds every pool thread's occupancy to each stall report beside the main thread's stack, for example <code>Job Worker #3: Background for 2.4s</code> or <code>Job Blocking #0: Script compiles for 12.0s</code>; teardown reports leave it out, because teardown destroys the pool.</p>
 
+<h3>13.1 · The ECS wave trace and publish attribution</h3>
+
+<p><code>get_job_system</code> answers between frames, so it never sees an ECS wave in flight. The wave trace answers after the fact: each <code>SystemManager</code> owns a <code>SystemWaveTrace</code> (<code>ECS/SystemWaveTrace.h</code>), a fixed ring of the newest 256 <code>Update</code> calls. Per frame it holds when each wave began and ended, how many systems it forked and how often it joined, how long the calling thread waited in those joins, and per system body the fork's publish time, the body's start and end, the worker that ran it (or the caller) and how many jobs the body published. Gaps, makespans and waits are derived when it is read.</p>
+
+<pre><code>ECS::SystemWaveTrace&amp; trace = systemManager.GetWaveTrace();
+trace.SetEnabled(true);                 // allocates the ring once, then records with no allocation
+// ... frames run ...
+std::vector&lt;ECS::SystemWaveTrace::Frame&gt; frames;
+trace.CopyFrames(frames, 64);           // on the thread that calls Update, outside Update
+
+// Attribute publishes to a site of your own: every job this thread publishes
+// while the scope lives adds one to `count`.
+uint32 count = 0;
+{
+    JobSystem::WorkStealingThreadPool::PublishCountScope scope(count);
+    pool.Run(job, counter);
+}
+uint64 total = pool.GetPublishedJobCount(); // every thread's publishes so far</code></pre>
+
+<ul>
+<li><strong>Off by default.</strong> While it is off, an <code>Update</code> pays one relaxed load. While it is on, a frame costs a few clock reads per wave and per system, and never allocates. Changing the system set (adding, replacing or retiring a system) clears it, because frames name systems by slot.</li>
+<li><strong>Publishes are attributed three ways:</strong> one job per fork from a wave's publish loop, the jobs each system body publishes on its own thread (a nested <code>Run</code>, a <code>ParallelFor</code>'s chunks, and the publishes of any job the body's own <code>Wait</code> runs inline on that thread, which a worker's <code>Wait</code> does), and everything else, which is the frame's total from <code>GetPublishedJobCount</code> minus the two.</li>
+<li><strong>The editor reads it</strong> through the <code>get_ecs_wave_trace</code> debug method (MCP tool and <code>node mcp/ge.mjs get_ecs_wave_trace</code>): <code>enabled</code> arms or disarms it, the reply summarises every recorded frame per wave and per system, and <code>frames</code> adds the newest frames one by one. On macOS each traced wave, join and system body is also an <code>os_signpost</code> interval (subsystem <code>com.gameengine.ecs</code>, category <code>SystemWaves</code>) that an Instruments recording with the Logging or os_signpost instrument shows on the timeline.</li>
+</ul>
+
 <h2>Changelog</h2>
 <ul>
+<li><strong>v1.9 · 2026-10-11:</strong> §3.4 rewritten: <code>ParallelFor</code> is the one fork verb, legal on any thread, a worker included. Its unit form, <code>ParallelFor(pool, count, body, ParallelForOptions)</code>, takes a body returning <code>void</code> or <code>bool</code> and options for helpers, their lane, a stop poll and a per-unit admission; its chunked overload takes <code>(pool, count, body(begin, end), minBatchSize)</code> in place of the old <code>(pool, begin, end, func, minBatchSize)</code>. <code>ParallelForEach</code> and <code>DispatchAndWait</code> are removed (each is a <code>ParallelFor</code>). A unit's exception stops the run and is rethrown on the caller; the pool bounds the helpers waiting to start in each lane and provisions the slabs they hold. §1's range row and flowchart, §7.1's row and §11's fork class follow; §8 no longer lists the range primitives on a worker as a deadlock.</li>
+<li><strong>v1.8 · 2026-10-11:</strong> §13.1 The ECS wave trace (<code>SystemWaveTrace</code>, the <code>get_ecs_wave_trace</code> debug method, the macOS signposts) and publish attribution (<code>PublishCountScope</code>, <code>GetPublishedJobCount</code>).</li>
 <li><strong>v1.7 · 2026-10-10:</strong> §13 Statistics and occupancy: <code>GetStatistics()</code> (lanes, channels, threads, the derived <code>TasksExecuted</code> and the census, which replaces <code>GetTopologyCensusForTests()</code>), <code>SnapshotOccupancy()</code>, the class a body runs as, the <code>get_job_system</code> debug method and the hang watchdog's occupancy lines. §9 points at §13.</li>
 <li><strong>v1.6 · 2026-10-10:</strong> §12: <code>JobChannel::Enqueue</code> (fire-and-forget, never dropped; a destroyed channel hands its queued <code>Enqueue</code> jobs on, in order) and the editor's blocking channels (<code>Engine startup</code>, <code>Terrain bake store</code>, <code>Tree removals</code>, <code>Polyhaven</code>, <code>Project acquisition</code>, <code>Project catalog</code>, <code>Game export</code>); <code>Script compiles</code> also runs the game export's script step. §1 and §7: <code>Enqueue</code> beside <code>Submit</code>.</li>
 <li><strong>v1.5 · 2026-10-10:</strong> §12 Blocking channels: <code>JobChannel</code> with <code>Submit</code>, the pool's blocking threads and their budget (the constructor's second parameter, <code>Platform::BlockingThreadBudget()</code> in the engine), and the engine's three channels. §1 gains the blocking-work row. §7: the blocking threads are joined after the drain, the graph retire and the registry sweep, and the release runs again after them. §8 points process waits at §12.</li>
@@ -681,7 +747,7 @@ size_t count = pool.SnapshotOccupancy(threads);   // workers first, then blockin
 <li><strong>v1.1 · 2026-07-10:</strong> priorities and the API-polish batch.</li>
 </ul>
 
-<footer>v1.7 · 2026-10-10 · sources: JobSystemStatistics.h / WorkStealingThreadPool.h @ feat/jobsystem-s5-statistics (the JobSystem design's slice S5), Tests/Jobs/JobSystemStatisticsTests, Apps/Editor DebugServer/JobSystemDebugHandlers and Diagnostics/MainThreadHangWatchdog; JobChannel.h @ feat/jobsystem-s7-editor-channels (the JobSystem design's slice S7), Tests/Jobs/JobChannelTests; JobChannel.h / WorkStealingThreadPool.h / Capabilities.h @ feat/jobsystem-s6-blocking-channels (the JobSystem design's slice S6), Tests/Jobs/JobChannelTests; Task.h / WorkStealingThreadPool.h @ refactor/jobsystem-s3-header-split (the JobSystem design's slice S3); TaskHandle.h / TaskHandle.cpp @ refactor/jobsystem-s2-callbacks-unlocked (the JobSystem design's slice S2); WorkStealingThreadPool.h / JobCounter.h / ParallelAlgorithms.h / TaskHandle.h @ refactor/jobsystem-s1-hygiene (the JobSystem design's slice S1, on top of v1.1's sources @ feat/jobsystem-api-polish: priorities #327 + API-polish batch: Submit(fn, deps), JobCounter::Reset, TaskHandle hardening, CreateCompletedHandle(payload), TryGetResult Debug diagnosability), the jobsystem-overhaul and jobsystem-priorities design records, Tests/Jobs (JobCounterTests, SubmitWithDependencyTests, CancellationAndShutdownTests, TaskDependencyGraphTests, JobPriorityTests)</footer>
+<footer>v1.9 · 2026-10-11 · sources: SystemWaveTrace.h / Systems.h / WorkStealingThreadPool.h @ feat/jobsystem-wave-instrument, Tests/ECS/SystemWaveTraceTest, Tests/Jobs/JobSystemStatisticsTests, Apps/Editor DebugServer/SystemWaveTraceReport; ParallelForOptions.h / ParallelAlgorithms.h / WorkStealingThreadPool.h @ feat/jobsystem-s8-claim-core (the JobSystem design's slice S8), Tests/Jobs/ParallelForTests, Engine/Modules/JobSystem/Tests/ParallelAlgorithmsTests; JobSystemStatistics.h / WorkStealingThreadPool.h @ feat/jobsystem-s5-statistics (the JobSystem design's slice S5), Tests/Jobs/JobSystemStatisticsTests, Apps/Editor DebugServer/JobSystemDebugHandlers and Diagnostics/MainThreadHangWatchdog; JobChannel.h @ feat/jobsystem-s7-editor-channels (the JobSystem design's slice S7), Tests/Jobs/JobChannelTests; JobChannel.h / WorkStealingThreadPool.h / Capabilities.h @ feat/jobsystem-s6-blocking-channels (the JobSystem design's slice S6), Tests/Jobs/JobChannelTests; Task.h / WorkStealingThreadPool.h @ refactor/jobsystem-s3-header-split (the JobSystem design's slice S3); TaskHandle.h / TaskHandle.cpp @ refactor/jobsystem-s2-callbacks-unlocked (the JobSystem design's slice S2); WorkStealingThreadPool.h / JobCounter.h / ParallelAlgorithms.h / TaskHandle.h @ refactor/jobsystem-s1-hygiene (the JobSystem design's slice S1, on top of v1.1's sources @ feat/jobsystem-api-polish: priorities #327 + API-polish batch: Submit(fn, deps), JobCounter::Reset, TaskHandle hardening, CreateCompletedHandle(payload), TryGetResult Debug diagnosability), the jobsystem-overhaul and jobsystem-priorities design records, Tests/Jobs (JobCounterTests, SubmitWithDependencyTests, CancellationAndShutdownTests, TaskDependencyGraphTests, JobPriorityTests)</footer>
 
 <script src="https://cdn.jsdelivr.net/npm/mermaid@10/dist/mermaid.min.js"></script>
 <script>mermaid.initialize({ startOnLoad: true, theme: 'dark', themeVariables: { darkMode: true, background: '#0f1115' } });</script>

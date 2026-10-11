@@ -1634,7 +1634,7 @@ namespace
 struct DirectHarness
 {
     std::filesystem::path Root;
-    AssetStore_TextJsonl Store;
+    AssetStore_TextJsonl Store{nullptr};
     AssetDbCache_Sqlite Cache;
 
     explicit DirectHarness(const std::string& tag)
@@ -1886,7 +1886,7 @@ TEST(AssetDbDerivedRedirect, DirectTornHealAppendKeepsRedirectBeforeDelete)
 
     // The prefix reloads as the interrupted-heal shape: redirect present,
     // ghost record still present (its delete was in the lost suffix).
-    AssetStore_TextJsonl reloaded;
+    AssetStore_TextJsonl reloaded(nullptr);
     std::string err;
     ASSERT_TRUE(reloaded.LoadFromFile(dbPath, &err)) << err;
     const auto target = reloaded.ResolveRedirect(oldGuid);
@@ -2037,7 +2037,7 @@ TEST(AssetDbDerivedRedirect, RemoveThenReaddRedirectReloadsWithoutConflict)
     ASSERT_TRUE(h.Store.AddRedirect(guidA, guidC, nullptr));
     ASSERT_TRUE(h.Store.SaveToFile(dbPath, nullptr)); // appends the re-add
 
-    AssetStore_TextJsonl reloaded;
+    AssetStore_TextJsonl reloaded(nullptr);
     std::string err;
     ASSERT_TRUE(reloaded.LoadFromFile(dbPath, &err)) << err;
     EXPECT_TRUE(reloaded.GetLoadConflicts().empty())
@@ -2264,7 +2264,7 @@ TEST(AssetDbDerivedRedirect, RetargetAppendReloadsWithoutConflict)
     ASSERT_TRUE(h.Store.AddRedirect(guidC, guidB, nullptr)); // the retarget
     ASSERT_TRUE(h.Store.SaveToFile(dbPath, nullptr));
 
-    AssetStore_TextJsonl reloaded;
+    AssetStore_TextJsonl reloaded(nullptr);
     std::string err;
     ASSERT_TRUE(reloaded.LoadFromFile(dbPath, &err)) << err;
     EXPECT_TRUE(reloaded.GetLoadConflicts().empty())

@@ -27,6 +27,16 @@ ge_stage_runtime_dependencies(QueryAllocationTests)
 add_test(NAME QueryAllocationTests COMMAND QueryAllocationTests)
 set_tests_properties(QueryAllocationTests PROPERTIES TIMEOUT 30)
 
+# The wave trace's allocation contract (a process-wide allocation window, so its own executable).
+add_executable(SystemWaveTraceAllocationTests SystemWaveTraceAllocationTests.cpp)
+set_target_properties(SystemWaveTraceAllocationTests PROPERTIES UNITY_BUILD OFF)
+target_compile_features(SystemWaveTraceAllocationTests PRIVATE cxx_std_20)
+target_link_libraries(SystemWaveTraceAllocationTests PRIVATE GTest::gtest_main Logger JobSystem ECS)
+ge_set_output_tests(SystemWaveTraceAllocationTests)
+ge_stage_runtime_dependencies(SystemWaveTraceAllocationTests)
+add_test(NAME SystemWaveTraceAllocationTests COMMAND SystemWaveTraceAllocationTests)
+set_tests_properties(SystemWaveTraceAllocationTests PROPERTIES TIMEOUT 30)
+
 # ============================================================================
 # CONSOLIDATED TEST SUITE DEFINITIONS
 # ============================================================================
@@ -66,6 +76,7 @@ set(ECS_CORE_TEST_SOURCES
     SystemPlanTrailingWaveTest.cpp
     SystemPerformanceMaximaTest.cpp
     SystemWaveThreadPinningTest.cpp
+    SystemWaveTraceTest.cpp
     SystemSchedulePhaseInsertionTest.cpp
     OrderedHandleSetTest.cpp
     ModuleReloadScheduleTests.cpp

@@ -148,7 +148,7 @@ TEST(PackagePublish, WritesCurrentGuidsVerbatimAndIsIdempotent)
     ASSERT_TRUE(fs::exists(published.ManifestPath));
 
     // The manifest carries the registry's CURRENT GUIDs verbatim.
-    AssetDatabase::AssetStore_TextJsonl manifest;
+    AssetDatabase::AssetStore_TextJsonl manifest(nullptr);
     ASSERT_TRUE(manifest.LoadFromFile(published.ManifestPath, nullptr));
     EXPECT_EQ(manifest.CountAssets(), 2u);
     const auto woodInManifest = manifest.LookupGuidByPath("textures/wood.png");
@@ -214,7 +214,7 @@ TEST(PackageStoredIdentity, ExtractionAcceptance_OriginalProjectGuidResolvesAfte
     EXPECT_EQ(published.RemappedCount, 1u);
     EXPECT_TRUE(published.Warnings.empty());
     {
-        AssetDatabase::AssetStore_TextJsonl manifest;
+        AssetDatabase::AssetStore_TextJsonl manifest(nullptr);
         ASSERT_TRUE(manifest.LoadFromFile(published.ManifestPath, nullptr));
         const auto inManifest = manifest.LookupGuidByPath("textures/leaf.png");
         ASSERT_TRUE(inManifest.has_value());
@@ -298,7 +298,7 @@ TEST(PackageStoredIdentity, ExplorerAddToMutablePackageRoutesToPackageDb)
     // Unmount flushes the package store; the record survives on disk in the
     // package's own .assetdb.
     ASSERT_TRUE(am.BeginUnregisterSource("pkg-mut"));
-    AssetDatabase::AssetStore_TextJsonl store;
+    AssetDatabase::AssetStore_TextJsonl store(nullptr);
     ASSERT_TRUE(store.LoadFromFile(pkg.RootDir / "AssetDatabase.assetdb", nullptr));
     const auto persisted = store.LookupGuidByPath("textures/new.png");
     ASSERT_TRUE(persisted.has_value());
@@ -416,7 +416,7 @@ TEST(PackageStoredIdentity, RepublishFoldsAdditionsAndKeepsOriginalIdentity)
     // the published identity, and the fallback addition folds in verbatim.
     const PackagePublishResult republished = PublishPackageAssetManifest(reg, "pkg-re");
     ASSERT_TRUE(republished.Success) << (republished.Errors.empty() ? "" : republished.Errors[0]);
-    AssetDatabase::AssetStore_TextJsonl manifest;
+    AssetDatabase::AssetStore_TextJsonl manifest(nullptr);
     ASSERT_TRUE(manifest.LoadFromFile(republished.ManifestPath, nullptr));
     const auto rockInManifest = manifest.LookupGuidByPath("art/rock.png");
     const auto mossInManifest = manifest.LookupGuidByPath("art/moss.png");
@@ -508,7 +508,7 @@ TEST(PackagePublish, VanishedRecordIsNotPublishedIntoTheManifest)
     // previously-opened package would have, so the ghost gets its real
     // residence and the arrangement below is the filed one.
     {
-        AssetDatabase::AssetStore_TextJsonl seed;
+        AssetDatabase::AssetStore_TextJsonl seed(nullptr);
         ASSERT_TRUE(seed.SaveToFile(pkg.RootDir / "AssetDatabase.assetdb", nullptr));
     }
     ASSERT_TRUE(project.MountEmbedded(pkg));
@@ -548,7 +548,7 @@ TEST(PackagePublish, VanishedRecordIsNotPublishedIntoTheManifest)
     EXPECT_EQ(published.EntryCount, 1u);
     EXPECT_EQ(published.VanishedCount, 1u);
 
-    AssetDatabase::AssetStore_TextJsonl manifest;
+    AssetDatabase::AssetStore_TextJsonl manifest(nullptr);
     ASSERT_TRUE(manifest.LoadFromFile(published.ManifestPath, nullptr));
     EXPECT_TRUE(manifest.LookupGuidByPath("textures/kept.png").has_value())
         << "publish dropped a file that is on disk";
@@ -623,7 +623,7 @@ TEST(PackagePublish, VanishedRecordWithNoResidenceIsAlsoNotPublished)
     EXPECT_EQ(published.EntryCount, 1u);
     EXPECT_EQ(published.VanishedCount, 1u);
 
-    AssetDatabase::AssetStore_TextJsonl manifest;
+    AssetDatabase::AssetStore_TextJsonl manifest(nullptr);
     ASSERT_TRUE(manifest.LoadFromFile(published.ManifestPath, nullptr));
     EXPECT_TRUE(manifest.LookupGuidByPath("kept.txt").has_value());
     EXPECT_FALSE(manifest.LookupGuidByPath("gone.txt").has_value())
@@ -657,7 +657,7 @@ TEST(PackageStoredIdentity, DanglingManifestEntryIsMergedAtMountWithoutComplaint
     const fs::path manifestPath = pkg.AssetsDir / ".assetmanifest";
     const GUID danglingGuid("00000000-0000-4000-8000-000000001006");
     {
-        AssetDatabase::AssetStore_TextJsonl manifest;
+        AssetDatabase::AssetStore_TextJsonl manifest(nullptr);
         ASSERT_TRUE(manifest.LoadFromFile(manifestPath, nullptr));
         AssetDatabase::AssetRecord dangling{};
         dangling.guid = danglingGuid;
@@ -719,7 +719,7 @@ ResolvedPackage MakePublishedTexturePackage(StoredIdentityProject& project,
     WriteTextFile(pkg.AssetsDir / relPath, "PNGDATA");
 
     outGuid = AssetRegistry::DeriveGuidForSourcePath(alias, relPath);
-    AssetDatabase::AssetStore_TextJsonl manifest;
+    AssetDatabase::AssetStore_TextJsonl manifest(nullptr);
     AssetDatabase::AssetRecord record{};
     record.guid = outGuid;
     record.path = relPath;
@@ -760,7 +760,7 @@ TEST(PackageImportMetadata, EnginePackageMountPersistsImportSettingsIntoItsManif
     // The package's own file on disk carries it — that file ships with the
     // package and is what the build reads back at export.
     FlushDirtyStores(reg);
-    AssetDatabase::AssetStore_TextJsonl persisted;
+    AssetDatabase::AssetStore_TextJsonl persisted(nullptr);
     ASSERT_TRUE(persisted.LoadFromFile(pkg.AssetsDir / ".assetmanifest", nullptr));
     AssetDatabase::AssetRecord record{};
     ASSERT_TRUE(persisted.TryGetAsset(textureGuid, record));
@@ -844,7 +844,7 @@ TEST(PackageImportMetadata, EnginePackageMountWritesThroughToTheAuthoringTree)
     ASSERT_TRUE(reg.SetMetaValue(texture, kTextureUsageMetaKey, "color"));
     FlushDirtyStores(reg);
 
-    AssetDatabase::AssetStore_TextJsonl authored;
+    AssetDatabase::AssetStore_TextJsonl authored(nullptr);
     ASSERT_TRUE(authored.LoadFromFile(authoring.AssetsDir / ".assetmanifest", nullptr));
     AssetDatabase::AssetRecord record{};
     ASSERT_TRUE(authored.TryGetAsset(textureGuid, record));
@@ -923,7 +923,7 @@ TEST(PackageImportMetadata, EnginePackageMountRefusesStructuralMutationsAndKeeps
     // The published row is still on disk, still at its published path, and the
     // refused add minted nothing into the package's identity contract.
     FlushDirtyStores(reg);
-    AssetDatabase::AssetStore_TextJsonl persisted;
+    AssetDatabase::AssetStore_TextJsonl persisted(nullptr);
     ASSERT_TRUE(persisted.LoadFromFile(pkg.AssetsDir / ".assetmanifest", nullptr));
     AssetDatabase::AssetRecord record{};
     ASSERT_TRUE(persisted.TryGetAsset(textureGuid, record));

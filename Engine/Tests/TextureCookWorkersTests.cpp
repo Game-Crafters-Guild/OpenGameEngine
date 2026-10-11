@@ -229,6 +229,48 @@ TEST(TextureCookWorkers, FailedBandFailsTheRun)
     EXPECT_FALSE(gated.Workers.RunBands(50, FailBandFive, {}));
 }
 
+// The band claimed last reports a failed encode after the first has finished:
+// no band was left to skip, and the run still fails.
+TEST(TextureCookWorkers, AFalseFromTheLastBandFailsTheRun)
+{
+    GatedPool gated;
+    std::atomic<int> started{0};
+    std::atomic<bool> firstFinished{false};
+    const auto encode = [&](uint32) {
+        if (started.fetch_add(1) == 0)
+        {
+            std::this_thread::sleep_for(kBandWork);
+            firstFinished.store(true);
+            return true;
+        }
+        const auto deadline = std::chrono::steady_clock::now() + std::chrono::seconds(10);
+        while (!firstFinished.load() && std::chrono::steady_clock::now() < deadline)
+            std::this_thread::sleep_for(std::chrono::milliseconds(1));
+        return false;
+    };
+    EXPECT_FALSE(gated.Workers.RunBands(2, encode, {}));
+    EXPECT_EQ(started.load(), 2);
+}
+
+// Helpers ride the Background lane, so frame work is dequeued first: the
+// run publishes Background work only, whichever thread cooks.
+TEST(TextureCookWorkers, HelpersRunOnTheBackgroundLane)
+{
+    constexpr uint32 kBands = 40;
+    GatedPool gated;
+    const auto before = gated.Pool.GetStatistics();
+
+    ConcurrencyMeter meter, helperMeter;
+    BandProbe probe(kBands, meter, helperMeter);
+    EXPECT_TRUE(gated.Workers.RunBands(kBands, [&probe](uint32 band) { return probe.Encode(band); }, {}));
+    ExpectEveryBandRanOnce(probe);
+    EXPECT_TRUE(ShareRefills(*gated.Gate)) << "a helper kept its gate slot";
+
+    const auto after = gated.Pool.GetStatistics();
+    EXPECT_GT(after.BackgroundPushes - before.BackgroundPushes, 0u);
+    EXPECT_EQ(after.GlobalPushes - before.GlobalPushes, 0u) << "a helper was published at Normal priority";
+}
+
 // Every band a helper takes throws, as an encoder out of memory would; the
 // cooking thread holds its first band until a helper has thrown, so the throw
 // has to cross threads to reach the caller.
@@ -327,6 +369,21 @@ TEST(TextureCookWorkers, StopThatThrowsEndsTheRunBeforeReachingTheCaller)
     std::this_thread::sleep_for(std::chrono::milliseconds(200));
     EXPECT_EQ(ranSoFar(), ranAtThrow) << "helpers started bands after RunBands had thrown";
     EXPECT_TRUE(ShareRefills(*gated.Gate)) << "a helper kept its gate slot";
+}
+
+// After the pool's shutdown gate no helper is published: every band runs on
+// the calling thread.
+TEST(TextureCookWorkers, AShutDownPoolEncodesOnTheCallingThread)
+{
+    constexpr uint32 kBands = 12;
+    GatedPool gated;
+    gated.Pool.Shutdown();
+
+    ConcurrencyMeter meter, helperMeter;
+    BandProbe probe(kBands, meter, helperMeter);
+    EXPECT_TRUE(gated.Workers.RunBands(kBands, [&probe](uint32 band) { return probe.Encode(band); }, {}));
+    ExpectEveryBandRanOnce(probe);
+    EXPECT_EQ(probe.OffCaller.load(), 0u);
 }
 
 // An inline pool has no workers to spread to: every band runs on the caller.

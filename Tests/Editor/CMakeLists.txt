@@ -403,6 +403,10 @@ set(EDITOR_TEST_SOURCES
 	# (JobSystemStatistics + nlohmann).
 	JobSystemReportTests.cpp
 	${CMAKE_SOURCE_DIR}/Apps/Editor/Source/DebugServer/JobSystemReport.cpp
+	# get_ecs_wave_trace's reply: the derived times and counts over hand-built frames. Leaf TU
+	# (SystemWaveTrace's frame layout + nlohmann).
+	SystemWaveTraceReportTests.cpp
+	${CMAKE_SOURCE_DIR}/Apps/Editor/Source/DebugServer/SystemWaveTraceReport.cpp
 	# Where synthesized pointer input enters the engine. Injection that calls
 	# UIManager directly reaches the UI alone, leaving the editor InputSystem and
 	# the play-pointer remap — the whole runtime-input leg gameplay reads — unfed

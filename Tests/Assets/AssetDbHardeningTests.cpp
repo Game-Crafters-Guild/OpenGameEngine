@@ -372,7 +372,7 @@ TEST(AssetDbHardening, WipeDbThenRelaunchDoesNotRegressTypesToUnknown)
 
     // Third run: verify persisted types are still correct
     {
-        AssetDatabase::AssetStore_TextJsonl store;
+        AssetDatabase::AssetStore_TextJsonl store(nullptr);
         std::string err;
         ASSERT_TRUE(store.LoadFromFile(dbPath, &err)) << err;
 
@@ -2629,7 +2629,7 @@ TEST(AssetSourceSnapshot, RoundTripPreservesAllFields)
     uint64_t loadedIgnoreSig = 0;
     std::vector<AssetSourceSnapshotRecord> loaded;
     std::vector<AssetSourceSnapshotDirectory> loadedDirectories;
-    ASSERT_TRUE(AssetSourceSnapshot::Load(snapshotFile, loadedRoot, loadedIgnoreSig, loaded, loadedDirectories, &err)) << err;
+    ASSERT_TRUE(AssetSourceSnapshot::Load(snapshotFile, nullptr, loadedRoot, loadedIgnoreSig, loaded, loadedDirectories, &err)) << err;
 
     EXPECT_EQ(loadedRoot.generic_string(), mountRoot.lexically_normal().generic_string());
     EXPECT_EQ(loadedIgnoreSig, kTestIgnoreSig);
@@ -2672,7 +2672,7 @@ TEST(AssetSourceSnapshot, EmptyRecordListRoundTrips)
     uint64_t loadedIgnoreSig = 0;
     std::vector<AssetSourceSnapshotRecord> loaded;
     std::vector<AssetSourceSnapshotDirectory> loadedDirectories;
-    ASSERT_TRUE(AssetSourceSnapshot::Load(snapshotFile, loadedRoot, loadedIgnoreSig, loaded, loadedDirectories, &err)) << err;
+    ASSERT_TRUE(AssetSourceSnapshot::Load(snapshotFile, nullptr, loadedRoot, loadedIgnoreSig, loaded, loadedDirectories, &err)) << err;
     EXPECT_TRUE(loaded.empty());
     EXPECT_TRUE(loadedDirectories.empty());
 
@@ -2702,7 +2702,7 @@ TEST(AssetSourceSnapshot, LoadRejectsCorruptMagic)
     std::vector<AssetSourceSnapshotRecord> loaded;
     std::vector<AssetSourceSnapshotDirectory> loadedDirectories;
     std::string err;
-    EXPECT_FALSE(AssetSourceSnapshot::Load(snapshotFile, loadedRoot, loadedIgnoreSig, loaded, loadedDirectories, &err));
+    EXPECT_FALSE(AssetSourceSnapshot::Load(snapshotFile, nullptr, loadedRoot, loadedIgnoreSig, loaded, loadedDirectories, &err));
     EXPECT_FALSE(err.empty()) << "Load failure should populate outError";
     EXPECT_TRUE(loaded.empty());
 
@@ -2743,7 +2743,7 @@ TEST(AssetSourceSnapshot, LoadRejectsOlderVersion)
     std::vector<AssetSourceSnapshotRecord> loaded;
     std::vector<AssetSourceSnapshotDirectory> loadedDirectories;
     std::string err;
-    EXPECT_FALSE(AssetSourceSnapshot::Load(snapshotFile, loadedRoot, loadedIgnoreSig, loaded, loadedDirectories, &err));
+    EXPECT_FALSE(AssetSourceSnapshot::Load(snapshotFile, nullptr, loadedRoot, loadedIgnoreSig, loaded, loadedDirectories, &err));
     EXPECT_NE(err.find("unsupported version"), std::string::npos)
         << "Expected version-mismatch error, got: " << err;
     EXPECT_TRUE(loaded.empty());
@@ -2802,7 +2802,7 @@ TEST(AssetSourceSnapshot, LoadRejectsMountPathHashMismatch)
     uint64_t loadedIgnoreSig = 0;
     std::vector<AssetSourceSnapshotRecord> loaded;
     std::vector<AssetSourceSnapshotDirectory> loadedDirectories;
-    EXPECT_FALSE(AssetSourceSnapshot::Load(snapshotFile, loadedRoot, loadedIgnoreSig, loaded, loadedDirectories, &err));
+    EXPECT_FALSE(AssetSourceSnapshot::Load(snapshotFile, nullptr, loadedRoot, loadedIgnoreSig, loaded, loadedDirectories, &err));
     EXPECT_NE(err.find("hash"), std::string::npos) << "err was: " << err;
 
     fs::remove_all(tmpRoot, ec);
@@ -2917,7 +2917,7 @@ TEST(AssetRegistryShutdown, WritesSnapshotForAuthoritativeSource)
     std::vector<AssetDatabase::AssetSourceSnapshotRecord> loaded;
     std::vector<AssetDatabase::AssetSourceSnapshotDirectory> loadedDirectories;
     std::string err;
-    ASSERT_TRUE(AssetDatabase::AssetSourceSnapshot::Load(expectedSnapshot, loadedRoot, loadedIgnoreSig, loaded, loadedDirectories, &err)) << err;
+    ASSERT_TRUE(AssetDatabase::AssetSourceSnapshot::Load(expectedSnapshot, nullptr, loadedRoot, loadedIgnoreSig, loaded, loadedDirectories, &err)) << err;
     // Compare on the canonical form to handle both case-sensitive (Linux) and
     // case-insensitive (Windows/macOS) platforms.
     EXPECT_EQ(AssetPaths::NormalizeForRegistryKey(loadedRoot),
@@ -3145,7 +3145,7 @@ TEST(AssetSourceSnapshot, LoadRejectsTruncatedRecord)
         uint64_t rtSig = 0;
         std::vector<AssetSourceSnapshotRecord> rtRecords;
         std::vector<AssetSourceSnapshotDirectory> rtDirectories;
-        ASSERT_TRUE(AssetSourceSnapshot::Load(roundtripFile, rtRoot, rtSig, rtRecords, rtDirectories, &roundErr));
+        ASSERT_TRUE(AssetSourceSnapshot::Load(roundtripFile, nullptr, rtRoot, rtSig, rtRecords, rtDirectories, &roundErr));
         EXPECT_EQ(rtSig, kStableSig);
     }
 
@@ -3159,7 +3159,7 @@ TEST(AssetSourceSnapshot, LoadRejectsTruncatedRecord)
     uint64_t loadedIgnoreSig = 0;
     std::vector<AssetSourceSnapshotRecord> loaded;
     std::vector<AssetSourceSnapshotDirectory> loadedDirectories;
-    EXPECT_FALSE(AssetSourceSnapshot::Load(snapshotFile, loadedRoot, loadedIgnoreSig, loaded, loadedDirectories, &err))
+    EXPECT_FALSE(AssetSourceSnapshot::Load(snapshotFile, nullptr, loadedRoot, loadedIgnoreSig, loaded, loadedDirectories, &err))
         << "Truncated snapshot must fail to load, not produce a partial list";
     EXPECT_TRUE(loaded.empty()) << "Failed loads must clear the output vector";
 
@@ -4327,7 +4327,7 @@ TEST(AssetDbHardening, ReconcileReusesSnapshotHashWhenStatMatches)
         std::vector<AssetDatabase::AssetSourceSnapshotRecord> snapRecs;
         std::vector<AssetDatabase::AssetSourceSnapshotDirectory> snapDirs;
         std::string serr;
-        ASSERT_TRUE(AssetDatabase::AssetSourceSnapshot::Load(snapshotFile, mountRoot, ignSig, snapRecs, snapDirs, &serr));
+        ASSERT_TRUE(AssetDatabase::AssetSourceSnapshot::Load(snapshotFile, nullptr, mountRoot, ignSig, snapRecs, snapDirs, &serr));
         for (const auto& r : snapRecs)
         {
             if (r.CanonicalPath == "a.txt" || r.CanonicalPath == "b.txt" ||
@@ -4343,7 +4343,7 @@ TEST(AssetDbHardening, ReconcileReusesSnapshotHashWhenStatMatches)
     {
         // Open store directly and remove the survivor's record so session 2
         // sees it as a "new file" while the snapshot still has its entry.
-        AssetDatabase::AssetStore_TextJsonl store;
+        AssetDatabase::AssetStore_TextJsonl store(nullptr);
         ASSERT_TRUE(store.LoadFromFile(dbFile, nullptr));
         const auto recs = store.EnumerateAssets();
         bool removed = false;
@@ -4432,7 +4432,7 @@ TEST(AssetDbHardening, ReconcileBypassesSnapshotWhenStatChanged)
     fs::remove(fileD, ec);
     WriteTextFile(fileA, "alpha REWRITTEN with new content of different length");
     {
-        AssetDatabase::AssetStore_TextJsonl store;
+        AssetDatabase::AssetStore_TextJsonl store(nullptr);
         ASSERT_TRUE(store.LoadFromFile(dbFile, nullptr));
         for (const auto& r : store.EnumerateAssets())
         {
@@ -5354,7 +5354,7 @@ TEST(AssetDbHardening, SnapshotSaveOverridesStaleLock)
     uint64_t ignoreSig = 0;
     std::vector<AssetDatabase::AssetSourceSnapshotRecord> outRecords;
     std::vector<AssetDatabase::AssetSourceSnapshotDirectory> outDirectories;
-    ASSERT_TRUE(AssetDatabase::AssetSourceSnapshot::Load(snapFile, outRoot, ignoreSig, outRecords, outDirectories, &err)) << err;
+    ASSERT_TRUE(AssetDatabase::AssetSourceSnapshot::Load(snapFile, nullptr, outRoot, ignoreSig, outRecords, outDirectories, &err)) << err;
 
     fs::remove_all(tmpRoot, ec);
 }
@@ -5407,7 +5407,7 @@ TEST(AssetDbHardening, JsonlV2FormatHeaderAndDeleteRecordRoundTrip)
 
     // Phase 1: write 2 assets, then delete one, then save again.
     {
-        AssetDatabase::AssetStore_TextJsonl store;
+        AssetDatabase::AssetStore_TextJsonl store(nullptr);
         AssetDatabase::AssetRecord recA{};
         recA.guid = guidA;
         recA.path = "Models/cube.gltf";
@@ -5444,7 +5444,7 @@ TEST(AssetDbHardening, JsonlV2FormatHeaderAndDeleteRecordRoundTrip)
 
     // Phase 2: load into a fresh store, replay the journal, expect A absent and B present.
     {
-        AssetDatabase::AssetStore_TextJsonl store;
+        AssetDatabase::AssetStore_TextJsonl store(nullptr);
         ASSERT_TRUE(store.LoadFromFile(dbPath, nullptr));
 
         AssetDatabase::AssetRecord rec{};
@@ -5465,7 +5465,7 @@ TEST(AssetDbHardening, JsonlDeltaAppendDoesNotRewriteWholeFile)
     fs::create_directories(tmpRoot, ec);
 
     const fs::path dbPath = tmpRoot / "store.assetdb";
-    AssetDatabase::AssetStore_TextJsonl store;
+    AssetDatabase::AssetStore_TextJsonl store(nullptr);
 
     // Seed with 50 assets and snapshot.
     for (size_t i = 0; i < 50; ++i)
@@ -5503,7 +5503,7 @@ TEST(AssetDbHardening, JsonlDeltaAppendDoesNotRewriteWholeFile)
         << "append should add one line, not rewrite the whole file again";
 
     // Reload + verify last-write-wins replay.
-    AssetDatabase::AssetStore_TextJsonl store2;
+    AssetDatabase::AssetStore_TextJsonl store2(nullptr);
     ASSERT_TRUE(store2.LoadFromFile(dbPath, nullptr));
     AssetDatabase::AssetRecord rec{};
     EXPECT_TRUE(store2.TryGetAsset(GUID("11111111-aaaa-bbbb-cccc-000000000000"), rec));
@@ -5528,7 +5528,7 @@ static void ExpectSaveRewritesTheWholeViewAfter(const char* tempName,
     const fs::path dbPath = tmpRoot / "store.assetdb";
     const GUID clean("22222222-aaaa-bbbb-cccc-000000000001");
     const GUID dirty("22222222-aaaa-bbbb-cccc-000000000002");
-    AssetDatabase::AssetStore_TextJsonl store;
+    AssetDatabase::AssetStore_TextJsonl store(nullptr);
     for (const GUID& guid : {clean, dirty})
     {
         AssetDatabase::AssetRecord rec{};
@@ -5556,7 +5556,7 @@ static void ExpectSaveRewritesTheWholeViewAfter(const char* tempName,
     in.close();
     EXPECT_NE(text.find("\"format\":\"assetdb\""), std::string::npos) << text;
 
-    AssetDatabase::AssetStore_TextJsonl reloaded;
+    AssetDatabase::AssetStore_TextJsonl reloaded(nullptr);
     ASSERT_TRUE(reloaded.LoadFromFile(dbPath, nullptr));
     AssetDatabase::AssetRecord rec{};
     EXPECT_TRUE(reloaded.TryGetAsset(clean, rec)) << "the clean row was dropped";
@@ -5603,7 +5603,7 @@ TEST(AssetDbHardening, JsonlCompactionFiresAfterThreshold)
     fs::create_directories(tmpRoot, ec);
 
     const fs::path dbPath = tmpRoot / "store.assetdb";
-    AssetDatabase::AssetStore_TextJsonl store;
+    AssetDatabase::AssetStore_TextJsonl store(nullptr);
     // Reduce threshold to 4 so we don't have to do 1000 round-trips.
     store.SetCompactionThresholdForTesting(4);
 
@@ -5641,7 +5641,7 @@ TEST(AssetDbHardening, JsonlCompactionFiresAfterThreshold)
         << "compaction should reset the counter";
 
     // Sanity-reload: 5 records all present, replayed cleanly.
-    AssetDatabase::AssetStore_TextJsonl store2;
+    AssetDatabase::AssetStore_TextJsonl store2(nullptr);
     ASSERT_TRUE(store2.LoadFromFile(dbPath, nullptr));
     EXPECT_EQ(store2.EnumerateAssets().size(), 5u);
 
@@ -5675,7 +5675,7 @@ TEST(AssetDbHardening, IterateAssetsVisitsTheSameRecordsAsEnumerateAssets)
     fs::remove_all(tmpRoot, ec);
     fs::create_directories(tmpRoot, ec);
 
-    AssetDatabase::AssetStore_TextJsonl store;
+    AssetDatabase::AssetStore_TextJsonl store(nullptr);
     constexpr size_t kRecords = 64;
     for (size_t i = 0; i < kRecords; ++i)
     {
@@ -5736,7 +5736,7 @@ TEST(AssetDbHardening, JsonlV1LegacyFileUpgradesToV2OnNextSave)
         out << R"({"guid":"cafebabe-0000-0000-0000-000000000001","path":"old/asset.txt","type":"Unknown"})" << "\n";
     }
 
-    AssetDatabase::AssetStore_TextJsonl store;
+    AssetDatabase::AssetStore_TextJsonl store(nullptr);
     ASSERT_TRUE(store.LoadFromFile(dbPath, nullptr));
 
     AssetDatabase::AssetRecord rec{};
@@ -5758,7 +5758,7 @@ TEST(AssetDbHardening, JsonlV1LegacyFileUpgradesToV2OnNextSave)
     EXPECT_NE(body.find(R"({"format":"assetdb","version":2})"), std::string::npos);
 
     // Both records present after upgrade.
-    AssetDatabase::AssetStore_TextJsonl store2;
+    AssetDatabase::AssetStore_TextJsonl store2(nullptr);
     ASSERT_TRUE(store2.LoadFromFile(dbPath, nullptr));
     EXPECT_TRUE(store2.TryGetAsset(GUID("cafebabe-0000-0000-0000-000000000001"), rec));
     EXPECT_TRUE(store2.TryGetAsset(GUID("cafebabe-0000-0000-0000-000000000002"), rec));

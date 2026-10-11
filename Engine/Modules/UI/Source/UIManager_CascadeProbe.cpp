@@ -227,7 +227,7 @@ void UIManager::RunLevelWaveCascadeProbe(bool levelWave, bool coldCaches,
 
         ShareGroup* groupData = groups.data();
         JobSystem::ParallelFor(
-            m_JobSystem, 0, groupCount,
+            m_JobSystem, groupCount,
             [groupData, sheetsSpan, indicesSpan, &emptyHover, this](size_t b, size_t e)
             {
                 // Lane-private donor cache: multi-member groups register their

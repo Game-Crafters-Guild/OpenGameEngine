@@ -6,6 +6,11 @@
 
 #include <unordered_map>
 
+namespace JobSystem
+{
+class WorkStealingThreadPool;
+}
+
 namespace GameEngine
 {
 class AssetRegistry;
@@ -38,12 +43,15 @@ struct TexturePackageCookStats
 // Failure/cancellation leaves the final export untouched (BuildPipeline publishes
 // the staging tree only after success); no partial KTX2 file is published.
 // `encodeWorkers` spreads each bake across a pool (CookTexture's `workers`); null
-// bakes on the calling thread.
+// bakes on the calling thread. `manifestParsePool` parses each staged
+// `.assetmanifest` (AssetStore_TextJsonl's parse pool); null parses on the
+// calling thread.
 bool StagePackagedTextureCooks(const std::filesystem::path& contentRoot,
                               const AssetManifest& manifest,
                               const AssetRegistry& sourceRegistry,
                               TextureCookEncodeQuality targetBc7Quality,
                               TextureCookWorkers* encodeWorkers,
+                              JobSystem::WorkStealingThreadPool* manifestParsePool,
                               const std::function<bool()>& cancelRequested,
                               TexturePackageCookStats& stats,
                               std::string& error);

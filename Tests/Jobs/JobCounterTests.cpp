@@ -8,6 +8,7 @@
 // a lost wakeup cannot hide inside the scheduler tail).
 
 #include "JobSystem/JobCounter.h"
+#include "JobSystem/ParallelAlgorithms.h"
 #include "JobSystem/WorkStealingThreadPool.h"
 #include "Memory/AllocationCountScope.h"
 
@@ -909,11 +910,10 @@ double Percentile(std::vector<double>& sorted, double p)
 
 // JobCounter fork-join round-trip bench (Run x8 + Wait, warm storm shape —
 // same gaps as BENCHMARK_WarmStormFork so the rows are comparable). The
-// primitive pays one envelope + one stub per task versus DispatchAndWait's
-// single batch publish; the row quantifies that delta for the PR table. The
-// hard gate is deliberately loose (sanity against strands); the <20us
-// warm-storm gate lives on the DispatchAndWait bench, which now runs on a
-// JobCounter barrier.
+// primitive pays one envelope + one stub per task versus ParallelFor's
+// single batch publish; the row quantifies that delta. The hard gate is
+// deliberately loose (sanity against strands); the <20us warm-storm gate
+// lives on the ParallelFor fork bench (WakeProtocolAndSpinTests).
 TEST(JobSystemBench, BENCHMARK_JobCounterForkJoin)
 {
     JobSystem::WorkStealingThreadPool pool(8);
@@ -951,8 +951,53 @@ TEST(JobSystemBench, BENCHMARK_JobCounterForkJoin)
     }
 
     std::sort(samples.begin(), samples.end());
-    std::printf("[bench] jobcounter-forkjoin x%d    median=%8.2fus p99=%8.2fus worst=%8.2fus\n",
-                kFanout, Percentile(samples, 0.5), Percentile(samples, 0.99), samples.back());
+    std::printf("[bench] jobcounter-forkjoin x%d    median=%8.2fus p99=%8.2fus p99.9=%8.2fus worst=%8.2fus\n",
+                kFanout, Percentile(samples, 0.5), Percentile(samples, 0.99), Percentile(samples, 0.999),
+                samples.back());
+    EXPECT_LT(Percentile(samples, 0.5), 100.0);
+}
+
+// The ParallelFor fork at the shape of the JobCounter bench above: 8 chunks of
+// one element on an 8-worker pool (the caller and 7 helpers), 20-50 us apart,
+// so a fork often meets workers that just went idle.
+TEST(JobSystemBench, BENCHMARK_ParallelFor8)
+{
+    JobSystem::WorkStealingThreadPool pool(8);
+    pool.SetSpinConfigForTest(100, 2);
+
+    constexpr int kIterations = 2000;
+    constexpr size_t kChunks = 8;
+    std::mt19937 rng(0xBE7D);
+    std::uniform_int_distribution<int> gapUs(20, 50);
+
+    std::atomic<uint64_t> sink{0};
+    auto fork = [&]
+    {
+        JobSystem::ParallelFor(&pool, kChunks,
+                               [&sink](size_t begin, size_t end) { sink.fetch_add(end - begin, std::memory_order_relaxed); },
+                               1);
+    };
+
+    for (int i = 0; i < 100; ++i) // warmup, not measured
+    {
+        fork();
+    }
+
+    std::vector<double> samples;
+    samples.reserve(kIterations);
+    for (int i = 0; i < kIterations; ++i)
+    {
+        BusyWaitUs(gapUs(rng));
+        const auto t0 = SteadyClock::now();
+        fork();
+        samples.push_back(ElapsedUs(t0, SteadyClock::now()));
+    }
+
+    std::sort(samples.begin(), samples.end());
+    std::printf("[bench] parallelfor x%zu            median=%8.2fus p99=%8.2fus p99.9=%8.2fus worst=%8.2fus\n",
+                kChunks, Percentile(samples, 0.5), Percentile(samples, 0.99), Percentile(samples, 0.999),
+                samples.back());
+    EXPECT_EQ(sink.load(), (100 + kIterations) * kChunks);
     EXPECT_LT(Percentile(samples, 0.5), 100.0);
 }
 

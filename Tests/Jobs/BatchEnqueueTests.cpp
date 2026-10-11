@@ -99,8 +99,8 @@ void LogTimerResolution()
 }
 
 // The homogeneous batch closure used across these tests: a POD functor (not a
-// lambda) so tests can build plain stack arrays of it — the same pattern the
-// rewired ParallelFor/DispatchAndWait internals use.
+// lambda) so tests can build plain stack arrays of it — the same pattern
+// ParallelFor's helpers use.
 struct CountingFn
 {
     std::atomic<uint64_t>* Counter = nullptr;
@@ -272,8 +272,8 @@ TEST(BatchEnqueueTest, BatchWakeBoundedAndPropagatesToFullWidth)
  * @brief Batches racing Shutdown() strand nothing (F13c): every batched
  * callable runs exactly once — on a worker, in Shutdown()'s post-join drain,
  * in the publisher's post-publish self-drain, or inline via the up-front gate
- * once shutdown is visible. A racing DispatchAndWait caller (whose internals
- * now publish through the batch path) must never hang on its barrier. Mirrors
+ * once shutdown is visible. A racing ParallelFor caller (whose helpers
+ * publish through the batch path) must never hang on its join. Mirrors
  * ShutdownWhileStormingStress + the slice-3 wait-on-handles variant shape.
  */
 TEST(BatchEnqueueTest, BatchVsShutdownNothingStranded)
@@ -323,7 +323,7 @@ TEST(BatchEnqueueTest, BatchVsShutdownNothingStranded)
                 task = [&dispatchRan] { dispatchRan.fetch_add(1, std::memory_order_relaxed); };
             }
             while (!stop.load(std::memory_order_acquire)) {
-                JobSystem::DispatchAndWait(pool.get(), tasks, 8);
+                JobSystem::ParallelFor(pool.get(), 8, [&](size_t task) { tasks[task](); });
             }
             threadsDone.fetch_add(1, std::memory_order_acq_rel);
         });

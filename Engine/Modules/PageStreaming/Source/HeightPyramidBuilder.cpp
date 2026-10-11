@@ -3,7 +3,6 @@
 #include "PageStreaming/HeightPageCodec.h"
 #include "PageStreaming/PageStoreWriter.h"
 
-#include "JobSystem/JobCounter.h"
 #include "JobSystem/WorkStealingThreadPool.h"
 
 #include <algorithm>
@@ -236,16 +235,7 @@ void HeightPyramidBuilder::Discard(uint32 levelIndex)
 
 void HeightPyramidBuilder::RunParallel(uint32 count, const std::function<void(uint32)>& body) const
 {
-    if (!m_Pool || count < 2u)
-    {
-        for (uint32 i = 0; i < count; ++i)
-            body(i);
-        return;
-    }
-    JobSystem::JobCounter counter;
-    for (uint32 i = 0; i < count; ++i)
-        m_Pool->Run([&body, i]() { body(i); }, counter);
-    m_Pool->Wait(counter);
+    JobSystem::ParallelFor(m_Pool, count, [&body](size_t i) { body(static_cast<uint32>(i)); });
 }
 
 } // namespace GameEngine::PageStreaming

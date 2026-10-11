@@ -108,7 +108,7 @@ double MeasureForkUs(JobSystem::WorkStealingThreadPool& pool,
                      std::function<void()>* tasks, uint32_t count)
 {
     const auto t0 = SteadyClock::now();
-    JobSystem::DispatchAndWait(&pool, tasks, count);
+    JobSystem::ParallelFor(&pool, count, [&](size_t task) { tasks[task](); });
     return ElapsedUs(t0, SteadyClock::now());
 }
 
@@ -155,7 +155,7 @@ void RunLostWakeupStress(uint32_t spinWindowUs, uint32_t maxSpinners)
     for (int i = 0; i < kIterations; ++i)
     {
         const auto t0 = SteadyClock::now();
-        JobSystem::DispatchAndWait(&pool, tasks, 2);
+        JobSystem::ParallelFor(&pool, 2, [&](size_t task) { tasks[task](); });
         const double us = ElapsedUs(t0, SteadyClock::now());
         worstUs = std::max(worstUs, us);
         if (us > 900.0)
@@ -576,7 +576,7 @@ ForkBenchResult RunForkBench(JobSystem::WorkStealingThreadPool& pool, int iterat
 
     for (int i = 0; i < 100; ++i) // warmup, not measured
     {
-        JobSystem::DispatchAndWait(&pool, tasks.data(), fanout);
+        JobSystem::ParallelFor(&pool, fanout, [&](size_t task) { tasks[task](); });
     }
 
     for (int i = 0; i < iterations; ++i)
@@ -714,7 +714,7 @@ double MeasureIdleCpuPercent(uint32_t spinWindowUs, uint32_t maxSpinners)
     // Cycle every worker through the loop once, then let the pool settle into
     // its idle regime before sampling.
     std::function<void()> tasks[4] = {[] {}, [] {}, [] {}, [] {}};
-    JobSystem::DispatchAndWait(&pool, tasks, 4);
+    JobSystem::ParallelFor(&pool, 4, [&](size_t task) { tasks[task](); });
     std::this_thread::sleep_for(std::chrono::milliseconds(200));
 
 #if GE_TEST_HAS_WIN_TIMERS

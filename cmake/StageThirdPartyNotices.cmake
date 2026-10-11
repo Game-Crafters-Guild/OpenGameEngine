@@ -239,26 +239,32 @@ _ge_notice_copy(
 string(ASCII 1 2 3 4 5 6 7 8 11 12 14 15 16 17 18 19 20 21 22 23 24 25 26 27 28 29 30 31
     _ge_control_bytes)
 
-# CMake regular expressions stop at the first NUL, so "^.*" matches exactly the bytes
-# before it; LENGTH and SUBSTRING see the whole string.
+# CMake regular expressions stop at the first NUL, so "^.*" matches the bytes before
+# it while LENGTH and SUBSTRING see the whole string. The match can also stop short of
+# a non-NUL byte (CMake 4.3.1 returns "^.*" one byte short on inputs of a few hundred
+# kilobytes), so a stop at a byte that "^." matches keeps that byte and carries on;
+# only a byte "^." cannot match is a NUL, and only that is dropped.
 function(_ge_notice_drop_nul text_var)
     set(_text "${${text_var}}")
+    set(_kept "")
     while(TRUE)
         string(REGEX MATCH "^.*" _head "${_text}")
         string(LENGTH "${_head}" _head_length)
         string(LENGTH "${_text}" _text_length)
         if(_head_length EQUAL _text_length)
+            string(APPEND _kept "${_head}")
             break()
         endif()
         string(SUBSTRING "${_text}" ${_head_length} 1 _stop)
         if(_stop MATCHES "^.")
-            message(FATAL_ERROR "StageThirdPartyNotices: notice text stopped matching at a byte that is not NUL")
+            string(APPEND _kept "${_head}${_stop}")
+        else()
+            string(APPEND _kept "${_head}")
         endif()
         math(EXPR _tail_start "${_head_length} + 1")
-        string(SUBSTRING "${_text}" ${_tail_start} -1 _tail)
-        set(_text "${_head}${_tail}")
+        string(SUBSTRING "${_text}" ${_tail_start} -1 _text)
     endwhile()
-    set(${text_var} "${_text}" PARENT_SCOPE)
+    set(${text_var} "${_kept}" PARENT_SCOPE)
 endfunction()
 
 # Covers the RTF that rich-edit controls write: destination groups, control words,

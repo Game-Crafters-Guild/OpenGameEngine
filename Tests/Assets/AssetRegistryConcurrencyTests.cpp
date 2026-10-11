@@ -709,7 +709,7 @@ TEST(AssetRegistryConcurrency, ShutdownCancelsInFlightStartupScan)
         EXPECT_LT(shutdownTime, std::chrono::seconds(5));
     }
 
-    AssetDatabase::AssetStore_TextJsonl store;
+    AssetDatabase::AssetStore_TextJsonl store(nullptr);
     ASSERT_TRUE(store.LoadFromFile(tmpRoot / "AssetDatabase.assetdb", nullptr));
     EXPECT_LT(store.EnumerateAssets().size(), kFileCount)
         << "Shutdown waited for the startup scan to register every file";

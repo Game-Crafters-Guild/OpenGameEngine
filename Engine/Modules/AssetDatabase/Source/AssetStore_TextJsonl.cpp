@@ -1,13 +1,12 @@
 #include "AssetDatabase/AssetStore_TextJsonl.h"
 
-#include "ChunkedParallel.h"
 #include "AssetCore/SharedFileRead.h"
 
 #include "AssetCore/PathNormalization.h"
 #include "FileSystem/FileSystem.h"
 #include "FileSystem/ScopedFileLock.h"
+#include "JobSystem/ParallelAlgorithms.h"
 #include "Logger/Logger.h"
-#include "Platform/Capabilities.h"
 
 #include <algorithm>
 #include <cerrno>
@@ -500,6 +499,10 @@ std::string AssetStore_TextJsonl::NormalizeCanonicalPath(std::string s)
     return AssetPaths::CanonicalizeStorePath(std::move(s));
 }
 
+AssetStore_TextJsonl::AssetStore_TextJsonl(JobSystem::WorkStealingThreadPool* parsePool) : m_ParsePool(parsePool)
+{
+}
+
 bool AssetStore_TextJsonl::LoadFromFile(const std::filesystem::path& filePath, std::string* outError)
 {
     std::lock_guard<std::mutex> lk(m_Mutex);
@@ -555,13 +558,11 @@ bool AssetStore_TextJsonl::LoadFromFile(const std::filesystem::path& filePath, s
             lineSpans.emplace_back(lineBegin, buffer.size());
     }
 
-    // F.7: parallelize the JSON-parse stage for large files. ParseJsonlLine
-    // is pure — workers can run concurrently. The merge into m_Assets etc.
-    // stays sequential to preserve last-write-wins ordering. Threshold
-    // chosen so the per-thread overhead doesn't dominate small projects.
-    // The parallel arm runs on transient threads (LaunchChunkedParallel), which
-    // a platform without them cannot host: sequential there.
-    const size_t kParallelLineThreshold = Platform::SupportsTransientThreads() ? 4000 : SIZE_MAX;
+    // F.7: parallelize the JSON-parse stage for large files on the parse pool.
+    // ParseJsonlLine is pure, so lines parse concurrently. The merge into
+    // m_Assets etc. stays sequential to preserve last-write-wins ordering. The
+    // threshold keeps the fork's overhead off small projects.
+    constexpr size_t kParallelLineThreshold = 4000;
     int detectedVersion = 1;
 
     // GUID-keyed during replay so last-write-wins holds across the
@@ -579,7 +580,7 @@ bool AssetStore_TextJsonl::LoadFromFile(const std::filesystem::path& filePath, s
     // reach it — which is how the file grows without bound across sessions.
     size_t journalRecordLines = 0;
 
-    if (lineSpans.size() < kParallelLineThreshold)
+    if (!m_ParsePool || lineSpans.size() < kParallelLineThreshold)
     {
         // Single-threaded path: parse + apply each line in order.
         for (size_t idx = 0; idx < lineSpans.size(); ++idx)
@@ -595,36 +596,25 @@ bool AssetStore_TextJsonl::LoadFromFile(const std::filesystem::path& filePath, s
     }
     else
     {
-        // Parallel path: split lines into N chunks, parse concurrently,
-        // then merge sequentially in chunk-then-line order.
-        auto futures = LaunchChunkedParallel(lineSpans.size(),
-            [&buffer, &lineSpans](size_t chunkBegin, size_t chunkEnd) {
-                std::vector<ParsedLine> out;
-                out.reserve(chunkEnd - chunkBegin);
-                for (size_t idx = chunkBegin; idx < chunkEnd; ++idx)
+        // Parallel path: parse every line into its own slot, then apply the
+        // slots in line order on this thread.
+        std::vector<ParsedLine> parsed(lineSpans.size());
+        JobSystem::ParallelFor(m_ParsePool, lineSpans.size(),
+            [&buffer, &lineSpans, &parsed](size_t begin, size_t end) {
+                for (size_t idx = begin; idx < end; ++idx)
                 {
                     const auto [b, e] = lineSpans[idx];
-                    const std::string_view raw(buffer.data() + b, e - b);
-                    out.push_back(ParseJsonlLine(raw, idx + 1));
+                    parsed[idx] = ParseJsonlLine(std::string_view(buffer.data() + b, e - b), idx + 1);
                 }
-                return out;
-            });
+            },
+            kParallelLineThreshold / 4);
 
-        // Sequential merge. Wait on each future in chunk order, then
-        // apply each parsed line. The map mutations stay single-threaded;
-        // last-write-wins ordering is preserved because chunks were
-        // assigned contiguously and we drain them in order.
-        for (auto& fut : futures)
+        for (const ParsedLine& pl : parsed)
         {
-            std::vector<ParsedLine> chunk = fut.get();
-            for (const auto& pl : chunk)
-            {
-                if (pl.kind != ParsedLine::Kind::Skipped
-                    && pl.kind != ParsedLine::Kind::FormatHeader)
-                    ++journalRecordLines;
-                ApplyParsedLine(pl, m_Assets, m_PathToGuid, m_Redirects,
-                                quarantined, displaced, m_LoadConflicts, detectedVersion, filePath);
-            }
+            if (pl.kind != ParsedLine::Kind::Skipped && pl.kind != ParsedLine::Kind::FormatHeader)
+                ++journalRecordLines;
+            ApplyParsedLine(pl, m_Assets, m_PathToGuid, m_Redirects,
+                            quarantined, displaced, m_LoadConflicts, detectedVersion, filePath);
         }
     }
 
@@ -796,7 +786,7 @@ bool AssetStore_TextJsonl::SaveToFile(const std::filesystem::path& filePath, std
         std::error_code existsError;
         if (std::filesystem::exists(filePath, existsError))
         {
-            onDisk.emplace();
+            onDisk.emplace(m_ParsePool);
             std::string readError;
             if (!onDisk->LoadFromFile(filePath, &readError))
             {

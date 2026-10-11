@@ -4,9 +4,12 @@
 #include "Rendering/Core/Device.h"
 #include "Rendering/ShaderCache/ShaderPackageIO.h"
 
+#include <algorithm>
+#include <atomic>
 #include <cstdlib>
 #include <fstream>
 #include <string>
+#include <thread>
 #include <unordered_map>
 
 namespace GameEngine::Tools
@@ -120,6 +123,39 @@ bool CookWebWgslIntoPackage(const WebWgslCookRequest& request, std::string& outE
     wgslBytes["fs"] = std::move(fragmentWgsl);
     return Rendering::SaveShaderPkg(request.PackagePath, pkg.meta, pkg.stageBytes,
                                     pkg.cacheInfoJson, &outError, wgslBytes);
+}
+
+namespace
+{
+// One worker: claims the next unclaimed request until none is left.
+void CookBatchWorker(const std::vector<WebWgslCookRequest>& requests, std::atomic<size_t>& next,
+                     std::vector<std::string>& errors)
+{
+    for (size_t index = next.fetch_add(1); index < requests.size(); index = next.fetch_add(1))
+    {
+        const WebWgslCookRequest& request = requests[index];
+        std::string error;
+        std::error_code ec;
+        if (CookWebWgslIntoPackage(request, error))
+            fs::remove_all(request.ScratchDir, ec);
+        else
+            errors[index] = error.empty() ? std::string("WGSL cook failed") : std::move(error);
+    }
+}
+} // namespace
+
+std::vector<std::string> CookWebWgslBatch(const std::vector<WebWgslCookRequest>& requests, size_t jobs)
+{
+    std::vector<std::string> errors(requests.size());
+    std::atomic<size_t> next{0};
+    const size_t workerCount = std::min(std::max<size_t>(jobs, 1), std::max<size_t>(requests.size(), 1));
+    std::vector<std::thread> workers;
+    workers.reserve(workerCount);
+    for (size_t i = 0; i < workerCount; ++i)
+        workers.emplace_back(CookBatchWorker, std::cref(requests), std::ref(next), std::ref(errors));
+    for (std::thread& worker : workers)
+        worker.join();
+    return errors;
 }
 
 } // namespace GameEngine::Tools

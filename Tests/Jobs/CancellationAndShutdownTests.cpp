@@ -434,8 +434,7 @@ TEST_F(ShutdownContractTest, ShutdownWakesAllWaiters) {
 
 /**
  * @brief B7 pin: bare EnqueueWork tasks enqueued around Shutdown always
- * execute — the hand-rolled caller barrier (the DispatchAndWait/ParallelFor
- * shape) must always release, before, during, and after shutdown.
+ * execute — a hand-rolled caller barrier over them must always release, before, during, and after shutdown.
  */
 TEST_F(ShutdownContractTest, ShutdownExecutesBareBarrierTasks) {
     WorkStealingThreadPool pool(4);
@@ -493,8 +492,8 @@ TEST_F(ShutdownContractTest, ShutdownExecutesBareBarrierTasks) {
 }
 
 /**
- * @brief F13b: ParallelFor / DispatchAndWait against a shut-down pool fall
- * back to sequential execution on the caller — correct results, no hang.
+ * @brief F13b: ParallelFor (both overloads) and ParallelSort against a
+ * shut-down pool fall back to sequential execution on the caller — correct results, no hang.
  */
 TEST_F(ShutdownContractTest, ParallelForDuringShutdownFallsBackSequential) {
     WorkStealingThreadPool pool(4);
@@ -503,7 +502,7 @@ TEST_F(ShutdownContractTest, ParallelForDuringShutdownFallsBackSequential) {
     constexpr size_t kCount = 100000;
     std::vector<int> data(kCount, 0);
     JobSystem::ParallelFor(
-        &pool, 0, kCount,
+        &pool, kCount,
         [&data](size_t begin, size_t end) {
             for (size_t i = begin; i < end; ++i) {
                 data[i] = static_cast<int>(i);
@@ -519,7 +518,7 @@ TEST_F(ShutdownContractTest, ParallelForDuringShutdownFallsBackSequential) {
     for (auto& task : tasks) {
         task = [&dispatched] { dispatched.fetch_add(1); };
     }
-    JobSystem::DispatchAndWait(&pool, tasks, 4);
+    JobSystem::ParallelFor(&pool, 4, [&](size_t task) { tasks[task](); });
     EXPECT_EQ(dispatched.load(), 4);
 
     std::vector<int> toSort(20000);
@@ -552,7 +551,7 @@ TEST_F(ShutdownContractTest, ShutdownWhileStormingStress) {
             std::vector<int> buffer(20000, 0);
             while (!stop.load(std::memory_order_acquire)) {
                 JobSystem::ParallelFor(
-                    pool.get(), 0, buffer.size(),
+                    pool.get(), buffer.size(),
                     [&buffer](size_t begin, size_t end) {
                         for (size_t i = begin; i < end; ++i) {
                             ++buffer[i];

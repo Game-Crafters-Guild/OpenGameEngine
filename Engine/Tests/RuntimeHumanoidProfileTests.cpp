@@ -231,7 +231,7 @@ TEST_F(RuntimeHumanoidProfileTest, PackagedManifestRetainsCollectedProfileIdenti
     const auto packageRoot = root / "export/Assets";
     fs::create_directories((root / "export" / entry.outputPath).parent_path());
     fs::copy_file(entry.sourcePath, root / "export" / entry.outputPath);
-    AssetDatabase::AssetStore_TextJsonl store;
+    AssetDatabase::AssetStore_TextJsonl store(nullptr);
     AssetDatabase::AssetRecord row;
     row.guid = entry.guid;
     row.path = relativeProfile;

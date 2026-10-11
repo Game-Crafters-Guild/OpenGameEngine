@@ -948,7 +948,8 @@ bool BuildPipeline::ExecuteImpl(const BuildSettings& settings)
         ? TextureCookEncodeQuality::QuickBC7 : TextureCookEncodeQuality::Full;
     AssetManager& assets = EngineCore::GetInstance().GetAssetManager();
     if (!CookStagedContent(contentRoot, manifest, assets.GetRegistry(), assets.GetParserRegistry(), targetQuality,
-                           assets.GetTextureCookWorkers(), [this]() { return m_CancelRequested.load(); },
+                           assets.GetTextureCookWorkers(), &assets.GetJobSystem(),
+                           [this]() { return m_CancelRequested.load(); },
                            textureStats, cookError))
     {
         if (FailIfCancelled())
@@ -2186,8 +2187,9 @@ bool BuildPipeline::StageAssetManifest(const fs::path& contentRoot, const AssetM
         {
             rel.erase(0, assetsPrefix.size());
         }
+        // Written here and never loaded, so no parse pool.
         AssetDatabase::AssetStore_TextJsonl& store =
-            stores[isPackageEntry ? entry.sourceAlias : std::string()];
+            stores.try_emplace(isPackageEntry ? entry.sourceAlias : std::string(), nullptr).first->second;
 
         // Store the path FIELD case-preserved (NormalizeCanonicalPath:
         // forward-slash + lexically-normal, real on-disk case) — the packaged
@@ -2297,7 +2299,7 @@ bool BuildPipeline::StageAssetManifest(const fs::path& contentRoot, const AssetM
     // The project manifest always ships (even empty — the Player's packaged
     // mount detection keys off its presence); package manifests only where a
     // package staged assets.
-    stores[std::string()];
+    stores.try_emplace(std::string(), nullptr);
 
     for (auto& [alias, store] : stores)
     {

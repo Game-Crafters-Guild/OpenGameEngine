@@ -38,7 +38,18 @@ struct SlabStats
 // static destruction are safe: the storage persists and no destructor runs.
 SlabStats s_Stats;
 
-using SlabFreelist = moodycamel::ConcurrentQueue<void*>;
+// Every release is a tokenless (implicit-producer) enqueue: each releasing
+// thread fills its own sub-queue, whose block index cannot grow on the
+// non-allocating try_enqueue. The default index (32 blocks of 32) would let
+// one thread hold only 1,024 slabs, a quarter of the cap; this one indexes
+// the whole cap, so a single releasing thread can fill the freelist.
+struct SlabFreelistTraits : moodycamel::ConcurrentQueueDefaultTraits
+{
+    static const size_t IMPLICIT_INITIAL_INDEX_SIZE =
+        kTaskSlabPoolCapacity / moodycamel::ConcurrentQueueDefaultTraits::BLOCK_SIZE;
+};
+
+using SlabFreelist = moodycamel::ConcurrentQueue<void*, SlabFreelistTraits>;
 
 SlabFreelist& Freelist()
 {
@@ -50,6 +61,7 @@ SlabFreelist& Freelist()
     // The constructed capacity is the retention cap: try_enqueue never
     // allocates new blocks, so the freelist can never hold more than
     // kTaskSlabPoolCapacity slabs (512KB) — overflow frees go to the heap.
+    // Any one releasing thread can reach the cap (SlabFreelistTraits).
     static SlabFreelist* const s_Freelist = new SlabFreelist(kTaskSlabPoolCapacity);
     return *s_Freelist;
 }
@@ -126,6 +138,22 @@ void ReleaseTaskSlab(void* slab) noexcept
 
     s_Stats.HeapFrees.fetch_add(1, std::memory_order_relaxed);
     ::operator delete(slab);
+}
+
+void ProvisionTaskSlabs(size_t count)
+{
+    for (size_t i = 0; i < count; ++i)
+    {
+        s_Stats.HeapAllocs.fetch_add(1, std::memory_order_relaxed);
+        void* slab = ::operator new(kTaskSlabSize);
+        if (!Freelist().try_enqueue(slab))
+        {
+            // At the cap: the rest would go straight back to the heap too.
+            s_Stats.HeapFrees.fetch_add(1, std::memory_order_relaxed);
+            ::operator delete(slab);
+            return;
+        }
+    }
 }
 
 TaskSlabStatsSnapshot GetTaskSlabStatsForTests()

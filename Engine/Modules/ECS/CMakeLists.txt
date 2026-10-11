@@ -17,6 +17,7 @@ set(ECS_SOURCES
     Source/CachedQuery.cpp
     Source/UnresolvedComponentStore.cpp
     Source/OrderedHandleSet.cpp
+    Source/SystemWaveTrace.cpp
 )
 
 # Core ECS header files
@@ -45,6 +46,7 @@ set(ECS_HEADERS
     Include/ECS/AutoRegistration.h
     Include/ECS/ECSTemplates.h
     Include/ECS/Systems.h
+    Include/ECS/SystemWaveTrace.h
     Include/ECS/WorldTemplateImplementations.inl
     Include/ECS/OrderedHandleSet.h
 )

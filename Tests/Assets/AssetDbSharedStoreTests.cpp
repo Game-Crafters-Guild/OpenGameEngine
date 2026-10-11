@@ -74,7 +74,7 @@ struct SharedStoreFixture
         , DbFile(Dir / ".assetmanifest")
         , LockFile(Dir / ".assetmanifest.lock")
     {
-        AssetStore_TextJsonl seed;
+        AssetStore_TextJsonl seed(nullptr);
         seed.UpsertAsset(MakeRecord(kGuidA, "textures/a.png"), nullptr);
         seed.SaveToFile(DbFile, nullptr);
     }
@@ -139,7 +139,7 @@ constexpr std::chrono::milliseconds kPeerHoldTime{150};
 TEST(AssetDbSharedStore, ARefusedSaveKeepsItsDeltasForTheRetry)
 {
     const SharedStoreFixture fixture("ge_shared_store_refusal");
-    AssetStore_TextJsonl store;
+    AssetStore_TextJsonl store(nullptr);
     fixture.Open(store);
     ASSERT_TRUE(store.UpsertAsset(MakeRecord(kGuidB, "textures/b.png"), nullptr));
 
@@ -156,7 +156,7 @@ TEST(AssetDbSharedStore, ARefusedSaveKeepsItsDeltasForTheRetry)
     }
 
     ASSERT_TRUE(store.SaveToFile(fixture.DbFile, nullptr));
-    AssetStore_TextJsonl reread;
+    AssetStore_TextJsonl reread(nullptr);
     ASSERT_TRUE(reread.LoadFromFile(fixture.DbFile, nullptr));
     EXPECT_TRUE(reread.LookupGuidByPath("textures/b.png").has_value())
         << "the delta was drained by the refused save and never written";
@@ -169,9 +169,9 @@ TEST(AssetDbSharedStore, ARefusedSaveKeepsItsDeltasForTheRetry)
 TEST(AssetDbSharedStore, CompactionFromAStaleViewKeepsAnotherProcessesRow)
 {
     const SharedStoreFixture fixture("ge_shared_store_merge");
-    AssetStore_TextJsonl first;
+    AssetStore_TextJsonl first(nullptr);
     fixture.Open(first);
-    AssetStore_TextJsonl second;
+    AssetStore_TextJsonl second(nullptr);
     fixture.Open(second);
 
     // The second process commits a row the first has never seen.
@@ -184,7 +184,7 @@ TEST(AssetDbSharedStore, CompactionFromAStaleViewKeepsAnotherProcessesRow)
     ASSERT_TRUE(first.UpsertAsset(MakeRecord(kGuidC, "textures/c.png"), nullptr));
     ASSERT_TRUE(first.SaveToFile(fixture.DbFile, nullptr));
 
-    AssetStore_TextJsonl reread;
+    AssetStore_TextJsonl reread(nullptr);
     ASSERT_TRUE(reread.LoadFromFile(fixture.DbFile, nullptr));
     EXPECT_TRUE(reread.LookupGuidByPath("textures/c.png").has_value())
         << "the compacting process lost its own row";
@@ -200,7 +200,7 @@ TEST(AssetDbSharedStore, CompactionFromAStaleViewKeepsAnotherProcessesRow)
 TEST(AssetDbSharedStore, CompactsItsWholeViewWhenTheFileWentMissing)
 {
     const SharedStoreFixture fixture("ge_shared_store_missing");
-    AssetStore_TextJsonl store;
+    AssetStore_TextJsonl store(nullptr);
     fixture.Open(store);
 
     std::error_code ec;
@@ -210,7 +210,7 @@ TEST(AssetDbSharedStore, CompactsItsWholeViewWhenTheFileWentMissing)
     ASSERT_TRUE(store.UpsertAsset(MakeRecord(kGuidB, "textures/b.png"), nullptr));
     ASSERT_TRUE(store.SaveToFile(fixture.DbFile, nullptr));
 
-    AssetStore_TextJsonl reread;
+    AssetStore_TextJsonl reread(nullptr);
     ASSERT_TRUE(reread.LoadFromFile(fixture.DbFile, nullptr));
     EXPECT_TRUE(reread.LookupGuidByPath("textures/b.png").has_value());
     EXPECT_TRUE(reread.LookupGuidByPath("textures/a.png").has_value())
@@ -225,7 +225,7 @@ TEST(AssetDbSharedStore, CompactsItsWholeViewWhenTheFileWentMissing)
 TEST(AssetDbSharedStore, RefusesToMergeAgainstAFileAnExternalWriterEmptied)
 {
     const SharedStoreFixture fixture("ge_shared_store_emptied");
-    AssetStore_TextJsonl store;
+    AssetStore_TextJsonl store(nullptr);
     fixture.Open(store);
 
     { std::ofstream(fixture.DbFile, std::ios::binary | std::ios::trunc); }
@@ -241,13 +241,13 @@ TEST(AssetDbSharedStore, RefusesToMergeAgainstAFileAnExternalWriterEmptied)
     // Whoever repairs the file gets the held delta on the next save, because
     // the refusal never drained it.
     {
-        AssetStore_TextJsonl repaired;
+        AssetStore_TextJsonl repaired(nullptr);
         repaired.UpsertAsset(MakeRecord(kGuidA, "textures/a.png"), nullptr);
         ASSERT_TRUE(repaired.SaveToFile(fixture.DbFile, nullptr));
     }
     ASSERT_TRUE(store.SaveToFile(fixture.DbFile, &error)) << error;
 
-    AssetStore_TextJsonl reread;
+    AssetStore_TextJsonl reread(nullptr);
     ASSERT_TRUE(reread.LoadFromFile(fixture.DbFile, nullptr));
     EXPECT_TRUE(reread.LookupGuidByPath("textures/b.png").has_value())
         << "the refused save drained the delta and never wrote it";
@@ -260,7 +260,7 @@ TEST(AssetDbSharedStore, RefusesToMergeAgainstAFileAnExternalWriterEmptied)
 TEST(AssetDbSharedStore, AWaitingSaveOutlastsThePeerAndLandsItsDelta)
 {
     const SharedStoreFixture fixture("ge_shared_store_wait");
-    AssetStore_TextJsonl store;
+    AssetStore_TextJsonl store(nullptr);
     fixture.Open(store);
     ASSERT_TRUE(store.UpsertAsset(MakeRecord(kGuidB, "textures/b.png"), nullptr));
 
@@ -277,7 +277,7 @@ TEST(AssetDbSharedStore, AWaitingSaveOutlastsThePeerAndLandsItsDelta)
     EXPECT_TRUE(store.SaveToFile(fixture.DbFile, nullptr,
                                  GameEngine::AssetDatabase::StoreSaveWait::WaitForPeers));
 
-    AssetStore_TextJsonl reread;
+    AssetStore_TextJsonl reread(nullptr);
     ASSERT_TRUE(reread.LoadFromFile(fixture.DbFile, nullptr));
     EXPECT_TRUE(reread.LookupGuidByPath("textures/b.png").has_value());
 }
@@ -310,7 +310,7 @@ TEST(AssetDbSharedStore, UnmountingWaitsOutAPeerInsteadOfDroppingTheEdit)
         std::error_code ec;
         fs::create_directories(package.AssetsDir / "textures", ec);
         std::ofstream(package.AssetsDir / "textures" / "bark.png", std::ios::binary) << "PNGDATA";
-        AssetStore_TextJsonl manifest;
+        AssetStore_TextJsonl manifest(nullptr);
         AssetRecord record = MakeRecord(kGuidA, "textures/bark.png");
         manifest.UpsertAsset(record, nullptr);
         ASSERT_TRUE(manifest.SaveToFile(package.AssetsDir / ".assetmanifest", nullptr,
@@ -331,7 +331,7 @@ TEST(AssetDbSharedStore, UnmountingWaitsOutAPeerInsteadOfDroppingTheEdit)
     peer.ReleaseAfter(kPeerHoldTime);
     ASSERT_TRUE(manager.GetRegistry().UnregisterSource("shared-pack"));
 
-    AssetStore_TextJsonl persisted;
+    AssetStore_TextJsonl persisted(nullptr);
     ASSERT_TRUE(persisted.LoadFromFile(package.AssetsDir / ".assetmanifest", nullptr));
     AssetRecord record{};
     ASSERT_TRUE(persisted.TryGetAsset(GameEngine::GUID(kGuidA), record));

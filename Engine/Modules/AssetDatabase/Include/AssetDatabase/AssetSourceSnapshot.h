@@ -5,6 +5,11 @@
 #include <string>
 #include <vector>
 
+namespace JobSystem
+{
+class WorkStealingThreadPool;
+}
+
 namespace GameEngine::AssetDatabase
 {
 
@@ -143,7 +148,10 @@ public:
     // `outIgnoreRulesSignature` is the u64 from the header — callers compare
     // it against the current ignore-rules signature and treat a mismatch
     // as a snapshot-invalidation event (re-scan from scratch).
+    // `parsePool` parses a large snapshot's records in parallel (null parses
+    // on the calling thread).
     static bool Load(const std::filesystem::path& snapshotFile,
+                     JobSystem::WorkStealingThreadPool* parsePool,
                      std::filesystem::path& outMountRoot,
                      uint64_t& outIgnoreRulesSignature,
                      std::vector<AssetSourceSnapshotRecord>& outRecords,

@@ -1,11 +1,11 @@
 #include "AssetDatabase/AssetSourceSnapshot.h"
 
-#include "ChunkedParallel.h"
 #include "AssetCore/SharedFileRead.h"
 #include "FileSystem/FileSystem.h"
-#include "Platform/Capabilities.h"
+#include "JobSystem/ParallelAlgorithms.h"
 
 #include <algorithm>
+#include <atomic>
 #include <chrono>
 #include <charconv>
 #include <cstdio>
@@ -308,6 +308,7 @@ bool AssetSourceSnapshot::Save(const std::filesystem::path& snapshotFile,
 }
 
 bool AssetSourceSnapshot::Load(const std::filesystem::path& snapshotFile,
+                               JobSystem::WorkStealingThreadPool* parsePool,
                                std::filesystem::path& outMountRoot,
                                uint64_t& outIgnoreRulesSignature,
                                std::vector<AssetSourceSnapshotRecord>& outRecords,
@@ -425,10 +426,10 @@ bool AssetSourceSnapshot::Load(const std::filesystem::path& snapshotFile,
                ReadStringFromBuffer(data, size, c, outRec.TypeId);
     };
 
-    // The parallel arm runs on transient threads (LaunchChunkedParallel), which
-    // a platform without them cannot host: sequential there.
+    // Large snapshots parse their records on the parse pool; each record
+    // writes only its own slot.
     constexpr size_t kParallelRecordThreshold = 4000;
-    if (!Platform::SupportsTransientThreads() || recordCount < kParallelRecordThreshold)
+    if (!parsePool || recordCount < kParallelRecordThreshold)
     {
         for (size_t i = 0; i < recordOffsets.size(); ++i)
         {
@@ -442,19 +443,20 @@ bool AssetSourceSnapshot::Load(const std::filesystem::path& snapshotFile,
     }
     else
     {
-        auto futures = LaunchChunkedParallel(recordOffsets.size(),
-            [&recordOffsets, &outRecords, &parseRecordAt](size_t chunkBegin, size_t chunkEnd) {
+        std::atomic<bool> ok{true};
+        JobSystem::ParallelFor(parsePool, recordOffsets.size(),
+            [&recordOffsets, &outRecords, &parseRecordAt, &ok](size_t chunkBegin, size_t chunkEnd) {
                 for (size_t i = chunkBegin; i < chunkEnd; ++i)
                 {
                     if (!parseRecordAt(recordOffsets[i], outRecords[i]))
-                        return false;
+                    {
+                        ok.store(false, std::memory_order_relaxed);
+                        return;
+                    }
                 }
-                return true;
-            });
-        bool ok = true;
-        for (auto& fut : futures)
-            ok = fut.get() && ok;
-        if (!ok)
+            },
+            kParallelRecordThreshold / 4);
+        if (!ok.load(std::memory_order_relaxed))
         {
             if (outError) *outError = "Snapshot record parse failed (parallel path)";
             outRecords.clear();

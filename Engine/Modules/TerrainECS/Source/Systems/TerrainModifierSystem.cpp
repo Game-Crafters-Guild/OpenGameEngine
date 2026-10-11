@@ -4161,12 +4161,10 @@ void TerrainModifierSystem::BakeTiledFull(TiledTerrainData& tiled, float32 heigh
                 tileFn(*tile);
             return;
         }
-        // Match the region bake's fork/join: Wait helps drain jobs, including when this system
-        // is already running on a worker inside a scheduler wave. ParallelFor cannot join there.
-        JobSystem::JobCounter counter;
-        for (const auto& [coord, tile] : fullTiles)
-            m_JobPool->Run([&tileFn, tile]() { tileFn(*tile); }, counter);
-        m_JobPool->Wait(counter);
+        // One unit per tile; legal when this system already runs on a worker inside a
+        // scheduler wave.
+        JobSystem::ParallelFor(m_JobPool, fullTiles.size(),
+                               [&tileFn, &fullTiles](std::size_t i) { tileFn(*fullTiles[i].second); });
     };
 
     // Pass 1: regenerate the base + apply height modifiers on every Full tile.
@@ -4313,22 +4311,21 @@ bool TerrainModifierSystem::RunBakeRowBands(
     // Flatten every region into fixed-height row bands so the pool stays busy even
     // when there are few regions. The per-sample noise, modifier and splat evaluators
     // are pure functions of world position, so a band split is byte-identical to one
-    // whole-region call. Bands are launched through the JobCounter fork-join (Run +
-    // Wait), NOT ParallelFor: the wave scheduler runs a multi-system wave's members on
-    // pool workers, and this bake is one of them. Wait(counter) participates in
-    // draining the bands (the joining worker executes them itself), so it is safe to
-    // join from a worker, where ParallelFor's barrier is not.
+    // whole-region call. One ParallelFor unit per band: the wave scheduler runs a
+    // multi-system wave's members on pool workers, and this bake is one of them, so the
+    // fork must be legal on a worker, which ParallelFor is.
     struct Band { std::size_t Region; int32 MinX, MaxX, Z0, Z1; };
     std::vector<Band> bands;
     for (std::size_t i = 0; i < regions.size(); ++i)
         for (int32 z = regions[i].MinZ; z <= regions[i].MaxZ; z += kBakeBandRows)
             bands.push_back(Band{i, regions[i].MinX, regions[i].MaxX, z,
                                  std::min(z + kBakeBandRows - 1, regions[i].MaxZ)});
-    JobSystem::JobCounter counter;
-    for (const Band& band : bands)
-        m_JobPool->Run([&rowFn, band]() { rowFn(band.Region, band.MinX, band.MaxX, band.Z0, band.Z1); },
-                       counter);
-    m_JobPool->Wait(counter);
+    const auto bakeBand = [&rowFn, &bands](std::size_t i)
+    {
+        const Band& band = bands[i];
+        rowFn(band.Region, band.MinX, band.MaxX, band.Z0, band.Z1);
+    };
+    JobSystem::ParallelFor(m_JobPool, bands.size(), bakeBand);
     m_LastBakeBandCount = static_cast<uint32>(bands.size());
     return true;
 }

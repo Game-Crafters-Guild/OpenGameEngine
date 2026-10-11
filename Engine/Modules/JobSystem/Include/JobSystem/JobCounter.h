@@ -2,10 +2,9 @@
 
 // JobCounter — caller-owned fork-join counter (slice 5, spec F16-F19).
 //
-// The ONE completion primitive for fire-and-wait work. Replaces the six
-// hand-rolled remaining/mutex/condvar barrier copies (ParallelFor /
-// ParallelForEach / ParallelSort / DispatchAndWait, the ECS
-// vector<TaskHandle> wave joins, and MaterialSystem's prewarm drain).
+// The ONE completion primitive for fire-and-wait work published with Run:
+// the ECS wave joins and MaterialSystem's prewarm drain wait on it. A
+// ParallelFor joins on its own run state instead (ParallelForCore.cpp).
 //
 // Contract (F16, normative):
 //   - Add() at SUBMIT, on the submitting thread, BEFORE the task is

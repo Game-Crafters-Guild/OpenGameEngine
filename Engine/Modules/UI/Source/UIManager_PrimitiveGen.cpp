@@ -1434,7 +1434,7 @@ bool UIManager::DrainPrimitiveDataDirty()
     size_t numTasks = 1;
     if (sParallelDrainEnabled && m_JobSystem)
     {
-        // +1 lane: DispatchAndWait runs the first task on this thread.
+        // +1 lane: ParallelFor runs tasks on this thread too.
         const size_t lanes = m_JobSystem->GetWorkerCount() + 1;
         numTasks = std::max<size_t>(
             1, std::min(lanes, (items.size() + sMinItemsPerTask - 1) / sMinItemsPerTask));
@@ -1499,21 +1499,19 @@ bool UIManager::DrainPrimitiveDataDirty()
     if (numTasks >= 2)
     {
         const size_t perTask = (items.size() + numTasks - 1) / numTasks;
-        std::vector<std::function<void()>> tasks;
-        tasks.reserve(numTasks);
-        for (size_t t = 0, b = 0; t < numTasks && b < items.size(); ++t, b += perTask)
-        {
-            const size_t e = std::min(b + perTask, items.size());
-            // Explicit pointers: the worker must operate on the UI thread's
-            // items/scratch objects, never its own thread_local instances.
-            std::vector<DrainItem>* itemsPtr = &items;
-            std::vector<UI::UIPrimitive>* scratchPtr = &taskScratch[t];
-            tasks.push_back([&emitSlice, itemsPtr, scratchPtr, t, b, e]
-                            { emitSlice(*itemsPtr, *scratchPtr, static_cast<uint32_t>(t), b, e,
-                                        /*offThread=*/true); });
-        }
-        forkedTasks = static_cast<uint32_t>(tasks.size());
-        JobSystem::DispatchAndWait(m_JobSystem, tasks.data(), forkedTasks);
+        forkedTasks = static_cast<uint32_t>((items.size() + perTask - 1) / perTask);
+        // Explicit pointers: the worker must operate on the UI thread's
+        // items/scratch objects, never its own thread_local instances.
+        std::vector<DrainItem>* itemsPtr = &items;
+        std::vector<std::vector<UI::UIPrimitive>>* scratchPtr = &taskScratch;
+        JobSystem::ParallelFor(m_JobSystem, forkedTasks,
+                               [&emitSlice, itemsPtr, scratchPtr, perTask](size_t t)
+                               {
+                                   const size_t b = t * perTask;
+                                   const size_t e = std::min(b + perTask, itemsPtr->size());
+                                   emitSlice(*itemsPtr, (*scratchPtr)[t], static_cast<uint32_t>(t), b, e,
+                                             /*offThread=*/true);
+                               });
     }
     else
     {

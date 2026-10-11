@@ -38,4 +38,11 @@ struct WebWgslCookRequest
 // must never reach a package.
 bool CookWebWgslIntoPackage(const WebWgslCookRequest& request, std::string& outError);
 
+// Cook every request on at most `jobs` concurrent workers (at least one). Each
+// request must name its own ScratchDir and its own PackagePath: the workers share
+// nothing else. Returns one error per request, in request order, empty where the
+// request cooked; a cooked request's scratch directory is removed, a failed one's
+// is kept because its error names the files in it.
+std::vector<std::string> CookWebWgslBatch(const std::vector<WebWgslCookRequest>& requests, size_t jobs);
+
 } // namespace GameEngine::Tools

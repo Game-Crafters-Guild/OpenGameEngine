@@ -539,6 +539,7 @@ set(EDITOR_SOURCES
 	Source/DebugServer/GroundQueryDebugHandlers.cpp
 	Source/DebugServer/JobSystemDebugHandlers.cpp
 	Source/DebugServer/JobSystemReport.cpp
+	Source/DebugServer/SystemWaveTraceReport.cpp
 	Source/DebugServer/MarkupDebugHandlers.cpp
 	Source/DebugServer/SkyDebugHandlers.cpp
 	Source/DebugServer/ThumbnailDebugHandlers.cpp
@@ -580,6 +581,7 @@ set(EDITOR_HEADERS
 	Source/DebugServer/GroundQueryDebugHandlers.h
 	Source/DebugServer/JobSystemDebugHandlers.h
 	Source/DebugServer/JobSystemReport.h
+	Source/DebugServer/SystemWaveTraceReport.h
 	Source/DebugServer/SkyDebugHandlers.h
 	Source/DebugServer/ParallaxDebugHandlers.h
 	Source/DebugServer/ParallaxStepsViewRequest.h

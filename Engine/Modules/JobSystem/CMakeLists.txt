@@ -7,6 +7,7 @@ project(JobSystem LANGUAGES CXX)
 set(JOBSYSTEM_SOURCES
     Source/WorkStealingThreadPool.cpp
     Source/BlockingThreads.cpp
+    Source/ParallelForCore.cpp
     Source/JobChannel.cpp
     Source/JobChannelState.cpp
     Source/JobCounter.cpp
@@ -14,12 +15,12 @@ set(JOBSYSTEM_SOURCES
     Source/TaskHandle.cpp
     Source/TaskDependencyGraph.cpp
     Source/TaskSlabPool.cpp
-    Source/ParallelAlgorithms.cpp
 )
 
 # Core Job System header files
 set(JOBSYSTEM_HEADERS
     Include/JobSystem/WorkStealingThreadPool.h
+    Include/JobSystem/ParallelForOptions.h
     Include/JobSystem/JobChannel.h
     Include/JobSystem/JobSystemStatistics.h
     Include/JobSystem/JobCounter.h

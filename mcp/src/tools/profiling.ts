@@ -188,6 +188,17 @@ export const tools: ToolDef[] = [
   }),
 
   proxyTool({
+    name: "get_ecs_wave_trace",
+    category: "profiling",
+    description: "Read how the ECS system waves ran, frame by frame, from a ring of the newest 256 SystemManager updates recorded while the trace is armed (pass enabled: true first; arming clears the ring). Unlike get_job_system, which polls between frames, it sees every fork after the fact. summary: ecsMs (the ECS part of the frame), framePeriodMs, joinWaitMs (time the main thread waited in wave joins), inlineMs (bodies the main thread ran in single-system and exclusive waves), helpMs (forked bodies the main thread ran while joining; 0 on native targets, where the join parks), gapsMs (ECS time outside any wave), forkedWaves, forks, joins, and publishes: waveForks (one job per fork), inSystems (jobs system bodies published on their own thread), duringUpdate (every thread's publishes during the ECS update), perFrame (every thread's publishes from one frame's start to the next) and outsideSystems (perFrame minus the two attributed counts). waves[] per plan wave: systems, forks, makespanMs, gapBeforeMs, joinWaitMs, criticalPathMs (slowest forked body), dispatchMs (fork publish to body start). systems[] per system, slowest first: ms, updates, forked, onWorker, onCaller, publishesPerUpdate. Distributions are {median, p95, max} in milliseconds. frames[] describes the newest N frames system by system. On macOS the same waves, joins and bodies are os_signpost intervals (subsystem com.gameengine.ecs, category SystemWaves) for an Instruments recording while armed.",
+    schema: {
+      enabled: z.boolean().optional().describe("Arm (true, clears the ring) or disarm (false) the trace. Omit to leave it as it is."),
+      window: z.coerce.number().int().optional().describe("Summarise the newest N recorded frames (default and maximum 256)"),
+      frames: z.coerce.number().int().optional().describe("Also describe the newest N frames one by one (default 0)"),
+    },
+  }),
+
+  proxyTool({
     name: "get_gpu_profiler",
     category: "profiling",
     description: "Read per-pass CPU/GPU timings from the render graph for the last executed frame, including query resolveStats and any warnings. The response is the last frame only — there is no rolling history here; use get_monitors with a name for a frame-time ring buffer. Read timingSemantics before interpreting gpuSpanMs: 'pipeline-point' (Vulkan) means the value is the pass's own bracketed execution; 'encoder-span' (Metal — Apple GPUs sample counters only at command-encoder stage boundaries) means it is the summed busy span of the encoder(s) the pass created, with stage gaps and inter-encoder idle excluded, but still overlapping neighbouring passes' spans because the GPU runs encoders concurrently, and still charged in full to every pass that shared an encoder (spanShared true). Under encoder-span the payload deliberately carries no frame GPU total: never sum gpuSpanMs over all passes. Each measurement is counted on exactly one pass (spanCounted true), so to total a group of passes add only those. Use resolveStats.distinctSpanGpuMs (each measurement counted once, still an upper bound) for a ceiling, and get_monitors Time/GPUFramePeriod or get_render_stats gpuSync.frameGpuPeriodMs for the frame's real GPU period.",

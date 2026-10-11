@@ -602,7 +602,7 @@ TEST(EZTreeNativeTests, DefaultTexturesDeclareTheImportSettingsTheirMaterialSlot
     ASSERT_TRUE(std::filesystem::exists(manifestFile))
         << manifestFile.string() << " missing — the eztree package manifest is not staged";
 
-    AssetDatabase::AssetStore_TextJsonl manifest;
+    AssetDatabase::AssetStore_TextJsonl manifest(nullptr);
     ASSERT_TRUE(manifest.LoadFromFile(manifestFile, nullptr));
 
     size_t declared = 0;

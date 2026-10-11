@@ -134,7 +134,7 @@ TEST(AssetDbJournalGrowth, IdenticalUpsertsDoNotGrowTheJournal)
     const fs::path dir = TestUtils::MakeUniqueTempDirectory("ge_assetdb_journal_noop");
     const fs::path dbFile = dir / "AssetDatabase.assetdb";
 
-    AssetStore_TextJsonl store;
+    AssetStore_TextJsonl store(nullptr);
     const AssetRecord rec = MakeRecord(kGuidA, "scenes/shadowstress.scene");
 
     ASSERT_TRUE(store.UpsertAsset(rec, nullptr));
@@ -168,7 +168,7 @@ TEST(AssetDbJournalGrowth, MarkMissingNoOpDoesNotGrowTheJournal)
     const fs::path dir = TestUtils::MakeUniqueTempDirectory("ge_assetdb_journal_missnoop");
     const fs::path dbFile = dir / "AssetDatabase.assetdb";
 
-    AssetStore_TextJsonl store;
+    AssetStore_TextJsonl store(nullptr);
     ASSERT_TRUE(store.UpsertAsset(MakeRecord(kGuidA, "scenes/ghost.scene"), nullptr));
     ASSERT_TRUE(store.MarkMissing(GUID(kGuidA), true, nullptr));
     ASSERT_TRUE(store.SaveToFile(dbFile, nullptr));
@@ -196,7 +196,7 @@ TEST(AssetDbJournalGrowth, SetKeyValueNoOpDoesNotGrowTheJournal)
     const fs::path dir = TestUtils::MakeUniqueTempDirectory("ge_assetdb_journal_kvnoop");
     const fs::path dbFile = dir / "AssetDatabase.assetdb";
 
-    AssetStore_TextJsonl store;
+    AssetStore_TextJsonl store(nullptr);
     ASSERT_TRUE(store.UpsertAsset(MakeRecord(kGuidA, "scenes/kv.scene"), nullptr));
     ASSERT_TRUE(store.SetKeyValue(GUID(kGuidA), "shader_stage", "vertex", nullptr));
     ASSERT_TRUE(store.SaveToFile(dbFile, nullptr));
@@ -224,7 +224,7 @@ TEST(AssetDbJournalGrowth, AddRedirectNoOpDoesNotGrowTheJournal)
     const fs::path dir = TestUtils::MakeUniqueTempDirectory("ge_assetdb_journal_redirnoop");
     const fs::path dbFile = dir / "AssetDatabase.assetdb";
 
-    AssetStore_TextJsonl store;
+    AssetStore_TextJsonl store(nullptr);
     ASSERT_TRUE(store.AddRedirect(GUID(kGuidA), GUID(kGuidB), nullptr));
     ASSERT_TRUE(store.SaveToFile(dbFile, nullptr));
     const size_t afterFirst = CountRecordLines(dbFile);
@@ -271,7 +271,7 @@ TEST(AssetDbJournalGrowth, ALoadedJournalCarriesItsDebtAndCompacts)
     }
     ASSERT_EQ(CountRecordLines(dbFile), kRedundantLines);
 
-    AssetStore_TextJsonl store;
+    AssetStore_TextJsonl store(nullptr);
     ASSERT_TRUE(store.LoadFromFile(dbFile, nullptr));
     ASSERT_EQ(store.CountAssets(), 1u);
 
@@ -313,7 +313,7 @@ TEST(AssetDbJournalGrowth, LoadArmsTheWallClockCompactionTrigger)
         }
     }
 
-    AssetStore_TextJsonl store;
+    AssetStore_TextJsonl store(nullptr);
     ASSERT_TRUE(store.LoadFromFile(dbFile, nullptr));
 
     // Any elapsed time counts as past the max age, and the threshold is left
@@ -353,7 +353,7 @@ TEST(AssetDbJournalGrowth, ASaveWithNothingToWriteLeavesTheFileAlone)
         SCOPED_TRACE(shared ? "a store shared across processes" : "a store one process owns");
         WriteTextFile(dbFile, journal);
 
-        AssetStore_TextJsonl store;
+        AssetStore_TextJsonl store(nullptr);
         if (shared)
             store.SetCrossProcessWriteLockFile(dbFile.string() + ".lock");
         ASSERT_TRUE(store.LoadFromFile(dbFile, nullptr));
@@ -388,11 +388,11 @@ TEST(AssetDbJournalGrowth, ASaveWithNothingToWriteSkipsOnlyTheFileTheStoreRead)
     WriteTextFile(otherFile, JoinLines({kFormatLine, AssetLine(kGuidC, "scenes/c.scene")}));
 
     {
-        AssetStore_TextJsonl store;
+        AssetStore_TextJsonl store(nullptr);
         ASSERT_TRUE(store.LoadFromFile(dbFile, nullptr));
         ASSERT_TRUE(store.SaveToFile(otherFile, nullptr));
     }
-    AssetStore_TextJsonl other;
+    AssetStore_TextJsonl other(nullptr);
     ASSERT_TRUE(other.LoadFromFile(otherFile, nullptr));
     AssetRecord row{};
     EXPECT_EQ(other.CountAssets(), 2u) << "a save to another existing file left that file as it was";
@@ -400,13 +400,13 @@ TEST(AssetDbJournalGrowth, ASaveWithNothingToWriteSkipsOnlyTheFileTheStoreRead)
     EXPECT_FALSE(other.TryGetAsset(GUID(kGuidC), row));
 
     {
-        AssetStore_TextJsonl store;
+        AssetStore_TextJsonl store(nullptr);
         ASSERT_TRUE(store.LoadFromFile(dbFile, nullptr));
         std::error_code ec;
         ASSERT_TRUE(fs::remove(dbFile, ec));
         ASSERT_TRUE(store.SaveToFile(dbFile, nullptr));
     }
-    AssetStore_TextJsonl recreated;
+    AssetStore_TextJsonl recreated(nullptr);
     ASSERT_TRUE(recreated.LoadFromFile(dbFile, nullptr));
     EXPECT_EQ(recreated.CountAssets(), 2u) << "a save after the file was deleted did not write it again";
 
@@ -415,14 +415,14 @@ TEST(AssetDbJournalGrowth, ASaveWithNothingToWriteSkipsOnlyTheFileTheStoreRead)
     {
         SCOPED_TRACE(replacement.empty() ? "the file was emptied" : "the file was replaced by a v1 file");
         {
-            AssetStore_TextJsonl store;
+            AssetStore_TextJsonl store(nullptr);
             ASSERT_TRUE(store.LoadFromFile(dbFile, nullptr));
             WriteTextFile(dbFile, replacement);
             ASSERT_TRUE(store.SaveToFile(dbFile, nullptr));
         }
         EXPECT_NE(ReadTextFile(dbFile).find(kFormatLine), std::string::npos)
             << "the save left the file without its v2 header";
-        AssetStore_TextJsonl rewritten;
+        AssetStore_TextJsonl rewritten(nullptr);
         ASSERT_TRUE(rewritten.LoadFromFile(dbFile, nullptr));
         EXPECT_EQ(rewritten.CountAssets(), 2u) << "the save did not write the file whole";
     }
@@ -447,7 +447,7 @@ TEST(AssetDbJournalGrowth, RowsSavedToAnotherFileStillReachTheStoresOwnFile)
                                          AssetLine(kGuidB, "scenes/b.scene")}));
         WriteTextFile(otherFile, JoinLines({kFormatLine, AssetLine(kGuidC, "scenes/c.scene")}));
         {
-            AssetStore_TextJsonl store;
+            AssetStore_TextJsonl store(nullptr);
             ASSERT_TRUE(store.LoadFromFile(dbFile, nullptr));
             if (compactOnEveryWrite)
                 store.SetCompactionThresholdForTesting(1u);
@@ -455,7 +455,7 @@ TEST(AssetDbJournalGrowth, RowsSavedToAnotherFileStillReachTheStoresOwnFile)
             ASSERT_TRUE(store.SaveToFile(otherFile, nullptr));
             ASSERT_TRUE(store.SaveToFile(dbFile, nullptr));
         }
-        AssetStore_TextJsonl reread;
+        AssetStore_TextJsonl reread(nullptr);
         ASSERT_TRUE(reread.LoadFromFile(dbFile, nullptr));
         std::string stage;
         EXPECT_TRUE(reread.TryGetKeyValue(GUID(kGuidB), "shader_stage", stage) && stage == "vertex")
@@ -493,7 +493,7 @@ TEST(AssetDbJournalGrowth, ASaveWithNothingToWriteRewritesAFileThatLoadedWithCon
                                                               AssetLine(kGuidC, "scenes/c.scene"),
                                                               AssetLine(kGuidB, "scenes/b.scene")})
                                                  : conflicted);
-        AssetStore_TextJsonl store;
+        AssetStore_TextJsonl store(nullptr);
         if (c.shared)
             store.SetCrossProcessWriteLockFile(dbFile.string() + ".lock");
         ASSERT_TRUE(store.LoadFromFile(dbFile, nullptr));
@@ -504,7 +504,7 @@ TEST(AssetDbJournalGrowth, ASaveWithNothingToWriteRewritesAFileThatLoadedWithCon
         ASSERT_TRUE(store.SaveToFile(dbFile, nullptr));
         const std::string rewritten = ReadTextFile(dbFile);
         EXPECT_EQ(rewritten.find("<<<<<<<"), std::string::npos) << "the save left the conflict markers in the file";
-        AssetStore_TextJsonl reread;
+        AssetStore_TextJsonl reread(nullptr);
         ASSERT_TRUE(reread.LoadFromFile(dbFile, nullptr));
         EXPECT_FALSE(reread.HasLoadConflicts());
         EXPECT_EQ(reread.CountAssets(), 3u);

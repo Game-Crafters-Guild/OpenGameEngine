@@ -598,7 +598,7 @@ TEST(JobSystemBench, BENCHMARK_NormalForkUnderBackgroundFlood)
             if (betweenSamples) {
                 betweenSamples();
             }
-            JobSystem::DispatchAndWait(&pool, tasks.data(), kFanout);
+            JobSystem::ParallelFor(&pool, kFanout, [&](size_t task) { tasks[task](); });
         }
         for (int i = 0; i < iterations; ++i) {
             if (betweenSamples) {
@@ -606,7 +606,7 @@ TEST(JobSystemBench, BENCHMARK_NormalForkUnderBackgroundFlood)
             }
             BusyWaitUs(gapUs(rng));
             const auto t0 = SteadyClock::now();
-            JobSystem::DispatchAndWait(&pool, tasks.data(), kFanout);
+            JobSystem::ParallelFor(&pool, kFanout, [&](size_t task) { tasks[task](); });
             samples.push_back(ElapsedUs(t0, SteadyClock::now()));
         }
         std::sort(samples.begin(), samples.end());

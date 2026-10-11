@@ -39,9 +39,9 @@ class AssetDecodeGate;
  * to the end of the Background lane, so the decodes queued there, and the
  * decode readers waiting on the gate, are reached between bands.
  *
- * Thread-safe. Helpers keep the state they need alive themselves, so this
- * object may be destroyed while helpers that found no band left are still
- * queued; the pool must outlive them.
+ * Thread-safe. A helper still queued when RunBands returns ends without
+ * touching this object, the gate or the run's callbacks, so this object may
+ * be destroyed while such helpers are queued; the pool must outlive them.
  */
 class TextureCookWorkers
 {
@@ -72,8 +72,8 @@ class TextureCookWorkers
                   const std::function<bool()>& stopRequested);
 
   private:
-    struct Slots;
-    std::shared_ptr<Slots> m_Slots;
+    JobSystem::WorkStealingThreadPool& m_Pool;
+    std::shared_ptr<AssetDecodeGate> m_Gate;
 };
 
 } // namespace GameEngine

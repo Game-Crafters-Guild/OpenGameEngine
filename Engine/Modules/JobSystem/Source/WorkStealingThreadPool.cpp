@@ -105,6 +105,7 @@ namespace
 thread_local size_t WorkStealingThreadPool::s_CurrentWorkerId = SIZE_MAX;
 thread_local WorkStealingThreadPool::Worker* WorkStealingThreadPool::s_CurrentWorker = nullptr;
 thread_local WorkStealingThreadPool* WorkStealingThreadPool::s_CurrentPool = nullptr;
+thread_local uint32* WorkStealingThreadPool::s_PublishSink = nullptr;
 thread_local WorkStealingThreadPool::ThreadJobState* WorkStealingThreadPool::s_JobState = nullptr;
 thread_local WorkStealingThreadPool::ThreadJobState WorkStealingThreadPool::s_OwnJobState;
 
@@ -239,6 +240,15 @@ WorkStealingThreadPool::WorkStealingThreadPool(size_t numThreads, size_t blockin
 
     m_DependencyGraph = MakeUnique<TaskDependencyGraph>();
     m_BlockingThreads = MakeUnique<Detail::BlockingThreads>(*this, blockingThreadBudget);
+
+    // The slabs ParallelFor can hold at once on this pool, provisioned before
+    // the first fork so that no fork takes a heap allocation: the helper
+    // envelopes (kMaxUnstartedClaimHelpersPerWorker unstarted in each of the
+    // two lanes and one running, per worker), a run block for each of them,
+    // and the forking caller's block. Each further caller forking at the same
+    // time adds one block.
+    const size_t claimHelperEnvelopes = (2 * kMaxUnstartedClaimHelpersPerWorker + 1) * numThreads;
+    Detail::ProvisionTaskSlabs(2 * claimHelperEnvelopes + 1);
     // Every record exists before any thread that writes one: the workers
     // start below, blocking threads on a channel's first dispatch.
     m_BlockingRecordCount = blockingThreadBudget;
@@ -757,6 +767,27 @@ void WorkStealingThreadPool::BindBlockingThread(size_t index) {
     }
 }
 
+uint64 WorkStealingThreadPool::GetPublishedJobCount() const {
+    return m_Census.GlobalPushes.load(std::memory_order_relaxed) +
+           m_Census.LocalPushes.load(std::memory_order_relaxed) +
+           m_Census.BackgroundPushes.load(std::memory_order_relaxed);
+}
+
+WorkStealingThreadPool::PublishCountScope::PublishCountScope(uint32& sink)
+    : m_Enclosing(s_PublishSink) {
+    s_PublishSink = &sink;
+}
+
+WorkStealingThreadPool::PublishCountScope::~PublishCountScope() {
+    s_PublishSink = m_Enclosing;
+}
+
+void WorkStealingThreadPool::CountPublishedOnThisThread(size_t count) {
+    if (uint32* sink = s_PublishSink) {
+        *sink += static_cast<uint32>(count);
+    }
+}
+
 size_t WorkStealingThreadPool::GetCurrentWorkerId() const {
     return s_CurrentWorkerId;
 }
@@ -872,8 +903,8 @@ void WorkStealingThreadPool::Shutdown() {
 
     // Shutdown order (binding: each step depends on the previous):
     //   1. GATE: the flag above refuses Submit and JobChannel::Submit, makes
-    //      EnqueueWork self-drain, sends ParallelFor/DispatchAndWait down
-    //      their sequential fallbacks, and stops every blocking thread from
+    //      EnqueueWork self-drain, sends ParallelFor down
+    //      its caller-only path, and stops every blocking thread from
     //      taking further work (each finishes the job it holds).
     //   2. JOIN COMPUTE WORKERS: they stop taking new work (loop-top check),
     //      finish their in-flight task, and exit.
@@ -1171,7 +1202,7 @@ void WorkStealingThreadPool::DrainQueuesOnThisThread() {
         }
 
         // Phase 3: execute the bare tasks. They are caller-barrier releasers
-        // (ParallelFor / DispatchAndWait chunks reference a blocked caller's
+        // (ParallelFor helpers reference a blocked caller's
         // stack): dropping one hangs that caller forever (B7), and any
         // handle task they Wait() on is already terminal from phase 2.
         for (DrainedTask& entry : drained) {
@@ -1474,6 +1505,7 @@ void WorkStealingThreadPool::PushTask(UniquePtr<TaskBase> task) {
             std::abort();
         }
         m_Census.LocalPushes.fetch_add(1, std::memory_order_relaxed);
+        CountPublishedOnThisThread(1);
     } else {
         // External submissions may come from many threads (UI, asset batcher,
         // thumbnail preload, file watchers). ProducerToken is thread-affine, so
@@ -2216,6 +2248,7 @@ void WorkStealingThreadPool::PushGlobalQueue(UniquePtr<TaskBase> task, JobPriori
     auto& pushCounter = priority == JobPriority::Background ? m_Census.BackgroundPushes
                                                             : m_Census.GlobalPushes;
     pushCounter.fetch_add(1, std::memory_order_relaxed);
+    CountPublishedOnThisThread(1);
 }
 
 void WorkStealingThreadPool::EnqueueBulkGlobal(UniquePtr<TaskBase>* tasks, size_t count,
@@ -2240,6 +2273,7 @@ void WorkStealingThreadPool::EnqueueBulkGlobal(UniquePtr<TaskBase>* tasks, size_
     auto& pushCounter = priority == JobPriority::Background ? m_Census.BackgroundPushes
                                                             : m_Census.GlobalPushes;
     pushCounter.fetch_add(count, std::memory_order_relaxed);
+    CountPublishedOnThisThread(count);
 }
 
 } // namespace JobSystem

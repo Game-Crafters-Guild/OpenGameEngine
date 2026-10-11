@@ -4,10 +4,12 @@
 #include "AssetDatabase/AssetStoreReconciler.h"
 #include "Assets/AssetDependencyExtractor.h"
 #include "Assets/AssetRegistry.h"
+#include "JobSystem/WorkStealingThreadPool.h"
 #include "Logger/Logger.h"
 #include <algorithm>
 #include <chrono>
-#include <mutex>
+#include <functional>
+#include <iterator>
 #include <unordered_set>
 
 namespace GameEngine
@@ -97,26 +99,7 @@ static AssetMetadata ProcessSingleAssetForScan(AssetRegistry& registry, const Sc
     return metadata;
 }
 
-struct MetadataFanoutState
-{
-    std::mutex mutex;
-    Vector<ScannedFileInfo> assetInfos;
-    std::atomic<size_t> nextIndex{0};
-    Vector<AssetMetadata> combined;
-    std::atomic<size_t> activeWorkers{0};
-    std::atomic<bool> done{false};
-    std::chrono::high_resolution_clock::time_point startTime{};
-    std::promise<Vector<AssetMetadata>> promise;
-    // B.3b: warm-start snapshot threaded through so workers can skip
-    // ProcessSingleAssetForScan + downstream RegistryUpdateTask work
-    // for files whose (mtime, size) match the snapshot.
-    std::filesystem::path mountRoot;
-    std::unordered_map<std::string, AssetRegistry::SnapshotFingerprint> snapshotByPath;
-    std::shared_ptr<const std::atomic<bool>> cancelRequested;
-};
-
-// B.3b: shared between the parallel worker pool and the synchronous fallback
-// loop. Returns true if this scanned file is provably unchanged since the
+// B.3b: returns true if this scanned file is provably unchanged since the
 // snapshot was written, so the registry already has it from
 // PopulateHotCachesFromSource and the per-file scan pipeline can be skipped.
 static bool IsScannedFileSnapshotCurrent(
@@ -141,211 +124,26 @@ static bool IsScannedFileSnapshotCurrent(
            snap.Size == static_cast<int64_t>(info.fileSize);
 }
 
-class MetadataWorkerTask final : public JobSystem::Task
+// The units of the two scan fan-outs: 256 files per unit, claimed by the
+// stage's own thread and its helpers.
+constexpr size_t kScanChunkSize = 256;
+
+size_t ScanChunkCount(size_t fileCount)
 {
-  public:
-    MetadataWorkerTask(JobSystem::WorkStealingThreadPool* jobSystem,
-                       AssetRegistry& registry,
-                       std::shared_ptr<MetadataFanoutState> state,
-                       size_t chunkSize)
-        : JobSystem::Task(jobSystem), m_Registry(registry), m_State(std::move(state)), m_ChunkSize(chunkSize)
-    {
-    }
+    return (fileCount + kScanChunkSize - 1) / kScanChunkSize;
+}
 
-    void Execute() override
-    {
-        if (!m_State)
-            return;
-
-        Vector<AssetMetadata> local;
-        while (!m_State->cancelRequested->load())
-        {
-            const size_t start = m_State->nextIndex.fetch_add(m_ChunkSize, std::memory_order_relaxed);
-            if (start >= m_State->assetInfos.size())
-                break;
-
-            const size_t end = std::min(start + m_ChunkSize, m_State->assetInfos.size());
-            local.reserve(local.size() + (end - start));
-
-            for (size_t i = start; i < end && !m_State->cancelRequested->load(); ++i)
-            {
-                const auto& info = m_State->assetInfos[i];
-                // Existence check is only needed for un-cached entries; cached
-                // entries came from the iterator and were live at scan time
-                // (the small remaining race is acceptable for non-tombstoned
-                // metadata that the registry will reconcile later).
-                if (!info.hasCachedStats)
-                {
-                    std::error_code ec;
-                    if (!std::filesystem::exists(info.path, ec))
-                        continue;
-                }
-
-                // B.3b: snapshot-current files are already in the registry
-                // (populated by PopulateHotCachesFromSource at Initialize).
-                // Skip ClassifyAssetType + dep extract + downstream registry
-                // update — there's nothing to do for them.
-                if (IsScannedFileSnapshotCurrent(m_State->mountRoot, m_State->snapshotByPath, info))
-                {
-                    continue;
-                }
-
-                AssetMetadata md = ProcessSingleAssetForScan(m_Registry, info);
-                if (!md.Path.empty())
-                {
-                    local.push_back(std::move(md));
-                }
-            }
-        }
-
-        {
-            std::lock_guard<std::mutex> lk(m_State->mutex);
-            for (auto& md : local)
-            {
-                m_State->combined.push_back(std::move(md));
-            }
-        }
-
-        const size_t prev = m_State->activeWorkers.fetch_sub(1, std::memory_order_acq_rel);
-        if (prev == 1 && !m_State->done.exchange(true))
-        {
-            // Last worker finishes the batch and fulfills the promise. A worker
-            // that stopped early for cancellation left its chunks unprocessed,
-            // so a cancelled batch is never handed on as complete.
-            if (m_State->cancelRequested->load())
-            {
-                m_State->promise.set_exception(ScanCancelledError());
-                return;
-            }
-
-            auto endTime = std::chrono::high_resolution_clock::now();
-            auto duration = std::chrono::duration_cast<std::chrono::microseconds>(endTime - m_State->startTime);
-
-            Logger::Log::Debug("MetadataBatchProcessingTask: Processed {} assets in {}μs",
-                               m_State->combined.size(), duration.count());
-
-            m_State->promise.set_value(std::move(m_State->combined));
-        }
-    }
-
-  private:
-    AssetRegistry& m_Registry;
-    std::shared_ptr<MetadataFanoutState> m_State;
-    size_t m_ChunkSize = 256;
-};
-
-// E2: shared state for the parallel register fan-in. Mirrors
-// MetadataFanoutState — workers pull index ranges, resolve GUIDs, and hand
-// each chunk to AssetRegistry::RegisterAssetMetadataBatch (one writer-lock
-// scope + one derived-cache transaction per chunk). The last worker
-// fulfills the promise with the summed register count.
-struct RegisterFanoutState
+// The fan-out width the two stages keep: the stage's own thread plus its
+// helpers make max(1, W / 2) threads, leaving half the pool to other work.
+// Without a job system the stage's own thread runs every unit.
+JobSystem::ParallelForOptions ScanFanOut(const JobSystem::WorkStealingThreadPool* jobSystem,
+                                         const std::function<bool()>& stop)
 {
-    Vector<AssetMetadata> metadataList;
-    std::atomic<size_t> nextIndex{0};
-    std::atomic<size_t> registeredCount{0};
-    std::atomic<size_t> activeWorkers{0};
-    std::atomic<bool> done{false};
-    std::promise<size_t> promise;
-    // Scanned directory, forwarded so the last worker can run the derived
-    // post-scan reconcile before it fulfills the promise.
-    std::filesystem::path scanRoot;
-    // Derived rename-heal candidates (the scan's !hadExisting registrations),
-    // merged from every worker's batches; consumed by the last worker's
-    // reconcile call. activeWorkers' acq_rel fence orders the merge before
-    // the read, the mutex serializes concurrent merges.
-    std::mutex newFilesMutex;
-    std::vector<AssetDatabase::ReconcileScanNewFile> derivedNewFiles;
-    std::shared_ptr<const std::atomic<bool>> cancelRequested;
-};
-
-class RegisterWorkerTask final : public JobSystem::Task
-{
-  public:
-    RegisterWorkerTask(JobSystem::WorkStealingThreadPool* jobSystem,
-                       AssetRegistry& registry,
-                       std::shared_ptr<RegisterFanoutState> state,
-                       size_t chunkSize)
-        : JobSystem::Task(jobSystem), m_Registry(registry), m_State(std::move(state)), m_ChunkSize(chunkSize)
-    {
-    }
-
-    void Execute() override
-    {
-        if (!m_State)
-            return;
-
-        std::vector<AssetDatabase::ReconcileScanNewFile> localNewFiles;
-        // Cancellation is checked between chunks: a chunk resolves its GUIDs
-        // and registers them as one unit.
-        while (!m_State->cancelRequested->load())
-        {
-            const size_t start = m_State->nextIndex.fetch_add(m_ChunkSize, std::memory_order_relaxed);
-            if (start >= m_State->metadataList.size())
-                break;
-            const size_t end = std::min(start + m_ChunkSize, m_State->metadataList.size());
-
-            Vector<AssetMetadata> chunk;
-            chunk.reserve(end - start);
-            for (size_t i = start; i < end; ++i)
-            {
-                AssetMetadata& md = m_State->metadataList[i];
-                if (md.Path.empty())
-                    continue;
-                // Resolve identity without expensive per-file work (mirrors
-                // the serial fan-in).
-                md.Guid = m_Registry.GetOrCreateAssetGUID(md.Path);
-                if (md.Guid.IsNull())
-                    continue;
-                chunk.push_back(std::move(md));
-            }
-            if (!chunk.empty())
-            {
-                const size_t registered =
-                    m_Registry.RegisterAssetMetadataBatch(std::move(chunk), &localNewFiles);
-                m_State->registeredCount.fetch_add(registered, std::memory_order_relaxed);
-            }
-        }
-
-        if (!localNewFiles.empty())
-        {
-            std::lock_guard<std::mutex> lk(m_State->newFilesMutex);
-            m_State->derivedNewFiles.insert(m_State->derivedNewFiles.end(),
-                                            std::make_move_iterator(localNewFiles.begin()),
-                                            std::make_move_iterator(localNewFiles.end()));
-        }
-
-        const size_t prev = m_State->activeWorkers.fetch_sub(1, std::memory_order_acq_rel);
-        if (prev == 1 && !m_State->done.exchange(true))
-        {
-            // A cancelled scan registered only some chunks. The reconcile
-            // takes its rename-heal candidates from the registered files, so
-            // on a partial scan it would miss heals and age ghosts a full scan
-            // heals; a cancelled scan skips it.
-            if (m_State->cancelRequested->load())
-            {
-                m_State->promise.set_exception(ScanCancelledError());
-                return;
-            }
-
-            // Derived post-scan reconcile runs after the last register batch
-            // and before the promise resolves, so StartupScanFuture waiters
-            // observe a fully reconciled registry.
-            m_Registry.ReconcileDerivedSourceAfterScan(
-                m_State->scanRoot,
-                m_State->derivedNewFiles.empty() ? nullptr : &m_State->derivedNewFiles);
-
-            Logger::Log::Debug("RegisterWorkerTask: registered {} assets",
-                               m_State->registeredCount.load(std::memory_order_relaxed));
-            m_State->promise.set_value(m_State->registeredCount.load(std::memory_order_relaxed));
-        }
-    }
-
-  private:
-    AssetRegistry& m_Registry;
-    std::shared_ptr<RegisterFanoutState> m_State;
-    size_t m_ChunkSize = 256;
-};
+    JobSystem::ParallelForOptions options;
+    options.Helpers = jobSystem ? std::max<size_t>(1, jobSystem->GetWorkerCount() / 2) - 1 : 0;
+    options.Stop = &stop;
+    return options;
+}
 
 } // namespace
 
@@ -594,15 +392,13 @@ MetadataBatchProcessingTask::MetadataBatchProcessingTask(JobSystem::WorkStealing
 void MetadataBatchProcessingTask::Execute()
 {
     auto startTime = std::chrono::high_resolution_clock::now();
-    Vector<AssetMetadata> processedMetadata;
-    Vector<ScannedFileInfo> assetInfos;
 
     try
     {
         // Resolve the upstream file list (may block this worker thread, but will not block the caller thread).
         // Cancellation is checked only after it resolves, so this stage never finishes while the walk
         // before it still runs.
-        assetInfos = m_AssetInfosFuture.get();
+        const Vector<ScannedFileInfo> assetInfos = m_AssetInfosFuture.get();
 
         if (IsCancelled())
         {
@@ -612,75 +408,31 @@ void MetadataBatchProcessingTask::Execute()
 
         Logger::Log::Debug("MetadataBatchProcessingTask: Processing {} assets", assetInfos.size());
 
-        if (assetInfos.empty())
-        {
-            m_ProcessedMetadataPromise.set_value({});
-            return;
-        }
-
-        // Parallelize metadata extraction for large scans.
-        // NOTE: This is derived data; prioritize responsiveness over fully saturating the job system.
-        constexpr size_t kChunkSize = 256;
-        const size_t chunkCount = (assetInfos.size() + (kChunkSize - 1)) / kChunkSize;
+        // One unit per 256 files; each writes its own list, joined in file order
+        // below. The cancel flag is read per file, so every thread stops mid-unit.
+        const size_t chunkCount = ScanChunkCount(assetInfos.size());
+        Vector<Vector<AssetMetadata>> chunkMetadata(chunkCount);
 
         JobSystem::WorkStealingThreadPool* js = GetJobSystem();
-        if (js && chunkCount > 1)
+        const std::function<bool()> stop = [this] { return IsCancelled(); };
+        const bool finished = JobSystem::ParallelFor(
+            js, chunkCount, [&](size_t chunk) { return ProcessChunk(assetInfos, chunk, chunkMetadata[chunk]); },
+            ScanFanOut(js, stop));
+
+        // A cancelled scan left files unprocessed, so it is never handed on as complete.
+        if (!finished || IsCancelled())
         {
-            auto state = std::make_shared<MetadataFanoutState>();
-            state->assetInfos = std::move(assetInfos);
-            state->combined.reserve(state->assetInfos.size());
-            state->startTime = startTime;
-            state->promise = std::move(m_ProcessedMetadataPromise);
-            state->mountRoot = m_MountRoot;
-            state->snapshotByPath = std::move(m_SnapshotByPath);
-            state->cancelRequested = m_CancelRequested;
-
-            // Throttle concurrency: use only a subset of the pool so other async jobs still make progress.
-            const size_t workerCount = js->GetWorkerCount();
-            const size_t maxScanWorkers = std::max<size_t>(1, workerCount > 1 ? (workerCount / 2) : 1);
-            const size_t workersToSpawn = std::min(maxScanWorkers, chunkCount);
-            state->activeWorkers.store(workersToSpawn, std::memory_order_relaxed);
-
-            for (size_t i = 0; i < workersToSpawn; ++i)
-            {
-                auto task = std::make_unique<MetadataWorkerTask>(js, m_Registry, state, kChunkSize);
-                js->Submit(std::move(task));
-            }
-
-            // IMPORTANT: Do not fulfill m_ProcessedMetadataPromise here; the last worker will.
+            m_ProcessedMetadataPromise.set_exception(ScanCancelledError());
             return;
         }
 
-        processedMetadata.reserve(assetInfos.size());
-
-        for (const auto& info : assetInfos)
-        {
-            if (IsCancelled())
-            {
-                m_ProcessedMetadataPromise.set_exception(ScanCancelledError());
-                return;
-            }
-
-            // Cached entries skip the existence check (the scan saw it live);
-            // un-cached entries (BatchProcessAssetsAsync raw paths) re-check.
-            if (!info.hasCachedStats)
-            {
-                std::error_code ec;
-                if (!std::filesystem::exists(info.path, ec))
-                    continue;
-            }
-
-            // B.3b: snapshot-current files already populated by
-            // PopulateHotCachesFromSource at Initialize — skip downstream work.
-            if (IsScannedFileSnapshotCurrent(m_MountRoot, m_SnapshotByPath, info))
-                continue;
-
-            AssetMetadata metadata = ProcessSingleAssetForScan(m_Registry, info);
-            if (!metadata.Path.empty())
-            {
-                processedMetadata.push_back(std::move(metadata));
-            }
-        }
+        Vector<AssetMetadata> processedMetadata;
+        size_t processedCount = 0;
+        for (const Vector<AssetMetadata>& chunk : chunkMetadata)
+            processedCount += chunk.size();
+        processedMetadata.reserve(processedCount);
+        for (Vector<AssetMetadata>& chunk : chunkMetadata)
+            std::move(chunk.begin(), chunk.end(), std::back_inserter(processedMetadata));
 
         auto endTime = std::chrono::high_resolution_clock::now();
         auto duration = std::chrono::duration_cast<std::chrono::microseconds>(endTime - startTime);
@@ -699,6 +451,48 @@ void MetadataBatchProcessingTask::Execute()
         Logger::Log::Error("MetadataBatchProcessingTask failed: {}", e.what());
         m_ProcessedMetadataPromise.set_exception(std::current_exception());
     }
+    catch (...)
+    {
+        Logger::Log::Error("MetadataBatchProcessingTask failed with a non-standard exception");
+        m_ProcessedMetadataPromise.set_exception(std::current_exception());
+    }
+}
+
+// One unit of the metadata stage: the files of `chunk` into `out`. False once
+// the scan is cancelled; the cancel flag is read per file.
+bool MetadataBatchProcessingTask::ProcessChunk(const Vector<ScannedFileInfo>& assetInfos, size_t chunk,
+                                               Vector<AssetMetadata>& out) const
+{
+    const size_t start = chunk * kScanChunkSize;
+    const size_t end = std::min(start + kScanChunkSize, assetInfos.size());
+    out.reserve(end - start);
+    for (size_t i = start; i < end; ++i)
+    {
+        if (IsCancelled())
+            return false;
+
+        const ScannedFileInfo& info = assetInfos[i];
+        // Cached entries came from the iterator and were live at scan
+        // time; un-cached entries (BatchProcessAssetsAsync raw paths)
+        // re-check existence.
+        if (!info.hasCachedStats)
+        {
+            std::error_code ec;
+            if (!std::filesystem::exists(info.path, ec))
+                continue;
+        }
+
+        // B.3b: snapshot-current files are already in the registry
+        // (populated by PopulateHotCachesFromSource at Initialize):
+        // nothing to do downstream.
+        if (IsScannedFileSnapshotCurrent(m_MountRoot, m_SnapshotByPath, info))
+            continue;
+
+        AssetMetadata metadata = ProcessSingleAssetForScan(m_Registry, info);
+        if (!metadata.Path.empty())
+            out.push_back(std::move(metadata));
+    }
+    return true;
 }
 
 // RegistryUpdateTask Implementation
@@ -720,8 +514,8 @@ void RegistryUpdateTask::Execute()
     {
         // Get processed metadata. Cancellation is checked only after it
         // resolves: this stage's future is the one AssetRegistry::Shutdown
-        // joins, so it must not resolve while the metadata workers before it
-        // still call into the registry.
+        // joins, so it must not resolve while the stage before it still calls
+        // into the registry.
         Vector<AssetMetadata> metadataList = m_MetadataFuture.get();
 
         if (IsCancelled())
@@ -730,83 +524,44 @@ void RegistryUpdateTask::Execute()
             return;
         }
 
-        // E2: the register fan-in used to be one serial loop doing per-file
-        // GetOrCreateAssetGUID + RegisterAssetMetadata (per-file content hash,
-        // CreateFileW, and two per-call-prepared SQLite statements — ~17µs of
-        // prepare overhead each, one core). Shard it across JobSystem workers
-        // (mirroring the stage-2 metadata fan-out) with each chunk registered
-        // through RegisterAssetMetadataBatch: writer-lock scope and derived-
-        // cache transaction per chunk, not per file.
-        constexpr size_t kChunkSize = 256;
-        const size_t chunkCount = (metadataList.size() + (kChunkSize - 1)) / kChunkSize;
+        // E2: one unit per 256 files resolves its GUIDs and registers them
+        // through RegisterAssetMetadataBatch (one writer-lock scope and one
+        // derived-cache transaction per unit, not per file). The cancel flag is
+        // read on entry to each unit: a unit registers as a whole.
+        const size_t chunkCount = ScanChunkCount(metadataList.size());
+        std::atomic<size_t> registeredCount{0};
+        std::vector<std::vector<AssetDatabase::ReconcileScanNewFile>> chunkNewFiles(chunkCount);
 
         JobSystem::WorkStealingThreadPool* js = GetJobSystem();
-        if (js && chunkCount > 1)
-        {
-            auto state = std::make_shared<RegisterFanoutState>();
-            state->metadataList = std::move(metadataList);
-            state->promise = std::move(m_RegisteredCountPromise);
-            state->scanRoot = m_ScanRoot;
-            state->cancelRequested = m_CancelRequested;
+        const std::function<bool()> stop = [this] { return IsCancelled(); };
+        const bool finished = JobSystem::ParallelFor(
+            js, chunkCount,
+            [&](size_t chunk) { return RegisterChunk(metadataList, chunk, chunkNewFiles[chunk], registeredCount); },
+            ScanFanOut(js, stop));
 
-            // Throttle: leave half the pool for other async work, matching
-            // the metadata stage's policy.
-            const size_t workerCount = js->GetWorkerCount();
-            const size_t maxWorkers = std::max<size_t>(1, workerCount > 1 ? (workerCount / 2) : 1);
-            const size_t workersToSpawn = std::min(maxWorkers, chunkCount);
-            state->activeWorkers.store(workersToSpawn, std::memory_order_relaxed);
-
-            for (size_t i = 0; i < workersToSpawn; ++i)
-            {
-                auto task = std::make_unique<RegisterWorkerTask>(js, m_Registry, state, kChunkSize);
-                js->Submit(std::move(task));
-            }
-
-            // The last worker fulfills the promise.
-            return;
-        }
-
-        // Serial fallback (no job system / small scans): still batched.
-        Vector<AssetMetadata> batch;
-        batch.reserve(metadataList.size());
-        for (AssetMetadata& md : metadataList)
-        {
-            if (IsCancelled())
-            {
-                m_RegisteredCountPromise.set_exception(ScanCancelledError());
-                return;
-            }
-            if (md.Path.empty())
-                continue;
-
-            // Ensure the asset has an identity (GUID) without doing expensive
-            // per-file work (hashing/fingerprinting) during startup scans.
-            md.Guid = m_Registry.GetOrCreateAssetGUID(md.Path);
-            if (md.Guid.IsNull())
-                continue;
-            batch.push_back(std::move(md));
-        }
-        std::vector<AssetDatabase::ReconcileScanNewFile> newFiles;
-        const size_t registeredCount =
-            batch.empty() ? 0 : m_Registry.RegisterAssetMetadataBatch(std::move(batch), &newFiles);
-
-        // Same contract as the parallel fan-in's last worker: a cancelled
-        // scan skips the reconcile.
-        if (IsCancelled())
+        // A cancelled scan registered only some units. The reconcile takes its
+        // rename-heal candidates from the registered files, so on a partial scan
+        // it would miss heals and age ghosts a full scan heals; a cancelled scan
+        // skips it.
+        if (!finished || IsCancelled())
         {
             m_RegisteredCountPromise.set_exception(ScanCancelledError());
             return;
         }
 
-        // Derived post-scan reconcile runs after the register batch and
-        // before the promise resolves, so StartupScanFuture waiters observe
-        // a fully reconciled registry.
-        m_Registry.ReconcileDerivedSourceAfterScan(m_ScanRoot,
-                                                   newFiles.empty() ? nullptr : &newFiles);
+        std::vector<AssetDatabase::ReconcileScanNewFile> newFiles;
+        for (std::vector<AssetDatabase::ReconcileScanNewFile>& chunk : chunkNewFiles)
+            std::move(chunk.begin(), chunk.end(), std::back_inserter(newFiles));
 
-        Logger::Log::Debug("RegistryUpdateTask: Registered {} assets", registeredCount);
+        // Derived post-scan reconcile runs after the last register batch and
+        // before the promise resolves, so StartupScanFuture waiters observe a
+        // fully reconciled registry.
+        m_Registry.ReconcileDerivedSourceAfterScan(m_ScanRoot, newFiles.empty() ? nullptr : &newFiles);
 
-        m_RegisteredCountPromise.set_value(registeredCount);
+        const size_t registered = registeredCount.load(std::memory_order_relaxed);
+        Logger::Log::Debug("RegistryUpdateTask: Registered {} assets", registered);
+
+        m_RegisteredCountPromise.set_value(registered);
     }
     catch (const AssetScanCancelled&)
     {
@@ -817,6 +572,42 @@ void RegistryUpdateTask::Execute()
         Logger::Log::Error("RegistryUpdateTask failed: {}", e.what());
         m_RegisteredCountPromise.set_exception(std::current_exception());
     }
+    catch (...)
+    {
+        Logger::Log::Error("RegistryUpdateTask failed with a non-standard exception");
+        m_RegisteredCountPromise.set_exception(std::current_exception());
+    }
+}
+
+// One unit of the register stage: resolves the GUIDs of `chunk`'s files and
+// registers them in one RegisterAssetMetadataBatch. False once the scan is
+// cancelled; the flag is read on entry, so a unit registers as a whole.
+bool RegistryUpdateTask::RegisterChunk(Vector<AssetMetadata>& metadataList, size_t chunk,
+                                       std::vector<AssetDatabase::ReconcileScanNewFile>& newFiles,
+                                       std::atomic<size_t>& registeredCount)
+{
+    if (IsCancelled())
+        return false;
+    const size_t start = chunk * kScanChunkSize;
+    const size_t end = std::min(start + kScanChunkSize, metadataList.size());
+    Vector<AssetMetadata> batch;
+    batch.reserve(end - start);
+    for (size_t i = start; i < end; ++i)
+    {
+        AssetMetadata& md = metadataList[i];
+        if (md.Path.empty())
+            continue;
+        // Ensure the asset has an identity (GUID) without doing expensive
+        // per-file work (hashing/fingerprinting) during startup scans.
+        md.Guid = m_Registry.GetOrCreateAssetGUID(md.Path);
+        if (md.Guid.IsNull())
+            continue;
+        batch.push_back(std::move(md));
+    }
+    if (!batch.empty())
+        registeredCount.fetch_add(m_Registry.RegisterAssetMetadataBatch(std::move(batch), &newFiles),
+                                  std::memory_order_relaxed);
+    return true;
 }
 
 // AsyncRegistryCoordinator Implementation

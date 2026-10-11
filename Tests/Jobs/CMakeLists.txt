@@ -30,6 +30,7 @@ set(JOB_SYSTEM_TEST_SOURCES
     JobPriorityTests.cpp
     JobSystemStatisticsTests.cpp
     QueueFairnessTests.cpp
+    ParallelForTests.cpp
     TaskSlabPoolTests.cpp
     TopologyCensusBench.cpp
     PerformanceRegressionTests.cpp

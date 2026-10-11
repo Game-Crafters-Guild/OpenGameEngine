@@ -79,7 +79,8 @@ PackagePublishResult PublishPackageAssetManifest(const AssetRegistry& registry,
     // mount's own answer, and a record it calls a tombstone is not publishable
     // identity even if a file has since reappeared at the path unregistered.
     const std::filesystem::path packageRoot = source->Root;
-    AssetDatabase::AssetStore_TextJsonl manifest;
+    // Written here and never loaded, so no parse pool.
+    AssetDatabase::AssetStore_TextJsonl manifest(nullptr);
     std::unordered_map<GUID, std::string> emittedPathByGuid; // collision detection
     bool visited = registry.VisitSourceStoreRecords(
         packageAlias,

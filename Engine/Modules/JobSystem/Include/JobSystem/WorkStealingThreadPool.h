@@ -2,6 +2,7 @@
 
 #include "JobSystem/JobCounter.h"
 #include "JobSystem/JobSystemStatistics.h"
+#include "JobSystem/ParallelForOptions.h"
 #include "JobSystem/Task.h"
 #include "JobSystem/TaskHandle.h"
 #include "JobSystem/TaskSlabPool.h"
@@ -62,6 +63,56 @@ template <typename F>
 class BareWorkTask;
 } // namespace Detail
 
+class WorkStealingThreadPool;
+
+/**
+ * @brief Run `body(unit)` once for every unit in [0, count), claimed one at
+ * a time by the calling thread and by up to `options.Helpers` helper tasks on
+ * `pool`; legal on any thread, a pool worker included.
+ *
+ * Helpers are bare pool tasks published in one batch at
+ * options.HelperPriority, clamped by the class of the pool body running on
+ * this thread (ParallelForOptions::HelperPriority). The caller claims and
+ * runs units itself until none is left or the run is stopped, then closes
+ * the run and waits only for the units in progress on other threads, parked
+ * on an atomic word (std::atomic::wait). A helper still queued at that point
+ * finds the run closed when it runs and ends without touching the caller's
+ * body, Stop or Admission, so the call never waits on a unit nobody has
+ * started, needs no participation in the pool's queues and no JobCounter,
+ * and is legal on a worker, the main thread or any other thread. On a thread
+ * that cannot block (the browser main thread) the wait services the thread's
+ * proxied calls instead of parking.
+ *
+ * Stopping: a body that returns false, a body that throws, options.Stop
+ * returning true or throwing, or an admission hook throwing stops the run:
+ * no further unit starts on any thread, units in flight finish.
+ *
+ * @param pool The pool helpers publish to; null runs every unit on the
+ *        caller, in order, with the same stop rules.
+ * @param count The number of units.
+ * @param body Callable as void(size_t unit) or bool(size_t unit); false
+ *        stops the run. Runs on several threads at once; each unit must
+ *        touch only its own output.
+ * @param options Helpers, their lane, the stop poll and the helper admission.
+ * @return False when a body returned false or options.Stop returned true (a
+ *         stopped run, even when no unit was left to skip), true otherwise;
+ *         always true for a void body without a Stop.
+ * @throws The first exception a body, options.Stop or an admission hook
+ *         threw, on any thread, rethrown here once every unit in flight has
+ *         finished.
+ * @note No helper is published in inline mode or once Shutdown() has been
+ *       requested, and none re-publishes after that: the caller runs what is
+ *       left. The pool keeps at most
+ *       WorkStealingThreadPool::kMaxUnstartedClaimHelpersPerWorker helpers
+ *       per worker published and not yet started in each lane, across every
+ *       caller; a fork publishes only the helpers that fit and the caller
+ *       claims the rest. The run's state is one 128-byte slab and the helpers
+ *       are slab envelopes: no heap allocation at steady state. The chunked
+ *       overload and ParallelSort are in JobSystem/ParallelAlgorithms.h.
+ */
+template <typename Body>
+bool ParallelFor(WorkStealingThreadPool* pool, size_t count, Body&& body, const ParallelForOptions& options = {});
+
 /**
  * @brief The engine's job scheduler: one global MPMC queue, per-worker local
  * queues, a steal ring and a Background lane.
@@ -87,7 +138,9 @@ class BareWorkTask;
  *   spin poll and the retiring spinner's recheck). Each poll is gated on the
  *   m_BackgroundQueued occupancy counter, so an empty lane costs one relaxed
  *   load. Background work never enters a local queue or the steal ring;
- *   graph tasks and JobCounter stubs are always Normal. m_QueuedTasks counts
+ *   graph tasks are always Normal, and a fork (JobCounter stubs, ParallelFor
+ *   helpers) publishes at the class of the body that forks, so a Background
+ *   body's forks stay Background. m_QueuedTasks counts
  *   both classes, so both share one wake protocol and differ only in dequeue
  *   order. Starvation runs one way: a saturating Normal flood postpones
  *   Background work indefinitely (there is no aging), while Background work
@@ -209,7 +262,7 @@ class WorkStealingThreadPool
      * EnqueueWorkBatch (one bulk queue operation, one bounded wake).
      *
      * Shutdown: EnqueueWork never drops work. Bare tasks are the release edge
-     * of caller barriers (ParallelFor and DispatchAndWait chunks reference the
+     * of caller barriers (ParallelFor helpers reference the
      * blocked caller's stack), so dropping one turns a shutdown race into a
      * caller hang. If shutdown is observed after the publish, this call drains
      * the queues on the calling thread: bare tasks (this one and possibly other
@@ -234,6 +287,18 @@ class WorkStealingThreadPool
     static constexpr size_t kStackBatch = 64;
     static constexpr uint32 kMaxWakePerBatch = 4;
     static constexpr size_t kBulkPublishThreshold = 8;
+
+    // ParallelFor's helpers published and not yet started, across every caller,
+    // are at most this many per worker in each lane; a fork publishes only the
+    // helpers that fit its helpers' lane (none: the caller runs every unit).
+    // The budget: two forks at full width from threads that are no workers (2
+    // per worker), plus the copies running helpers re-publish between units
+    // without checking the budget (at most one per worker): 3, taken as 4. The helpers of
+    // closed runs are what the bound limits: a caller that forks back to back
+    // faster than the workers drain them would otherwise queue them, and the
+    // slabs they hold, without limit. Each lane has its own budget, so cook
+    // helpers queued behind a streaming flood never take a Normal fork's.
+    static constexpr size_t kMaxUnstartedClaimHelpersPerWorker = 4;
 
     /**
      * @brief Fire-and-forget batch: publish `count` callables of one closure
@@ -309,7 +374,10 @@ class WorkStealingThreadPool
      * The counter must outlive the join: call Wait(counter) before it is
      * destroyed. Every task of one counter must target the same pool.
      *
-     * Priority: Run() takes no JobPriority; its stubs are always Normal.
+     * Priority: Run() takes no JobPriority; its stubs publish at the class
+     * of the pool body running on this thread (Background inside a
+     * Background body, Normal everywhere else), so a Background body's fork
+     * never publishes Normal work.
      */
     template <typename F, typename = std::enable_if_t<std::is_invocable_v<F&>>>
     void Run(F&& fn, JobCounter& counter);
@@ -509,6 +577,43 @@ class WorkStealingThreadPool
     size_t SnapshotOccupancy(std::span<JobSystemStatistics::Occupancy> out) const;
 
     /**
+     * @brief Jobs published into the compute queues so far: GlobalPushes +
+     * LocalPushes + BackgroundPushes of the census, as three relaxed loads
+     * with no allocation and no lock. The ECS wave trace reads it at the start
+     * and the end of a traced frame.
+     */
+    uint64 GetPublishedJobCount() const;
+
+    /**
+     * @brief Attributes publishes to a site: while it lives, every job the
+     * calling thread publishes into a compute queue (a Run stub, an
+     * EnqueueWork or Submit envelope, each element of an EnqueueWorkBatch, a
+     * graph task) adds one to `sink`. Jobs published by other threads are not
+     * counted, so a body another thread runs adds nothing. A body this
+     * thread's own Wait runs inline (a participating Wait: any worker of this
+     * pool, or a host thread that cannot block) publishes on this thread, so
+     * its publishes count as this thread's.
+     *
+     * Scopes nest: the innermost one counts, and the enclosing one counts
+     * again once it ends. `sink` is a plain integer written only by the
+     * calling thread, so it must be read on that thread or after a join that
+     * orders the thread's writes before the read. The ECS wave trace opens
+     * one around each traced system body and one around a wave's publish
+     * loop. Without a scope a publish pays one thread-local load.
+     */
+    class PublishCountScope
+    {
+      public:
+        explicit PublishCountScope(uint32& sink);
+        ~PublishCountScope();
+        PublishCountScope(const PublishCountScope&) = delete;
+        PublishCountScope& operator=(const PublishCountScope&) = delete;
+
+      private:
+        uint32* m_Enclosing;
+    };
+
+    /**
      * @brief Test hook: what the calling thread is executing as a job body:
      * "Normal" or "Background" for a compute job, the channel's name for a
      * channel job, null outside a job body (completion callbacks included).
@@ -531,6 +636,35 @@ class WorkStealingThreadPool
      */
     void SetSleepBackstopForTest(uint32 backstopUs);
 
+#if GE_DEBUG_INSTRUMENTATION
+    /**
+     * @brief Debug-only test hook: where a ParallelFor helper calls the hook
+     * installed with SetClaimHelperHookForTests.
+     *  - PassedOpenCheck: the helper saw the run open and units left on its
+     *    first load and has not yet counted itself in progress.
+     *  - CountedInProgress: the helper counted itself in progress and has
+     *    not yet re-read the run's state.
+     */
+    enum class ClaimHelperPoint : uint8
+    {
+        PassedOpenCheck,
+        CountedInProgress,
+    };
+
+    /**
+     * @brief Debug-only test hook: install a function every ParallelFor
+     * helper of every pool calls at each ClaimHelperPoint (null removes it).
+     * A test holds a helper at a point by blocking inside the hook.
+     */
+    static void SetClaimHelperHookForTests(void (*hook)(ClaimHelperPoint point));
+
+    /**
+     * @brief Debug-only test hook: how many times ParallelFor callers, across
+     * every pool, have parked waiting for units in progress.
+     */
+    static uint64 GetClaimCallerParksForTests();
+#endif
+
     /**
      * @brief The calling thread's worker index, read from a thread-local that
      * is not checked against this pool (a worker of another pool reads its
@@ -547,7 +681,7 @@ class WorkStealingThreadPool
      * blocking threads -> release again.
      *  - Every submit path is gated: Submit and JobChannel::Submit return an
      *    invalid handle, EnqueueWork drains on its caller (see its contract),
-     *    ParallelFor and DispatchAndWait run sequentially on the caller.
+     *    ParallelFor runs every unit on the caller.
      *  - Compute workers stop taking new work and are joined; the tasks they
      *    are running complete normally. Blocking threads take no new work
      *    either, but keep running the job they hold.
@@ -678,6 +812,27 @@ class WorkStealingThreadPool
     template <typename F>
     static void RunBareInline(F& func, JobPriority priority);
 
+    // ParallelFor after type erasure: the body is `invoke(body, unit)`; a
+    // null pool runs every unit on the caller.
+    template <typename Body>
+    friend bool ParallelFor(WorkStealingThreadPool* pool, size_t count, Body&& body,
+                            const ParallelForOptions& options);
+    static bool RunParallelFor(WorkStealingThreadPool* pool, bool (*invoke)(void* body, size_t unit), void* body,
+                               size_t unitCount, const ParallelForOptions& options);
+    template <typename B>
+    static bool InvokeParallelForUnit(void* body, size_t unit)
+    {
+        if constexpr (std::is_void_v<std::invoke_result_t<B&, size_t>>)
+        {
+            (*static_cast<B*>(body))(unit);
+            return true;
+        }
+        else
+        {
+            return (*static_cast<B*>(body))(unit);
+        }
+    }
+
     // A worker thread and its queues. Every ConsumerToken here is
     // thread-affine: only the owning worker's thread may pass it to a dequeue.
     // The steal path and the drain, which run on other threads, dequeue
@@ -759,6 +914,14 @@ class WorkStealingThreadPool
     // line with m_QueuedTasks on purpose: idle scans load that line every lap
     // already.
     std::atomic<uint32> m_BackgroundQueued{0};
+    // ParallelFor helpers published and not yet started, indexed by lane
+    // (JobPriority), each at most kMaxUnstartedClaimHelpersPerWorker per
+    // worker: a fork reserves its helpers' counts in their lane before it
+    // publishes them, and a helper gives its count back when it starts or
+    // when its envelope is destroyed unrun. A bound, not a synchronization:
+    // relaxed. On the queued counter's line, which the dequeue before a
+    // helper's start has just written.
+    std::atomic<uint32> m_UnstartedClaimHelpers[2]{};
     // Workers inside the TrySpinPoll poll loop only (the token is retired
     // before any task found is executed).
     std::atomic<uint32> m_NumSpinning{0};
@@ -863,6 +1026,10 @@ class WorkStealingThreadPool
     // path applies only to workers of this pool: routing a task into another
     // pool's local queue would corrupt both pools' queued-task counters.
     static thread_local WorkStealingThreadPool* s_CurrentPool;
+    // The calling thread's innermost PublishCountScope sink; null outside one.
+    static thread_local uint32* s_PublishSink;
+    // Adds `count` published jobs to the calling thread's sink, if it has one.
+    static void CountPublishedOnThisThread(size_t count);
     // True on a compute worker thread of `pool`; false on every other thread,
     // a worker of another pool included. Read by TaskHandle::Wait's Debug
     // assert.
@@ -1397,8 +1564,31 @@ void WorkStealingThreadPool::Run(F&& fn, JobCounter& counter)
     // The stub holds a reference to the tagged queue, never the counter: a
     // stub whose envelope a participating waiter consumed can outlive a
     // stack-owned counter and must still be safe to execute, and the queue
-    // is not recycled while the stub holds it.
-    EnqueueWork([jobs = std::move(jobs)]() { JobCounter::RunOneTagged(*jobs); });
+    // is not recycled while the stub holds it. The stub publishes at the
+    // forking body's class, so a Background body's fork stays Background.
+    EnqueueWork([jobs = std::move(jobs)]() { JobCounter::RunOneTagged(*jobs); }, CallerContext().Class);
+}
+
+template <typename Body>
+bool ParallelFor(WorkStealingThreadPool* pool, size_t count, Body&& body, const ParallelForOptions& options)
+{
+    using BodyType = std::remove_reference_t<Body>;
+    if constexpr (std::is_invocable_v<BodyType&, size_t>)
+    {
+        using Result = std::invoke_result_t<BodyType&, size_t>;
+        static_assert(std::is_void_v<Result> || std::is_same_v<Result, bool>,
+                      "ParallelFor: the body returns void or bool (false stops the run)");
+    }
+    else
+    {
+        static_assert(std::is_invocable_v<BodyType&, size_t>,
+                      "ParallelFor: the body is callable as body(size_t unit); a chunk body "
+                      "(size_t begin, size_t end) takes the chunked overload in "
+                      "JobSystem/ParallelAlgorithms.h with a minBatchSize");
+    }
+    return WorkStealingThreadPool::RunParallelFor(
+        pool, &WorkStealingThreadPool::InvokeParallelForUnit<BodyType>,
+        const_cast<void*>(static_cast<const void*>(std::addressof(body))), count, options);
 }
 
 template <typename F>

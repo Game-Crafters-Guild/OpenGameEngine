@@ -11,7 +11,7 @@
 //                         [--package-shaders <dir>]...
 //                         [--scan <dir> [--scan-alias <alias>]]... [--verify]
 //                         [--web --shadercook <shadercook.py>]
-//                         [--particle-row <variant>]
+//                         [--particle-row <variant>] [--jobs <count>]
 //
 // The cache root defaults to <project>/.Cache/Shaders — the location the
 // runtime probes — so the cooked tree ships by copying the project.
@@ -67,17 +67,21 @@
 #include "EZTreeECS/EZTreeRuntimeMaterials.h"
 #include "TerrainGrass/GrassDrawMode.h"
 #include "Ocean/OceanSurfaceMaterial.h"
+#include "Platform/Process.h"
 #include "WebWgslCook.h"
 #include "MeshVariantTable.h"
 #include "VariantRequests.h"
 
 #include <algorithm>
+#include <charconv>
 #include <filesystem>
 #include <iostream>
 #include <iterator>
 #include <optional>
 #include <string>
 #include <string_view>
+#include <thread>
+#include <unordered_map>
 #include <unordered_set>
 #include <vector>
 
@@ -115,6 +119,8 @@ struct Options
     fs::path ShaderCookScript;
     bool Verify = false;
     bool Web = false;
+    // Concurrent WGSL translations under --web; 0 = one per hardware thread.
+    size_t Jobs = 0;
     // The one particle request-set row each particle shape cooks under --particle-row.
     std::optional<VariantRequest> ParticleRow;
 };
@@ -275,6 +281,22 @@ bool ParseOptions(int argc, char** argv, Options& out, std::string& error)
         else if (arg == "--web")
         {
             out.Web = true;
+        }
+        else if (arg == "--jobs")
+        {
+            std::string count;
+            if (!value(count)) return false;
+            // from_chars takes digits only: no sign, no whitespace, no wrap of "-1".
+            size_t parsed = 0;
+            const char* last = count.data() + count.size();
+            const auto [end, status] = std::from_chars(count.data(), last, parsed);
+            if (status != std::errc{} || end != last || parsed == 0)
+            {
+                error = "--jobs needs a positive whole number (1 or more, digits only), got '" +
+                        count + "'";
+                return false;
+            }
+            out.Jobs = parsed;
         }
         else if (arg == "--particle-row")
         {
@@ -650,6 +672,21 @@ std::vector<CookTarget> CollectTargets(const fs::path& project, MaterialBuildCon
     return preparedTargets;
 }
 
+constexpr size_t kNoWgslRequest = static_cast<size_t>(-1);
+
+// One variant's result, reported after every WGSL translation has run.
+struct VariantOutcome
+{
+    std::string Label;
+    std::string PackagePath;
+    std::vector<std::string> BuildErrors;
+    bool Built = false;
+    // The translation this variant's package needs, or kNoWgslRequest.
+    size_t WgslRequest = kNoWgslRequest;
+    // Another variant of this run owns the translation of the same package.
+    bool SharesTranslation = false;
+};
+
 // The logger's drain thread shares the console and writes a message and its
 // newline separately, so a result line written in pieces can be split by a log
 // line. Each result line, with its indented detail lines, is composed first
@@ -668,7 +705,9 @@ void PrintUsage(std::ostream& out)
            "                           [--cache <dir>] [--package-shaders <dir>]...\n"
            "                           [--scan <dir> [--scan-alias <alias>]]...\n"
            "                           [--verify] [--web --shadercook <path>]\n"
-           "                           [--particle-row <variant>]\n"
+           "                           [--particle-row <variant>] [--jobs <count>]\n"
+           "--jobs bounds the concurrent WGSL translations under --web (default: one\n"
+           "per hardware thread).\n"
            "--scan-alias names the --scan root before it in generated graph surface\n"
            "names and must be the alias the runtime mounts that root under. Without\n"
            "it, a root that a package manifest names as its assets folder takes that\n"
@@ -746,71 +785,90 @@ int main(int argc, char** argv)
     }
 
     // Outside the cache root: the cache ships with the content, and the WGSL
-    // chain's intermediates are debugging material, not shipped artifacts. A
-    // failure names the scratch file it wrote so it stays inspectable.
+    // chain's intermediates are debugging material, not shipped artifacts. Each
+    // translation writes under its own <pid>-<index> directory, so concurrent
+    // translations, and concurrent cooks on one machine, never share a file. A
+    // failure keeps its directory and names the scratch file it wrote.
     const fs::path wgslScratch = fs::temp_directory_path() / "MaterialVariantCookWeb";
+    const std::string processTag = std::to_string(Platform::GetCurrentProcessId());
 
-    size_t cooked = 0;
-    size_t webTranslationsReused = 0;
-    std::unordered_set<std::string> webCookedPackages;
+    // Every variant builds its SPIR-V here, in order; the WGSL translations they
+    // need are collected and run concurrently afterwards, and the results are
+    // reported in this order whatever order the translations finish in.
+    std::vector<VariantOutcome> outcomes;
+    std::vector<Tools::WebWgslCookRequest> wgslRequests;
+    std::unordered_map<std::string, size_t> wgslRequestByPackage;
     for (const CookTarget& target : targets)
     {
         for (const VariantRequest& variant : VariantsFor(target, options.Web))
         {
             const MaterialBuildResult result = target.Builder.Build(
                 ShaderSourceKind::SpirV, variant.PassKeywords, variant.VertexFlags);
+            VariantOutcome& outcome = outcomes.emplace_back();
+            outcome.Label = target.Name + " [" + variant.Name + "]";
             if (!result.success)
             {
-                std::cerr << ResultLines("  FAIL " + target.Name + " [" + variant.Name + "]",
-                                         result.errors);
-                ++failed;
+                outcome.BuildErrors = result.errors;
                 continue;
             }
+            outcome.Built = true;
+            outcome.PackagePath = result.generatedShaderPkgPath;
+            if (!options.Web)
+                continue;
 
-            bool reuseWebTranslation = false;
-            if (options.Web && webCookedPackages.contains(result.generatedShaderPkgPath))
+            // BuildMaterialToShaderPackage has validated this content key and its
+            // include dependencies, so variants that share a package share its
+            // translation: it runs once in this run and is never taken from a prior one.
+            if (const auto it = wgslRequestByPackage.find(outcome.PackagePath);
+                it != wgslRequestByPackage.end())
             {
-                // BuildMaterialToShaderPackage has validated this content key
-                // and its include dependencies. Shared materials can reuse the
-                // WGSL translated in this run. A stale/rebuilt SPIR-V package
-                // has no WGSL chunks and must go through translation again.
-                ShaderPackage pkg{};
-                reuseWebTranslation = LoadShaderPkg(result.generatedShaderPkgPath,
-                                                     ShaderSourceKind::SpirV, pkg)
-                    && pkg.wgslStages.contains("vs") && pkg.wgslStages.contains("fs");
+                outcome.WgslRequest = it->second;
+                outcome.SharesTranslation = true;
+                continue;
             }
-            if (options.Web && !reuseWebTranslation)
-            {
-                Tools::WebWgslCookRequest wgsl{};
-                wgsl.ShaderCookScript = fs::absolute(options.ShaderCookScript);
-                wgsl.ScratchDir = wgslScratch;
-                wgsl.PackagePath = result.generatedShaderPkgPath;
-                wgsl.VertexSource = result.composedVertexSource;
-                wgsl.FragmentSource = result.composedFragmentSource;
-                wgsl.Defines = result.composedDefines;
-                wgsl.IncludeRoots =
-                    BuildMaterialIncludeRoots(context, target.MaterialPath.parent_path());
-                wgsl.DebugName = target.Name + "_" + variant.Name;
-                std::string wgslError;
-                if (!Tools::CookWebWgslIntoPackage(wgsl, wgslError))
-                {
-                    std::cerr << ResultLines(
-                        "  FAIL " + target.Name + " [" + variant.Name + "] WGSL", {wgslError});
-                    ++failed;
-                    continue;
-                }
-                // Do not reuse entries from a prior run: this run's compiler
-                // and translation script must validate every distinct package.
-                webCookedPackages.insert(result.generatedShaderPkgPath);
-            }
-            if (reuseWebTranslation)
-                ++webTranslationsReused;
-
-            ++cooked;
-            std::cout << ResultLines("  ok   " + target.Name + " [" + variant.Name + "] -> " +
-                                         result.generatedShaderPkgPath,
-                                     {});
+            outcome.WgslRequest = wgslRequests.size();
+            Tools::WebWgslCookRequest& wgsl = wgslRequests.emplace_back();
+            wgsl.ShaderCookScript = fs::absolute(options.ShaderCookScript);
+            wgsl.ScratchDir = wgslScratch / (processTag + "-" + std::to_string(outcome.WgslRequest));
+            wgsl.PackagePath = result.generatedShaderPkgPath;
+            wgsl.VertexSource = result.composedVertexSource;
+            wgsl.FragmentSource = result.composedFragmentSource;
+            wgsl.Defines = result.composedDefines;
+            wgsl.IncludeRoots = BuildMaterialIncludeRoots(context, target.MaterialPath.parent_path());
+            wgsl.DebugName = target.Name + "_" + variant.Name;
+            wgslRequestByPackage.emplace(outcome.PackagePath, outcome.WgslRequest);
         }
+    }
+
+    const size_t jobs = options.Jobs != 0 ? options.Jobs
+                                          : std::max<size_t>(std::thread::hardware_concurrency(), 1);
+    // No result line prints until the batch ends, so say what is running.
+    if (!wgslRequests.empty())
+        std::cout << "MaterialVariantCook: translating " << wgslRequests.size() << " WGSL program(s) on "
+                  << std::min(jobs, wgslRequests.size()) << " worker(s)\n"
+                  << std::flush;
+    const std::vector<std::string> wgslErrors = Tools::CookWebWgslBatch(wgslRequests, jobs);
+
+    size_t cooked = 0;
+    size_t webTranslationsReused = 0;
+    for (const VariantOutcome& outcome : outcomes)
+    {
+        if (!outcome.Built)
+        {
+            std::cerr << ResultLines("  FAIL " + outcome.Label, outcome.BuildErrors);
+            ++failed;
+            continue;
+        }
+        if (outcome.WgslRequest != kNoWgslRequest && !wgslErrors[outcome.WgslRequest].empty())
+        {
+            std::cerr << ResultLines("  FAIL " + outcome.Label + " WGSL", {wgslErrors[outcome.WgslRequest]});
+            ++failed;
+            continue;
+        }
+        if (outcome.SharesTranslation)
+            ++webTranslationsReused;
+        ++cooked;
+        std::cout << ResultLines("  ok   " + outcome.Label + " -> " + outcome.PackagePath, {});
     }
 
     if (options.Verify && failed == 0)

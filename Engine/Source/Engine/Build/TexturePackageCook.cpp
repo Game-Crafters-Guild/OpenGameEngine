@@ -186,6 +186,7 @@ bool StagePackagedTextureCooks(const fs::path& contentRoot,
                               const AssetRegistry& sourceRegistry,
                               TextureCookEncodeQuality targetBc7Quality,
                               TextureCookWorkers* encodeWorkers,
+                              JobSystem::WorkStealingThreadPool* manifestParsePool,
                               const std::function<bool()>& cancelRequested,
                               TexturePackageCookStats& stats,
                               std::string& error)
@@ -221,7 +222,7 @@ bool StagePackagedTextureCooks(const fs::path& contentRoot,
             auto& store = stores[mountRoot];
             if (!store)
             {
-                store = std::make_unique<AssetDatabase::AssetStore_TextJsonl>();
+                store = std::make_unique<AssetDatabase::AssetStore_TextJsonl>(manifestParsePool);
                 if (!store->LoadFromFile(assetRoot / ".assetmanifest", &error))
                     return false;
             }

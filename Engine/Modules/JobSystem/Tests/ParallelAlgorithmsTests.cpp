@@ -5,9 +5,11 @@
 
 #include <algorithm>
 #include <atomic>
+#include <chrono>
 #include <numeric>
 #include <random>
 #include <stdexcept>
+#include <string>
 #include <thread>
 #include <vector>
 
@@ -37,15 +39,15 @@ class ParallelAlgorithmsTest : public ::testing::Test
 TEST_F(ParallelAlgorithmsTest, ParallelFor_EmptyRange)
 {
     bool called = false;
-    JobSystem::ParallelFor(m_Pool.get(), 0, 0,
-        [&](size_t, size_t) { called = true; });
+    JobSystem::ParallelFor(m_Pool.get(), 0,
+        [&](size_t, size_t) { called = true; }, 1);
     EXPECT_FALSE(called);
 }
 
 TEST_F(ParallelAlgorithmsTest, ParallelFor_SmallRangeRunsSequentially)
 {
     std::vector<int> data(100, 0);
-    JobSystem::ParallelFor(m_Pool.get(), 0, data.size(),
+    JobSystem::ParallelFor(m_Pool.get(), data.size(),
         [&](size_t begin, size_t end) {
             for (size_t i = begin; i < end; ++i)
                 data[i] = 1;
@@ -60,7 +62,7 @@ TEST_F(ParallelAlgorithmsTest, ParallelFor_LargeRangeCoversAll)
     std::vector<std::atomic<int>> data(kCount);
     for (auto& a : data) a.store(0);
 
-    JobSystem::ParallelFor(m_Pool.get(), 0, kCount,
+    JobSystem::ParallelFor(m_Pool.get(), kCount,
         [&](size_t begin, size_t end) {
             for (size_t i = begin; i < end; ++i)
                 data[i].fetch_add(1, std::memory_order_relaxed);
@@ -73,45 +75,13 @@ TEST_F(ParallelAlgorithmsTest, ParallelFor_LargeRangeCoversAll)
 TEST_F(ParallelAlgorithmsTest, ParallelFor_NullPoolRunsSequentially)
 {
     std::vector<int> data(5000, 0);
-    JobSystem::ParallelFor(nullptr, 0, data.size(),
+    JobSystem::ParallelFor(nullptr, data.size(),
         [&](size_t begin, size_t end) {
             for (size_t i = begin; i < end; ++i)
                 data[i] = 42;
         }, 100);
     for (int v : data)
         EXPECT_EQ(v, 42);
-}
-
-// ---------------------------------------------------------------------------
-// ParallelForEach
-// ---------------------------------------------------------------------------
-
-TEST_F(ParallelAlgorithmsTest, ParallelForEach_AllElementsVisited)
-{
-    constexpr size_t kCount = 50000;
-    std::vector<std::atomic<int>> data(kCount);
-    for (auto& a : data) a.store(0);
-
-    // Create index vector to iterate over
-    std::vector<size_t> indices(kCount);
-    std::iota(indices.begin(), indices.end(), 0);
-
-    JobSystem::ParallelForEach(m_Pool.get(), indices.begin(), indices.end(),
-        [&](size_t idx) {
-            data[idx].fetch_add(1, std::memory_order_relaxed);
-        }, 1024);
-
-    for (size_t i = 0; i < kCount; ++i)
-        EXPECT_EQ(data[i].load(), 1) << "index " << i;
-}
-
-TEST_F(ParallelAlgorithmsTest, ParallelForEach_EmptyRange)
-{
-    std::vector<int> v;
-    bool called = false;
-    JobSystem::ParallelForEach(m_Pool.get(), v.begin(), v.end(),
-        [&](int&) { called = true; });
-    EXPECT_FALSE(called);
 }
 
 // ---------------------------------------------------------------------------
@@ -206,92 +176,75 @@ TEST_F(ParallelAlgorithmsTest, ParallelSort_DefaultComparator)
 }
 
 // ---------------------------------------------------------------------------
-// DispatchAndWait
+// ParallelFor, one unit per index
 // ---------------------------------------------------------------------------
 
-TEST_F(ParallelAlgorithmsTest, DispatchAndWait_ZeroTasks)
+TEST_F(ParallelAlgorithmsTest, ParallelForUnits_ZeroUnits)
 {
-    JobSystem::DispatchAndWait(m_Pool.get(), nullptr, 0);
-    // Should not hang or crash.
+    bool called = false;
+    EXPECT_TRUE(JobSystem::ParallelFor(m_Pool.get(), 0, [&](size_t) { called = true; }));
+    EXPECT_FALSE(called);
 }
 
-TEST_F(ParallelAlgorithmsTest, DispatchAndWait_SingleTask)
+TEST_F(ParallelAlgorithmsTest, ParallelForUnits_SingleUnit)
 {
     int result = 0;
-    std::function<void()> task = [&]() { result = 42; };
-    JobSystem::DispatchAndWait(m_Pool.get(), &task, 1);
+    EXPECT_TRUE(JobSystem::ParallelFor(m_Pool.get(), 1, [&](size_t) { result = 42; }));
     EXPECT_EQ(result, 42);
 }
 
-TEST_F(ParallelAlgorithmsTest, DispatchAndWait_MultipleTasks)
+TEST_F(ParallelAlgorithmsTest, ParallelForUnits_MultipleUnits)
 {
-    constexpr uint32_t kCount = 16;
+    constexpr size_t kCount = 16;
     std::atomic<int> counter{0};
-    std::vector<std::function<void()>> tasks(kCount);
-    for (auto& t : tasks)
-        t = [&counter]() { counter.fetch_add(1, std::memory_order_relaxed); };
-
-    JobSystem::DispatchAndWait(m_Pool.get(), tasks.data(), kCount);
+    JobSystem::ParallelFor(m_Pool.get(), kCount,
+                           [&counter](size_t) { counter.fetch_add(1, std::memory_order_relaxed); });
     EXPECT_EQ(counter.load(), static_cast<int>(kCount));
 }
 
-TEST_F(ParallelAlgorithmsTest, DispatchAndWait_NullPool)
+// With no pool the caller runs the units in order, and a false stops the run.
+TEST_F(ParallelAlgorithmsTest, ParallelForUnits_NullPoolRunsInOrderAndStopsOnFalse)
 {
-    int result = 0;
-    std::function<void()> task = [&]() { result = 7; };
-    JobSystem::DispatchAndWait(nullptr, &task, 1);
-    EXPECT_EQ(result, 7);
+    std::vector<size_t> ran;
+    const bool finished = JobSystem::ParallelFor(nullptr, 5,
+                                                 [&ran](size_t unit)
+                                                 {
+                                                     ran.push_back(unit);
+                                                     return unit != 2;
+                                                 });
+    EXPECT_FALSE(finished);
+    EXPECT_EQ(ran, (std::vector<size_t>{0, 1, 2}));
 }
 
-TEST_F(ParallelAlgorithmsTest, DispatchAndWait_NullTasksSkipped)
+TEST_F(ParallelAlgorithmsTest, ParallelForUnits_AllCompleteBeforeReturn)
 {
-    std::atomic<int> counter{0};
-    std::vector<std::function<void()>> tasks(4);
-    tasks[0] = [&]() { counter.fetch_add(1); };
-    tasks[1] = nullptr;
-    tasks[2] = [&]() { counter.fetch_add(1); };
-    tasks[3] = nullptr;
-
-    JobSystem::DispatchAndWait(m_Pool.get(), tasks.data(), 4);
-    EXPECT_EQ(counter.load(), 2);
-}
-
-TEST_F(ParallelAlgorithmsTest, DispatchAndWait_AllCompleteBeforeReturn)
-{
-    constexpr uint32_t kCount = 64;
+    constexpr size_t kCount = 64;
     std::vector<std::atomic<int>> flags(kCount);
     for (auto& f : flags) f.store(0);
 
-    std::vector<std::function<void()>> tasks(kCount);
-    for (uint32_t i = 0; i < kCount; ++i)
-    {
-        tasks[i] = [&flags, i]() {
-            // Simulate some work
-            volatile int dummy = 0;
-            for (int j = 0; j < 1000; ++j)
-                dummy += j;
-            (void)dummy;
-            flags[i].store(1, std::memory_order_release);
-        };
-    }
+    JobSystem::ParallelFor(m_Pool.get(), kCount,
+                           [&flags](size_t i)
+                           {
+                               volatile int dummy = 0;
+                               for (int j = 0; j < 1000; ++j)
+                                   dummy += j;
+                               (void)dummy;
+                               flags[i].store(1, std::memory_order_release);
+                           });
 
-    JobSystem::DispatchAndWait(m_Pool.get(), tasks.data(), kCount);
-
-    for (uint32_t i = 0; i < kCount; ++i)
-        EXPECT_EQ(flags[i].load(std::memory_order_acquire), 1) << "task " << i;
+    for (size_t i = 0; i < kCount; ++i)
+        EXPECT_EQ(flags[i].load(std::memory_order_acquire), 1) << "unit " << i;
 }
 
-TEST_F(ParallelAlgorithmsTest, DispatchAndWait_ConcurrentFromMultipleThreads)
+TEST_F(ParallelAlgorithmsTest, ParallelForUnits_ConcurrentFromMultipleThreads)
 {
-    // Two threads each do their own DispatchAndWait — verify no deadlock.
-    constexpr uint32_t kTasksPerThread = 32;
+    // Two threads each fork their own run: neither deadlocks.
+    constexpr size_t kUnitsPerThread = 32;
     std::atomic<int> globalCounter{0};
 
     auto threadFunc = [&]() {
-        std::vector<std::function<void()>> tasks(kTasksPerThread);
-        for (auto& t : tasks)
-            t = [&globalCounter]() { globalCounter.fetch_add(1, std::memory_order_relaxed); };
-        JobSystem::DispatchAndWait(m_Pool.get(), tasks.data(), kTasksPerThread);
+        JobSystem::ParallelFor(m_Pool.get(), kUnitsPerThread,
+                               [&globalCounter](size_t) { globalCounter.fetch_add(1, std::memory_order_relaxed); });
     };
 
     std::thread t1(threadFunc);
@@ -299,28 +252,37 @@ TEST_F(ParallelAlgorithmsTest, DispatchAndWait_ConcurrentFromMultipleThreads)
     t1.join();
     t2.join();
 
-    EXPECT_EQ(globalCounter.load(), static_cast<int>(kTasksPerThread * 2));
+    EXPECT_EQ(globalCounter.load(), static_cast<int>(kUnitsPerThread * 2));
+}
+
+TEST_F(ParallelAlgorithmsTest, ParallelForUnits_LargeUnitCount)
+{
+    constexpr size_t kCount = 512;
+    std::atomic<int> counter{0};
+    JobSystem::ParallelFor(m_Pool.get(), kCount,
+                           [&counter](size_t) { counter.fetch_add(1, std::memory_order_relaxed); });
+    EXPECT_EQ(counter.load(), static_cast<int>(kCount));
+}
+
+TEST_F(ParallelAlgorithmsTest, ParallelForUnits_RepeatedCalls)
+{
+    std::atomic<int> counter{0};
+    for (int iter = 0; iter < 200; ++iter)
+        JobSystem::ParallelFor(m_Pool.get(), 1,
+                               [&counter](size_t) { counter.fetch_add(1, std::memory_order_relaxed); });
+    EXPECT_EQ(counter.load(), 200);
 }
 
 // ---------------------------------------------------------------------------
 // Additional edge-case tests from audit
 // ---------------------------------------------------------------------------
 
-// ParallelFor: inverted range (begin > end) should be a no-op.
-TEST_F(ParallelAlgorithmsTest, ParallelFor_InvertedRange)
-{
-    bool called = false;
-    JobSystem::ParallelFor(m_Pool.get(), 10, 5,
-        [&](size_t, size_t) { called = true; });
-    EXPECT_FALSE(called);
-}
-
 // ParallelFor: range exactly at minBatchSize boundary runs sequentially.
 TEST_F(ParallelAlgorithmsTest, ParallelFor_ExactBatchSizeBoundary)
 {
     constexpr size_t kBatch = 512;
     std::vector<int> data(kBatch, 0);
-    JobSystem::ParallelFor(m_Pool.get(), 0, kBatch,
+    JobSystem::ParallelFor(m_Pool.get(), kBatch,
         [&](size_t begin, size_t end) {
             for (size_t i = begin; i < end; ++i)
                 data[i] = 1;
@@ -337,7 +299,7 @@ TEST_F(ParallelAlgorithmsTest, ParallelFor_MinBatchSizePlusOne)
     std::vector<std::atomic<int>> data(kCount);
     for (auto& a : data) a.store(0);
 
-    JobSystem::ParallelFor(m_Pool.get(), 0, kCount,
+    JobSystem::ParallelFor(m_Pool.get(), kCount,
         [&](size_t begin, size_t end) {
             for (size_t i = begin; i < end; ++i)
                 data[i].fetch_add(1, std::memory_order_relaxed);
@@ -354,7 +316,7 @@ TEST_F(ParallelAlgorithmsTest, ParallelFor_NonPowerOf2Count)
     std::vector<std::atomic<int>> data(kCount);
     for (auto& a : data) a.store(0);
 
-    JobSystem::ParallelFor(m_Pool.get(), 0, kCount,
+    JobSystem::ParallelFor(m_Pool.get(), kCount,
         [&](size_t begin, size_t end) {
             for (size_t i = begin; i < end; ++i)
                 data[i].fetch_add(1, std::memory_order_relaxed);
@@ -362,27 +324,6 @@ TEST_F(ParallelAlgorithmsTest, ParallelFor_NonPowerOf2Count)
 
     for (size_t i = 0; i < kCount; ++i)
         EXPECT_EQ(data[i].load(), 1) << "index " << i;
-}
-
-// ParallelForEach: null pool fallback.
-TEST_F(ParallelAlgorithmsTest, ParallelForEach_NullPool)
-{
-    std::vector<int> data = {1, 2, 3, 4, 5};
-    int sum = 0;
-    JobSystem::ParallelForEach(static_cast<JobSystem::WorkStealingThreadPool*>(nullptr),
-        data.begin(), data.end(),
-        [&sum](int v) { sum += v; }, 2);
-    EXPECT_EQ(sum, 15);
-}
-
-// ParallelForEach: single element.
-TEST_F(ParallelAlgorithmsTest, ParallelForEach_SingleElement)
-{
-    std::vector<int> data = {42};
-    int seen = 0;
-    JobSystem::ParallelForEach(m_Pool.get(), data.begin(), data.end(),
-        [&seen](int v) { seen = v; });
-    EXPECT_EQ(seen, 42);
 }
 
 // ParallelSort: reverse-sorted input.
@@ -450,83 +391,56 @@ TEST_F(ParallelAlgorithmsTest, ParallelSort_TwoElements)
     EXPECT_EQ(data[1], 5);
 }
 
-// DispatchAndWait: all-null tasks array.
-TEST_F(ParallelAlgorithmsTest, DispatchAndWait_AllNullTasks)
-{
-    std::vector<std::function<void()>> tasks(8, nullptr);
-    JobSystem::DispatchAndWait(m_Pool.get(), tasks.data(), 8);
-    // Should complete without hanging.
-}
-
-// DispatchAndWait: large task count under contention.
-TEST_F(ParallelAlgorithmsTest, DispatchAndWait_LargeTaskCount)
-{
-    constexpr uint32_t kCount = 512;
-    std::atomic<int> counter{0};
-    std::vector<std::function<void()>> tasks(kCount);
-    for (auto& t : tasks)
-        t = [&counter]() { counter.fetch_add(1, std::memory_order_relaxed); };
-
-    JobSystem::DispatchAndWait(m_Pool.get(), tasks.data(), kCount);
-    EXPECT_EQ(counter.load(), static_cast<int>(kCount));
-}
-
-// DispatchAndWait: rapid repeated calls (no resource leak).
-TEST_F(ParallelAlgorithmsTest, DispatchAndWait_RepeatedCalls)
-{
-    std::atomic<int> counter{0};
-    std::function<void()> task = [&counter]() { counter.fetch_add(1, std::memory_order_relaxed); };
-
-    for (int iter = 0; iter < 200; ++iter)
-        JobSystem::DispatchAndWait(m_Pool.get(), &task, 1);
-
-    EXPECT_EQ(counter.load(), 200);
-}
-
 // ---------------------------------------------------------------------------
-// Exception safety: verify algorithms return without deadlock when user throws
+// Exceptions: the first chunk's throw reaches the caller once the chunks in
+// flight have finished; chunks not yet started do not run.
 // ---------------------------------------------------------------------------
 
-TEST_F(ParallelAlgorithmsTest, ParallelFor_ExceptionDoesNotHang)
+// Counts the chunks running at once, so a test can check none is still
+// running when the throw reaches the caller.
+struct RunningChunks
 {
-    std::atomic<int> chunksCalled{0};
-    JobSystem::ParallelFor(m_Pool.get(), 0, 10000,
-        [&](size_t begin, size_t /*end*/) {
-            chunksCalled.fetch_add(1, std::memory_order_relaxed);
-            if (begin == 0)
-                throw std::runtime_error("test");
-        }, 1000);
-    // Must reach here without deadlock. At least the throwing chunk ran.
-    EXPECT_GE(chunksCalled.load(), 1);
+    void Enter() { Running.fetch_add(1); }
+    void Leave() { Running.fetch_sub(1); }
+    std::atomic<int> Running{0};
+};
+
+TEST_F(ParallelAlgorithmsTest, ParallelFor_ChunkThrowReachesTheCaller)
+{
+    RunningChunks running;
+    std::string thrown;
+    try
+    {
+        JobSystem::ParallelFor(m_Pool.get(), 10000,
+            [&](size_t begin, size_t /*end*/) {
+                running.Enter();
+                std::this_thread::sleep_for(std::chrono::milliseconds(1));
+                running.Leave();
+                if (begin == 0)
+                    throw std::runtime_error("chunk zero threw");
+            }, 1000);
+    }
+    catch (const std::runtime_error& e)
+    {
+        thrown = e.what();
+    }
+    EXPECT_EQ(thrown, "chunk zero threw");
+    EXPECT_EQ(running.Running.load(), 0) << "ParallelFor threw while a chunk was still running";
 }
 
-TEST_F(ParallelAlgorithmsTest, ParallelForEach_ExceptionDoesNotHang)
-{
-    std::vector<int> data(5000);
-    std::iota(data.begin(), data.end(), 0);
-    std::atomic<int> visited{0};
-    JobSystem::ParallelForEach(m_Pool.get(), data.begin(), data.end(),
-        [&](int v) {
-            visited.fetch_add(1, std::memory_order_relaxed);
-            if (v == 0)
-                throw std::runtime_error("test");
-        }, 500);
-    EXPECT_GE(visited.load(), 1);
-}
-
-TEST_F(ParallelAlgorithmsTest, DispatchAndWait_ExceptionDoesNotHang)
+TEST_F(ParallelAlgorithmsTest, ParallelForUnits_UnitThrowReachesTheCaller)
 {
     std::atomic<int> counter{0};
-    std::vector<std::function<void()>> tasks(8);
-    for (auto& t : tasks)
-        t = [&counter]() { counter.fetch_add(1, std::memory_order_relaxed); };
-    tasks[0] = [&counter]() {
-        counter.fetch_add(1, std::memory_order_relaxed);
-        throw std::runtime_error("test");
-    };
-    JobSystem::DispatchAndWait(m_Pool.get(), tasks.data(), 8);
-    // Must return without deadlock. All 8 tasks dispatched.
-    EXPECT_EQ(counter.load(), 8);
+    EXPECT_THROW(JobSystem::ParallelFor(m_Pool.get(), 8,
+                                        [&counter](size_t unit)
+                                        {
+                                            counter.fetch_add(1, std::memory_order_relaxed);
+                                            if (unit == 0)
+                                                throw std::runtime_error("unit zero threw");
+                                        }),
+                 std::runtime_error);
+    EXPECT_GE(counter.load(), 1);
+    EXPECT_LE(counter.load(), 8);
 }
 
 } // namespace

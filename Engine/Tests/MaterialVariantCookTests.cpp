@@ -381,6 +381,63 @@ TEST_F(WebMaterialVariantCook, CompatVariantsTranslateToWgslAndServeWithoutAComp
         << "the web variants must be SERVED from the cooked cache, not recompiled";
 }
 
+// The batch's failure contract (WebWgslCook.h): one error per request in request order,
+// a cooked request's scratch removed and its package carrying WGSL, a failed request's
+// scratch kept (its error names the file there) and its package left without WGSL.
+TEST_F(WebMaterialVariantCook, ABatchReportsEachFailureAtItsOwnIndexAndKeepsOnlyItsScratch)
+{
+    ScopedCompatShaderProfile compat;
+    ScopedWebCacheSpirvTarget webSpirv;
+    TempTree cookDir("ge_web_variant_batch");
+    const CookedProject project = MakeProject(cookDir.Root, m_EngineShaderDir);
+
+    const MaterialBuildResult color = Build(project, kColorVariant);
+    const MaterialBuildResult depth = Build(project, kDepthVariant);
+    ASSERT_TRUE(color.success);
+    ASSERT_TRUE(depth.success);
+    // The failing request's own package: a SPIR-V-only copy nothing else writes.
+    const fs::path brokenPackage = cookDir.Root / "broken.shaderpkg";
+    fs::copy_file(depth.generatedShaderPkgPath, brokenPackage);
+
+    std::vector<GameEngine::Tools::WebWgslCookRequest> requests(3);
+    const MaterialBuildResult* sources[3] = {&color, &depth, &depth};
+    for (size_t i = 0; i < requests.size(); ++i)
+    {
+        GameEngine::Tools::WebWgslCookRequest& request = requests[i];
+        request.ShaderCookScript = m_ShaderCookScript;
+        request.ScratchDir = cookDir.Root / "Batch" / std::to_string(i);
+        request.VertexSource = sources[i]->composedVertexSource;
+        request.FragmentSource = sources[i]->composedFragmentSource;
+        request.Defines = sources[i]->composedDefines;
+        request.IncludeRoots = BuildMaterialIncludeRoots(project.Context, project.MaterialPath.parent_path());
+        request.DebugName = "batch_" + std::to_string(i);
+    }
+    requests[0].PackagePath = color.generatedShaderPkgPath;
+    requests[1].PackagePath = brokenPackage;
+    requests[1].VertexSource = "#version 450\nvoid main() { this does not compile; }\n";
+    requests[2].PackagePath = depth.generatedShaderPkgPath;
+
+    const std::vector<std::string> errors = GameEngine::Tools::CookWebWgslBatch(requests, 3);
+
+    ASSERT_EQ(errors.size(), 3u);
+    EXPECT_TRUE(errors[0].empty()) << errors[0];
+    EXPECT_TRUE(errors[2].empty()) << errors[2];
+    EXPECT_NE(errors[1].find("batch_1_vs.vert"), std::string::npos) << errors[1];
+    EXPECT_FALSE(fs::exists(requests[0].ScratchDir));
+    EXPECT_TRUE(fs::exists(requests[1].ScratchDir / "batch_1_vs.vert"));
+    EXPECT_FALSE(fs::exists(requests[2].ScratchDir));
+
+    const auto wgslStageCount = [](const fs::path& path) {
+        ShaderPackage pkg{};
+        std::string loadError;
+        EXPECT_TRUE(LoadShaderPkg(path.string(), ShaderSourceKind::SpirV, pkg, &loadError)) << loadError;
+        return pkg.wgslStages.count("vs") + pkg.wgslStages.count("fs");
+    };
+    EXPECT_EQ(wgslStageCount(requests[0].PackagePath), 2u);
+    EXPECT_EQ(wgslStageCount(requests[1].PackagePath), 0u);
+    EXPECT_EQ(wgslStageCount(requests[2].PackagePath), 2u);
+}
+
 // The cook and the runtime never configure the same include roots: an editor or
 // Player mounts the asset ROOT above the engine shader tree
 // (MaterialBuildContext::IncludeDirs), an offline cook points straight at the

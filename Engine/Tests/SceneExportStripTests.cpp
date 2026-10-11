@@ -125,7 +125,8 @@ TEST(SceneExportStrip, ExportKeepsAPropAndItsChildWithoutTheMeasureOnIt)
     TexturePackageCookStats textureStats;
     std::string error;
     ASSERT_TRUE(CookStagedContent(root, manifest, registry, parsers, TextureCookEncodeQuality::QuickBC7,
-                                  /*textureWorkers=*/nullptr, NeverCancelled, textureStats, error))
+                                  /*textureWorkers=*/nullptr, /*manifestParsePool=*/nullptr,
+                                  NeverCancelled, textureStats, error))
         << error;
     EXPECT_EQ(ReadText(root / relative),
               WithoutLines(authored, {"Measure.", "Markup.", "MarkupVolume.", "Name.value = \"Lake Shore\""}));
@@ -262,7 +263,8 @@ TEST(SceneExportStrip, ARegionLeavesOnlyItsEntityAndTransform)
     TexturePackageCookStats textureStats;
     std::string error;
     ASSERT_TRUE(CookStagedContent(root, manifest, registry, parsers, TextureCookEncodeQuality::QuickBC7,
-                                  /*textureWorkers=*/nullptr, NeverCancelled, textureStats, error))
+                                  /*textureWorkers=*/nullptr, /*manifestParsePool=*/nullptr,
+                                  NeverCancelled, textureStats, error))
         << error;
     EXPECT_EQ(ReadText(root / relative),
               WithoutLines(authored, {"Markup.", "MarkupVolume.", "MarkupRegion.", "Spline.", "Name.value = \"Forest\""}));
